@@ -82,6 +82,16 @@ const AdminOrders = () => {
                       Table {order.table_sessions?.tables?.table_number}
                     </span>
                     <Badge className={`text-xs ${statusColors[order.status]}`}>{order.status}</Badge>
+                    {/* [UX] Wait time tracking */}
+                    {!['served', 'cancelled'].includes(order.status) && (() => {
+                      const mins = Math.floor((Date.now() - new Date(order.created_at).getTime()) / 60000);
+                      const label = mins < 1 ? 'Just now' : mins < 60 ? `${mins}m` : `${Math.floor(mins / 60)}h ${mins % 60}m`;
+                      return (
+                        <span className={`text-xs font-sans flex items-center gap-1 ${mins >= 10 ? 'text-destructive font-semibold' : 'text-muted-foreground'}`}>
+                          ⏱ {label}
+                        </span>
+                      );
+                    })()}
                   </div>
                   <p className="text-xs text-muted-foreground font-sans mt-1">
                     {new Date(order.created_at).toLocaleString()}

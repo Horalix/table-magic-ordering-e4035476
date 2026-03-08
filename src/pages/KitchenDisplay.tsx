@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Bell, Clock, ChefHat, Check, Utensils, Hand, X } from 'lucide-react';
+import { Bell, Clock, ChefHat, Check, Utensils, Hand, X, CreditCard } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -31,6 +31,14 @@ interface WaiterCall {
   table_number: number;
 }
 
+interface BillRequest {
+  id: string;
+  table_session_id: string;
+  status: string;
+  created_at: string;
+  table_number: number;
+}
+
 const statusColors: Record<string, string> = {
   pending: 'bg-destructive/10 text-destructive border-destructive/20',
   confirmed: 'bg-accent/10 text-accent border-accent/20',
@@ -50,6 +58,7 @@ const statusIcons: Record<string, React.ReactNode> = {
 const KitchenDisplay = () => {
   const [orders, setOrders] = useState<OrderWithItems[]>([]);
   const [waiterCalls, setWaiterCalls] = useState<WaiterCall[]>([]);
+  const [billRequests, setBillRequests] = useState<BillRequest[]>([]);
   const [filter, setFilter] = useState<string>('active');
 
   const fetchOrders = async () => {
@@ -122,9 +131,38 @@ const KitchenDisplay = () => {
     setWaiterCalls(mapped);
   };
 
+  const fetchBillRequests = async () => {
+    const { data, error } = await supabase
+      .from('bill_requests')
+      .select(`
+        *,
+        table_sessions!inner(
+          tables!inner(table_number)
+        )
+      `)
+      .eq('status', 'pending')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Error fetching bill requests:', error);
+      return;
+    }
+
+    const mapped: BillRequest[] = (data || []).map((b: any) => ({
+      id: b.id,
+      table_session_id: b.table_session_id,
+      status: b.status,
+      created_at: b.created_at,
+      table_number: b.table_sessions?.tables?.table_number || 0,
+    }));
+
+    setBillRequests(mapped);
+  };
+
   useEffect(() => {
     fetchOrders();
     fetchWaiterCalls();
+    fetchBillRequests();
 
     const channel = supabase
       .channel('kitchen-all')
@@ -141,6 +179,12 @@ const KitchenDisplay = () => {
         fetchWaiterCalls();
         if (Notification.permission === 'granted') {
           new Notification('🔔 Waiter Call!', { body: 'A table is requesting assistance.' });
+        }
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'bill_requests' }, () => {
+        fetchBillRequests();
+        if (Notification.permission === 'granted') {
+          new Notification('💳 Bill Requested!', { body: 'A table is ready to pay.' });
         }
       })
       .subscribe();
@@ -179,6 +223,20 @@ const KitchenDisplay = () => {
     } else {
       toast.success('Waiter call resolved');
       fetchWaiterCalls();
+    }
+  };
+
+  const resolveBillRequest = async (requestId: string) => {
+    const { error } = await supabase
+      .from('bill_requests')
+      .update({ status: 'resolved', resolved_at: new Date().toISOString() })
+      .eq('id', requestId);
+
+    if (error) {
+      toast.error('Failed to resolve bill request');
+    } else {
+      toast.success('Bill request resolved');
+      fetchBillRequests();
     }
   };
 
@@ -277,7 +335,47 @@ const KitchenDisplay = () => {
         )}
       </AnimatePresence>
 
-      {/* Orders Grid */}
+      {/* Bill Requests Banner */}
+      <AnimatePresence>
+        {billRequests.length > 0 && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            className="bg-primary/10 border-b border-primary/20 overflow-hidden"
+          >
+            <div className="px-6 py-3 space-y-2">
+              <p className="text-xs font-sans font-semibold text-primary uppercase tracking-wider flex items-center gap-2">
+                <CreditCard className="w-4 h-4" />
+                Bill Requests ({billRequests.length})
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {billRequests.map((req) => (
+                  <motion.div
+                    key={req.id}
+                    initial={{ scale: 0.9, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    className="flex items-center gap-2 px-3 py-2 rounded-full bg-primary/15 border border-primary/25 min-h-[44px]"
+                  >
+                    <span className="text-sm font-sans font-semibold text-primary">
+                      Table {req.table_number}
+                    </span>
+                    <span className="text-xs text-primary/70 font-sans">{timeSince(req.created_at)}</span>
+                    <button
+                      onClick={() => resolveBillRequest(req.id)}
+                      className="w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center hover:bg-primary/40 transition-colors"
+                      aria-label="Resolve bill request"
+                    >
+                      <Check className="w-3 h-3 text-primary" />
+                    </button>
+                  </motion.div>
+                ))}
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <div className="p-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
         <AnimatePresence>
           {orders.map((order) => (
