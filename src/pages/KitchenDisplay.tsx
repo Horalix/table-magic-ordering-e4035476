@@ -131,9 +131,38 @@ const KitchenDisplay = () => {
     setWaiterCalls(mapped);
   };
 
+  const fetchBillRequests = async () => {
+    const { data, error } = await supabase
+      .from('bill_requests')
+      .select(`
+        *,
+        table_sessions!inner(
+          tables!inner(table_number)
+        )
+      `)
+      .eq('status', 'pending')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Error fetching bill requests:', error);
+      return;
+    }
+
+    const mapped: BillRequest[] = (data || []).map((b: any) => ({
+      id: b.id,
+      table_session_id: b.table_session_id,
+      status: b.status,
+      created_at: b.created_at,
+      table_number: b.table_sessions?.tables?.table_number || 0,
+    }));
+
+    setBillRequests(mapped);
+  };
+
   useEffect(() => {
     fetchOrders();
     fetchWaiterCalls();
+    fetchBillRequests();
 
     const channel = supabase
       .channel('kitchen-all')
@@ -150,6 +179,12 @@ const KitchenDisplay = () => {
         fetchWaiterCalls();
         if (Notification.permission === 'granted') {
           new Notification('🔔 Waiter Call!', { body: 'A table is requesting assistance.' });
+        }
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'bill_requests' }, () => {
+        fetchBillRequests();
+        if (Notification.permission === 'granted') {
+          new Notification('💳 Bill Requested!', { body: 'A table is ready to pay.' });
         }
       })
       .subscribe();
