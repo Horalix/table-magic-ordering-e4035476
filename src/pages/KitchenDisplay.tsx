@@ -290,6 +290,15 @@ const KitchenDisplay = () => {
           </div>
           <div className="flex gap-2">
             <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setSoundEnabled(!soundEnabled)}
+              className="rounded-full min-h-[44px] min-w-[44px]"
+              aria-label={soundEnabled ? 'Mute alerts' : 'Enable alerts'}
+            >
+              {soundEnabled ? <Volume2 className="w-5 h-5" /> : <VolumeX className="w-5 h-5 text-muted-foreground" />}
+            </Button>
+            <Button
               variant={filter === 'active' ? 'default' : 'outline'}
               size="sm"
               onClick={() => setFilter('active')}
