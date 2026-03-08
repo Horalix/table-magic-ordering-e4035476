@@ -1,0 +1,212 @@
+import React, { useState } from 'react';
+import { motion } from 'framer-motion';
+import { ArrowLeft, Minus, Plus, Trash2, Send, CheckCircle } from 'lucide-react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useCartStore } from '@/lib/cart-store';
+import { supabase } from '@/integrations/supabase/client';
+import { Button } from '@/components/ui/button';
+import { toast } from 'sonner';
+
+const CartPage = () => {
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const { items, total, updateQuantity, removeItem, clearCart, tableNumber, sessionId } = useCartStore();
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [orderPlaced, setOrderPlaced] = useState(false);
+
+  const table = searchParams.get('table');
+  const token = searchParams.get('token');
+
+  const goBack = () => {
+    navigate(-1);
+  };
+
+  const placeOrder = async () => {
+    if (!sessionId) {
+      toast.error('No active table session. Please scan the QR code again.');
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const orderTotal = total();
+
+      // Create order
+      const { data: order, error: orderError } = await supabase
+        .from('orders')
+        .insert({
+          table_session_id: sessionId,
+          total: orderTotal,
+          status: 'pending' as any,
+        })
+        .select()
+        .single();
+
+      if (orderError) throw orderError;
+
+      // Create order items
+      const orderItems = items.map((item) => ({
+        order_id: order.id,
+        menu_item_id: item.id,
+        quantity: item.quantity,
+        unit_price: item.price,
+        notes: item.notes || null,
+        status: 'pending' as any,
+      }));
+
+      const { error: itemsError } = await supabase.from('order_items').insert(orderItems);
+      if (itemsError) throw itemsError;
+
+      setOrderPlaced(true);
+      clearCart();
+      toast.success('Order placed successfully!');
+    } catch (err: any) {
+      console.error('Order error:', err);
+      toast.error('Failed to place order. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  if (orderPlaced) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center px-6">
+        <motion.div
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="text-center"
+        >
+          <div className="w-20 h-20 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-6">
+            <CheckCircle className="w-10 h-10 text-primary" />
+          </div>
+          <h2 className="font-serif text-2xl font-bold text-foreground">Order Confirmed!</h2>
+          <p className="text-muted-foreground font-sans mt-2">Your order has been sent to the kitchen.</p>
+          {table && <p className="text-sm text-primary font-sans mt-1">Table {table}</p>}
+          <Button
+            onClick={() => {
+              setOrderPlaced(false);
+              const params = new URLSearchParams();
+              if (table) params.set('table', table);
+              if (token) params.set('token', token);
+              navigate(`/menu?${params.toString()}`);
+            }}
+            className="mt-8 rounded-full px-8 bg-primary text-primary-foreground hover:bg-sage-dark"
+          >
+            Order More
+          </Button>
+        </motion.div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-background pb-32">
+      {/* Header */}
+      <div className="sticky top-0 z-30 glass">
+        <div className="flex items-center gap-3 px-4 py-4">
+          <button onClick={goBack} className="p-2 -ml-2 rounded-full hover:bg-muted transition-colors">
+            <ArrowLeft className="w-5 h-5 text-foreground" />
+          </button>
+          <h1 className="font-serif text-xl font-semibold text-foreground">Your Order</h1>
+          {table && (
+            <span className="ml-auto text-xs font-sans px-3 py-1 rounded-full bg-primary/10 text-primary">
+              Table {table}
+            </span>
+          )}
+        </div>
+      </div>
+
+      {items.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-20 px-6">
+          <p className="text-muted-foreground font-sans text-center">Your order is empty.<br />Browse the menu to add items.</p>
+          <Button onClick={goBack} variant="outline" className="mt-4 rounded-full">
+            Back to Menu
+          </Button>
+        </div>
+      ) : (
+        <>
+          {/* Items */}
+          <div className="px-4 pt-4 space-y-3">
+            {items.map((item, i) => (
+              <motion.div
+                key={item.id}
+                initial={{ opacity: 0, x: -10 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: i * 0.05 }}
+                className="flex gap-4 p-4 rounded-xl border border-border bg-card"
+              >
+                <div className="flex-1 min-w-0">
+                  <h3 className="font-serif text-base font-semibold text-foreground">{item.name}</h3>
+                  {item.notes && (
+                    <p className="text-xs text-muted-foreground mt-0.5 italic">"{item.notes}"</p>
+                  )}
+                  <p className="text-sm font-sans font-semibold text-accent mt-1">
+                    {(item.price * item.quantity).toFixed(2)} KM
+                  </p>
+                </div>
+                <div className="flex flex-col items-end gap-2">
+                  <button onClick={() => removeItem(item.id)} className="text-muted-foreground hover:text-destructive transition-colors">
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                  <div className="flex items-center gap-2 bg-muted rounded-full px-1.5 py-0.5">
+                    <button
+                      onClick={() => updateQuantity(item.id, item.quantity - 1)}
+                      className="w-6 h-6 rounded-full flex items-center justify-center hover:bg-card"
+                    >
+                      <Minus className="w-3 h-3" />
+                    </button>
+                    <span className="text-sm font-sans font-semibold w-4 text-center">{item.quantity}</span>
+                    <button
+                      onClick={() => updateQuantity(item.id, item.quantity + 1)}
+                      className="w-6 h-6 rounded-full flex items-center justify-center hover:bg-card"
+                    >
+                      <Plus className="w-3 h-3" />
+                    </button>
+                  </div>
+                </div>
+              </motion.div>
+            ))}
+          </div>
+
+          {/* Summary */}
+          <div className="px-4 mt-6">
+            <div className="p-4 rounded-xl border border-border bg-card">
+              <div className="flex justify-between items-center">
+                <span className="font-sans text-sm text-muted-foreground">Total</span>
+                <span className="font-serif text-xl font-bold text-foreground">{total().toFixed(2)} KM</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Place Order Button */}
+          <div className="fixed bottom-0 left-0 right-0 z-40 p-4 pb-6">
+            <Button
+              onClick={placeOrder}
+              disabled={isSubmitting || !sessionId}
+              className="w-full h-14 rounded-2xl bg-primary text-primary-foreground font-sans font-semibold text-base hover:bg-sage-dark disabled:opacity-50"
+            >
+              {isSubmitting ? (
+                <span className="flex items-center gap-2">
+                  <div className="w-4 h-4 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin" />
+                  Placing Order...
+                </span>
+              ) : (
+                <span className="flex items-center gap-2">
+                  <Send className="w-4 h-4" />
+                  Place Order · {total().toFixed(2)} KM
+                </span>
+              )}
+            </Button>
+            {!sessionId && (
+              <p className="text-xs text-destructive text-center mt-2 font-sans">
+                Please scan the QR code at your table to place an order
+              </p>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  );
+};
+
+export default CartPage;

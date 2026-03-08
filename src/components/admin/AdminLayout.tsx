@@ -1,0 +1,134 @@
+import React, { useEffect, useState } from 'react';
+import { useNavigate, Outlet, Link, useLocation } from 'react-router-dom';
+import { supabase } from '@/integrations/supabase/client';
+import { 
+  LayoutDashboard, UtensilsCrossed, TableProperties, ClipboardList, 
+  BarChart3, QrCode, LogOut, ChefHat, Menu, X 
+} from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { toast } from 'sonner';
+
+const navItems = [
+  { label: 'Dashboard', icon: LayoutDashboard, path: '/admin' },
+  { label: 'Menu', icon: UtensilsCrossed, path: '/admin/menu' },
+  { label: 'Tables', icon: TableProperties, path: '/admin/tables' },
+  { label: 'Orders', icon: ClipboardList, path: '/admin/orders' },
+  { label: 'Analytics', icon: BarChart3, path: '/admin/analytics' },
+  { label: 'QR Codes', icon: QrCode, path: '/admin/qr-codes' },
+  { label: 'Kitchen', icon: ChefHat, path: '/kitchen' },
+];
+
+const AdminLayout = () => {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [user, setUser] = useState<any>(null);
+
+  useEffect(() => {
+    const checkAuth = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        navigate('/admin/login');
+        return;
+      }
+
+      const { data: roles } = await supabase
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', session.user.id);
+
+      if (!roles || roles.length === 0) {
+        await supabase.auth.signOut();
+        navigate('/admin/login');
+        toast.error('Unauthorized access');
+        return;
+      }
+
+      setUser(session.user);
+    };
+
+    checkAuth();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_OUT') navigate('/admin/login');
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    navigate('/admin/login');
+  };
+
+  return (
+    <div className="min-h-screen bg-background flex">
+      {/* Mobile menu button */}
+      <button
+        onClick={() => setSidebarOpen(!sidebarOpen)}
+        className="lg:hidden fixed top-4 left-4 z-50 p-2 rounded-lg bg-card border border-border shadow-sm"
+      >
+        {sidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+      </button>
+
+      {/* Sidebar */}
+      <aside className={`
+        fixed lg:static inset-y-0 left-0 z-40 w-64 bg-sidebar border-r border-sidebar-border
+        transform transition-transform duration-200
+        ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
+      `}>
+        <div className="flex flex-col h-full">
+          <div className="px-6 py-6 border-b border-sidebar-border">
+            <h1 className="font-serif text-xl font-bold text-sidebar-foreground">La Soul</h1>
+            <p className="text-xs text-sidebar-foreground/60 font-sans mt-0.5">Admin Dashboard</p>
+          </div>
+
+          <nav className="flex-1 px-3 py-4 space-y-1">
+            {navItems.map((item) => {
+              const isActive = location.pathname === item.path;
+              return (
+                <Link
+                  key={item.path}
+                  to={item.path}
+                  onClick={() => setSidebarOpen(false)}
+                  className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-sans transition-colors ${
+                    isActive
+                      ? 'bg-sidebar-accent text-sidebar-accent-foreground font-medium'
+                      : 'text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'
+                  }`}
+                >
+                  <item.icon className="w-4 h-4" />
+                  {item.label}
+                </Link>
+              );
+            })}
+          </nav>
+
+          <div className="px-3 py-4 border-t border-sidebar-border">
+            <button
+              onClick={handleLogout}
+              className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-sans text-sidebar-foreground/70 hover:bg-sidebar-accent/50 w-full"
+            >
+              <LogOut className="w-4 h-4" />
+              Sign Out
+            </button>
+          </div>
+        </div>
+      </aside>
+
+      {/* Mobile overlay */}
+      {sidebarOpen && (
+        <div className="lg:hidden fixed inset-0 z-30 bg-charcoal/50" onClick={() => setSidebarOpen(false)} />
+      )}
+
+      {/* Main content */}
+      <main className="flex-1 min-w-0 lg:ml-0">
+        <div className="p-6 lg:p-8 pt-16 lg:pt-8">
+          <Outlet />
+        </div>
+      </main>
+    </div>
+  );
+};
+
+export default AdminLayout;
