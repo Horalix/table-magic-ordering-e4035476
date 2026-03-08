@@ -31,6 +31,14 @@ interface WaiterCall {
   table_number: number;
 }
 
+interface BillRequest {
+  id: string;
+  table_session_id: string;
+  status: string;
+  created_at: string;
+  table_number: number;
+}
+
 const statusColors: Record<string, string> = {
   pending: 'bg-destructive/10 text-destructive border-destructive/20',
   confirmed: 'bg-accent/10 text-accent border-accent/20',
