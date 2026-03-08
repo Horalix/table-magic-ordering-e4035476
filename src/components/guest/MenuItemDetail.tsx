@@ -7,17 +7,16 @@ import { Textarea } from '@/components/ui/textarea';
 
 interface Props {
   item: {
+    id: string;
     name: string;
     description?: string;
     price: number;
     image_url?: string;
   };
-  categoryType: string;
-  subcategoryName: string;
   onClose: () => void;
 }
 
-const MenuItemDetail = ({ item, categoryType, subcategoryName, onClose }: Props) => {
+const MenuItemDetail = ({ item, onClose }: Props) => {
   const [quantity, setQuantity] = useState(1);
   const [notes, setNotes] = useState('');
   const { addItem } = useCartStore();
@@ -25,7 +24,7 @@ const MenuItemDetail = ({ item, categoryType, subcategoryName, onClose }: Props)
   const handleAdd = () => {
     for (let i = 0; i < quantity; i++) {
       addItem({
-        id: `${categoryType}-${subcategoryName}-${item.name}`,
+        id: item.id,
         name: item.name,
         price: item.price,
         image_url: item.image_url,
@@ -42,10 +41,8 @@ const MenuItemDetail = ({ item, categoryType, subcategoryName, onClose }: Props)
       exit={{ opacity: 0 }}
       className="fixed inset-0 z-50 flex items-end sm:items-center justify-center"
     >
-      {/* Backdrop */}
       <div className="absolute inset-0 bg-charcoal/60 backdrop-blur-sm" onClick={onClose} />
 
-      {/* Content */}
       <motion.div
         initial={{ y: '100%' }}
         animate={{ y: 0 }}
@@ -53,7 +50,6 @@ const MenuItemDetail = ({ item, categoryType, subcategoryName, onClose }: Props)
         transition={{ type: 'spring', damping: 25, stiffness: 300 }}
         className="relative w-full max-w-lg bg-card rounded-t-3xl sm:rounded-3xl overflow-hidden"
       >
-        {/* Close button */}
         <button
           onClick={onClose}
           className="absolute top-4 right-4 z-10 w-8 h-8 rounded-full bg-card/80 backdrop-blur flex items-center justify-center"
@@ -61,14 +57,12 @@ const MenuItemDetail = ({ item, categoryType, subcategoryName, onClose }: Props)
           <X className="w-4 h-4 text-foreground" />
         </button>
 
-        {/* Image */}
         {item.image_url && (
           <div className="w-full h-48 bg-muted overflow-hidden">
             <img src={item.image_url} alt={item.name} className="w-full h-full object-cover" />
           </div>
         )}
 
-        {/* Details */}
         <div className="p-6">
           <h2 className="font-serif text-2xl font-bold text-foreground">{item.name}</h2>
           {item.description && (
@@ -76,7 +70,6 @@ const MenuItemDetail = ({ item, categoryType, subcategoryName, onClose }: Props)
           )}
           <p className="text-lg font-sans font-bold text-accent mt-3">{item.price.toFixed(2)} KM</p>
 
-          {/* Notes */}
           <div className="mt-4">
             <label className="text-sm font-sans font-medium text-foreground">Special requests</label>
             <Textarea
@@ -88,7 +81,6 @@ const MenuItemDetail = ({ item, categoryType, subcategoryName, onClose }: Props)
             />
           </div>
 
-          {/* Quantity + Add */}
           <div className="flex items-center gap-4 mt-6">
             <div className="flex items-center gap-3 bg-muted rounded-full px-2 py-1">
               <button

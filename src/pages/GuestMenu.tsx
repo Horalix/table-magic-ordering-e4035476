@@ -2,18 +2,44 @@ import React from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { UtensilsCrossed, Wine, Cake } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
 
-const categories = [
-  { name: 'Drinks', icon: Wine, path: '/menu/drinks', color: 'from-sage-dark to-sage' },
-  { name: 'Food', icon: UtensilsCrossed, path: '/menu/food', color: 'from-accent to-gold-light' },
-  { name: 'Desserts', icon: Cake, path: '/menu/dessert', color: 'from-sage to-sage-light' },
-];
+const iconMap: Record<string, any> = {
+  Drinks: Wine,
+  Food: UtensilsCrossed,
+  Desserts: Cake,
+};
+
+const pathMap: Record<string, string> = {
+  Drinks: '/menu/drinks',
+  Food: '/menu/food',
+  Desserts: '/menu/desserts',
+};
+
+const descMap: Record<string, string> = {
+  Drinks: 'Cocktails, wine, coffee & more',
+  Food: 'Starters, mains, burgers & pizza',
+  Desserts: 'Sweet endings',
+};
 
 const GuestMenu = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const table = searchParams.get('table');
   const token = searchParams.get('token');
+
+  const { data: categories = [] } = useQuery({
+    queryKey: ['categories'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('categories')
+        .select('*')
+        .order('sort_order');
+      if (error) throw error;
+      return data;
+    },
+  });
 
   const handleCategoryClick = (path: string) => {
     const params = new URLSearchParams();
@@ -31,7 +57,6 @@ const GuestMenu = () => {
         transition={{ duration: 0.8 }}
         className="relative flex flex-col items-center justify-center px-6 pt-16 pb-10"
       >
-        {/* Logo area */}
         <motion.div
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -77,39 +102,41 @@ const GuestMenu = () => {
 
       {/* Categories */}
       <div className="px-6 pb-32 space-y-4">
-        {categories.map((cat, i) => (
-          <motion.button
-            key={cat.name}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.8 + i * 0.15, duration: 0.5 }}
-            onClick={() => handleCategoryClick(cat.path)}
-            className="w-full group"
-          >
-            <div className="relative overflow-hidden rounded-2xl border border-border bg-card p-8 transition-all duration-300 hover:shadow-lg hover:border-primary/30 hover:-translate-y-0.5">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 transition-colors">
-                    <cat.icon className="w-6 h-6 text-primary" />
+        {categories.map((cat, i) => {
+          const Icon = iconMap[cat.name] || UtensilsCrossed;
+          const path = pathMap[cat.name] || `/menu/${cat.name.toLowerCase()}`;
+          return (
+            <motion.button
+              key={cat.id}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.8 + i * 0.15, duration: 0.5 }}
+              onClick={() => handleCategoryClick(path)}
+              className="w-full group"
+            >
+              <div className="relative overflow-hidden rounded-2xl border border-border bg-card p-8 transition-all duration-300 hover:shadow-lg hover:border-primary/30 hover:-translate-y-0.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 transition-colors">
+                      <Icon className="w-6 h-6 text-primary" />
+                    </div>
+                    <div className="text-left">
+                      <h2 className="font-serif text-2xl font-semibold text-foreground">{cat.name}</h2>
+                      <p className="text-sm text-muted-foreground font-sans mt-0.5">
+                        {descMap[cat.name] || ''}
+                      </p>
+                    </div>
                   </div>
-                  <div className="text-left">
-                    <h2 className="font-serif text-2xl font-semibold text-foreground">{cat.name}</h2>
-                    <p className="text-sm text-muted-foreground font-sans mt-0.5">
-                      {cat.name === 'Drinks' && 'Cocktails, wine, coffee & more'}
-                      {cat.name === 'Food' && 'Starters, mains, burgers & pizza'}
-                      {cat.name === 'Desserts' && 'Sweet endings'}
-                    </p>
+                  <div className="text-muted-foreground group-hover:text-primary transition-colors">
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
                   </div>
-                </div>
-                <div className="text-muted-foreground group-hover:text-primary transition-colors">
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                  </svg>
                 </div>
               </div>
-            </div>
-          </motion.button>
-        ))}
+            </motion.button>
+          );
+        })}
       </div>
     </div>
   );
