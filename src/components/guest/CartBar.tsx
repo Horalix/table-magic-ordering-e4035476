@@ -10,10 +10,11 @@ const CartBar = () => {
   const [searchParams] = useSearchParams();
   const count = itemCount();
 
-  if (count === 0) return null;
-
   const table = searchParams.get('table');
   const token = searchParams.get('token');
+  const hasSession = !!(table && token);
+
+  if (count === 0 || !hasSession) return null;
 
   const goToCart = () => {
     const params = new URLSearchParams();

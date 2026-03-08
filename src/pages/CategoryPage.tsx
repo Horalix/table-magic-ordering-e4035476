@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, Plus } from 'lucide-react';
+import { ArrowLeft, Plus, QrCode } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useCartStore } from '@/lib/cart-store';
@@ -25,10 +25,10 @@ const CategoryPage = () => {
 
   const table = searchParams.get('table');
   const token = searchParams.get('token');
+  const hasSession = !!(table && token);
 
   const categoryName = categoryNameMap[type || ''] || type;
 
-  // Fetch category
   const { data: category } = useQuery({
     queryKey: ['category', categoryName],
     queryFn: async () => {
@@ -42,7 +42,6 @@ const CategoryPage = () => {
     },
   });
 
-  // Fetch subcategories
   const { data: subcategories = [] } = useQuery({
     queryKey: ['subcategories', category?.id],
     queryFn: async () => {
@@ -57,11 +56,8 @@ const CategoryPage = () => {
     enabled: !!category?.id,
   });
 
-  // Active subcategory
   const activeSubId = selectedSubcategory || subcategories[0]?.id;
-  const activeSub = subcategories.find((s) => s.id === activeSubId);
 
-  // Fetch items for active subcategory
   const { data: items = [] } = useQuery({
     queryKey: ['menu_items', activeSubId],
     queryFn: async () => {
@@ -126,6 +122,16 @@ const CategoryPage = () => {
         </div>
       </div>
 
+      {/* Browse-only banner */}
+      {!hasSession && (
+        <div className="mx-4 mt-3 px-4 py-3 rounded-xl bg-accent/10 border border-accent/20 flex items-center gap-3">
+          <QrCode className="w-4 h-4 text-accent flex-shrink-0" />
+          <p className="text-xs font-sans text-accent">
+            Scan the QR code at your table to place an order
+          </p>
+        </div>
+      )}
+
       {/* Items */}
       <div className="px-4 pt-4 space-y-3">
         {items.map((item, i) => (
@@ -152,22 +158,24 @@ const CategoryPage = () => {
                   )}
                   <p className="text-sm font-sans font-semibold text-accent mt-2">{Number(item.price).toFixed(2)} KM</p>
                 </div>
-                <div className="flex items-center">
-                  <div
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      addItem({
-                        id: item.id,
-                        name: item.name,
-                        price: Number(item.price),
-                        image_url: item.image_url || undefined,
-                      });
-                    }}
-                    className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center hover:bg-primary hover:text-primary-foreground transition-colors cursor-pointer"
-                  >
-                    <Plus className="w-4 h-4" />
+                {hasSession && (
+                  <div className="flex items-center">
+                    <div
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        addItem({
+                          id: item.id,
+                          name: item.name,
+                          price: Number(item.price),
+                          image_url: item.image_url || undefined,
+                        });
+                      }}
+                      className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center hover:bg-primary hover:text-primary-foreground transition-colors cursor-pointer"
+                    >
+                      <Plus className="w-4 h-4" />
+                    </div>
                   </div>
-                </div>
+                )}
               </div>
             </button>
           </motion.div>
@@ -186,11 +194,12 @@ const CategoryPage = () => {
               image_url: selectedItem.image_url || undefined,
             }}
             onClose={() => setSelectedItem(null)}
+            canOrder={hasSession}
           />
         )}
       </AnimatePresence>
 
-      <CartBar />
+      {hasSession && <CartBar />}
     </div>
   );
 };

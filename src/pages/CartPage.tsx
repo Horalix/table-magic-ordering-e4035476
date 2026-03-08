@@ -29,6 +29,20 @@ const CartPage = () => {
 
     setIsSubmitting(true);
     try {
+      // Validate session is still active server-side
+      const { data: session, error: sessionError } = await supabase
+        .from('table_sessions')
+        .select('id, is_active')
+        .eq('id', sessionId)
+        .eq('is_active', true)
+        .single();
+
+      if (sessionError || !session) {
+        toast.error('Your table session has expired. Please scan the QR code again.');
+        setIsSubmitting(false);
+        return;
+      }
+
       const orderTotal = total();
 
       // Create order
