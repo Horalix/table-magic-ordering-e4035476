@@ -14,6 +14,38 @@ export type Database = {
   }
   public: {
     Tables: {
+      bill_requests: {
+        Row: {
+          created_at: string
+          id: string
+          resolved_at: string | null
+          status: string
+          table_session_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          resolved_at?: string | null
+          status?: string
+          table_session_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          resolved_at?: string | null
+          status?: string
+          table_session_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bill_requests_table_session_id_fkey"
+            columns: ["table_session_id"]
+            isOneToOne: false
+            referencedRelation: "table_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       categories: {
         Row: {
           created_at: string
