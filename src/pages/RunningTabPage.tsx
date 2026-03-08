@@ -1,11 +1,13 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Clock, CheckCircle, ChefHat, Utensils, Receipt } from 'lucide-react';
+import { ArrowLeft, Clock, CheckCircle, ChefHat, Utensils, Receipt, CreditCard, Loader2 } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useCartStore } from '@/lib/cart-store';
 import { supabase } from '@/integrations/supabase/client';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Button } from '@/components/ui/button';
+import { toast } from 'sonner';
 
 const statusConfig: Record<string, { icon: React.ReactNode; label: string; color: string }> = {
   pending: { icon: <Clock className="w-3.5 h-3.5" />, label: 'Pending', color: 'bg-accent/10 text-accent border-accent/20' },
@@ -20,6 +22,7 @@ const RunningTabPage = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { sessionId } = useCartStore();
+  const [requestingBill, setRequestingBill] = useState(false);
 
   const table = searchParams.get('table');
   const token = searchParams.get('token');
@@ -46,6 +49,22 @@ const RunningTabPage = () => {
     refetchInterval: 10000,
   });
 
+  // [UX] Check if bill already requested
+  const { data: existingBillRequest } = useQuery({
+    queryKey: ['bill-request', sessionId],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('bill_requests')
+        .select('*')
+        .eq('table_session_id', sessionId!)
+        .eq('status', 'pending')
+        .maybeSingle();
+      return data;
+    },
+    enabled: !!sessionId,
+    refetchInterval: 10000,
+  });
+
   const grandTotal = orders.reduce((sum, o) => sum + Number(o.total), 0);
 
   const goBack = () => {
@@ -58,6 +77,34 @@ const RunningTabPage = () => {
   const formatTime = (dateStr: string) => {
     return new Date(dateStr).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
+
+  // [UX] Calculate wait time for each order
+  const getWaitTime = (createdAt: string, status: string) => {
+    if (status === 'served' || status === 'cancelled') return null;
+    const mins = Math.floor((Date.now() - new Date(createdAt).getTime()) / 60000);
+    if (mins < 1) return 'Just now';
+    if (mins < 60) return `${mins} min`;
+    return `${Math.floor(mins / 60)}h ${mins % 60}m`;
+  };
+
+  const requestBill = async () => {
+    if (!sessionId) return;
+    setRequestingBill(true);
+    try {
+      const { error } = await supabase
+        .from('bill_requests')
+        .insert({ table_session_id: sessionId });
+
+      if (error) throw error;
+      toast.success('Bill requested! Your server will be with you shortly.');
+    } catch {
+      toast.error('Could not request bill. Please try again.');
+    } finally {
+      setRequestingBill(false);
+    }
+  };
+
+  const billRequested = !!existingBillRequest;
 
   return (
     <div className="min-h-screen bg-background pb-32">
@@ -108,15 +155,13 @@ const RunningTabPage = () => {
         </div>
       ) : (
         <>
-          {/* [ART] Grand Total Card with sage gradient */}
+          {/* Grand Total Card */}
           <div className="px-4 pt-4">
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              className="p-5 rounded-2xl text-white relative overflow-hidden"
-              style={{ backgroundColor: 'hsl(140, 12%, 53%)' }}
+              className="p-5 rounded-2xl text-white relative overflow-hidden bg-primary"
             >
-              {/* [ART] Subtle pattern overlay */}
               <div className="absolute inset-0 bg-gradient-to-br from-white/10 to-transparent" />
               <div className="relative flex justify-between items-center">
                 <div>
@@ -130,11 +175,41 @@ const RunningTabPage = () => {
             </motion.div>
           </div>
 
+          {/* [UX] Request Bill Button */}
+          <div className="px-4 pt-3">
+            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
+              {billRequested ? (
+                <div className="flex items-center gap-3 p-4 rounded-xl border border-primary/20 bg-primary/5">
+                  <CheckCircle className="w-5 h-5 text-primary shrink-0" />
+                  <div>
+                    <p className="text-sm font-sans font-semibold text-foreground">Bill requested</p>
+                    <p className="text-xs font-sans text-muted-foreground">Your server has been notified.</p>
+                  </div>
+                </div>
+              ) : (
+                <Button
+                  onClick={requestBill}
+                  disabled={requestingBill}
+                  className="w-full rounded-xl min-h-[48px] font-sans text-sm gap-2"
+                  variant="outline"
+                >
+                  {requestingBill ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <CreditCard className="w-4 h-4" />
+                  )}
+                  {requestingBill ? 'Requesting...' : 'Request Bill'}
+                </Button>
+              )}
+            </motion.div>
+          </div>
+
           {/* Orders List */}
           <div className="px-4 pt-4 space-y-4">
             {orders.map((order, idx) => {
               const status = statusConfig[order.status] || statusConfig.pending;
               const items = (order as any).order_items || [];
+              const waitTime = getWaitTime(order.created_at, order.status);
 
               return (
                 <motion.div
@@ -154,6 +229,13 @@ const RunningTabPage = () => {
                         {status.icon}
                         {status.label}
                       </span>
+                      {/* [UX] Wait time indicator */}
+                      {waitTime && (
+                        <span className="inline-flex items-center gap-1 text-[11px] font-sans text-muted-foreground">
+                          <Clock className="w-3 h-3" />
+                          {waitTime}
+                        </span>
+                      )}
                     </div>
                     <span className="text-sm font-sans font-bold text-foreground">
                       {Number(order.total).toFixed(2)} KM

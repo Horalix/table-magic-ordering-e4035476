@@ -58,6 +58,7 @@ const statusIcons: Record<string, React.ReactNode> = {
 const KitchenDisplay = () => {
   const [orders, setOrders] = useState<OrderWithItems[]>([]);
   const [waiterCalls, setWaiterCalls] = useState<WaiterCall[]>([]);
+  const [billRequests, setBillRequests] = useState<BillRequest[]>([]);
   const [filter, setFilter] = useState<string>('active');
 
   const fetchOrders = async () => {
