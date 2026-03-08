@@ -292,6 +292,38 @@ export type Database = {
         }
         Relationships: []
       }
+      waiter_calls: {
+        Row: {
+          created_at: string
+          id: string
+          resolved_at: string | null
+          status: string
+          table_session_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          resolved_at?: string | null
+          status?: string
+          table_session_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          resolved_at?: string | null
+          status?: string
+          table_session_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "waiter_calls_table_session_id_fkey"
+            columns: ["table_session_id"]
+            isOneToOne: false
+            referencedRelation: "table_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
