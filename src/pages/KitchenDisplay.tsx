@@ -335,7 +335,47 @@ const KitchenDisplay = () => {
         )}
       </AnimatePresence>
 
-      {/* Orders Grid */}
+      {/* Bill Requests Banner */}
+      <AnimatePresence>
+        {billRequests.length > 0 && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            className="bg-primary/10 border-b border-primary/20 overflow-hidden"
+          >
+            <div className="px-6 py-3 space-y-2">
+              <p className="text-xs font-sans font-semibold text-primary uppercase tracking-wider flex items-center gap-2">
+                <CreditCard className="w-4 h-4" />
+                Bill Requests ({billRequests.length})
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {billRequests.map((req) => (
+                  <motion.div
+                    key={req.id}
+                    initial={{ scale: 0.9, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    className="flex items-center gap-2 px-3 py-2 rounded-full bg-primary/15 border border-primary/25 min-h-[44px]"
+                  >
+                    <span className="text-sm font-sans font-semibold text-primary">
+                      Table {req.table_number}
+                    </span>
+                    <span className="text-xs text-primary/70 font-sans">{timeSince(req.created_at)}</span>
+                    <button
+                      onClick={() => resolveBillRequest(req.id)}
+                      className="w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center hover:bg-primary/40 transition-colors"
+                      aria-label="Resolve bill request"
+                    >
+                      <Check className="w-3 h-3 text-primary" />
+                    </button>
+                  </motion.div>
+                ))}
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <div className="p-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
         <AnimatePresence>
           {orders.map((order) => (
