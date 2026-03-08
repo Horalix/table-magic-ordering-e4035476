@@ -7,18 +7,51 @@ import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 
+// [UX] Extracted order success view for clarity
+const OrderSuccess = ({ table, onContinue }: { table: string | null; onContinue: () => void }) => (
+  <div className="min-h-screen bg-background flex items-center justify-center px-6">
+    <motion.div
+      initial={{ opacity: 0, scale: 0.9 }}
+      animate={{ opacity: 1, scale: 1 }}
+      className="text-center"
+    >
+      {/* [PSYCH] Celebratory animation — dopamine micro-reward */}
+      <motion.div
+        initial={{ scale: 0 }}
+        animate={{ scale: 1 }}
+        transition={{ type: 'spring', damping: 12, stiffness: 200, delay: 0.2 }}
+        className="w-20 h-20 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-6"
+      >
+        <CheckCircle className="w-10 h-10 text-primary" />
+      </motion.div>
+      <h2 className="font-serif text-2xl font-bold text-foreground">Order Confirmed!</h2>
+      <p className="text-muted-foreground font-sans mt-2">Your order has been sent to the kitchen.</p>
+      {table && <p className="text-sm text-primary font-sans mt-1">Table {table}</p>}
+      <Button
+        onClick={onContinue}
+        className="mt-8 rounded-full px-8 bg-primary text-primary-foreground hover:bg-sage-dark"
+      >
+        Order More
+      </Button>
+    </motion.div>
+  </div>
+);
+
 const CartPage = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { items, total, updateQuantity, removeItem, clearCart, tableNumber, sessionId } = useCartStore();
+  const { items, total, updateQuantity, removeItem, clearCart, sessionId } = useCartStore();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [orderPlaced, setOrderPlaced] = useState(false);
 
   const table = searchParams.get('table');
   const token = searchParams.get('token');
 
-  const goBack = () => {
-    navigate(-1);
+  const buildMenuUrl = () => {
+    const params = new URLSearchParams();
+    if (table) params.set('table', table);
+    if (token) params.set('token', token);
+    return `/menu?${params.toString()}`;
   };
 
   const placeOrder = async () => {
@@ -29,7 +62,7 @@ const CartPage = () => {
 
     setIsSubmitting(true);
     try {
-      // Validate session is still active server-side
+      // [UX] Server-side session validation
       const { data: session, error: sessionError } = await supabase
         .from('table_sessions')
         .select('id, is_active')
@@ -45,7 +78,6 @@ const CartPage = () => {
 
       const orderTotal = total();
 
-      // Create order
       const { data: order, error: orderError } = await supabase
         .from('orders')
         .insert({
@@ -58,7 +90,6 @@ const CartPage = () => {
 
       if (orderError) throw orderError;
 
-      // Create order items
       const orderItems = items.map((item) => ({
         order_id: order.id,
         menu_item_id: item.id,
@@ -84,32 +115,13 @@ const CartPage = () => {
 
   if (orderPlaced) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center px-6">
-        <motion.div
-          initial={{ opacity: 0, scale: 0.9 }}
-          animate={{ opacity: 1, scale: 1 }}
-          className="text-center"
-        >
-          <div className="w-20 h-20 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-6">
-            <CheckCircle className="w-10 h-10 text-primary" />
-          </div>
-          <h2 className="font-serif text-2xl font-bold text-foreground">Order Confirmed!</h2>
-          <p className="text-muted-foreground font-sans mt-2">Your order has been sent to the kitchen.</p>
-          {table && <p className="text-sm text-primary font-sans mt-1">Table {table}</p>}
-          <Button
-            onClick={() => {
-              setOrderPlaced(false);
-              const params = new URLSearchParams();
-              if (table) params.set('table', table);
-              if (token) params.set('token', token);
-              navigate(`/menu?${params.toString()}`);
-            }}
-            className="mt-8 rounded-full px-8 bg-primary text-primary-foreground hover:bg-sage-dark"
-          >
-            Order More
-          </Button>
-        </motion.div>
-      </div>
+      <OrderSuccess
+        table={table}
+        onContinue={() => {
+          setOrderPlaced(false);
+          navigate(buildMenuUrl());
+        }}
+      />
     );
   }
 
@@ -118,7 +130,7 @@ const CartPage = () => {
       {/* Header */}
       <div className="sticky top-0 z-30 glass">
         <div className="flex items-center gap-3 px-4 py-4">
-          <button onClick={goBack} className="p-2 -ml-2 rounded-full hover:bg-muted transition-colors">
+          <button onClick={() => navigate(-1)} className="p-2 -ml-2 rounded-full hover:bg-muted transition-colors">
             <ArrowLeft className="w-5 h-5 text-foreground" />
           </button>
           <h1 className="font-serif text-xl font-semibold text-foreground">Your Order</h1>
@@ -133,7 +145,7 @@ const CartPage = () => {
       {items.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 px-6">
           <p className="text-muted-foreground font-sans text-center">Your order is empty.<br />Browse the menu to add items.</p>
-          <Button onClick={goBack} variant="outline" className="mt-4 rounded-full">
+          <Button onClick={() => navigate(-1)} variant="outline" className="mt-4 rounded-full">
             Back to Menu
           </Button>
         </div>
@@ -159,20 +171,26 @@ const CartPage = () => {
                   </p>
                 </div>
                 <div className="flex flex-col items-end gap-2">
-                  <button onClick={() => removeItem(item.id)} className="text-muted-foreground hover:text-destructive transition-colors">
+                  <button
+                    onClick={() => removeItem(item.id)}
+                    className="text-muted-foreground hover:text-destructive transition-colors p-1"
+                    aria-label={`Remove ${item.name}`}
+                  >
                     <Trash2 className="w-4 h-4" />
                   </button>
                   <div className="flex items-center gap-2 bg-muted rounded-full px-1.5 py-0.5">
                     <button
                       onClick={() => updateQuantity(item.id, item.quantity - 1)}
-                      className="w-6 h-6 rounded-full flex items-center justify-center hover:bg-card"
+                      className="w-7 h-7 rounded-full flex items-center justify-center hover:bg-card transition-colors"
+                      aria-label="Decrease quantity"
                     >
                       <Minus className="w-3 h-3" />
                     </button>
-                    <span className="text-sm font-sans font-semibold w-4 text-center">{item.quantity}</span>
+                    <span className="text-sm font-sans font-semibold w-5 text-center">{item.quantity}</span>
                     <button
                       onClick={() => updateQuantity(item.id, item.quantity + 1)}
-                      className="w-6 h-6 rounded-full flex items-center justify-center hover:bg-card"
+                      className="w-7 h-7 rounded-full flex items-center justify-center hover:bg-card transition-colors"
+                      aria-label="Increase quantity"
                     >
                       <Plus className="w-3 h-3" />
                     </button>

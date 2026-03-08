@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import GuestMenu from "./pages/GuestMenu";
 import CategoryPage from "./pages/CategoryPage";
 import CartPage from "./pages/CartPage";
+import RunningTabPage from "./pages/RunningTabPage";
 import TableEntry from "./pages/TableEntry";
 import AdminLogin from "./pages/AdminLogin";
 import AdminLayout from "./components/admin/AdminLayout";
@@ -32,6 +33,7 @@ const App = () => (
           <Route path="/menu" element={<GuestMenu />} />
           <Route path="/menu/:type" element={<CategoryPage />} />
           <Route path="/cart" element={<CartPage />} />
+          <Route path="/tab" element={<RunningTabPage />} />
           <Route path="/table/:tableNumber" element={<TableEntry />} />
 
           {/* Admin Routes */}
