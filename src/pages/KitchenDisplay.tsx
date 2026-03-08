@@ -226,6 +226,20 @@ const KitchenDisplay = () => {
     }
   };
 
+  const resolveBillRequest = async (requestId: string) => {
+    const { error } = await supabase
+      .from('bill_requests')
+      .update({ status: 'resolved', resolved_at: new Date().toISOString() })
+      .eq('id', requestId);
+
+    if (error) {
+      toast.error('Failed to resolve bill request');
+    } else {
+      toast.success('Bill request resolved');
+      fetchBillRequests();
+    }
+  };
+
   const getNextStatus = (current: string) => {
     const flow: Record<string, string> = {
       pending: 'confirmed',
