@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Bell, Clock, ChefHat, Check, Utensils, Hand, X } from 'lucide-react';
+import { Bell, Clock, ChefHat, Check, Utensils, Hand, X, CreditCard } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
