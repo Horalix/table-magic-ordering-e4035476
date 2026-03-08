@@ -1,7 +1,15 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { DollarSign, ShoppingBag, Clock, TrendingUp } from 'lucide-react';
+import { DollarSign, ShoppingBag, Clock, TrendingUp, Timer } from 'lucide-react';
+
+interface WaitTimeStats {
+  pending: { avg: number; count: number };
+  confirmed: { avg: number; count: number };
+  preparing: { avg: number; count: number };
+  ready: { avg: number; count: number };
+  served: { avg: number; count: number };
+}
 
 const AdminDashboard = () => {
   const [stats, setStats] = useState({
@@ -11,6 +19,13 @@ const AdminDashboard = () => {
     avgOrderValue: 0,
   });
   const [recentOrders, setRecentOrders] = useState<any[]>([]);
+  const [waitTimeStats, setWaitTimeStats] = useState<WaitTimeStats>({
+    pending: { avg: 0, count: 0 },
+    confirmed: { avg: 0, count: 0 },
+    preparing: { avg: 0, count: 0 },
+    ready: { avg: 0, count: 0 },
+    served: { avg: 0, count: 0 },
+  });
 
   useEffect(() => {
     const fetchStats = async () => {
@@ -19,7 +34,7 @@ const AdminDashboard = () => {
       // Today's orders
       const { data: orders } = await supabase
         .from('orders')
-        .select('total, created_at, status')
+        .select('total, created_at, status, updated_at')
         .gte('created_at', today)
         .neq('status', 'cancelled');
 
@@ -38,6 +53,30 @@ const AdminDashboard = () => {
         activeTables: activeSessions || 0,
         avgOrderValue: count > 0 ? revenue / count : 0,
       });
+
+      // [UX] Compute average wait times grouped by current status
+      if (orders && orders.length > 0) {
+        const grouped: Record<string, number[]> = {};
+        for (const o of orders) {
+          const mins = Math.floor((Date.now() - new Date(o.created_at).getTime()) / 60000);
+          if (!grouped[o.status]) grouped[o.status] = [];
+          grouped[o.status].push(mins);
+        }
+        const compute = (status: string) => {
+          const arr = grouped[status] || [];
+          return {
+            avg: arr.length > 0 ? Math.round(arr.reduce((a, b) => a + b, 0) / arr.length) : 0,
+            count: arr.length,
+          };
+        };
+        setWaitTimeStats({
+          pending: compute('pending'),
+          confirmed: compute('confirmed'),
+          preparing: compute('preparing'),
+          ready: compute('ready'),
+          served: compute('served'),
+        });
+      }
 
       // Recent orders
       const { data: recent } = await supabase
@@ -65,9 +104,17 @@ const AdminDashboard = () => {
   const statCards = [
     { label: "Today's Revenue", value: `${stats.todayRevenue.toFixed(2)} KM`, icon: DollarSign, color: 'text-primary' },
     { label: 'Total Orders', value: stats.totalOrders.toString(), icon: ShoppingBag, color: 'text-accent' },
-    { label: 'Active Tables', value: stats.activeTables.toString(), icon: Clock, color: 'text-sage' },
-    { label: 'Avg Order', value: `${stats.avgOrderValue.toFixed(2)} KM`, icon: TrendingUp, color: 'text-gold' },
+    { label: 'Active Tables', value: stats.activeTables.toString(), icon: Clock, color: 'text-primary' },
+    { label: 'Avg Order', value: `${stats.avgOrderValue.toFixed(2)} KM`, icon: TrendingUp, color: 'text-accent' },
   ];
+
+  const waitTimeRows = [
+    { status: 'pending', label: 'Pending', color: 'bg-destructive/10 text-destructive' },
+    { status: 'confirmed', label: 'Confirmed', color: 'bg-accent/10 text-accent' },
+    { status: 'preparing', label: 'Preparing', color: 'bg-accent/15 text-accent' },
+    { status: 'ready', label: 'Ready', color: 'bg-primary/10 text-primary' },
+    { status: 'served', label: 'Served', color: 'bg-muted text-muted-foreground' },
+  ] as const;
 
   return (
     <div>
@@ -91,6 +138,36 @@ const AdminDashboard = () => {
           </Card>
         ))}
       </div>
+
+      {/* [UX] Daily Wait Time Summary */}
+      <Card className="border-border mb-8">
+        <CardHeader>
+          <CardTitle className="font-serif text-lg flex items-center gap-2">
+            <Timer className="w-5 h-5 text-primary" />
+            Today's Average Wait Times
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+            {waitTimeRows.map((row) => {
+              const data = waitTimeStats[row.status as keyof WaitTimeStats];
+              return (
+                <div key={row.status} className="rounded-xl border border-border p-4 text-center">
+                  <span className={`text-xs font-sans font-medium px-2 py-0.5 rounded-full ${row.color}`}>
+                    {row.label}
+                  </span>
+                  <p className="font-serif text-2xl font-bold text-foreground mt-2">
+                    {data.avg}<span className="text-sm font-sans text-muted-foreground ml-1">min</span>
+                  </p>
+                  <p className="text-xs font-sans text-muted-foreground mt-1">
+                    {data.count} order{data.count !== 1 ? 's' : ''}
+                  </p>
+                </div>
+              );
+            })}
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Recent orders */}
       <Card className="border-border">
