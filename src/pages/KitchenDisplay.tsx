@@ -163,9 +163,9 @@ const KitchenDisplay = () => {
   };
 
   useEffect(() => {
-    fetchOrders();
-    fetchWaiterCalls();
-    fetchBillRequests();
+    Promise.all([fetchOrders(), fetchWaiterCalls(), fetchBillRequests()]).then(() => {
+      initialLoadDone.current = true;
+    });
 
     const channel = supabase
       .channel('kitchen-all')
