@@ -61,6 +61,8 @@ const KitchenDisplay = () => {
   const [waiterCalls, setWaiterCalls] = useState<WaiterCall[]>([]);
   const [billRequests, setBillRequests] = useState<BillRequest[]>([]);
   const [filter, setFilter] = useState<string>('active');
+  const [soundEnabled, setSoundEnabled] = useState(true);
+  const initialLoadDone = useRef(false);
 
   const fetchOrders = async () => {
     const { data: ordersData, error } = await supabase
