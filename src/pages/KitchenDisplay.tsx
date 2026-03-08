@@ -199,6 +199,13 @@ const KitchenDisplay = () => {
     return `${Math.floor(mins / 60)}h ${mins % 60}m ago`;
   };
 
+  // [UX] Check if order is urgent (pending > 5 mins)
+  const isUrgent = (order: OrderWithItems) => {
+    if (order.status !== 'pending') return false;
+    const mins = Math.floor((Date.now() - new Date(order.created_at).getTime()) / 60000);
+    return mins >= 5;
+  };
+
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
@@ -213,7 +220,7 @@ const KitchenDisplay = () => {
               variant={filter === 'active' ? 'default' : 'outline'}
               size="sm"
               onClick={() => setFilter('active')}
-              className="rounded-full font-sans"
+              className="rounded-full font-sans min-h-[44px]"
             >
               Active
             </Button>
@@ -221,7 +228,7 @@ const KitchenDisplay = () => {
               variant={filter === 'history' ? 'default' : 'outline'}
               size="sm"
               onClick={() => setFilter('history')}
-              className="rounded-full font-sans"
+              className="rounded-full font-sans min-h-[44px]"
             >
               History
             </Button>
@@ -249,7 +256,7 @@ const KitchenDisplay = () => {
                     key={call.id}
                     initial={{ scale: 0.9, opacity: 0 }}
                     animate={{ scale: 1, opacity: 1 }}
-                    className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-accent/15 border border-accent/25"
+                    className="flex items-center gap-2 px-3 py-2 rounded-full bg-accent/15 border border-accent/25 min-h-[44px]"
                   >
                     <span className="text-sm font-sans font-semibold text-accent">
                       Table {call.table_number}
@@ -257,7 +264,8 @@ const KitchenDisplay = () => {
                     <span className="text-xs text-accent/70 font-sans">{timeSince(call.created_at)}</span>
                     <button
                       onClick={() => resolveWaiterCall(call.id)}
-                      className="w-5 h-5 rounded-full bg-accent/20 flex items-center justify-center hover:bg-accent/40 transition-colors"
+                      className="w-6 h-6 rounded-full bg-accent/20 flex items-center justify-center hover:bg-accent/40 transition-colors"
+                      aria-label="Resolve call"
                     >
                       <X className="w-3 h-3 text-accent" />
                     </button>
@@ -278,7 +286,11 @@ const KitchenDisplay = () => {
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="rounded-xl border border-border bg-card overflow-hidden"
+              className={`rounded-xl border bg-card overflow-hidden transition-all ${
+                isUrgent(order)
+                  ? 'border-destructive/50 shadow-[0_0_12px_-3px_hsl(var(--destructive)/0.3)] animate-pulse'
+                  : 'border-border'
+              }`}
             >
               <div className="flex items-center justify-between px-4 py-3 border-b border-border">
                 <div className="flex items-center gap-2">
@@ -290,7 +302,9 @@ const KitchenDisplay = () => {
                     </span>
                   </Badge>
                 </div>
-                <span className="text-xs text-muted-foreground font-sans">{timeSince(order.created_at)}</span>
+                <span className={`text-xs font-sans ${isUrgent(order) ? 'text-destructive font-semibold' : 'text-muted-foreground'}`}>
+                  {timeSince(order.created_at)}
+                </span>
               </div>
 
               <div className="px-4 py-3 space-y-2">
@@ -318,7 +332,7 @@ const KitchenDisplay = () => {
                 <div className="px-4 pb-4">
                   <Button
                     onClick={() => updateOrderStatus(order.id, getNextStatus(order.status)!)}
-                    className="w-full rounded-lg bg-primary text-primary-foreground font-sans text-sm"
+                    className="w-full rounded-lg bg-primary text-primary-foreground font-sans text-sm min-h-[44px]"
                     size="sm"
                   >
                     Mark as {getNextStatus(order.status)}

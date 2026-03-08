@@ -5,7 +5,12 @@ import { useCartStore } from '@/lib/cart-store';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
-const CallWaiterButton = () => {
+interface Props {
+  variant?: 'default' | 'hero';
+}
+
+// [ART] Two variants: default (sage on cream) and hero (white on sage)
+const CallWaiterButton = ({ variant = 'default' }: Props) => {
   const { sessionId } = useCartStore();
   const [called, setCalled] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -25,8 +30,6 @@ const CallWaiterButton = () => {
 
       setCalled(true);
       toast.success('Your waiter has been notified!');
-
-      // [UX] Reset after 30s so they can call again
       setTimeout(() => setCalled(false), 30000);
     } catch (err) {
       console.error('Call waiter error:', err);
@@ -36,14 +39,20 @@ const CallWaiterButton = () => {
     }
   };
 
+  const isHero = variant === 'hero';
+
   return (
     <motion.button
       onClick={handleCall}
       whileTap={{ scale: 0.95 }}
       className={`flex items-center gap-2 px-4 py-2.5 rounded-full font-sans text-sm font-medium transition-all duration-300 ${
         called
-          ? 'bg-primary/10 text-primary border border-primary/20'
-          : 'bg-accent/10 text-accent border border-accent/20 hover:bg-accent/20'
+          ? isHero
+            ? 'bg-white/20 text-white border border-white/30'
+            : 'bg-primary/10 text-primary border border-primary/20'
+          : isHero
+            ? 'bg-white/10 text-white border border-white/20 hover:bg-white/20'
+            : 'bg-accent/10 text-accent border border-accent/20 hover:bg-accent/20'
       }`}
     >
       <AnimatePresence mode="wait">

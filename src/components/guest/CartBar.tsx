@@ -14,6 +14,7 @@ const CartBar = () => {
   const token = searchParams.get('token');
   const hasSession = !!(table && token);
 
+  // [FIX] Don't render when no session
   if (!hasSession) return null;
 
   const buildParams = () => {
@@ -25,20 +26,20 @@ const CartBar = () => {
 
   return (
     <div className="fixed bottom-0 left-0 right-0 z-40 p-4 pb-6 space-y-2">
-      {/* [UX] Running tab shortcut — always visible with session */}
+      {/* [UX] Running tab shortcut */}
       {sessionId && (
         <motion.button
           initial={{ y: 50, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
           onClick={() => navigate(`/tab?${buildParams()}`)}
-          className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-card border border-border text-foreground font-sans text-sm font-medium hover:bg-muted transition-colors"
+          className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-card/90 backdrop-blur-lg border border-border text-foreground font-sans text-sm font-medium hover:bg-muted transition-colors min-h-[44px]"
         >
           <Receipt className="w-4 h-4 text-primary" />
           View Your Tab
         </motion.button>
       )}
 
-      {/* Cart bar */}
+      {/* [ART] Primary cart CTA */}
       <AnimatePresence>
         {count > 0 && (
           <motion.button
@@ -46,7 +47,8 @@ const CartBar = () => {
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: 100, opacity: 0 }}
             onClick={() => navigate(`/cart?${buildParams()}`)}
-            className="w-full flex items-center justify-between px-6 py-4 rounded-2xl bg-primary text-primary-foreground shadow-lg hover:bg-sage-dark transition-colors"
+            className="w-full flex items-center justify-between px-6 py-4 rounded-2xl text-white shadow-lg hover:opacity-95 transition-opacity min-h-[56px]"
+            style={{ backgroundColor: 'hsl(140, 12%, 53%)' }}
           >
             <div className="flex items-center gap-3">
               <div className="relative">
