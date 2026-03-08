@@ -21,7 +21,7 @@ const AdminOrders = () => {
       .limit(100);
 
     if (filter !== 'all') {
-      query = query.eq('status', filter);
+      query = query.eq('status', filter as any);
     }
 
     const { data } = await query;

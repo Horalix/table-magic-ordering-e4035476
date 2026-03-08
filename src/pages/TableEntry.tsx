@@ -1,34 +1,33 @@
 import React, { useEffect, useState } from 'react';
-import { useSearchParams, useNavigate } from 'react-router-dom';
+import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useCartStore } from '@/lib/cart-store';
 import { Loader2, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 const TableEntry = () => {
+  const { tableNumber } = useParams<{ tableNumber: string }>();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { setTable, setSessionId } = useCartStore();
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const tableNum = searchParams.get('table');
   const token = searchParams.get('token');
 
   useEffect(() => {
     const validateAndCreateSession = async () => {
-      if (!tableNum || !token) {
+      if (!tableNumber || !token) {
         setError('Invalid QR code. Please ask your waiter for assistance.');
         setLoading(false);
         return;
       }
 
       try {
-        // Validate table and token
         const { data: table, error: tableError } = await supabase
           .from('tables')
           .select('*')
-          .eq('table_number', parseInt(tableNum))
+          .eq('table_number', parseInt(tableNumber))
           .eq('qr_token', token)
           .single();
 
@@ -44,7 +43,7 @@ const TableEntry = () => {
           .select('*')
           .eq('table_id', table.id)
           .eq('is_active', true)
-          .single();
+          .maybeSingle();
 
         let sessionId: string;
 
@@ -65,12 +64,10 @@ const TableEntry = () => {
           sessionId = newSession.id;
         }
 
-        // Set cart store state
-        setTable(parseInt(tableNum), token);
+        setTable(parseInt(tableNumber), token);
         setSessionId(sessionId);
 
-        // Navigate to menu
-        const params = new URLSearchParams({ table: tableNum, token });
+        const params = new URLSearchParams({ table: tableNumber, token });
         navigate(`/menu?${params.toString()}`, { replace: true });
       } catch (err) {
         console.error('Table entry error:', err);
@@ -80,7 +77,7 @@ const TableEntry = () => {
     };
 
     validateAndCreateSession();
-  }, [tableNum, token]);
+  }, [tableNumber, token]);
 
   if (loading) {
     return (
@@ -101,11 +98,7 @@ const TableEntry = () => {
             <AlertCircle className="w-8 h-8 text-destructive" />
           </div>
           <h2 className="font-serif text-xl font-bold text-foreground">{error}</h2>
-          <Button
-            onClick={() => navigate('/menu')}
-            variant="outline"
-            className="mt-6 rounded-full"
-          >
+          <Button onClick={() => navigate('/menu')} variant="outline" className="mt-6 rounded-full">
             Browse Menu Without Ordering
           </Button>
         </div>
