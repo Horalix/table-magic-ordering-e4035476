@@ -5,6 +5,7 @@ import { ArrowLeft, Plus, QrCode } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useCartStore } from '@/lib/cart-store';
+import { Skeleton } from '@/components/ui/skeleton';
 import CartBar from '@/components/guest/CartBar';
 import MenuItemDetail from '@/components/guest/MenuItemDetail';
 
@@ -58,7 +59,7 @@ const CategoryPage = () => {
 
   const activeSubId = selectedSubcategory || subcategories[0]?.id;
 
-  const { data: items = [] } = useQuery({
+  const { data: items = [], isLoading: itemsLoading } = useQuery({
     queryKey: ['menu_items', activeSubId],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -80,107 +81,145 @@ const CategoryPage = () => {
     navigate(`/menu?${params.toString()}`);
   };
 
+  // [UX] Loading state with skeletons
   if (!category) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+      <div className="min-h-screen bg-background">
+        <div className="px-4 py-4 flex items-center gap-3">
+          <Skeleton className="w-8 h-8 rounded-full" />
+          <Skeleton className="w-32 h-6 rounded" />
+        </div>
+        <div className="px-4 space-y-3 mt-4">
+          {[1, 2, 3, 4].map(i => (
+            <Skeleton key={i} className="h-20 w-full rounded-xl" />
+          ))}
+        </div>
       </div>
     );
   }
 
   return (
     <div className="min-h-screen bg-background pb-32">
-      {/* Header */}
+      {/* [ART] Header with sage accent line */}
       <div className="sticky top-0 z-30 glass">
         <div className="flex items-center gap-3 px-4 py-4">
-          <button onClick={goBack} className="p-2 -ml-2 rounded-full hover:bg-muted transition-colors">
+          {/* [UX] Touch target ≥44px */}
+          <button onClick={goBack} className="p-2.5 -ml-2 rounded-full hover:bg-muted transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center">
             <ArrowLeft className="w-5 h-5 text-foreground" />
           </button>
           <h1 className="font-serif text-xl font-semibold text-foreground">{category.name}</h1>
           {table && (
-            <span className="ml-auto text-xs font-sans px-3 py-1 rounded-full bg-primary/10 text-primary">
+            <span className="ml-auto text-xs font-sans px-3 py-1 rounded-full bg-primary/10 text-primary font-medium">
               Table {table}
             </span>
           )}
         </div>
+        {/* [ART] Sage accent line */}
+        <div className="h-px bg-gradient-to-r from-transparent via-primary/20 to-transparent" />
 
-        {/* Subcategory tabs */}
-        <div className="flex gap-1 px-4 pb-3 overflow-x-auto scrollbar-hide">
-          {subcategories.map((sub) => (
-            <button
-              key={sub.id}
-              onClick={() => setSelectedSubcategory(sub.id)}
-              className={`px-4 py-2 rounded-full text-sm font-sans font-medium whitespace-nowrap transition-all ${
-                activeSubId === sub.id
-                  ? 'bg-primary text-primary-foreground'
-                  : 'bg-muted text-muted-foreground hover:bg-muted/80'
-              }`}
-            >
-              {sub.name}
-            </button>
-          ))}
-        </div>
+        {/* [UX] Subcategory tabs with 44px touch targets */}
+        {subcategories.length > 0 && (
+          <div className="flex gap-1.5 px-4 py-3 overflow-x-auto scrollbar-hide">
+            {subcategories.map((sub) => (
+              <button
+                key={sub.id}
+                onClick={() => setSelectedSubcategory(sub.id)}
+                className={`px-4 py-2.5 rounded-full text-sm font-sans font-medium whitespace-nowrap transition-all duration-200 min-h-[44px] ${
+                  activeSubId === sub.id
+                    ? 'bg-primary text-primary-foreground shadow-sm'
+                    : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                }`}
+              >
+                {sub.name}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
-      {/* Browse-only banner */}
+      {/* [UX] Browse-only banner */}
       {!hasSession && (
-        <div className="mx-4 mt-3 px-4 py-3 rounded-xl bg-accent/10 border border-accent/20 flex items-center gap-3">
+        <motion.div
+          initial={{ opacity: 0, y: -8 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mx-4 mt-3 px-4 py-3 rounded-xl bg-accent/8 border border-accent/15 flex items-center gap-3"
+        >
           <QrCode className="w-4 h-4 text-accent flex-shrink-0" />
           <p className="text-xs font-sans text-accent">
             Scan the QR code at your table to place an order
           </p>
-        </div>
+        </motion.div>
       )}
 
-      {/* Items */}
-      <div className="px-4 pt-4 space-y-3">
-        {items.map((item, i) => (
-          <motion.div
-            key={item.id}
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: i * 0.05, duration: 0.3 }}
-          >
-            <button
-              onClick={() => setSelectedItem(item)}
-              className="w-full text-left"
+      {/* [UX] Loading skeletons */}
+      {itemsLoading ? (
+        <div className="px-4 pt-4 space-y-3">
+          {[1, 2, 3].map(i => (
+            <Skeleton key={i} className="h-24 w-full rounded-xl" />
+          ))}
+        </div>
+      ) : items.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-20 px-6">
+          <p className="text-muted-foreground font-sans text-sm text-center">
+            No items available in this category yet.
+          </p>
+        </div>
+      ) : (
+        /* Items */
+        <div className="px-4 pt-4 space-y-3">
+          {items.map((item, i) => (
+            <motion.div
+              key={item.id}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: i * 0.04, duration: 0.3 }}
             >
-              <div className="flex gap-4 p-4 rounded-xl border border-border bg-card hover:border-primary/20 hover:shadow-sm transition-all">
-                {item.image_url && (
-                  <div className="w-20 h-20 rounded-lg overflow-hidden flex-shrink-0 bg-muted">
-                    <img src={item.image_url} alt={item.name} className="w-full h-full object-cover" />
-                  </div>
-                )}
-                <div className="flex-1 min-w-0">
-                  <h3 className="font-serif text-base font-semibold text-foreground">{item.name}</h3>
-                  {item.description && (
-                    <p className="text-sm text-muted-foreground font-sans mt-0.5 line-clamp-2">{item.description}</p>
-                  )}
-                  <p className="text-sm font-sans font-semibold text-accent mt-2">{Number(item.price).toFixed(2)} KM</p>
-                </div>
-                {hasSession && (
-                  <div className="flex items-center">
-                    <div
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        addItem({
-                          id: item.id,
-                          name: item.name,
-                          price: Number(item.price),
-                          image_url: item.image_url || undefined,
-                        });
-                      }}
-                      className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center hover:bg-primary hover:text-primary-foreground transition-colors cursor-pointer"
-                    >
-                      <Plus className="w-4 h-4" />
+              <button
+                onClick={() => setSelectedItem(item)}
+                className="w-full text-left"
+              >
+                <div className="flex gap-4 p-4 rounded-xl border border-border bg-card hover:border-primary/25 hover:shadow-sm transition-all duration-200">
+                  {item.image_url ? (
+                    <div className="w-20 h-20 rounded-lg overflow-hidden flex-shrink-0 bg-muted">
+                      <img src={item.image_url} alt={item.name} className="w-full h-full object-cover" />
                     </div>
+                  ) : (
+                    /* [ART] Placeholder when no image */
+                    <div className="w-20 h-20 rounded-lg flex-shrink-0 bg-primary/5 flex items-center justify-center">
+                      <span className="text-2xl font-serif text-primary/30">{item.name[0]}</span>
+                    </div>
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <h3 className="font-serif text-base font-semibold text-foreground">{item.name}</h3>
+                    {item.description && (
+                      <p className="text-sm text-muted-foreground font-sans mt-0.5 line-clamp-2">{item.description}</p>
+                    )}
+                    <p className="text-sm font-sans font-bold text-primary mt-2">{Number(item.price).toFixed(2)} KM</p>
                   </div>
-                )}
-              </div>
-            </button>
-          </motion.div>
-        ))}
-      </div>
+                  {hasSession && (
+                    <div className="flex items-center">
+                      <div
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          addItem({
+                            id: item.id,
+                            name: item.name,
+                            price: Number(item.price),
+                            image_url: item.image_url || undefined,
+                          });
+                        }}
+                        className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center hover:bg-primary hover:text-primary-foreground transition-all duration-200 cursor-pointer min-w-[44px] min-h-[44px]"
+                      >
+                        <Plus className="w-4 h-4" />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </button>
+            </motion.div>
+          ))}
+        </div>
+      )}
 
       {/* Item Detail Modal */}
       <AnimatePresence>

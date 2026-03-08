@@ -1,13 +1,13 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Minus, Plus, Trash2, Send, CheckCircle } from 'lucide-react';
+import { ArrowLeft, Minus, Plus, Trash2, Send, CheckCircle, ShoppingBag } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useCartStore } from '@/lib/cart-store';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 
-// [UX] Extracted order success view for clarity
+// [PSYCH] Celebratory success — peak-end effect
 const OrderSuccess = ({ table, onContinue }: { table: string | null; onContinue: () => void }) => (
   <div className="min-h-screen bg-background flex items-center justify-center px-6">
     <motion.div
@@ -15,7 +15,6 @@ const OrderSuccess = ({ table, onContinue }: { table: string | null; onContinue:
       animate={{ opacity: 1, scale: 1 }}
       className="text-center"
     >
-      {/* [PSYCH] Celebratory animation — dopamine micro-reward */}
       <motion.div
         initial={{ scale: 0 }}
         animate={{ scale: 1 }}
@@ -25,11 +24,11 @@ const OrderSuccess = ({ table, onContinue }: { table: string | null; onContinue:
         <CheckCircle className="w-10 h-10 text-primary" />
       </motion.div>
       <h2 className="font-serif text-2xl font-bold text-foreground">Order Confirmed!</h2>
-      <p className="text-muted-foreground font-sans mt-2">Your order has been sent to the kitchen.</p>
-      {table && <p className="text-sm text-primary font-sans mt-1">Table {table}</p>}
+      <p className="text-muted-foreground font-sans mt-2 text-sm">Your order has been sent to the kitchen.</p>
+      {table && <p className="text-sm text-primary font-sans mt-1 font-medium">Table {table}</p>}
       <Button
         onClick={onContinue}
-        className="mt-8 rounded-full px-8 bg-primary text-primary-foreground hover:bg-sage-dark"
+        className="mt-8 rounded-full px-8 h-12 bg-primary text-primary-foreground hover:bg-sage-dark font-sans font-semibold"
       >
         Order More
       </Button>
@@ -62,7 +61,6 @@ const CartPage = () => {
 
     setIsSubmitting(true);
     try {
-      // [UX] Server-side session validation
       const { data: session, error: sessionError } = await supabase
         .from('table_sessions')
         .select('id, is_active')
@@ -130,22 +128,28 @@ const CartPage = () => {
       {/* Header */}
       <div className="sticky top-0 z-30 glass">
         <div className="flex items-center gap-3 px-4 py-4">
-          <button onClick={() => navigate(-1)} className="p-2 -ml-2 rounded-full hover:bg-muted transition-colors">
+          <button onClick={() => navigate(-1)} className="p-2.5 -ml-2 rounded-full hover:bg-muted transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center">
             <ArrowLeft className="w-5 h-5 text-foreground" />
           </button>
           <h1 className="font-serif text-xl font-semibold text-foreground">Your Order</h1>
           {table && (
-            <span className="ml-auto text-xs font-sans px-3 py-1 rounded-full bg-primary/10 text-primary">
+            <span className="ml-auto text-xs font-sans px-3 py-1 rounded-full bg-primary/10 text-primary font-medium">
               Table {table}
             </span>
           )}
         </div>
+        <div className="h-px bg-gradient-to-r from-transparent via-primary/20 to-transparent" />
       </div>
 
       {items.length === 0 ? (
+        /* [UX] Empty state with logo */
         <div className="flex flex-col items-center justify-center py-20 px-6">
-          <p className="text-muted-foreground font-sans text-center">Your order is empty.<br />Browse the menu to add items.</p>
-          <Button onClick={() => navigate(-1)} variant="outline" className="mt-4 rounded-full">
+          <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center mb-4">
+            <ShoppingBag className="w-7 h-7 text-muted-foreground" />
+          </div>
+          <p className="text-foreground font-serif text-lg font-semibold">Your order is empty</p>
+          <p className="text-muted-foreground font-sans text-sm mt-1 text-center">Browse the menu to add items</p>
+          <Button onClick={() => navigate(-1)} variant="outline" className="mt-6 rounded-full px-6 font-sans">
             Back to Menu
           </Button>
         </div>
@@ -166,14 +170,14 @@ const CartPage = () => {
                   {item.notes && (
                     <p className="text-xs text-muted-foreground mt-0.5 italic">"{item.notes}"</p>
                   )}
-                  <p className="text-sm font-sans font-semibold text-accent mt-1">
+                  <p className="text-sm font-sans font-bold text-primary mt-1">
                     {(item.price * item.quantity).toFixed(2)} KM
                   </p>
                 </div>
                 <div className="flex flex-col items-end gap-2">
                   <button
                     onClick={() => removeItem(item.id)}
-                    className="text-muted-foreground hover:text-destructive transition-colors p-1"
+                    className="text-muted-foreground hover:text-destructive transition-colors p-1.5 min-w-[44px] min-h-[44px] flex items-center justify-center"
                     aria-label={`Remove ${item.name}`}
                   >
                     <Trash2 className="w-4 h-4" />
@@ -181,18 +185,18 @@ const CartPage = () => {
                   <div className="flex items-center gap-2 bg-muted rounded-full px-1.5 py-0.5">
                     <button
                       onClick={() => updateQuantity(item.id, item.quantity - 1)}
-                      className="w-7 h-7 rounded-full flex items-center justify-center hover:bg-card transition-colors"
+                      className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-card transition-colors"
                       aria-label="Decrease quantity"
                     >
-                      <Minus className="w-3 h-3" />
+                      <Minus className="w-3.5 h-3.5" />
                     </button>
                     <span className="text-sm font-sans font-semibold w-5 text-center">{item.quantity}</span>
                     <button
                       onClick={() => updateQuantity(item.id, item.quantity + 1)}
-                      className="w-7 h-7 rounded-full flex items-center justify-center hover:bg-card transition-colors"
+                      className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-card transition-colors"
                       aria-label="Increase quantity"
                     >
-                      <Plus className="w-3 h-3" />
+                      <Plus className="w-3.5 h-3.5" />
                     </button>
                   </div>
                 </div>
@@ -210,12 +214,12 @@ const CartPage = () => {
             </div>
           </div>
 
-          {/* Place Order Button */}
-          <div className="fixed bottom-0 left-0 right-0 z-40 p-4 pb-6">
+          {/* [ART] Frosted glass CTA */}
+          <div className="fixed bottom-0 left-0 right-0 z-40 p-4 pb-6 bg-background/80 backdrop-blur-xl border-t border-border/50">
             <Button
               onClick={placeOrder}
               disabled={isSubmitting || !sessionId}
-              className="w-full h-14 rounded-2xl bg-primary text-primary-foreground font-sans font-semibold text-base hover:bg-sage-dark disabled:opacity-50"
+              className="w-full h-14 rounded-2xl bg-primary text-primary-foreground font-sans font-semibold text-base hover:bg-sage-dark disabled:opacity-50 transition-colors"
             >
               {isSubmitting ? (
                 <span className="flex items-center gap-2">

@@ -5,7 +5,6 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
-import { Lock } from 'lucide-react';
 
 const AdminLogin = () => {
   const [email, setEmail] = useState('');
@@ -21,7 +20,6 @@ const AdminLogin = () => {
       const { data, error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) throw error;
 
-      // Check if user has admin or staff role
       const { data: roles, error: roleError } = await supabase
         .from('user_roles')
         .select('role')
@@ -47,43 +45,47 @@ const AdminLogin = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center px-6">
+    <div className="min-h-screen flex items-center justify-center px-6" style={{ backgroundColor: 'hsl(140, 12%, 53%)' }}>
       <div className="w-full max-w-sm">
+        {/* [ART] Logo + branding on sage background */}
         <div className="text-center mb-8">
-          <div className="w-14 h-14 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">
-            <Lock className="w-6 h-6 text-primary" />
-          </div>
-          <h1 className="font-serif text-2xl font-bold text-foreground">La Soul Admin</h1>
-          <p className="text-sm text-muted-foreground font-sans mt-1">Sign in to manage your restaurant</p>
+          <img
+            src="/lasoul-logo.svg"
+            alt="La Soul"
+            className="w-20 h-20 object-contain brightness-0 invert mx-auto mb-4"
+          />
+          <h1 className="font-serif text-2xl font-bold text-white">La Soul Admin</h1>
+          <p className="text-sm text-white/60 font-sans mt-1">Sign in to manage your restaurant</p>
         </div>
 
-        <form onSubmit={handleLogin} className="space-y-4">
+        <form onSubmit={handleLogin} className="space-y-4 bg-card rounded-2xl p-6 shadow-xl">
           <div>
-            <Label className="font-sans text-sm">Email</Label>
+            <Label className="font-sans text-sm text-foreground">Email</Label>
             <Input
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="admin@lasoul.net"
               required
-              className="mt-1"
+              autoFocus
+              className="mt-1.5"
             />
           </div>
           <div>
-            <Label className="font-sans text-sm">Password</Label>
+            <Label className="font-sans text-sm text-foreground">Password</Label>
             <Input
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="••••••••"
               required
-              className="mt-1"
+              className="mt-1.5"
             />
           </div>
           <Button
             type="submit"
-            disabled={loading}
-            className="w-full h-11 rounded-lg bg-primary text-primary-foreground font-sans font-semibold"
+            disabled={loading || !email || !password}
+            className="w-full h-12 rounded-xl bg-primary text-primary-foreground font-sans font-semibold"
           >
             {loading ? 'Signing in...' : 'Sign In'}
           </Button>
