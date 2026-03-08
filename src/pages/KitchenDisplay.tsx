@@ -1,10 +1,11 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Bell, Clock, ChefHat, Check, Utensils, Hand, X, CreditCard } from 'lucide-react';
+import { Bell, Clock, ChefHat, Check, Utensils, Hand, X, CreditCard, Volume2, VolumeX } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { playOrderAlert, playWaiterCallAlert, playBillRequestAlert } from '@/lib/kitchen-sounds';
 
 interface OrderWithItems {
   id: string;
@@ -60,6 +61,8 @@ const KitchenDisplay = () => {
   const [waiterCalls, setWaiterCalls] = useState<WaiterCall[]>([]);
   const [billRequests, setBillRequests] = useState<BillRequest[]>([]);
   const [filter, setFilter] = useState<string>('active');
+  const [soundEnabled, setSoundEnabled] = useState(true);
+  const initialLoadDone = useRef(false);
 
   const fetchOrders = async () => {
     const { data: ordersData, error } = await supabase
@@ -160,32 +163,44 @@ const KitchenDisplay = () => {
   };
 
   useEffect(() => {
-    fetchOrders();
-    fetchWaiterCalls();
-    fetchBillRequests();
+    Promise.all([fetchOrders(), fetchWaiterCalls(), fetchBillRequests()]).then(() => {
+      initialLoadDone.current = true;
+    });
 
     const channel = supabase
       .channel('kitchen-all')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => {
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders' }, () => {
         fetchOrders();
+        if (initialLoadDone.current && soundEnabled) playOrderAlert();
         if (Notification.permission === 'granted') {
           new Notification('New Order!', { body: 'A new order has been placed.' });
         }
       })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'orders' }, () => {
+        fetchOrders();
+      })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'order_items' }, () => {
         fetchOrders();
       })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'waiter_calls' }, () => {
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'waiter_calls' }, () => {
         fetchWaiterCalls();
+        if (initialLoadDone.current && soundEnabled) playWaiterCallAlert();
         if (Notification.permission === 'granted') {
           new Notification('🔔 Waiter Call!', { body: 'A table is requesting assistance.' });
         }
       })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'bill_requests' }, () => {
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'waiter_calls' }, () => {
+        fetchWaiterCalls();
+      })
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'bill_requests' }, () => {
         fetchBillRequests();
+        if (initialLoadDone.current && soundEnabled) playBillRequestAlert();
         if (Notification.permission === 'granted') {
           new Notification('💳 Bill Requested!', { body: 'A table is ready to pay.' });
         }
+      })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'bill_requests' }, () => {
+        fetchBillRequests();
       })
       .subscribe();
 
@@ -274,6 +289,15 @@ const KitchenDisplay = () => {
             <p className="text-sm text-muted-foreground font-sans">{orders.length} orders</p>
           </div>
           <div className="flex gap-2">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setSoundEnabled(!soundEnabled)}
+              className="rounded-full min-h-[44px] min-w-[44px]"
+              aria-label={soundEnabled ? 'Mute alerts' : 'Enable alerts'}
+            >
+              {soundEnabled ? <Volume2 className="w-5 h-5" /> : <VolumeX className="w-5 h-5 text-muted-foreground" />}
+            </Button>
             <Button
               variant={filter === 'active' ? 'default' : 'outline'}
               size="sm"
