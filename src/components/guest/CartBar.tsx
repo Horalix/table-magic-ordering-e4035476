@@ -3,18 +3,19 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { ShoppingBag, Receipt } from 'lucide-react';
 import { useCartStore } from '@/lib/cart-store';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useT } from '@/lib/i18n';
 
 const CartBar = () => {
   const { items, total, itemCount, sessionId } = useCartStore();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const count = itemCount();
+  const t = useT();
 
   const table = searchParams.get('table');
   const token = searchParams.get('token');
   const hasSession = !!(table && token);
 
-  // [FIX] Don't render when no session
   if (!hasSession) return null;
 
   const buildParams = () => {
@@ -26,7 +27,6 @@ const CartBar = () => {
 
   return (
     <div className="fixed bottom-0 left-0 right-0 z-40 p-4 pb-6 space-y-2">
-      {/* [UX] Running tab shortcut */}
       {sessionId && (
         <motion.button
           initial={{ y: 50, opacity: 0 }}
@@ -35,11 +35,10 @@ const CartBar = () => {
           className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-card/90 backdrop-blur-lg border border-border text-foreground font-sans text-sm font-medium hover:bg-muted transition-colors min-h-[44px]"
         >
           <Receipt className="w-4 h-4 text-primary" />
-          View Your Tab
+          {t('view_your_tab')}
         </motion.button>
       )}
 
-      {/* [ART] Primary cart CTA */}
       <AnimatePresence>
         {count > 0 && (
           <motion.button
@@ -57,7 +56,7 @@ const CartBar = () => {
                   {count}
                 </span>
               </div>
-              <span className="font-sans font-semibold text-sm">View Order</span>
+              <span className="font-sans font-semibold text-sm">{t('view_order')}</span>
             </div>
             <span className="font-sans font-bold text-base">{total().toFixed(2)} KM</span>
           </motion.button>

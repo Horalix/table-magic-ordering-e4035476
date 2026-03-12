@@ -1,4 +1,6 @@
 import { create } from 'zustand';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
 
 export interface CartItem {
   id: string;
@@ -14,6 +16,7 @@ interface CartStore {
   tableNumber: number | null;
   sessionToken: string | null;
   sessionId: string | null;
+  guestName: string | null;
   addItem: (item: Omit<CartItem, 'quantity'>) => void;
   removeItem: (id: string) => void;
   updateQuantity: (id: string, quantity: number) => void;
@@ -21,15 +24,21 @@ interface CartStore {
   clearCart: () => void;
   setTable: (tableNumber: number, token: string) => void;
   setSessionId: (id: string) => void;
+  setGuestName: (name: string) => void;
   total: () => number;
   itemCount: () => number;
+  startHeartbeat: () => void;
+  stopHeartbeat: () => void;
 }
+
+let heartbeatInterval: ReturnType<typeof setInterval> | null = null;
 
 export const useCartStore = create<CartStore>((set, get) => ({
   items: [],
   tableNumber: null,
   sessionToken: null,
   sessionId: null,
+  guestName: null,
 
   addItem: (item) => {
     set((state) => {
@@ -71,7 +80,40 @@ export const useCartStore = create<CartStore>((set, get) => ({
 
   setSessionId: (id) => set({ sessionId: id }),
 
+  setGuestName: (name) => set({ guestName: name }),
+
   total: () => get().items.reduce((sum, i) => sum + i.price * i.quantity, 0),
 
   itemCount: () => get().items.reduce((sum, i) => sum + i.quantity, 0),
+
+  startHeartbeat: () => {
+    if (heartbeatInterval) clearInterval(heartbeatInterval);
+    heartbeatInterval = setInterval(async () => {
+      const { sessionId } = get();
+      if (!sessionId) return;
+
+      const { data, error } = await supabase
+        .from('table_sessions')
+        .select('is_active')
+        .eq('id', sessionId)
+        .single();
+
+      if (error || !data?.is_active) {
+        get().clearCart();
+        set({ sessionId: null, sessionToken: null, tableNumber: null, guestName: null });
+        toast.error('Your session has expired. Please scan the QR code again.');
+        if (heartbeatInterval) {
+          clearInterval(heartbeatInterval);
+          heartbeatInterval = null;
+        }
+      }
+    }, 60000);
+  },
+
+  stopHeartbeat: () => {
+    if (heartbeatInterval) {
+      clearInterval(heartbeatInterval);
+      heartbeatInterval = null;
+    }
+  },
 }));

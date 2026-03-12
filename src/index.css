@@ -142,3 +142,12 @@
     scrollbar-width: none;
   }
 }
+
+/* [i18n] RTL support */
+[dir="rtl"] {
+  text-align: right;
+}
+
+[dir="rtl"] .flex-row-reverse-rtl {
+  flex-direction: row-reverse;
+}

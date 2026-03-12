@@ -1,10 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Plus, QrCode, Power, PowerOff } from 'lucide-react';
+import { Plus, QrCode, PowerOff } from 'lucide-react';
 import { toast } from 'sonner';
 import { QRCodeSVG } from 'qrcode.react';
 
@@ -16,20 +16,12 @@ const AdminTables = () => {
   const fetchTables = async () => {
     const { data } = await supabase
       .from('tables')
-      .select(`*, table_sessions(id, is_active, opened_at)`)
+      .select(`*, table_sessions(id, is_active, opened_at, guest_name)`)
       .order('table_number');
     setTables(data || []);
   };
 
   useEffect(() => { fetchTables(); }, []);
-
-  const addTable = async () => {
-    const num = parseInt(newTableNumber);
-    if (isNaN(num)) return;
-    const { error } = await supabase.from('tables').insert({ table_number: num });
-    if (error) toast.error(error.message);
-    else { toast.success(`Table ${num} added`); setNewTableNumber(''); fetchTables(); }
-  };
 
   const addMultipleTables = async () => {
     const count = parseInt(newTableNumber);
@@ -48,22 +40,27 @@ const AdminTables = () => {
     else { toast.success(`${toAdd.length} tables added`); setNewTableNumber(''); fetchTables(); }
   };
 
-  const closeSession = async (sessionId: string) => {
+  const closeSession = async (sessionId: string, tableId: string) => {
+    // Close session
     const { error } = await supabase
       .from('table_sessions')
       .update({ is_active: false, closed_at: new Date().toISOString() })
       .eq('id', sessionId);
-    if (error) toast.error('Failed to close session');
-    else { toast.success('Session closed'); fetchTables(); }
+    if (error) { toast.error('Failed to close session'); return; }
+
+    // Regenerate QR token to invalidate old QR codes (anti-fraud)
+    const newToken = Array.from(crypto.getRandomValues(new Uint8Array(32)))
+      .map(b => b.toString(16).padStart(2, '0')).join('');
+    await supabase.from('tables').update({ qr_token: newToken }).eq('id', tableId);
+
+    toast.success('Session closed & QR token regenerated');
+    fetchTables();
   };
 
   const regenerateToken = async (tableId: string) => {
     const newToken = Array.from(crypto.getRandomValues(new Uint8Array(32)))
       .map(b => b.toString(16).padStart(2, '0')).join('');
-    const { error } = await supabase
-      .from('tables')
-      .update({ qr_token: newToken })
-      .eq('id', tableId);
+    const { error } = await supabase.from('tables').update({ qr_token: newToken }).eq('id', tableId);
     if (error) toast.error('Failed to regenerate token');
     else { toast.success('Token regenerated'); fetchTables(); }
   };
@@ -77,7 +74,6 @@ const AdminTables = () => {
     <div>
       <h1 className="font-serif text-3xl font-bold text-foreground mb-6">Table Management</h1>
 
-      {/* Add tables */}
       <Card className="mb-6 border-border">
         <CardContent className="p-4">
           <div className="flex gap-2">
@@ -95,7 +91,6 @@ const AdminTables = () => {
         </CardContent>
       </Card>
 
-      {/* Tables grid */}
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
         {tables.map((table) => {
           const activeSession = table.table_sessions?.find((s: any) => s.is_active);
@@ -106,13 +101,16 @@ const AdminTables = () => {
                 <Badge variant="outline" className={`mt-1 text-xs ${activeSession ? 'border-primary text-primary' : 'border-muted-foreground text-muted-foreground'}`}>
                   {activeSession ? 'Occupied' : 'Available'}
                 </Badge>
+                {activeSession?.guest_name && (
+                  <p className="text-xs text-muted-foreground font-sans mt-1">{activeSession.guest_name}</p>
+                )}
 
                 <div className="flex gap-1 mt-3 justify-center">
                   <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => setShowQR(showQR === table.id ? null : table.id)}>
                     <QrCode className="w-3.5 h-3.5" />
                   </Button>
                   {activeSession && (
-                    <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => closeSession(activeSession.id)}>
+                    <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => closeSession(activeSession.id, table.id)}>
                       <PowerOff className="w-3.5 h-3.5 text-destructive" />
                     </Button>
                   )}
@@ -122,10 +120,7 @@ const AdminTables = () => {
                   <div className="mt-3 p-3 bg-card rounded-lg border border-border">
                     <QRCodeSVG value={getQRUrl(table)} size={120} className="mx-auto" />
                     <p className="text-[10px] text-muted-foreground mt-2 break-all">{getQRUrl(table)}</p>
-                    <Button
-                      variant="ghost" size="sm" className="mt-2 text-xs font-sans"
-                      onClick={() => regenerateToken(table.id)}
-                    >
+                    <Button variant="ghost" size="sm" className="mt-2 text-xs font-sans" onClick={() => regenerateToken(table.id)}>
                       Regenerate Token
                     </Button>
                   </div>

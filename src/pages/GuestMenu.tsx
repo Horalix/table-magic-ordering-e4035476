@@ -6,6 +6,8 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import CallWaiterButton from '@/components/guest/CallWaiterButton';
 import CartBar from '@/components/guest/CartBar';
+import LanguageSelector from '@/components/guest/LanguageSelector';
+import { useT, useLanguageStore, getLocalizedName } from '@/lib/i18n';
 
 const iconMap: Record<string, any> = {
   Drinks: Wine,
@@ -19,15 +21,17 @@ const pathMap: Record<string, string> = {
   Desserts: '/menu/desserts',
 };
 
-const descMap: Record<string, string> = {
-  Drinks: 'Cocktails, wine, coffee & more',
-  Food: 'Starters, mains, burgers & pizza',
-  Desserts: 'Sweet endings',
+const descKeyMap: Record<string, string> = {
+  Drinks: 'drinks_desc',
+  Food: 'food_desc',
+  Desserts: 'desserts_desc',
 };
 
 const GuestMenu = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const t = useT();
+  const locale = useLanguageStore((s) => s.locale);
   const table = searchParams.get('table');
   const token = searchParams.get('token');
   const hasSession = !!(table && token);
@@ -53,7 +57,6 @@ const GuestMenu = () => {
 
   return (
     <div className="min-h-screen flex flex-col">
-      {/* [ART] Full-screen sage green hero — matching menu.lasoul.net */}
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
@@ -61,7 +64,6 @@ const GuestMenu = () => {
         className="relative flex flex-col items-center justify-center px-6 pt-16 pb-10"
         style={{ backgroundColor: 'hsl(140, 12%, 53%)' }}
       >
-        {/* [ART] Decorative top line */}
         <motion.div
           initial={{ scaleX: 0 }}
           animate={{ scaleX: 1 }}
@@ -69,21 +71,15 @@ const GuestMenu = () => {
           className="w-12 h-px bg-white/30 mb-10"
         />
 
-        {/* [ART] La Soul arch logo — white on sage */}
         <motion.div
           initial={{ opacity: 0, scale: 0.85 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ delay: 0.4, duration: 1, ease: [0.16, 1, 0.3, 1] }}
           className="mb-6"
         >
-          <img
-            src="/lasoul-logo.svg"
-            alt="La Soul"
-            className="w-36 h-36 object-contain brightness-0 invert"
-          />
+          <img src="/lasoul-logo.svg" alt="La Soul" className="w-36 h-36 object-contain brightness-0 invert" />
         </motion.div>
 
-        {/* [ART] LA SOUL staggered text */}
         <div className="flex items-center gap-[0.12em] mb-1">
           {'LA SOUL'.split('').map((letter, i) => (
             <motion.span
@@ -98,7 +94,6 @@ const GuestMenu = () => {
           ))}
         </div>
 
-        {/* [ART] Menu divider */}
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
@@ -106,11 +101,10 @@ const GuestMenu = () => {
           className="mt-4 flex items-center gap-4"
         >
           <div className="h-px w-10 bg-white/25" />
-          <p className="text-[11px] font-sans text-white/70 tracking-[0.3em] uppercase font-medium">Menu</p>
+          <p className="text-[11px] font-sans text-white/70 tracking-[0.3em] uppercase font-medium">{t('menu')}</p>
           <div className="h-px w-10 bg-white/25" />
         </motion.div>
 
-        {/* [UX] Table badge + Call Waiter */}
         <motion.div
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
@@ -119,13 +113,13 @@ const GuestMenu = () => {
         >
           {table && (
             <span className="px-4 py-1.5 rounded-full border border-white/20 bg-white/10 text-xs font-sans font-medium text-white tracking-wider">
-              Table {table}
+              {t('table')} {table}
             </span>
           )}
           <CallWaiterButton variant="hero" />
+          <LanguageSelector variant="hero" />
         </motion.div>
 
-        {/* [UX] Scan prompt */}
         {!hasSession && (
           <motion.p
             initial={{ opacity: 0 }}
@@ -133,11 +127,10 @@ const GuestMenu = () => {
             transition={{ delay: 1.6, duration: 0.6 }}
             className="mt-4 text-[11px] font-sans text-white/50 text-center leading-relaxed"
           >
-            Scan the QR code at your table to place an order
+            {t('scan_qr_order')}
           </motion.p>
         )}
 
-        {/* [ART] Bottom contact info */}
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
@@ -146,20 +139,20 @@ const GuestMenu = () => {
         >
           <div className="flex items-center gap-2 text-white/40">
             <Phone className="w-3 h-3" />
-            <span className="text-[11px] font-sans tracking-wide">+387 33 844 334</span>
+            <span className="text-[11px] font-sans tracking-wide">{t('phone')}</span>
           </div>
           <div className="flex items-center gap-2 text-white/40">
             <MapPin className="w-3 h-3" />
-            <span className="text-[11px] font-sans tracking-wide">Maršala Tita 7, Sarajevo</span>
+            <span className="text-[11px] font-sans tracking-wide">{t('address')}</span>
           </div>
         </motion.div>
       </motion.div>
 
-      {/* [ART] Category cards section */}
       <div className="flex-1 bg-background px-5 py-6 pb-36 space-y-3 -mt-3 rounded-t-3xl relative z-10">
         {categories.map((cat, i) => {
           const Icon = iconMap[cat.name] || UtensilsCrossed;
           const path = pathMap[cat.name] || `/menu/${cat.name.toLowerCase()}`;
+          const localizedName = getLocalizedName(cat as any, locale);
           return (
             <motion.button
               key={cat.id}
@@ -173,18 +166,17 @@ const GuestMenu = () => {
               <div className="relative overflow-hidden rounded-2xl border border-border bg-card p-5 transition-all duration-300 hover:shadow-md hover:border-primary/30 hover:-translate-y-0.5 active:scale-[0.99]">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-4">
-                    {/* [ART] Icon container with sage accent */}
                     <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 transition-colors duration-300">
                       <Icon className="w-5 h-5 text-primary" />
                     </div>
                     <div className="text-left">
-                      <h2 className="font-serif text-lg font-semibold text-foreground">{cat.name}</h2>
+                      <h2 className="font-serif text-lg font-semibold text-foreground">{localizedName}</h2>
                       <p className="text-[13px] text-muted-foreground font-sans mt-0.5">
-                        {descMap[cat.name] || ''}
+                        {descKeyMap[cat.name] ? t(descKeyMap[cat.name]) : ''}
                       </p>
                     </div>
                   </div>
-                  <ChevronRight className="w-4 h-4 text-muted-foreground/40 group-hover:text-primary group-hover:translate-x-0.5 transition-all duration-300" />
+                  <ChevronRight className={`w-4 h-4 text-muted-foreground/40 group-hover:text-primary group-hover:translate-x-0.5 transition-all duration-300 ${locale === 'ar' ? 'rotate-180' : ''}`} />
                 </div>
               </div>
             </motion.button>
@@ -192,7 +184,6 @@ const GuestMenu = () => {
         })}
       </div>
 
-      {/* [UX] Cart Bar */}
       {hasSession && <CartBar />}
     </div>
   );

@@ -4,16 +4,17 @@ import { Hand, Check } from 'lucide-react';
 import { useCartStore } from '@/lib/cart-store';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { useT } from '@/lib/i18n';
 
 interface Props {
   variant?: 'default' | 'hero';
 }
 
-// [ART] Two variants: default (sage on cream) and hero (white on sage)
 const CallWaiterButton = ({ variant = 'default' }: Props) => {
   const { sessionId } = useCartStore();
   const [called, setCalled] = useState(false);
   const [loading, setLoading] = useState(false);
+  const t = useT();
 
   if (!sessionId) return null;
 
@@ -29,7 +30,7 @@ const CallWaiterButton = ({ variant = 'default' }: Props) => {
       if (error) throw error;
 
       setCalled(true);
-      toast.success('Your waiter has been notified!');
+      toast.success(t('waiter_notified'));
       setTimeout(() => setCalled(false), 30000);
     } catch (err) {
       console.error('Call waiter error:', err);
@@ -57,24 +58,14 @@ const CallWaiterButton = ({ variant = 'default' }: Props) => {
     >
       <AnimatePresence mode="wait">
         {called ? (
-          <motion.span
-            key="check"
-            initial={{ scale: 0 }}
-            animate={{ scale: 1 }}
-            className="flex items-center gap-2"
-          >
+          <motion.span key="check" initial={{ scale: 0 }} animate={{ scale: 1 }} className="flex items-center gap-2">
             <Check className="w-4 h-4" />
-            Waiter notified
+            {t('waiter_notified')}
           </motion.span>
         ) : (
-          <motion.span
-            key="call"
-            initial={{ scale: 0 }}
-            animate={{ scale: 1 }}
-            className="flex items-center gap-2"
-          >
+          <motion.span key="call" initial={{ scale: 0 }} animate={{ scale: 1 }} className="flex items-center gap-2">
             <Hand className="w-4 h-4" />
-            {loading ? 'Calling...' : 'Call Waiter'}
+            {loading ? t('calling') : t('call_waiter')}
           </motion.span>
         )}
       </AnimatePresence>

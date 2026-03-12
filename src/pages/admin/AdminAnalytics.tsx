@@ -9,6 +9,8 @@ const AdminAnalytics = () => {
   const [topItems, setTopItems] = useState<any[]>([]);
   const [dailyRevenue, setDailyRevenue] = useState<any[]>([]);
   const [categoryBreakdown, setCategoryBreakdown] = useState<any[]>([]);
+  const [peakHours, setPeakHours] = useState<any[]>([]);
+  const [tableTurnover, setTableTurnover] = useState<any[]>([]);
 
   useEffect(() => {
     const fetchAnalytics = async () => {
@@ -38,7 +40,7 @@ const AdminAnalytics = () => {
 
       const { data: allOrders } = await supabase
         .from('orders')
-        .select('total, created_at')
+        .select('total, created_at, status')
         .neq('status', 'cancelled')
         .gte('created_at', days[0]);
 
@@ -52,20 +54,65 @@ const AdminAnalytics = () => {
       });
       setDailyRevenue(Object.entries(revenueByDay).map(([date, revenue]) => ({
         date: new Date(date).toLocaleDateString('en', { weekday: 'short' }),
-        revenue,
+        revenue: Math.round(revenue * 100) / 100,
       })));
 
-      // Category breakdown
+      // Category breakdown with revenue
       const { data: catItems } = await supabase
         .from('order_items')
-        .select('quantity, menu_items(subcategories(categories(name)))');
+        .select('quantity, unit_price, menu_items(subcategories(categories(name)))');
 
-      const catCounts: Record<string, number> = {};
+      const catRevenue: Record<string, number> = {};
       catItems?.forEach((oi: any) => {
         const name = oi.menu_items?.subcategories?.categories?.name || 'Other';
-        catCounts[name] = (catCounts[name] || 0) + oi.quantity;
+        catRevenue[name] = (catRevenue[name] || 0) + (oi.quantity * Number(oi.unit_price));
       });
-      setCategoryBreakdown(Object.entries(catCounts).map(([name, value]) => ({ name, value })));
+      setCategoryBreakdown(Object.entries(catRevenue).map(([name, value]) => ({ name, value: Math.round(value * 100) / 100 })));
+
+      // Peak hours (today)
+      const today = new Date().toISOString().split('T')[0];
+      const { data: todayOrders } = await supabase
+        .from('orders')
+        .select('created_at')
+        .gte('created_at', today)
+        .neq('status', 'cancelled');
+
+      const hourCounts: Record<number, number> = {};
+      for (let h = 0; h < 24; h++) hourCounts[h] = 0;
+      todayOrders?.forEach((o: any) => {
+        const hour = new Date(o.created_at).getHours();
+        hourCounts[hour]++;
+      });
+      setPeakHours(
+        Object.entries(hourCounts)
+          .filter(([, count]) => count > 0 || parseInt(Object.keys(hourCounts).find(k => hourCounts[parseInt(k)] > 0) || '8') <= parseInt(Object.keys(hourCounts).find(k => hourCounts[parseInt(k)] > 0) || '23'))
+          .map(([hour, count]) => ({
+            hour: `${parseInt(hour).toString().padStart(2, '0')}:00`,
+            orders: count,
+          }))
+          .filter((_, i, arr) => {
+            // Show only hours 8-23 or where there are orders
+            const h = parseInt(arr[i].hour);
+            return h >= 8 && h <= 23;
+          })
+      );
+
+      // Table turnover
+      const { data: sessions } = await supabase
+        .from('table_sessions')
+        .select('table_id, is_active, tables(table_number)')
+        .gte('opened_at', today);
+
+      const turnover: Record<number, number> = {};
+      sessions?.forEach((s: any) => {
+        const num = s.tables?.table_number || 0;
+        turnover[num] = (turnover[num] || 0) + 1;
+      });
+      setTableTurnover(
+        Object.entries(turnover)
+          .sort(([a], [b]) => parseInt(a) - parseInt(b))
+          .map(([table, sessions]) => ({ table: `T${table}`, sessions }))
+      );
     };
 
     fetchAnalytics();
@@ -87,28 +134,28 @@ const AdminAnalytics = () => {
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                 <XAxis dataKey="date" tick={{ fontSize: 12 }} />
                 <YAxis tick={{ fontSize: 12 }} />
-                <Tooltip />
+                <Tooltip formatter={(v: number) => `${v.toFixed(2)} KM`} />
                 <Bar dataKey="revenue" fill="hsl(135,14%,55%)" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </CardContent>
         </Card>
 
-        {/* Category breakdown */}
+        {/* Revenue by Category */}
         <Card className="border-border">
           <CardHeader>
-            <CardTitle className="font-serif text-lg">Orders by Category</CardTitle>
+            <CardTitle className="font-serif text-lg">Revenue by Category</CardTitle>
           </CardHeader>
           <CardContent>
             {categoryBreakdown.length > 0 ? (
               <ResponsiveContainer width="100%" height={250}>
                 <PieChart>
-                  <Pie data={categoryBreakdown} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} label>
+                  <Pie data={categoryBreakdown} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} label={({ name, value }) => `${name}: ${value} KM`}>
                     {categoryBreakdown.map((_, i) => (
                       <Cell key={i} fill={COLORS[i % COLORS.length]} />
                     ))}
                   </Pie>
-                  <Tooltip />
+                  <Tooltip formatter={(v: number) => `${v.toFixed(2)} KM`} />
                 </PieChart>
               </ResponsiveContainer>
             ) : (
@@ -117,7 +164,51 @@ const AdminAnalytics = () => {
           </CardContent>
         </Card>
 
-        {/* Top items */}
+        {/* Peak Hours */}
+        <Card className="border-border">
+          <CardHeader>
+            <CardTitle className="font-serif text-lg">Peak Hours (Today)</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {peakHours.length > 0 ? (
+              <ResponsiveContainer width="100%" height={250}>
+                <BarChart data={peakHours}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                  <XAxis dataKey="hour" tick={{ fontSize: 10 }} />
+                  <YAxis tick={{ fontSize: 12 }} allowDecimals={false} />
+                  <Tooltip />
+                  <Bar dataKey="orders" fill="hsl(38,60%,55%)" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <p className="text-muted-foreground font-sans text-sm text-center py-10">No orders today</p>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Table Turnover */}
+        <Card className="border-border">
+          <CardHeader>
+            <CardTitle className="font-serif text-lg">Table Turnover (Today)</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {tableTurnover.length > 0 ? (
+              <ResponsiveContainer width="100%" height={250}>
+                <BarChart data={tableTurnover}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                  <XAxis dataKey="table" tick={{ fontSize: 10 }} />
+                  <YAxis tick={{ fontSize: 12 }} allowDecimals={false} />
+                  <Tooltip />
+                  <Bar dataKey="sessions" fill="hsl(150,10%,45%)" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <p className="text-muted-foreground font-sans text-sm text-center py-10">No sessions today</p>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Top Items */}
         <Card className="border-border lg:col-span-2">
           <CardHeader>
             <CardTitle className="font-serif text-lg">Most Ordered Items</CardTitle>
