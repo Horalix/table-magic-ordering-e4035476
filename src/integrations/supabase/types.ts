@@ -52,6 +52,7 @@ export type Database = {
           id: string
           image_url: string | null
           name: string
+          name_ar: string | null
           name_bs: string | null
           sort_order: number
         }
@@ -60,6 +61,7 @@ export type Database = {
           id?: string
           image_url?: string | null
           name: string
+          name_ar?: string | null
           name_bs?: string | null
           sort_order?: number
         }
@@ -68,6 +70,7 @@ export type Database = {
           id?: string
           image_url?: string | null
           name?: string
+          name_ar?: string | null
           name_bs?: string | null
           sort_order?: number
         }
@@ -77,11 +80,13 @@ export type Database = {
         Row: {
           created_at: string
           description: string | null
+          description_ar: string | null
           description_bs: string | null
           id: string
           image_url: string | null
           is_available: boolean
           name: string
+          name_ar: string | null
           name_bs: string | null
           price: number
           sort_order: number
@@ -91,11 +96,13 @@ export type Database = {
         Insert: {
           created_at?: string
           description?: string | null
+          description_ar?: string | null
           description_bs?: string | null
           id?: string
           image_url?: string | null
           is_available?: boolean
           name: string
+          name_ar?: string | null
           name_bs?: string | null
           price: number
           sort_order?: number
@@ -105,11 +112,13 @@ export type Database = {
         Update: {
           created_at?: string
           description?: string | null
+          description_ar?: string | null
           description_bs?: string | null
           id?: string
           image_url?: string | null
           is_available?: boolean
           name?: string
+          name_ar?: string | null
           name_bs?: string | null
           price?: number
           sort_order?: number
@@ -177,6 +186,7 @@ export type Database = {
       orders: {
         Row: {
           created_at: string
+          guest_name: string | null
           id: string
           notes: string | null
           status: Database["public"]["Enums"]["order_status"]
@@ -186,6 +196,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          guest_name?: string | null
           id?: string
           notes?: string | null
           status?: Database["public"]["Enums"]["order_status"]
@@ -195,6 +206,7 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          guest_name?: string | null
           id?: string
           notes?: string | null
           status?: Database["public"]["Enums"]["order_status"]
@@ -218,6 +230,7 @@ export type Database = {
           created_at: string
           id: string
           name: string
+          name_ar: string | null
           name_bs: string | null
           sort_order: number
         }
@@ -226,6 +239,7 @@ export type Database = {
           created_at?: string
           id?: string
           name: string
+          name_ar?: string | null
           name_bs?: string | null
           sort_order?: number
         }
@@ -234,6 +248,7 @@ export type Database = {
           created_at?: string
           id?: string
           name?: string
+          name_ar?: string | null
           name_bs?: string | null
           sort_order?: number
         }
@@ -250,6 +265,7 @@ export type Database = {
       table_sessions: {
         Row: {
           closed_at: string | null
+          guest_name: string | null
           id: string
           is_active: boolean
           opened_at: string
@@ -258,6 +274,7 @@ export type Database = {
         }
         Insert: {
           closed_at?: string | null
+          guest_name?: string | null
           id?: string
           is_active?: boolean
           opened_at?: string
@@ -266,6 +283,7 @@ export type Database = {
         }
         Update: {
           closed_at?: string | null
+          guest_name?: string | null
           id?: string
           is_active?: boolean
           opened_at?: string
