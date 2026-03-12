@@ -12,11 +12,7 @@ const AdminOrders = () => {
   const fetchOrders = async () => {
     let query = supabase
       .from('orders')
-      .select(`
-        *,
-        table_sessions!inner(tables!inner(table_number)),
-        order_items(*, menu_items(name))
-      `)
+      .select(`*, table_sessions!inner(tables!inner(table_number)), order_items(*, menu_items(name))`)
       .order('created_at', { ascending: false })
       .limit(100);
 
@@ -56,9 +52,7 @@ const AdminOrders = () => {
       <div className="flex items-center justify-between mb-6">
         <h1 className="font-serif text-3xl font-bold text-foreground">Orders</h1>
         <Select value={filter} onValueChange={setFilter}>
-          <SelectTrigger className="w-[150px] font-sans">
-            <SelectValue />
-          </SelectTrigger>
+          <SelectTrigger className="w-[150px] font-sans"><SelectValue /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Orders</SelectItem>
             <SelectItem value="pending">Pending</SelectItem>
@@ -77,12 +71,14 @@ const AdminOrders = () => {
             <CardContent className="p-4">
               <div className="flex items-start justify-between">
                 <div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <span className="font-serif font-bold text-foreground">
                       Table {order.table_sessions?.tables?.table_number}
                     </span>
+                    {order.guest_name && (
+                      <span className="text-sm font-sans text-muted-foreground">— {order.guest_name}</span>
+                    )}
                     <Badge className={`text-xs ${statusColors[order.status]}`}>{order.status}</Badge>
-                    {/* [UX] Wait time tracking */}
                     {!['served', 'cancelled'].includes(order.status) && (() => {
                       const mins = Math.floor((Date.now() - new Date(order.created_at).getTime()) / 60000);
                       const label = mins < 1 ? 'Just now' : mins < 60 ? `${mins}m` : `${Math.floor(mins / 60)}h ${mins % 60}m`;
@@ -93,14 +89,11 @@ const AdminOrders = () => {
                       );
                     })()}
                   </div>
-                  <p className="text-xs text-muted-foreground font-sans mt-1">
-                    {new Date(order.created_at).toLocaleString()}
-                  </p>
+                  <p className="text-xs text-muted-foreground font-sans mt-1">{new Date(order.created_at).toLocaleString()}</p>
                 </div>
                 <p className="font-serif font-bold text-foreground">{Number(order.total).toFixed(2)} KM</p>
               </div>
 
-              {/* Items */}
               <div className="mt-3 space-y-1">
                 {order.order_items?.map((item: any) => (
                   <div key={item.id} className="flex justify-between text-sm font-sans">
@@ -110,7 +103,6 @@ const AdminOrders = () => {
                 ))}
               </div>
 
-              {/* Status actions */}
               {order.status !== 'served' && order.status !== 'cancelled' && (
                 <div className="flex gap-2 mt-3">
                   {order.status === 'pending' && (
