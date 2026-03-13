@@ -8,7 +8,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
-import { useT, useLanguageStore } from '@/lib/i18n';
+import { useT, useLanguageStore, getLocalizedName } from '@/lib/i18n';
 
 const RunningTabPage = () => {
   const navigate = useNavigate();

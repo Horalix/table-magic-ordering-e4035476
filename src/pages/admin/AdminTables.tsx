@@ -40,29 +40,15 @@ const AdminTables = () => {
     else { toast.success(`${toAdd.length} tables added`); setNewTableNumber(''); fetchTables(); }
   };
 
-  const closeSession = async (sessionId: string, tableId: string) => {
-    // Close session
+  const closeSession = async (sessionId: string) => {
     const { error } = await supabase
       .from('table_sessions')
       .update({ is_active: false, closed_at: new Date().toISOString() })
       .eq('id', sessionId);
     if (error) { toast.error('Failed to close session'); return; }
 
-    // Regenerate QR token to invalidate old QR codes (anti-fraud)
-    const newToken = Array.from(crypto.getRandomValues(new Uint8Array(32)))
-      .map(b => b.toString(16).padStart(2, '0')).join('');
-    await supabase.from('tables').update({ qr_token: newToken }).eq('id', tableId);
-
-    toast.success('Session closed & QR token regenerated');
+    toast.success('Session closed');
     fetchTables();
-  };
-
-  const regenerateToken = async (tableId: string) => {
-    const newToken = Array.from(crypto.getRandomValues(new Uint8Array(32)))
-      .map(b => b.toString(16).padStart(2, '0')).join('');
-    const { error } = await supabase.from('tables').update({ qr_token: newToken }).eq('id', tableId);
-    if (error) toast.error('Failed to regenerate token');
-    else { toast.success('Token regenerated'); fetchTables(); }
   };
 
   const getQRUrl = (table: any) => {
@@ -110,7 +96,7 @@ const AdminTables = () => {
                     <QrCode className="w-3.5 h-3.5" />
                   </Button>
                   {activeSession && (
-                    <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => closeSession(activeSession.id, table.id)}>
+                    <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => closeSession(activeSession.id)}>
                       <PowerOff className="w-3.5 h-3.5 text-destructive" />
                     </Button>
                   )}
@@ -120,9 +106,6 @@ const AdminTables = () => {
                   <div className="mt-3 p-3 bg-card rounded-lg border border-border">
                     <QRCodeSVG value={getQRUrl(table)} size={120} className="mx-auto" />
                     <p className="text-[10px] text-muted-foreground mt-2 break-all">{getQRUrl(table)}</p>
-                    <Button variant="ghost" size="sm" className="mt-2 text-xs font-sans" onClick={() => regenerateToken(table.id)}>
-                      Regenerate Token
-                    </Button>
                   </div>
                 )}
               </CardContent>

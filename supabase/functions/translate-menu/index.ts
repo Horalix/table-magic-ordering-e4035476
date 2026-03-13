@@ -17,27 +17,46 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Fetch items needing Arabic translation
-    const { data: items } = await supabase
-      .from("menu_items")
-      .select("id, name, description")
-      .is("name_ar", null);
+    // Parse body for force param
+    let force = false;
+    try {
+      const body = await req.json();
+      force = body?.force === true;
+    } catch { /* no body is fine */ }
 
-    const { data: categories } = await supabase
-      .from("categories")
-      .select("id, name")
-      .is("name_ar", null);
+    // Fetch items needing translation (both AR and BS)
+    let itemsQuery = supabase.from("menu_items").select("id, name, description");
+    let categoriesQuery = supabase.from("categories").select("id, name");
+    let subcategoriesQuery = supabase.from("subcategories").select("id, name");
 
-    const { data: subcategories } = await supabase
-      .from("subcategories")
-      .select("id, name")
-      .is("name_ar", null);
+    if (!force) {
+      // Get items where EITHER ar or bs is missing
+      itemsQuery = supabase.from("menu_items").select("id, name, description, name_ar, name_bs");
+      categoriesQuery = supabase.from("categories").select("id, name, name_ar, name_bs");
+      subcategoriesQuery = supabase.from("subcategories").select("id, name, name_ar, name_bs");
+    }
 
-    const toTranslate: { type: string; id: string; name: string; description?: string }[] = [];
+    const { data: items } = await itemsQuery;
+    const { data: categories } = await categoriesQuery;
+    const { data: subcategories } = await subcategoriesQuery;
 
-    categories?.forEach((c) => toTranslate.push({ type: "category", id: c.id, name: c.name }));
-    subcategories?.forEach((s) => toTranslate.push({ type: "subcategory", id: s.id, name: s.name }));
-    items?.forEach((i) => toTranslate.push({ type: "item", id: i.id, name: i.name, description: i.description || undefined }));
+    const toTranslate: { type: string; id: string; name: string; description?: string; needs_ar: boolean; needs_bs: boolean }[] = [];
+
+    categories?.forEach((c: any) => {
+      const needs_ar = force || !c.name_ar;
+      const needs_bs = force || !c.name_bs;
+      if (needs_ar || needs_bs) toTranslate.push({ type: "category", id: c.id, name: c.name, needs_ar, needs_bs });
+    });
+    subcategories?.forEach((s: any) => {
+      const needs_ar = force || !s.name_ar;
+      const needs_bs = force || !s.name_bs;
+      if (needs_ar || needs_bs) toTranslate.push({ type: "subcategory", id: s.id, name: s.name, needs_ar, needs_bs });
+    });
+    items?.forEach((i: any) => {
+      const needs_ar = force || !i.name_ar;
+      const needs_bs = force || !i.name_bs;
+      if (needs_ar || needs_bs) toTranslate.push({ type: "item", id: i.id, name: i.name, description: i.description || undefined, needs_ar, needs_bs });
+    });
 
     if (toTranslate.length === 0) {
       return new Response(JSON.stringify({ message: "All items already translated", count: 0 }), {
@@ -45,13 +64,26 @@ serve(async (req) => {
       });
     }
 
-    // Build prompt
-    const prompt = `Translate the following restaurant menu items from English to Arabic. Return a JSON array with the same structure but with Arabic translations. Keep it natural for a restaurant menu context.
+    // Build prompt for both AR and BS
+    const prompt = `Translate the following restaurant menu items. For each item, provide Arabic and Bosnian translations.
+
+CRITICAL RULES:
+- Do NOT translate brand names like "La Soul", "LA SOUL" — keep them as-is in all languages
+- Keep translations natural for a restaurant menu context
+- Arabic should use proper Arabic script
+- Bosnian should use Latin script (not Cyrillic)
 
 Items to translate:
 ${JSON.stringify(toTranslate.map((t) => ({ id: t.id, type: t.type, name: t.name, description: t.description })))}
 
-Return ONLY a JSON array where each object has: id, name_ar, description_ar (if original had description). No markdown, no explanation.`;
+Return ONLY a JSON array where each object has:
+- id (same as input)
+- name_ar (Arabic translation of name)
+- name_bs (Bosnian translation of name)  
+- description_ar (Arabic translation of description, only if original had description)
+- description_bs (Bosnian translation of description, only if original had description)
+
+No markdown, no explanation, ONLY the JSON array.`;
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -62,7 +94,7 @@ Return ONLY a JSON array where each object has: id, name_ar, description_ar (if 
       body: JSON.stringify({
         model: "google/gemini-2.5-flash",
         messages: [
-          { role: "system", content: "You are a professional translator specializing in restaurant menus. Translate English to Arabic naturally." },
+          { role: "system", content: "You are a professional translator specializing in restaurant menus. Translate English to Arabic and Bosnian naturally. Never translate brand names." },
           { role: "user", content: prompt },
         ],
       }),
@@ -94,20 +126,23 @@ Return ONLY a JSON array where each object has: id, name_ar, description_ar (if 
       const original = toTranslate.find((o) => o.id === t.id);
       if (!original) continue;
 
-      if (original.type === "category") {
-        await supabase.from("categories").update({ name_ar: t.name_ar }).eq("id", t.id);
-      } else if (original.type === "subcategory") {
-        await supabase.from("subcategories").update({ name_ar: t.name_ar }).eq("id", t.id);
-      } else if (original.type === "item") {
-        await supabase.from("menu_items").update({
-          name_ar: t.name_ar,
-          description_ar: t.description_ar || null,
-        }).eq("id", t.id);
+      const updates: Record<string, any> = {};
+      if (original.needs_ar && t.name_ar) updates.name_ar = t.name_ar;
+      if (original.needs_bs && t.name_bs) updates.name_bs = t.name_bs;
+
+      if (original.type === "item") {
+        if (original.needs_ar && t.description_ar) updates.description_ar = t.description_ar;
+        if (original.needs_bs && t.description_bs) updates.description_bs = t.description_bs;
       }
+
+      if (Object.keys(updates).length === 0) continue;
+
+      const table = original.type === "category" ? "categories" : original.type === "subcategory" ? "subcategories" : "menu_items";
+      await supabase.from(table).update(updates).eq("id", t.id);
       updated++;
     }
 
-    return new Response(JSON.stringify({ message: `Translated ${updated} items`, count: updated }), {
+    return new Response(JSON.stringify({ message: `Translated ${updated} items to Arabic & Bosnian`, count: updated }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {

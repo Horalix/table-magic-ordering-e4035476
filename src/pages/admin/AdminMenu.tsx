@@ -1,11 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
-import { Plus, Trash2, ChevronDown, ChevronRight, Languages, Loader2 } from 'lucide-react';
+import { Plus, Trash2, ChevronDown, ChevronRight, Languages, Loader2, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 
 const AdminMenu = () => {
@@ -90,10 +90,12 @@ const AdminMenu = () => {
     else { toast.success('Deleted'); fetchMenu(); }
   };
 
-  const translateToArabic = async () => {
+  const translateMenu = async (force: boolean = false) => {
     setIsTranslating(true);
     try {
-      const { data, error } = await supabase.functions.invoke('translate-menu');
+      const { data, error } = await supabase.functions.invoke('translate-menu', {
+        body: { force },
+      });
       if (error) throw error;
       toast.success(`Translation complete: ${data.message}`);
       fetchMenu();
@@ -111,14 +113,24 @@ const AdminMenu = () => {
         <h1 className="font-serif text-3xl font-bold text-foreground">Menu Management</h1>
         <div className="flex gap-2">
           <Button
-            onClick={translateToArabic}
+            onClick={() => translateMenu(false)}
             disabled={isTranslating}
             variant="outline"
             size="sm"
             className="rounded-lg font-sans gap-1"
           >
             {isTranslating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Languages className="w-4 h-4" />}
-            {isTranslating ? 'Translating...' : 'Auto-Translate Arabic'}
+            {isTranslating ? 'Translating...' : 'Auto-Translate'}
+          </Button>
+          <Button
+            onClick={() => translateMenu(true)}
+            disabled={isTranslating}
+            variant="outline"
+            size="sm"
+            className="rounded-lg font-sans gap-1"
+          >
+            <RefreshCw className="w-4 h-4" />
+            Re-translate All
           </Button>
           <Button onClick={() => { setIsAddingCategory(true); resetForm(); }} className="rounded-lg font-sans" size="sm">
             <Plus className="w-4 h-4 mr-1" /> Add Category
@@ -225,6 +237,7 @@ const AdminMenu = () => {
                               )}
                               <div>
                                 <p className="text-sm font-sans font-medium text-foreground">{item.name}</p>
+                                {item.name_bs && <p className="text-xs text-muted-foreground">{item.name_bs}</p>}
                                 {item.name_ar && <p className="text-xs text-muted-foreground" dir="rtl">{item.name_ar}</p>}
                                 <p className="text-xs text-muted-foreground">{Number(item.price).toFixed(2)} KM</p>
                               </div>
