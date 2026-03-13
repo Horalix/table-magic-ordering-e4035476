@@ -35,7 +35,7 @@ const RunningTabPage = () => {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('orders')
-        .select(`*, order_items(*, menu_items(name))`)
+        .select(`*, order_items(*, menu_items(name, name_ar, name_bs))`)
         .eq('table_session_id', sessionId!)
         .order('created_at', { ascending: false });
       if (error) throw error;
