@@ -209,7 +209,7 @@ const RunningTabPage = () => {
                   <div className="px-4 py-3 space-y-2">
                     {items.map((oi: any) => (
                       <div key={oi.id} className="flex justify-between items-center">
-                        <span className="text-sm font-sans text-foreground">{oi.quantity}× {oi.menu_items?.name || 'Item'}</span>
+                        <span className="text-sm font-sans text-foreground">{oi.quantity}× {oi.menu_items ? getLocalizedName(oi.menu_items, locale) : 'Item'}</span>
                         <span className="text-xs font-sans text-muted-foreground">{(oi.quantity * Number(oi.unit_price)).toFixed(2)} KM</span>
                       </div>
                     ))}
