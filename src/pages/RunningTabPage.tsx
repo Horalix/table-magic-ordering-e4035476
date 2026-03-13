@@ -8,7 +8,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
-import { useT, useLanguageStore } from '@/lib/i18n';
+import { useT, useLanguageStore, getLocalizedName } from '@/lib/i18n';
 
 const RunningTabPage = () => {
   const navigate = useNavigate();
@@ -35,7 +35,7 @@ const RunningTabPage = () => {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('orders')
-        .select(`*, order_items(*, menu_items(name))`)
+        .select(`*, order_items(*, menu_items(name, name_ar, name_bs))`)
         .eq('table_session_id', sessionId!)
         .order('created_at', { ascending: false });
       if (error) throw error;
@@ -209,7 +209,7 @@ const RunningTabPage = () => {
                   <div className="px-4 py-3 space-y-2">
                     {items.map((oi: any) => (
                       <div key={oi.id} className="flex justify-between items-center">
-                        <span className="text-sm font-sans text-foreground">{oi.quantity}× {oi.menu_items?.name || 'Item'}</span>
+                        <span className="text-sm font-sans text-foreground">{oi.quantity}× {oi.menu_items ? getLocalizedName(oi.menu_items, locale) : 'Item'}</span>
                         <span className="text-xs font-sans text-muted-foreground">{(oi.quantity * Number(oi.unit_price)).toFixed(2)} KM</span>
                       </div>
                     ))}

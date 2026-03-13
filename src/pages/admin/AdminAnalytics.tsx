@@ -14,13 +14,22 @@ const AdminAnalytics = () => {
 
   useEffect(() => {
     const fetchAnalytics = async () => {
-      // Top ordered items
+      // Get all non-cancelled order IDs first
+      const { data: validOrders } = await supabase
+        .from('orders')
+        .select('id, total, created_at, status')
+        .neq('status', 'cancelled');
+
+      const validOrderIds = new Set((validOrders || []).map(o => o.id));
+
+      // Top ordered items — only from non-cancelled orders
       const { data: orderItems } = await supabase
         .from('order_items')
-        .select('quantity, menu_items(name)');
+        .select('quantity, order_id, menu_items(name)');
 
       const itemCounts: Record<string, number> = {};
       orderItems?.forEach((oi: any) => {
+        if (!validOrderIds.has(oi.order_id)) return;
         const name = oi.menu_items?.name || 'Unknown';
         itemCounts[name] = (itemCounts[name] || 0) + oi.quantity;
       });
@@ -38,15 +47,9 @@ const AdminAnalytics = () => {
         days.push(date.toISOString().split('T')[0]);
       }
 
-      const { data: allOrders } = await supabase
-        .from('orders')
-        .select('total, created_at, status')
-        .neq('status', 'cancelled')
-        .gte('created_at', days[0]);
-
       const revenueByDay: Record<string, number> = {};
       days.forEach(d => revenueByDay[d] = 0);
-      allOrders?.forEach((o: any) => {
+      validOrders?.forEach((o: any) => {
         const day = o.created_at.split('T')[0];
         if (revenueByDay[day] !== undefined) {
           revenueByDay[day] += Number(o.total);
@@ -57,44 +60,34 @@ const AdminAnalytics = () => {
         revenue: Math.round(revenue * 100) / 100,
       })));
 
-      // Category breakdown with revenue
+      // Category breakdown — only from non-cancelled orders
       const { data: catItems } = await supabase
         .from('order_items')
-        .select('quantity, unit_price, menu_items(subcategories(categories(name)))');
+        .select('quantity, unit_price, order_id, menu_items(subcategories(categories(name)))');
 
       const catRevenue: Record<string, number> = {};
       catItems?.forEach((oi: any) => {
+        if (!validOrderIds.has(oi.order_id)) return;
         const name = oi.menu_items?.subcategories?.categories?.name || 'Other';
         catRevenue[name] = (catRevenue[name] || 0) + (oi.quantity * Number(oi.unit_price));
       });
       setCategoryBreakdown(Object.entries(catRevenue).map(([name, value]) => ({ name, value: Math.round(value * 100) / 100 })));
 
-      // Peak hours (today)
+      // Peak hours (today) — simple 8-23 range
       const today = new Date().toISOString().split('T')[0];
-      const { data: todayOrders } = await supabase
-        .from('orders')
-        .select('created_at')
-        .gte('created_at', today)
-        .neq('status', 'cancelled');
+      const todayOrders = validOrders?.filter(o => o.created_at.startsWith(today)) || [];
 
       const hourCounts: Record<number, number> = {};
-      for (let h = 0; h < 24; h++) hourCounts[h] = 0;
-      todayOrders?.forEach((o: any) => {
+      for (let h = 8; h <= 23; h++) hourCounts[h] = 0;
+      todayOrders.forEach((o: any) => {
         const hour = new Date(o.created_at).getHours();
-        hourCounts[hour]++;
+        if (hour >= 8 && hour <= 23) hourCounts[hour]++;
       });
       setPeakHours(
-        Object.entries(hourCounts)
-          .filter(([, count]) => count > 0 || parseInt(Object.keys(hourCounts).find(k => hourCounts[parseInt(k)] > 0) || '8') <= parseInt(Object.keys(hourCounts).find(k => hourCounts[parseInt(k)] > 0) || '23'))
-          .map(([hour, count]) => ({
-            hour: `${parseInt(hour).toString().padStart(2, '0')}:00`,
-            orders: count,
-          }))
-          .filter((_, i, arr) => {
-            // Show only hours 8-23 or where there are orders
-            const h = parseInt(arr[i].hour);
-            return h >= 8 && h <= 23;
-          })
+        Object.entries(hourCounts).map(([hour, count]) => ({
+          hour: `${parseInt(hour).toString().padStart(2, '0')}:00`,
+          orders: count,
+        }))
       );
 
       // Table turnover
@@ -123,7 +116,6 @@ const AdminAnalytics = () => {
       <h1 className="font-serif text-3xl font-bold text-foreground mb-6">Analytics</h1>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Daily Revenue */}
         <Card className="border-border">
           <CardHeader>
             <CardTitle className="font-serif text-lg">Revenue (Last 7 Days)</CardTitle>
@@ -141,7 +133,6 @@ const AdminAnalytics = () => {
           </CardContent>
         </Card>
 
-        {/* Revenue by Category */}
         <Card className="border-border">
           <CardHeader>
             <CardTitle className="font-serif text-lg">Revenue by Category</CardTitle>
@@ -164,13 +155,12 @@ const AdminAnalytics = () => {
           </CardContent>
         </Card>
 
-        {/* Peak Hours */}
         <Card className="border-border">
           <CardHeader>
             <CardTitle className="font-serif text-lg">Peak Hours (Today)</CardTitle>
           </CardHeader>
           <CardContent>
-            {peakHours.length > 0 ? (
+            {peakHours.some(h => h.orders > 0) ? (
               <ResponsiveContainer width="100%" height={250}>
                 <BarChart data={peakHours}>
                   <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
@@ -186,7 +176,6 @@ const AdminAnalytics = () => {
           </CardContent>
         </Card>
 
-        {/* Table Turnover */}
         <Card className="border-border">
           <CardHeader>
             <CardTitle className="font-serif text-lg">Table Turnover (Today)</CardTitle>
@@ -208,7 +197,6 @@ const AdminAnalytics = () => {
           </CardContent>
         </Card>
 
-        {/* Top Items */}
         <Card className="border-border lg:col-span-2">
           <CardHeader>
             <CardTitle className="font-serif text-lg">Most Ordered Items</CardTitle>
