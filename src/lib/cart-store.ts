@@ -17,6 +17,7 @@ interface CartStore {
   sessionToken: string | null;
   sessionId: string | null;
   guestName: string | null;
+  lastOrderTime: number | null;
   addItem: (item: Omit<CartItem, 'quantity'>) => void;
   removeItem: (id: string) => void;
   updateQuantity: (id: string, quantity: number) => void;
@@ -25,6 +26,7 @@ interface CartStore {
   setTable: (tableNumber: number, token: string) => void;
   setSessionId: (id: string) => void;
   setGuestName: (name: string) => void;
+  setLastOrderTime: () => void;
   total: () => number;
   itemCount: () => number;
   startHeartbeat: () => void;
