@@ -37,8 +37,8 @@ const translations: Record<string, Record<Locale, string>> = {
   'drinks': { en: 'Drinks', bs: 'Pića', ar: 'المشروبات' },
   'food': { en: 'Food', bs: 'Hrana', ar: 'الطعام' },
   'desserts': { en: 'Desserts', bs: 'Deserti', ar: 'الحلويات' },
-  'drinks_desc': { en: 'Cocktails, wine, coffee & more', bs: 'Kokteli, vino, kafa i više', ar: 'كوكتيلات، نبيذ، قهوة والمزيد' },
-  'food_desc': { en: 'Starters, mains, burgers & pizza', bs: 'Predjela, glavna jela, burgeri i pizza', ar: 'مقبلات، أطباق رئيسية، برغر وبيتزا' },
+  'drinks_desc': { en: 'Cocktails, coffee, juices & more', bs: 'Kokteli, kafa, sokovi i više', ar: 'كوكتيلات، قهوة، عصائر والمزيد' },
+  'food_desc': { en: 'Starters, mains, burgers & more', bs: 'Predjela, glavna jela, burgeri i više', ar: 'مقبلات، أطباق رئيسية، برغر والمزيد' },
   'desserts_desc': { en: 'Sweet endings', bs: 'Slatki završeci', ar: 'نهايات حلوة' },
 
   // Cart
