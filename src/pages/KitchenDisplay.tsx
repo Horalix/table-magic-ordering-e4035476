@@ -211,10 +211,19 @@ const KitchenDisplay = () => {
     else { toast.success('Waiter call resolved'); fetchWaiterCalls(); }
   };
 
-  const resolveBillRequest = async (requestId: string) => {
-    const { error } = await supabase.from('bill_requests').update({ status: 'resolved', resolved_at: new Date().toISOString() }).eq('id', requestId);
-    if (error) toast.error('Failed to resolve bill request');
-    else { toast.success('Bill request resolved'); fetchBillRequests(); }
+  const resolveBillRequest = async (request: BillRequest) => {
+    const { error } = await supabase.from('bill_requests').update({ status: 'resolved', resolved_at: new Date().toISOString() }).eq('id', request.id);
+    if (error) { toast.error('Failed to resolve bill request'); return; }
+
+    // Auto-close the table session
+    await supabase
+      .from('table_sessions')
+      .update({ is_active: false, closed_at: new Date().toISOString() })
+      .eq('id', request.table_session_id);
+
+    toast.success('Bill resolved & table freed');
+    fetchBillRequests();
+    fetchOrders();
   };
 
   const getNextStatus = (current: string) => {
