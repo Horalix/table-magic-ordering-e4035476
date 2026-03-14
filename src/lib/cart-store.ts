@@ -41,6 +41,7 @@ export const useCartStore = create<CartStore>((set, get) => ({
   sessionToken: null,
   sessionId: null,
   guestName: null,
+  lastOrderTime: null,
 
   addItem: (item) => {
     set((state) => {
