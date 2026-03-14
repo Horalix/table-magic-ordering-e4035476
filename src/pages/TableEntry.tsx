@@ -73,6 +73,20 @@ const TableEntry = () => {
         setPendingSessionId(sessionId);
         setLoading(false);
         setShowNameModal(true);
+
+        // Prefetch menu images in background
+        supabase.from('menu_items').select('image_url').not('image_url', 'is', null)
+          .then(({ data }) => {
+            data?.forEach(item => {
+              if (item.image_url) {
+                const link = document.createElement('link');
+                link.rel = 'prefetch';
+                link.as = 'image';
+                link.href = item.image_url;
+                document.head.appendChild(link);
+              }
+            });
+          });
       } catch (err) {
         console.error('Table entry error:', err);
         setError(t('something_wrong'));

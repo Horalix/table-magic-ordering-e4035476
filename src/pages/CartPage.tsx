@@ -18,6 +18,9 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 
+const ORDER_COOLDOWN_MS = 30000; // 30 seconds
+const MAX_ITEMS_PER_ORDER = 20;
+
 const OrderSuccess = ({ table, onContinue }: { table: string | null; onContinue: () => void }) => {
   const t = useT();
   return (
@@ -48,7 +51,7 @@ const OrderSuccess = ({ table, onContinue }: { table: string | null; onContinue:
 const CartPage = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { items, total, updateQuantity, removeItem, clearCart, sessionId, guestName } = useCartStore();
+  const { items, total, updateQuantity, removeItem, clearCart, sessionId, guestName, lastOrderTime, setLastOrderTime, itemCount } = useCartStore();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [orderPlaced, setOrderPlaced] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
@@ -63,6 +66,20 @@ const CartPage = () => {
     if (table) params.set('table', table);
     if (token) params.set('token', token);
     return `/menu?${params.toString()}`;
+  };
+
+  const handlePlaceOrderClick = () => {
+    // Anti-spam: check cooldown
+    if (lastOrderTime && Date.now() - lastOrderTime < ORDER_COOLDOWN_MS) {
+      toast.error(t('order_cooldown'));
+      return;
+    }
+    // Anti-spam: check item count
+    if (itemCount() > MAX_ITEMS_PER_ORDER) {
+      toast.error(t('too_many_items'));
+      return;
+    }
+    setShowConfirm(true);
   };
 
   const placeOrder = async () => {
@@ -82,6 +99,19 @@ const CartPage = () => {
 
       if (sessionError || !session) {
         toast.error(t('session_expired'));
+        setIsSubmitting(false);
+        return;
+      }
+
+      // Anti-spam: check total orders for this session (max 10)
+      const { count } = await supabase
+        .from('orders')
+        .select('id', { count: 'exact', head: true })
+        .eq('table_session_id', sessionId)
+        .neq('status', 'cancelled');
+
+      if (count !== null && count >= 10) {
+        toast.error('Maximum orders reached for this session.');
         setIsSubmitting(false);
         return;
       }
@@ -113,6 +143,7 @@ const CartPage = () => {
       const { error: itemsError } = await supabase.from('order_items').insert(orderItems);
       if (itemsError) throw itemsError;
 
+      setLastOrderTime();
       setOrderPlaced(true);
       clearCart();
       toast.success(t('order_confirmed'));
@@ -223,7 +254,7 @@ const CartPage = () => {
 
           <div className="fixed bottom-0 left-0 right-0 z-40 p-4 pb-6 bg-background/80 backdrop-blur-xl border-t border-border/50">
             <Button
-              onClick={() => setShowConfirm(true)}
+              onClick={handlePlaceOrderClick}
               disabled={isSubmitting || !sessionId}
               className="w-full h-14 rounded-2xl bg-primary text-primary-foreground font-sans font-semibold text-base hover:bg-sage-dark disabled:opacity-50 transition-colors"
             >

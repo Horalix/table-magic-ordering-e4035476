@@ -9,12 +9,14 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import { useT, useLanguageStore, getLocalizedName } from '@/lib/i18n';
+import ReviewPrompt from '@/components/guest/ReviewPrompt';
 
 const RunningTabPage = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { sessionId } = useCartStore();
   const [requestingBill, setRequestingBill] = useState(false);
+  const [showReview, setShowReview] = useState(false);
   const t = useT();
   const locale = useLanguageStore((s) => s.locale);
 
@@ -89,7 +91,8 @@ const RunningTabPage = () => {
         .from('bill_requests')
         .insert({ table_session_id: sessionId });
       if (error) throw error;
-      toast.success(t('server_notified'));
+      // Show review prompt after successful bill request
+      setShowReview(true);
     } catch {
       toast.error('Could not request bill. Please try again.');
     } finally {
@@ -219,6 +222,17 @@ const RunningTabPage = () => {
             })}
           </div>
         </>
+      )}
+
+      {sessionId && (
+        <ReviewPrompt
+          open={showReview}
+          onClose={() => {
+            setShowReview(false);
+            toast.success(t('server_notified'));
+          }}
+          sessionId={sessionId}
+        />
       )}
     </div>
   );
