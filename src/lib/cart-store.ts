@@ -66,6 +66,7 @@ export const useCartStore = create<CartStore>((set, get) => ({
       get().removeItem(id);
       return;
     }
+    if (quantity > 10) return; // Max 10 per item
     set((state) => ({
       items: state.items.map((i) => (i.id === id ? { ...i, quantity } : i)),
     }));
