@@ -21,7 +21,22 @@ const AdminTables = () => {
     setTables(data || []);
   };
 
-  useEffect(() => { fetchTables(); }, []);
+  useEffect(() => {
+    fetchTables();
+
+    // Realtime subscription for live updates
+    const channel = supabase
+      .channel('admin-tables')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'table_sessions' }, () => {
+        fetchTables();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'tables' }, () => {
+        fetchTables();
+      })
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, []);
 
   const addMultipleTables = async () => {
     const count = parseInt(newTableNumber);
@@ -47,7 +62,7 @@ const AdminTables = () => {
       .eq('id', sessionId);
     if (error) { toast.error('Failed to close session'); return; }
 
-    toast.success('Session closed');
+    toast.success('Session closed — table is now free');
     fetchTables();
   };
 
@@ -96,8 +111,9 @@ const AdminTables = () => {
                     <QrCode className="w-3.5 h-3.5" />
                   </Button>
                   {activeSession && (
-                    <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => closeSession(activeSession.id)}>
-                      <PowerOff className="w-3.5 h-3.5 text-destructive" />
+                    <Button variant="outline" size="sm" className="h-8 text-xs gap-1" onClick={() => closeSession(activeSession.id)}>
+                      <PowerOff className="w-3 h-3 text-destructive" />
+                      Close
                     </Button>
                   )}
                 </div>

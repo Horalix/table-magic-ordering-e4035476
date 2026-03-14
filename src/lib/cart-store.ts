@@ -17,6 +17,7 @@ interface CartStore {
   sessionToken: string | null;
   sessionId: string | null;
   guestName: string | null;
+  lastOrderTime: number | null;
   addItem: (item: Omit<CartItem, 'quantity'>) => void;
   removeItem: (id: string) => void;
   updateQuantity: (id: string, quantity: number) => void;
@@ -25,6 +26,7 @@ interface CartStore {
   setTable: (tableNumber: number, token: string) => void;
   setSessionId: (id: string) => void;
   setGuestName: (name: string) => void;
+  setLastOrderTime: () => void;
   total: () => number;
   itemCount: () => number;
   startHeartbeat: () => void;
@@ -39,6 +41,7 @@ export const useCartStore = create<CartStore>((set, get) => ({
   sessionToken: null,
   sessionId: null,
   guestName: null,
+  lastOrderTime: null,
 
   addItem: (item) => {
     set((state) => {
@@ -63,6 +66,7 @@ export const useCartStore = create<CartStore>((set, get) => ({
       get().removeItem(id);
       return;
     }
+    if (quantity > 10) return; // Max 10 per item
     set((state) => ({
       items: state.items.map((i) => (i.id === id ? { ...i, quantity } : i)),
     }));
@@ -81,6 +85,8 @@ export const useCartStore = create<CartStore>((set, get) => ({
   setSessionId: (id) => set({ sessionId: id }),
 
   setGuestName: (name) => set({ guestName: name }),
+
+  setLastOrderTime: () => set({ lastOrderTime: Date.now() }),
 
   total: () => get().items.reduce((sum, i) => sum + i.price * i.quantity, 0),
 

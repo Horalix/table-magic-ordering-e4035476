@@ -37,8 +37,8 @@ const translations: Record<string, Record<Locale, string>> = {
   'drinks': { en: 'Drinks', bs: 'Pića', ar: 'المشروبات' },
   'food': { en: 'Food', bs: 'Hrana', ar: 'الطعام' },
   'desserts': { en: 'Desserts', bs: 'Deserti', ar: 'الحلويات' },
-  'drinks_desc': { en: 'Cocktails, wine, coffee & more', bs: 'Kokteli, vino, kafa i više', ar: 'كوكتيلات، نبيذ، قهوة والمزيد' },
-  'food_desc': { en: 'Starters, mains, burgers & pizza', bs: 'Predjela, glavna jela, burgeri i pizza', ar: 'مقبلات، أطباق رئيسية، برغر وبيتزا' },
+  'drinks_desc': { en: 'Cocktails, coffee, juices & more', bs: 'Kokteli, kafa, sokovi i više', ar: 'كوكتيلات، قهوة، عصائر والمزيد' },
+  'food_desc': { en: 'Starters, mains, burgers & more', bs: 'Predjela, glavna jela, burgeri i više', ar: 'مقبلات، أطباق رئيسية، برغر والمزيد' },
   'desserts_desc': { en: 'Sweet endings', bs: 'Slatki završeci', ar: 'نهايات حلوة' },
 
   // Cart
@@ -111,14 +111,27 @@ const translations: Record<string, Record<Locale, string>> = {
   'session_expired': { en: 'Your session has expired. Please scan the QR code again.', bs: 'Vaša sesija je istekla. Skenirajte QR kod ponovo.', ar: 'انتهت جلستك. يرجى مسح رمز QR مرة أخرى.' },
 
   // Contact
-  'phone': { en: '+387 33 844 334', bs: '+387 33 844 334', ar: '+387 33 844 334' },
-  'address': { en: 'Maršala Tita 7, Sarajevo', bs: 'Maršala Tita 7, Sarajevo', ar: 'مارشالا تيتا 7، سراييفو' },
+  'phone': { en: '033 877-779', bs: '033 877-779', ar: '033 877-779' },
+  'address': { en: 'Butmirska cesta, Sarajevo 71000', bs: 'Butmirska cesta, Sarajevo 71000', ar: 'بوتميرسكا جيستا، سراييفو 71000' },
 
   // No items
   'no_items_category': { en: 'No items available in this category yet.', bs: 'Još nema stavki u ovoj kategoriji.', ar: 'لا توجد عناصر متاحة في هذه الفئة بعد.' },
 
   // Just now / time
   'just_now': { en: 'Just now', bs: 'Upravo', ar: 'الآن' },
+
+  // Review / Rating
+  'how_was_experience': { en: 'How was your experience?', bs: 'Kako je bilo vaše iskustvo?', ar: 'كيف كانت تجربتك؟' },
+  'rate_your_visit': { en: 'Tap a star to rate your visit', bs: 'Dodirnite zvjezdicu da ocijenite posjetu', ar: 'انقر على نجمة لتقييم زيارتك' },
+  'thank_you_feedback': { en: 'Thank you for your feedback!', bs: 'Hvala na povratnoj informaciji!', ar: 'شكراً لملاحظاتك!' },
+  'help_discover_lasoul': { en: 'Help others discover La Soul', bs: 'Pomozite drugima da otkriju La Soul', ar: 'ساعد الآخرين في اكتشاف La Soul' },
+  'leave_google_review': { en: 'Leave a Google Review', bs: 'Ostavite Google recenziju', ar: 'اترك تقييماً على Google' },
+  'close': { en: 'Close', bs: 'Zatvori', ar: 'إغلاق' },
+
+  // Anti-spam
+  'order_cooldown': { en: 'Please wait before placing another order.', bs: 'Molimo pričekajte prije sljedeće narudžbe.', ar: 'يرجى الانتظار قبل تقديم طلب آخر.' },
+  'too_many_items': { en: 'Maximum 20 items per order.', bs: 'Maksimalno 20 stavki po narudžbi.', ar: 'الحد الأقصى 20 عنصرًا لكل طلب.' },
+  'max_quantity': { en: 'Maximum quantity is 10 per item.', bs: 'Maksimalna količina je 10 po stavci.', ar: 'الحد الأقصى للكمية هو 10 لكل عنصر.' },
 };
 
 export function t(key: string): string {

@@ -211,10 +211,19 @@ const KitchenDisplay = () => {
     else { toast.success('Waiter call resolved'); fetchWaiterCalls(); }
   };
 
-  const resolveBillRequest = async (requestId: string) => {
-    const { error } = await supabase.from('bill_requests').update({ status: 'resolved', resolved_at: new Date().toISOString() }).eq('id', requestId);
-    if (error) toast.error('Failed to resolve bill request');
-    else { toast.success('Bill request resolved'); fetchBillRequests(); }
+  const resolveBillRequest = async (request: BillRequest) => {
+    const { error } = await supabase.from('bill_requests').update({ status: 'resolved', resolved_at: new Date().toISOString() }).eq('id', request.id);
+    if (error) { toast.error('Failed to resolve bill request'); return; }
+
+    // Auto-close the table session
+    await supabase
+      .from('table_sessions')
+      .update({ is_active: false, closed_at: new Date().toISOString() })
+      .eq('id', request.table_session_id);
+
+    toast.success('Bill resolved & table freed');
+    fetchBillRequests();
+    fetchOrders();
   };
 
   const getNextStatus = (current: string) => {
@@ -287,7 +296,7 @@ const KitchenDisplay = () => {
                   <motion.div key={req.id} initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="flex items-center gap-2 px-3 py-2 rounded-full bg-primary/15 border border-primary/25 min-h-[44px]">
                     <span className="text-sm font-sans font-semibold text-primary">Table {req.table_number}</span>
                     <span className="text-xs text-primary/70 font-sans">{timeSince(req.created_at)}</span>
-                    <button onClick={() => resolveBillRequest(req.id)} className="w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center hover:bg-primary/40 transition-colors" aria-label="Resolve bill request">
+                    <button onClick={() => resolveBillRequest(req)} className="w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center hover:bg-primary/40 transition-colors" aria-label="Resolve bill request">
                       <Check className="w-3 h-3 text-primary" />
                     </button>
                   </motion.div>
