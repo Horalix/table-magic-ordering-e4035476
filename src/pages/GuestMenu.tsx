@@ -80,7 +80,7 @@ const GuestMenu = () => {
           <img src="/lasoul-logo.svg" alt="La Soul" className="w-36 h-36 object-contain brightness-0 invert" />
         </motion.div>
 
-        <div className="flex items-center gap-[0.12em] mb-1">
+        <div dir="ltr" className="flex items-center gap-[0.12em] mb-1">
           {'LA SOUL'.split('').map((letter, i) => (
             <motion.span
               key={i}

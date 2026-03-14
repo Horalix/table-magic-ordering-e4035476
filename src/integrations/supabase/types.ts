@@ -224,6 +224,35 @@ export type Database = {
           },
         ]
       }
+      ratings: {
+        Row: {
+          created_at: string
+          id: string
+          rating: number
+          table_session_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          rating: number
+          table_session_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          rating?: number
+          table_session_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ratings_table_session_id_fkey"
+            columns: ["table_session_id"]
+            isOneToOne: false
+            referencedRelation: "table_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       subcategories: {
         Row: {
           category_id: string

@@ -111,8 +111,8 @@ const translations: Record<string, Record<Locale, string>> = {
   'session_expired': { en: 'Your session has expired. Please scan the QR code again.', bs: 'Vaša sesija je istekla. Skenirajte QR kod ponovo.', ar: 'انتهت جلستك. يرجى مسح رمز QR مرة أخرى.' },
 
   // Contact
-  'phone': { en: '+387 33 844 334', bs: '+387 33 844 334', ar: '+387 33 844 334' },
-  'address': { en: 'Maršala Tita 7, Sarajevo', bs: 'Maršala Tita 7, Sarajevo', ar: 'مارشالا تيتا 7، سراييفو' },
+  'phone': { en: '033 877-779', bs: '033 877-779', ar: '033 877-779' },
+  'address': { en: 'Butmirska cesta, Sarajevo 71000', bs: 'Butmirska cesta, Sarajevo 71000', ar: 'بوتميرسكا جيستا، سراييفو 71000' },
 
   // No items
   'no_items_category': { en: 'No items available in this category yet.', bs: 'Još nema stavki u ovoj kategoriji.', ar: 'لا توجد عناصر متاحة في هذه الفئة بعد.' },
