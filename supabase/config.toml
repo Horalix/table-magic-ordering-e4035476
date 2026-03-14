@@ -4,4 +4,4 @@ project_id = "jgxnvrrphxnmzongtmzs"
 verify_jwt = false
 
 [functions.translate-menu]
-verify_jwt = true
+verify_jwt = false
