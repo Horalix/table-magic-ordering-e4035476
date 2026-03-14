@@ -119,6 +119,19 @@ const translations: Record<string, Record<Locale, string>> = {
 
   // Just now / time
   'just_now': { en: 'Just now', bs: 'Upravo', ar: 'الآن' },
+
+  // Review / Rating
+  'how_was_experience': { en: 'How was your experience?', bs: 'Kako je bilo vaše iskustvo?', ar: 'كيف كانت تجربتك؟' },
+  'rate_your_visit': { en: 'Tap a star to rate your visit', bs: 'Dodirnite zvjezdicu da ocijenite posjetu', ar: 'انقر على نجمة لتقييم زيارتك' },
+  'thank_you_feedback': { en: 'Thank you for your feedback!', bs: 'Hvala na povratnoj informaciji!', ar: 'شكراً لملاحظاتك!' },
+  'help_discover_lasoul': { en: 'Help others discover La Soul', bs: 'Pomozite drugima da otkriju La Soul', ar: 'ساعد الآخرين في اكتشاف La Soul' },
+  'leave_google_review': { en: 'Leave a Google Review', bs: 'Ostavite Google recenziju', ar: 'اترك تقييماً على Google' },
+  'close': { en: 'Close', bs: 'Zatvori', ar: 'إغلاق' },
+
+  // Anti-spam
+  'order_cooldown': { en: 'Please wait before placing another order.', bs: 'Molimo pričekajte prije sljedeće narudžbe.', ar: 'يرجى الانتظار قبل تقديم طلب آخر.' },
+  'too_many_items': { en: 'Maximum 20 items per order.', bs: 'Maksimalno 20 stavki po narudžbi.', ar: 'الحد الأقصى 20 عنصرًا لكل طلب.' },
+  'max_quantity': { en: 'Maximum quantity is 10 per item.', bs: 'Maksimalna količina je 10 po stavci.', ar: 'الحد الأقصى للكمية هو 10 لكل عنصر.' },
 };
 
 export function t(key: string): string {
