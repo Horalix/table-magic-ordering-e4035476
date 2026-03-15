@@ -68,15 +68,12 @@ const CartPage = () => {
     return `/menu?${params.toString()}`;
   };
 
+  const isLargeOrder = itemCount() > LARGE_ORDER_THRESHOLD;
+
   const handlePlaceOrderClick = () => {
     // Anti-spam: check cooldown
     if (lastOrderTime && Date.now() - lastOrderTime < ORDER_COOLDOWN_MS) {
       toast.error(t('order_cooldown'));
-      return;
-    }
-    // Anti-spam: check item count
-    if (itemCount() > MAX_ITEMS_PER_ORDER) {
-      toast.error(t('too_many_items'));
       return;
     }
     setShowConfirm(true);
