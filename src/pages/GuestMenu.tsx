@@ -124,7 +124,7 @@ const GuestMenu = () => {
           <motion.p
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            transition={{ delay: 1.6, duration: 0.6 }}
+            transition={{ delay: 0.9, duration: 0.4 }}
             className="mt-4 text-[11px] font-sans text-white/50 text-center leading-relaxed"
           >
             {t('scan_qr_order')}
