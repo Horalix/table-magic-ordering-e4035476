@@ -152,26 +152,94 @@
   flex-direction: row-reverse;
 }
 
-/* Print styles for QR codes */
+/* Print styles for QR codes — each card prints as its own sticker page */
 @media print {
+  /* Hide everything by default */
   body * {
     visibility: hidden;
   }
-  .qr-card, .qr-card * {
-    visibility: visible !important;
-  }
-  .qr-card.print-hidden, .qr-card.print-hidden * {
-    display: none !important;
-  }
-  .no-print {
-    display: none !important;
-  }
-  /* Admin sidebar and layout chrome */
+
+  /* Hide admin chrome */
+  .no-print,
   [data-sidebar], nav, header, .sidebar {
     display: none !important;
   }
+
+  /* Hide cards marked as hidden for single-print */
+  .qr-card.print-hidden, .qr-card.print-hidden * {
+    display: none !important;
+  }
+
+  /* Reset layout for print */
+  .qr-print-grid {
+    display: block !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  /* Each QR card = one sticker page, centered */
   .qr-card {
+    visibility: visible !important;
+    display: flex !important;
+    align-items: center;
+    justify-content: center;
+    page-break-after: always;
+    break-after: page;
     page-break-inside: avoid;
     break-inside: avoid;
+    width: 100% !important;
+    height: 100vh;
+    padding: 0;
+    margin: 0;
+  }
+
+  .qr-card * {
+    visibility: visible !important;
+  }
+
+  /* Remove card border/shadow for clean sticker look */
+  .qr-card .border-border {
+    border: 2px dashed #ccc !important;
+    border-radius: 16px !important;
+    box-shadow: none !important;
+    max-width: 320px;
+    margin: 0 auto;
+    padding: 32px 24px !important;
+  }
+
+  /* Make QR code larger for print */
+  .qr-card svg {
+    width: 200px !important;
+    height: 200px !important;
+  }
+
+  /* Branding */
+  .qr-brand {
+    font-size: 14px !important;
+    letter-spacing: 0.25em !important;
+    margin-bottom: 12px !important;
+    color: #000 !important;
+  }
+
+  .qr-table-label {
+    font-size: 28px !important;
+    color: #000 !important;
+  }
+
+  .qr-divider {
+    background: #999 !important;
+    width: 40px !important;
+    margin: 10px auto !important;
+  }
+
+  .qr-subtitle {
+    font-size: 12px !important;
+    color: #555 !important;
+  }
+
+  /* Remove last page break to avoid trailing blank page */
+  .qr-card:last-child {
+    page-break-after: auto;
+    break-after: auto;
   }
 }
