@@ -132,6 +132,7 @@ const translations: Record<string, Record<Locale, string>> = {
   'order_cooldown': { en: 'Please wait before placing another order.', bs: 'Molimo pričekajte prije sljedeće narudžbe.', ar: 'يرجى الانتظار قبل تقديم طلب آخر.' },
   'too_many_items': { en: 'Maximum 20 items per order.', bs: 'Maksimalno 20 stavki po narudžbi.', ar: 'الحد الأقصى 20 عنصرًا لكل طلب.' },
   'max_quantity': { en: 'Maximum quantity is 10 per item.', bs: 'Maksimalna količina je 10 po stavci.', ar: 'الحد الأقصى للكمية هو 10 لكل عنصر.' },
+  'large_order_suggestion': { en: 'For large orders, feel free to call a server for assistance.', bs: 'Za veće narudžbe, slobodno pozovite konobara za pomoć.', ar: 'للطلبات الكبيرة، لا تتردد في استدعاء النادل للمساعدة.' },
 };
 
 export function t(key: string): string {

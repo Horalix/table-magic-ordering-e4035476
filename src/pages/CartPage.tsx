@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Minus, Plus, Trash2, Send, CheckCircle, ShoppingBag } from 'lucide-react';
+import { ArrowLeft, Minus, Plus, Trash2, Send, CheckCircle, ShoppingBag, UtensilsCrossed } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useCartStore } from '@/lib/cart-store';
 import { supabase } from '@/integrations/supabase/client';
@@ -19,7 +19,7 @@ import {
 } from '@/components/ui/alert-dialog';
 
 const ORDER_COOLDOWN_MS = 30000; // 30 seconds
-const MAX_ITEMS_PER_ORDER = 20;
+const LARGE_ORDER_THRESHOLD = 20;
 
 const OrderSuccess = ({ table, onContinue }: { table: string | null; onContinue: () => void }) => {
   const t = useT();
@@ -68,15 +68,12 @@ const CartPage = () => {
     return `/menu?${params.toString()}`;
   };
 
+  const isLargeOrder = itemCount() > LARGE_ORDER_THRESHOLD;
+
   const handlePlaceOrderClick = () => {
     // Anti-spam: check cooldown
     if (lastOrderTime && Date.now() - lastOrderTime < ORDER_COOLDOWN_MS) {
       toast.error(t('order_cooldown'));
-      return;
-    }
-    // Anti-spam: check item count
-    if (itemCount() > MAX_ITEMS_PER_ORDER) {
-      toast.error(t('too_many_items'));
       return;
     }
     setShowConfirm(true);
@@ -206,6 +203,11 @@ const CartPage = () => {
                 transition={{ delay: i * 0.05 }}
                 className="flex gap-4 p-4 rounded-xl border border-border bg-card"
               >
+                {item.image_url && (
+                  <div className="w-16 h-16 rounded-lg overflow-hidden flex-shrink-0 bg-muted">
+                    <img src={item.image_url} alt={item.name} className="w-full h-full object-cover" />
+                  </div>
+                )}
                 <div className="flex-1 min-w-0">
                   <h3 className="font-serif text-base font-semibold text-foreground">{item.name}</h3>
                   {item.notes && (
@@ -243,7 +245,13 @@ const CartPage = () => {
             ))}
           </div>
 
-          <div className="px-4 mt-6">
+          <div className="px-4 mt-6 space-y-3">
+            {isLargeOrder && (
+              <div className="p-3 rounded-xl border border-accent/20 bg-accent/5 flex items-center gap-3">
+                <UtensilsCrossed className="w-4 h-4 text-accent flex-shrink-0" />
+                <p className="text-xs font-sans text-accent">{t('large_order_suggestion')}</p>
+              </div>
+            )}
             <div className="p-4 rounded-xl border border-border bg-card">
               <div className="flex justify-between items-center">
                 <span className="font-sans text-sm text-muted-foreground">{t('total')}</span>

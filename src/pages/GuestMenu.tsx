@@ -67,14 +67,14 @@ const GuestMenu = () => {
         <motion.div
           initial={{ scaleX: 0 }}
           animate={{ scaleX: 1 }}
-          transition={{ delay: 0.3, duration: 0.8, ease: 'easeOut' }}
+          transition={{ delay: 0.1, duration: 0.5, ease: 'easeOut' }}
           className="w-12 h-px bg-white/30 mb-10"
         />
 
         <motion.div
           initial={{ opacity: 0, scale: 0.85 }}
           animate={{ opacity: 1, scale: 1 }}
-          transition={{ delay: 0.4, duration: 1, ease: [0.16, 1, 0.3, 1] }}
+          transition={{ delay: 0.15, duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
           className="mb-6"
         >
           <img src="/lasoul-logo.svg" alt="La Soul" className="w-36 h-36 object-contain brightness-0 invert" />
@@ -86,7 +86,7 @@ const GuestMenu = () => {
               key={i}
               initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.8 + i * 0.06, duration: 0.5 }}
+              transition={{ delay: 0.3 + i * 0.04, duration: 0.4 }}
               className="font-serif text-[28px] font-bold text-white tracking-[0.15em]"
             >
               {letter === ' ' ? '\u00A0' : letter}
@@ -97,7 +97,7 @@ const GuestMenu = () => {
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
-          transition={{ delay: 1.3, duration: 0.6 }}
+          transition={{ delay: 0.7, duration: 0.4 }}
           className="mt-4 flex items-center gap-4"
         >
           <div className="h-px w-10 bg-white/25" />
@@ -108,7 +108,7 @@ const GuestMenu = () => {
         <motion.div
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 1.5, duration: 0.5 }}
+          transition={{ delay: 0.8, duration: 0.4 }}
           className="mt-6 flex items-center gap-3"
         >
           {table && (
@@ -124,7 +124,7 @@ const GuestMenu = () => {
           <motion.p
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            transition={{ delay: 1.6, duration: 0.6 }}
+            transition={{ delay: 0.9, duration: 0.4 }}
             className="mt-4 text-[11px] font-sans text-white/50 text-center leading-relaxed"
           >
             {t('scan_qr_order')}
@@ -134,7 +134,7 @@ const GuestMenu = () => {
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
-          transition={{ delay: 1.8, duration: 0.8 }}
+          transition={{ delay: 0.9, duration: 0.5 }}
           className="mt-8 flex flex-col items-center gap-2"
         >
           <div className="flex items-center gap-2 text-white/40">
@@ -158,7 +158,7 @@ const GuestMenu = () => {
               key={cat.id}
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 1.8 + i * 0.1, duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+              transition={{ delay: 0.6 + i * 0.08, duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
               whileTap={{ scale: 0.98 }}
               onClick={() => handleCategoryClick(path)}
               className="w-full group"

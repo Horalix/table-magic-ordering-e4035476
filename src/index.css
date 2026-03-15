@@ -151,3 +151,27 @@
 [dir="rtl"] .flex-row-reverse-rtl {
   flex-direction: row-reverse;
 }
+
+/* Print styles for QR codes */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  .qr-card, .qr-card * {
+    visibility: visible !important;
+  }
+  .qr-card.print-hidden, .qr-card.print-hidden * {
+    display: none !important;
+  }
+  .no-print {
+    display: none !important;
+  }
+  /* Admin sidebar and layout chrome */
+  [data-sidebar], nav, header, .sidebar {
+    display: none !important;
+  }
+  .qr-card {
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+}
