@@ -203,6 +203,11 @@ const CartPage = () => {
                 transition={{ delay: i * 0.05 }}
                 className="flex gap-4 p-4 rounded-xl border border-border bg-card"
               >
+                {item.image_url && (
+                  <div className="w-16 h-16 rounded-lg overflow-hidden flex-shrink-0 bg-muted">
+                    <img src={item.image_url} alt={item.name} className="w-full h-full object-cover" />
+                  </div>
+                )}
                 <div className="flex-1 min-w-0">
                   <h3 className="font-serif text-base font-semibold text-foreground">{item.name}</h3>
                   {item.notes && (
