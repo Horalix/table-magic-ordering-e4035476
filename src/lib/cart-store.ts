@@ -112,6 +112,8 @@ export const useCartStore = create<CartStore>((set, get) => ({
           clearInterval(heartbeatInterval);
           heartbeatInterval = null;
         }
+        // Redirect to menu without session
+        window.location.href = '/menu';
       }
     }, 60000);
   },

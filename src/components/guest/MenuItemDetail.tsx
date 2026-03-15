@@ -110,8 +110,9 @@ const MenuItemDetail = ({ item, onClose, canOrder = true }: Props) => {
                   </button>
                   <span className="text-base font-sans font-semibold w-6 text-center">{quantity}</span>
                   <button
-                    onClick={() => setQuantity(quantity + 1)}
+                    onClick={() => setQuantity(Math.min(10, quantity + 1))}
                     className="w-9 h-9 rounded-full flex items-center justify-center hover:bg-card transition-colors min-w-[44px] min-h-[44px]"
+                    disabled={quantity >= 10}
                   >
                     <Plus className="w-4 h-4" />
                   </button>

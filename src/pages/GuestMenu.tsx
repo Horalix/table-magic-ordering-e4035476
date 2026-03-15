@@ -158,7 +158,7 @@ const GuestMenu = () => {
               key={cat.id}
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 1.8 + i * 0.1, duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+              transition={{ delay: 0.6 + i * 0.08, duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
               whileTap={{ scale: 0.98 }}
               onClick={() => handleCategoryClick(path)}
               className="w-full group"

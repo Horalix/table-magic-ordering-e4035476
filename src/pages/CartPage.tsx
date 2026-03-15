@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Minus, Plus, Trash2, Send, CheckCircle, ShoppingBag } from 'lucide-react';
+import { ArrowLeft, Minus, Plus, Trash2, Send, CheckCircle, ShoppingBag, UtensilsCrossed } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useCartStore } from '@/lib/cart-store';
 import { supabase } from '@/integrations/supabase/client';
