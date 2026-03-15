@@ -97,7 +97,7 @@ const GuestMenu = () => {
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
-          transition={{ delay: 1.3, duration: 0.6 }}
+          transition={{ delay: 0.7, duration: 0.4 }}
           className="mt-4 flex items-center gap-4"
         >
           <div className="h-px w-10 bg-white/25" />
