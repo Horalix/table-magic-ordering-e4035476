@@ -67,7 +67,7 @@ const GuestMenu = () => {
         <motion.div
           initial={{ scaleX: 0 }}
           animate={{ scaleX: 1 }}
-          transition={{ delay: 0.3, duration: 0.8, ease: 'easeOut' }}
+          transition={{ delay: 0.1, duration: 0.5, ease: 'easeOut' }}
           className="w-12 h-px bg-white/30 mb-10"
         />
 
