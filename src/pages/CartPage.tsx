@@ -19,7 +19,7 @@ import {
 } from '@/components/ui/alert-dialog';
 
 const ORDER_COOLDOWN_MS = 30000; // 30 seconds
-const MAX_ITEMS_PER_ORDER = 20;
+const LARGE_ORDER_THRESHOLD = 20;
 
 const OrderSuccess = ({ table, onContinue }: { table: string | null; onContinue: () => void }) => {
   const t = useT();
