@@ -86,7 +86,7 @@ const GuestMenu = () => {
               key={i}
               initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.8 + i * 0.06, duration: 0.5 }}
+              transition={{ delay: 0.3 + i * 0.04, duration: 0.4 }}
               className="font-serif text-[28px] font-bold text-white tracking-[0.15em]"
             >
               {letter === ' ' ? '\u00A0' : letter}
