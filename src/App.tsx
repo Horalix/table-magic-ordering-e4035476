@@ -16,7 +16,11 @@ import AdminTables from "./pages/admin/AdminTables";
 import AdminOrders from "./pages/admin/AdminOrders";
 import AdminAnalytics from "./pages/admin/AdminAnalytics";
 import AdminQRCodes from "./pages/admin/AdminQRCodes";
+import AdminSections from "./pages/admin/AdminSections";
+import AdminWaiters from "./pages/admin/AdminWaiters";
+import AdminPerformance from "./pages/admin/AdminPerformance";
 import KitchenDisplay from "./pages/KitchenDisplay";
+import WaiterDashboard from "./pages/WaiterDashboard";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -45,10 +49,14 @@ const App = () => (
             <Route path="orders" element={<AdminOrders />} />
             <Route path="analytics" element={<AdminAnalytics />} />
             <Route path="qr-codes" element={<AdminQRCodes />} />
+            <Route path="sections" element={<AdminSections />} />
+            <Route path="waiters" element={<AdminWaiters />} />
+            <Route path="performance" element={<AdminPerformance />} />
           </Route>
 
-          {/* Kitchen */}
+          {/* Kitchen & Waiter */}
           <Route path="/kitchen" element={<KitchenDisplay />} />
+          <Route path="/waiter" element={<WaiterDashboard />} />
 
           <Route path="*" element={<NotFound />} />
         </Routes>

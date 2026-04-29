@@ -4,9 +4,10 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Plus, QrCode, PowerOff } from 'lucide-react';
+import { Plus, QrCode, PowerOff, Clock } from 'lucide-react';
 import { toast } from 'sonner';
 import { QRCodeSVG } from 'qrcode.react';
+import { useElapsed, formatDuration } from '@/lib/timing';
 
 const AdminTables = () => {
   const [tables, setTables] = useState<any[]>([]);
@@ -16,7 +17,7 @@ const AdminTables = () => {
   const fetchTables = async () => {
     const { data } = await supabase
       .from('tables')
-      .select(`*, table_sessions(id, is_active, opened_at, guest_name)`)
+      .select(`*, sections(name, color), table_sessions(id, is_active, opened_at, guest_name)`)
       .order('table_number');
     setTables(data || []);
   };
@@ -98,10 +99,21 @@ const AdminTables = () => {
           return (
             <Card key={table.id} className={`border-border ${activeSession ? 'border-primary/30 bg-primary/5' : ''}`}>
               <CardContent className="p-4 text-center">
+                {table.sections && (
+                  <div className="flex items-center justify-center gap-1 mb-1">
+                    <span className="w-2 h-2 rounded-full" style={{ background: table.sections.color }} />
+                    <span className="text-[10px] uppercase tracking-wide text-muted-foreground">{table.sections.name}</span>
+                  </div>
+                )}
                 <p className="font-serif text-2xl font-bold text-foreground">{table.table_number}</p>
                 <Badge variant="outline" className={`mt-1 text-xs ${activeSession ? 'border-primary text-primary' : 'border-muted-foreground text-muted-foreground'}`}>
                   {activeSession ? 'Occupied' : 'Available'}
                 </Badge>
+                {activeSession && (
+                  <p className="text-[11px] text-muted-foreground font-sans mt-1 flex items-center justify-center gap-1">
+                    <Clock className="w-3 h-3" /> <OccupancyTimer since={activeSession.opened_at} />
+                  </p>
+                )}
                 {activeSession?.guest_name && (
                   <p className="text-xs text-muted-foreground font-sans mt-1">{activeSession.guest_name}</p>
                 )}
@@ -131,6 +143,11 @@ const AdminTables = () => {
       </div>
     </div>
   );
+};
+
+const OccupancyTimer = ({ since }: { since: string }) => {
+  const ms = useElapsed(since);
+  return <>{formatDuration(ms)}</>;
 };
 
 export default AdminTables;

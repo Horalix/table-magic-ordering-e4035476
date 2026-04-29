@@ -15,6 +15,9 @@ interface OrderWithItems {
   created_at: string;
   table_number: number;
   guest_name: string | null;
+  section_id: string | null;
+  section_name: string | null;
+  section_color: string | null;
   items: {
     id: string;
     quantity: number;
@@ -62,6 +65,8 @@ const KitchenDisplay = () => {
   const [waiterCalls, setWaiterCalls] = useState<WaiterCall[]>([]);
   const [billRequests, setBillRequests] = useState<BillRequest[]>([]);
   const [filter, setFilter] = useState<string>('active');
+  const [sectionFilter, setSectionFilter] = useState<string>('all');
+  const [sections, setSections] = useState<{ id: string; name: string; color: string }[]>([]);
   const [soundEnabled, setSoundEnabled] = useState(true);
   const soundEnabledRef = useRef(true);
   const initialLoadDone = useRef(false);
@@ -77,7 +82,7 @@ const KitchenDisplay = () => {
       .select(`
         *,
         table_sessions!inner(
-          tables!inner(table_number)
+          tables!inner(table_number, section_id, sections(name, color))
         ),
         order_items(
           *,
@@ -101,6 +106,9 @@ const KitchenDisplay = () => {
       created_at: o.created_at,
       table_number: o.table_sessions?.tables?.table_number || 0,
       guest_name: o.guest_name || null,
+      section_id: o.table_sessions?.tables?.section_id || null,
+      section_name: o.table_sessions?.tables?.sections?.name || null,
+      section_color: o.table_sessions?.tables?.sections?.color || null,
       items: (o.order_items || []).map((oi: any) => ({
         id: oi.id,
         quantity: oi.quantity,
@@ -151,6 +159,10 @@ const KitchenDisplay = () => {
   };
 
   useEffect(() => {
+    supabase.from('sections').select('id, name, color').order('sort_order').then(({ data }) => {
+      setSections(data || []);
+    });
+
     Promise.all([fetchOrders(), fetchWaiterCalls(), fetchBillRequests()]).then(() => {
       initialLoadDone.current = true;
     });
@@ -251,7 +263,18 @@ const KitchenDisplay = () => {
             <h1 className="font-serif text-2xl font-bold text-foreground">Kitchen Display</h1>
             <p className="text-sm text-muted-foreground font-sans">{orders.length} orders</p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
+            {sections.length > 0 && (
+              <select
+                value={sectionFilter}
+                onChange={(e) => setSectionFilter(e.target.value)}
+                className="rounded-full border border-border bg-card px-3 text-sm font-sans min-h-[44px]"
+                aria-label="Filter by section"
+              >
+                <option value="all">All sections</option>
+                {sections.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </select>
+            )}
             <Button variant="ghost" size="icon" onClick={() => setSoundEnabled(!soundEnabled)} className="rounded-full min-h-[44px] min-w-[44px]" aria-label={soundEnabled ? 'Mute alerts' : 'Enable alerts'}>
               {soundEnabled ? <Volume2 className="w-5 h-5" /> : <VolumeX className="w-5 h-5 text-muted-foreground" />}
             </Button>
@@ -309,11 +332,16 @@ const KitchenDisplay = () => {
 
       <div className="p-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
         <AnimatePresence>
-          {orders.map((order) => (
+          {orders.filter(o => sectionFilter === 'all' || o.section_id === sectionFilter).map((order) => (
             <motion.div key={order.id} initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
               className={`rounded-xl border bg-card overflow-hidden transition-all ${isUrgent(order) ? 'border-destructive/50 shadow-[0_0_12px_-3px_hsl(var(--destructive)/0.3)] animate-pulse' : 'border-border'}`}>
               <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
+                  {order.section_name && (
+                    <span className="inline-flex items-center gap-1 text-[10px] uppercase font-sans px-1.5 py-0.5 rounded" style={{ background: `${order.section_color}33`, color: order.section_color || undefined }}>
+                      {order.section_name}
+                    </span>
+                  )}
                   <span className="font-serif text-lg font-bold text-foreground">Table {order.table_number}</span>
                   {order.guest_name && <span className="text-xs text-muted-foreground font-sans">({order.guest_name})</span>}
                   <Badge className={`text-[11px] font-sans ${statusColors[order.status]}`}>

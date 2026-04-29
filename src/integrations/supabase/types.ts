@@ -185,36 +185,58 @@ export type Database = {
       }
       orders: {
         Row: {
+          assigned_waiter_id: string | null
+          confirmed_at: string | null
           created_at: string
           guest_name: string | null
           id: string
           notes: string | null
+          preparing_at: string | null
+          ready_at: string | null
+          served_at: string | null
           status: Database["public"]["Enums"]["order_status"]
           table_session_id: string
           total: number
           updated_at: string
         }
         Insert: {
+          assigned_waiter_id?: string | null
+          confirmed_at?: string | null
           created_at?: string
           guest_name?: string | null
           id?: string
           notes?: string | null
+          preparing_at?: string | null
+          ready_at?: string | null
+          served_at?: string | null
           status?: Database["public"]["Enums"]["order_status"]
           table_session_id: string
           total?: number
           updated_at?: string
         }
         Update: {
+          assigned_waiter_id?: string | null
+          confirmed_at?: string | null
           created_at?: string
           guest_name?: string | null
           id?: string
           notes?: string | null
+          preparing_at?: string | null
+          ready_at?: string | null
+          served_at?: string | null
           status?: Database["public"]["Enums"]["order_status"]
           table_session_id?: string
           total?: number
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "orders_assigned_waiter_id_fkey"
+            columns: ["assigned_waiter_id"]
+            isOneToOne: false
+            referencedRelation: "waiters"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "orders_table_session_id_fkey"
             columns: ["table_session_id"]
@@ -249,6 +271,111 @@ export type Database = {
             columns: ["table_session_id"]
             isOneToOne: false
             referencedRelation: "table_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      section_assignments: {
+        Row: {
+          created_at: string
+          id: string
+          section_id: string
+          shift_date: string
+          waiter_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          section_id: string
+          shift_date?: string
+          waiter_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          section_id?: string
+          shift_date?: string
+          waiter_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "section_assignments_section_id_fkey"
+            columns: ["section_id"]
+            isOneToOne: false
+            referencedRelation: "sections"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "section_assignments_waiter_id_fkey"
+            columns: ["waiter_id"]
+            isOneToOne: false
+            referencedRelation: "waiters"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sections: {
+        Row: {
+          color: string
+          created_at: string
+          id: string
+          name: string
+          sort_order: number
+        }
+        Insert: {
+          color?: string
+          created_at?: string
+          id?: string
+          name: string
+          sort_order?: number
+        }
+        Update: {
+          color?: string
+          created_at?: string
+          id?: string
+          name?: string
+          sort_order?: number
+        }
+        Relationships: []
+      }
+      server_ratings: {
+        Row: {
+          comment: string | null
+          created_at: string
+          id: string
+          rating: number
+          table_session_id: string
+          waiter_id: string | null
+        }
+        Insert: {
+          comment?: string | null
+          created_at?: string
+          id?: string
+          rating: number
+          table_session_id: string
+          waiter_id?: string | null
+        }
+        Update: {
+          comment?: string | null
+          created_at?: string
+          id?: string
+          rating?: number
+          table_session_id?: string
+          waiter_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "server_ratings_table_session_id_fkey"
+            columns: ["table_session_id"]
+            isOneToOne: false
+            referencedRelation: "table_sessions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "server_ratings_waiter_id_fkey"
+            columns: ["waiter_id"]
+            isOneToOne: false
+            referencedRelation: "waiters"
             referencedColumns: ["id"]
           },
         ]
@@ -293,33 +420,49 @@ export type Database = {
       }
       table_sessions: {
         Row: {
+          assigned_waiter_id: string | null
           closed_at: string | null
+          first_order_at: string | null
           guest_name: string | null
           id: string
           is_active: boolean
+          last_served_at: string | null
           opened_at: string
           table_id: string
           token: string
         }
         Insert: {
+          assigned_waiter_id?: string | null
           closed_at?: string | null
+          first_order_at?: string | null
           guest_name?: string | null
           id?: string
           is_active?: boolean
+          last_served_at?: string | null
           opened_at?: string
           table_id: string
           token?: string
         }
         Update: {
+          assigned_waiter_id?: string | null
           closed_at?: string | null
+          first_order_at?: string | null
           guest_name?: string | null
           id?: string
           is_active?: boolean
+          last_served_at?: string | null
           opened_at?: string
           table_id?: string
           token?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "table_sessions_assigned_waiter_id_fkey"
+            columns: ["assigned_waiter_id"]
+            isOneToOne: false
+            referencedRelation: "waiters"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "table_sessions_table_id_fkey"
             columns: ["table_id"]
@@ -334,6 +477,7 @@ export type Database = {
           created_at: string
           id: string
           qr_token: string
+          section_id: string | null
           status: Database["public"]["Enums"]["table_status"]
           table_number: number
         }
@@ -341,6 +485,7 @@ export type Database = {
           created_at?: string
           id?: string
           qr_token?: string
+          section_id?: string | null
           status?: Database["public"]["Enums"]["table_status"]
           table_number: number
         }
@@ -348,10 +493,19 @@ export type Database = {
           created_at?: string
           id?: string
           qr_token?: string
+          section_id?: string | null
           status?: Database["public"]["Enums"]["table_status"]
           table_number?: number
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "tables_section_id_fkey"
+            columns: ["section_id"]
+            isOneToOne: false
+            referencedRelation: "sections"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       user_roles: {
         Row: {
@@ -403,11 +557,36 @@ export type Database = {
           },
         ]
       }
+      waiters: {
+        Row: {
+          created_at: string
+          display_name: string
+          id: string
+          is_active: boolean
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          display_name: string
+          id?: string
+          is_active?: boolean
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          display_name?: string
+          id?: string
+          is_active?: boolean
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
+      get_waiter_id: { Args: { _user_id: string }; Returns: string }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
