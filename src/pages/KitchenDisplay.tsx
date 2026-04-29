@@ -15,6 +15,9 @@ interface OrderWithItems {
   created_at: string;
   table_number: number;
   guest_name: string | null;
+  section_id: string | null;
+  section_name: string | null;
+  section_color: string | null;
   items: {
     id: string;
     quantity: number;
@@ -62,6 +65,8 @@ const KitchenDisplay = () => {
   const [waiterCalls, setWaiterCalls] = useState<WaiterCall[]>([]);
   const [billRequests, setBillRequests] = useState<BillRequest[]>([]);
   const [filter, setFilter] = useState<string>('active');
+  const [sectionFilter, setSectionFilter] = useState<string>('all');
+  const [sections, setSections] = useState<{ id: string; name: string; color: string }[]>([]);
   const [soundEnabled, setSoundEnabled] = useState(true);
   const soundEnabledRef = useRef(true);
   const initialLoadDone = useRef(false);
@@ -77,7 +82,7 @@ const KitchenDisplay = () => {
       .select(`
         *,
         table_sessions!inner(
-          tables!inner(table_number)
+          tables!inner(table_number, section_id, sections(name, color))
         ),
         order_items(
           *,
@@ -101,6 +106,9 @@ const KitchenDisplay = () => {
       created_at: o.created_at,
       table_number: o.table_sessions?.tables?.table_number || 0,
       guest_name: o.guest_name || null,
+      section_id: o.table_sessions?.tables?.section_id || null,
+      section_name: o.table_sessions?.tables?.sections?.name || null,
+      section_color: o.table_sessions?.tables?.sections?.color || null,
       items: (o.order_items || []).map((oi: any) => ({
         id: oi.id,
         quantity: oi.quantity,
