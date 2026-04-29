@@ -4,9 +4,10 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Plus, QrCode, PowerOff } from 'lucide-react';
+import { Plus, QrCode, PowerOff, Clock } from 'lucide-react';
 import { toast } from 'sonner';
 import { QRCodeSVG } from 'qrcode.react';
+import { useElapsed, formatDuration } from '@/lib/timing';
 
 const AdminTables = () => {
   const [tables, setTables] = useState<any[]>([]);
