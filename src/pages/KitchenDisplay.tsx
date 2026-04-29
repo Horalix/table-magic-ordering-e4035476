@@ -159,6 +159,10 @@ const KitchenDisplay = () => {
   };
 
   useEffect(() => {
+    supabase.from('sections').select('id, name, color').order('sort_order').then(({ data }) => {
+      setSections(data || []);
+    });
+
     Promise.all([fetchOrders(), fetchWaiterCalls(), fetchBillRequests()]).then(() => {
       initialLoadDone.current = true;
     });
