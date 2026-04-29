@@ -133,6 +133,24 @@ const translations: Record<string, Record<Locale, string>> = {
   'too_many_items': { en: 'Maximum 20 items per order.', bs: 'Maksimalno 20 stavki po narudžbi.', ar: 'الحد الأقصى 20 عنصرًا لكل طلب.' },
   'max_quantity': { en: 'Maximum quantity is 10 per item.', bs: 'Maksimalna količina je 10 po stavci.', ar: 'الحد الأقصى للكمية هو 10 لكل عنصر.' },
   'large_order_suggestion': { en: 'For large orders, feel free to call a server for assistance.', bs: 'Za veće narudžbe, slobodno pozovite konobara za pomoć.', ar: 'للطلبات الكبيرة، لا تتردد في استدعاء النادل للمساعدة.' },
+
+  // Server rating
+  'rate_your_server': { en: 'How was your server?', bs: 'Kako je bio vaš konobar?', ar: 'كيف كان النادل الخاص بك؟' },
+  'served_by': { en: 'Served by', bs: 'Posluženo od', ar: 'قُدم بواسطة' },
+  'optional_comment': { en: 'Add a comment (optional)', bs: 'Dodaj komentar (opcionalno)', ar: 'أضف تعليقًا (اختياري)' },
+  'submit': { en: 'Submit', bs: 'Pošalji', ar: 'إرسال' },
+  'skip': { en: 'Skip', bs: 'Preskoči', ar: 'تخطي' },
+  'next': { en: 'Next', bs: 'Dalje', ar: 'التالي' },
+
+  // Sections / waiter / admin
+  'section': { en: 'Section', bs: 'Sekcija', ar: 'القسم' },
+  'sections': { en: 'Sections', bs: 'Sekcije', ar: 'الأقسام' },
+  'waiter': { en: 'Waiter', bs: 'Konobar', ar: 'النادل' },
+  'waiters': { en: 'Waiters', bs: 'Konobari', ar: 'النوادل' },
+  'unassigned': { en: 'Unassigned', bs: 'Nedodijeljeno', ar: 'غير معيّن' },
+  'occupied_for': { en: 'Occupied for', bs: 'Zauzet', ar: 'مشغولة منذ' },
+  'waiting': { en: 'Waiting', bs: 'Čeka', ar: 'في الانتظار' },
+  'performance': { en: 'Performance', bs: 'Performanse', ar: 'الأداء' },
 };
 
 export function t(key: string): string {
