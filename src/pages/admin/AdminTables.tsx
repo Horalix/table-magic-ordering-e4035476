@@ -145,4 +145,10 @@ const AdminTables = () => {
   );
 };
 
+const OccupancyTimer = ({ since }: { since: string }) => {
+  const ms = useElapsed(since);
+  return <>{formatDuration(ms)}</>;
+};
+
+export default AdminTables;
 export default AdminTables;
