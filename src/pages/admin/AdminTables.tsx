@@ -17,7 +17,7 @@ const AdminTables = () => {
   const fetchTables = async () => {
     const { data } = await supabase
       .from('tables')
-      .select(`*, table_sessions(id, is_active, opened_at, guest_name)`)
+      .select(`*, sections(name, color), table_sessions(id, is_active, opened_at, guest_name)`)
       .order('table_number');
     setTables(data || []);
   };
