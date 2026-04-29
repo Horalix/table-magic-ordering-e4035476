@@ -151,4 +151,3 @@ const OccupancyTimer = ({ since }: { since: string }) => {
 };
 
 export default AdminTables;
-export default AdminTables;
