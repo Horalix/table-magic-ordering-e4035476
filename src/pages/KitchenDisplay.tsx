@@ -263,7 +263,18 @@ const KitchenDisplay = () => {
             <h1 className="font-serif text-2xl font-bold text-foreground">Kitchen Display</h1>
             <p className="text-sm text-muted-foreground font-sans">{orders.length} orders</p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
+            {sections.length > 0 && (
+              <select
+                value={sectionFilter}
+                onChange={(e) => setSectionFilter(e.target.value)}
+                className="rounded-full border border-border bg-card px-3 text-sm font-sans min-h-[44px]"
+                aria-label="Filter by section"
+              >
+                <option value="all">All sections</option>
+                {sections.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </select>
+            )}
             <Button variant="ghost" size="icon" onClick={() => setSoundEnabled(!soundEnabled)} className="rounded-full min-h-[44px] min-w-[44px]" aria-label={soundEnabled ? 'Mute alerts' : 'Enable alerts'}>
               {soundEnabled ? <Volume2 className="w-5 h-5" /> : <VolumeX className="w-5 h-5 text-muted-foreground" />}
             </Button>
@@ -321,11 +332,16 @@ const KitchenDisplay = () => {
 
       <div className="p-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
         <AnimatePresence>
-          {orders.map((order) => (
+          {orders.filter(o => sectionFilter === 'all' || o.section_id === sectionFilter).map((order) => (
             <motion.div key={order.id} initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
               className={`rounded-xl border bg-card overflow-hidden transition-all ${isUrgent(order) ? 'border-destructive/50 shadow-[0_0_12px_-3px_hsl(var(--destructive)/0.3)] animate-pulse' : 'border-border'}`}>
               <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
+                  {order.section_name && (
+                    <span className="inline-flex items-center gap-1 text-[10px] uppercase font-sans px-1.5 py-0.5 rounded" style={{ background: `${order.section_color}33`, color: order.section_color || undefined }}>
+                      {order.section_name}
+                    </span>
+                  )}
                   <span className="font-serif text-lg font-bold text-foreground">Table {order.table_number}</span>
                   {order.guest_name && <span className="text-xs text-muted-foreground font-sans">({order.guest_name})</span>}
                   <Badge className={`text-[11px] font-sans ${statusColors[order.status]}`}>
