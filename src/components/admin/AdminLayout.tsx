@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, Outlet, Link, useLocation } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
-import { 
-  LayoutDashboard, UtensilsCrossed, TableProperties, ClipboardList, 
-  BarChart3, QrCode, LogOut, ChefHat, Menu, X 
+import {
+  LayoutDashboard, UtensilsCrossed, TableProperties, ClipboardList,
+  BarChart3, QrCode, LogOut, ChefHat, Menu, X, Layers, Users, Star
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
@@ -12,7 +12,10 @@ const navItems = [
   { label: 'Dashboard', icon: LayoutDashboard, path: '/admin' },
   { label: 'Menu', icon: UtensilsCrossed, path: '/admin/menu' },
   { label: 'Tables', icon: TableProperties, path: '/admin/tables' },
+  { label: 'Sections', icon: Layers, path: '/admin/sections' },
+  { label: 'Waiters', icon: Users, path: '/admin/waiters' },
   { label: 'Orders', icon: ClipboardList, path: '/admin/orders' },
+  { label: 'Performance', icon: Star, path: '/admin/performance' },
   { label: 'Analytics', icon: BarChart3, path: '/admin/analytics' },
   { label: 'QR Codes', icon: QrCode, path: '/admin/qr-codes' },
   { label: 'Kitchen', icon: ChefHat, path: '/kitchen' },
