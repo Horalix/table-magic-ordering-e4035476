@@ -144,19 +144,27 @@ const CategoryPage = () => {
 
         {subcategories.length > 0 && (
           <div className="flex gap-1.5 px-4 py-3 overflow-x-auto scrollbar-hide">
-            {subcategories.map((sub) => (
-              <button
-                key={sub.id}
-                onClick={() => setSelectedSubcategory(sub.id)}
-                className={`px-4 py-2.5 rounded-full text-sm font-sans font-medium whitespace-nowrap transition-all duration-200 min-h-[44px] ${
-                  activeSubId === sub.id
-                    ? 'bg-primary text-primary-foreground shadow-sm'
-                    : 'bg-muted text-muted-foreground hover:bg-muted/80'
-                }`}
-              >
-                {getLocalizedName(sub as any, locale)}
-              </button>
-            ))}
+            {subcategories.map((sub) => {
+              const isActive = activeSubId === sub.id;
+              return (
+                <button
+                  key={sub.id}
+                  onClick={() => setSelectedSubcategory(sub.id)}
+                  className={`relative px-4 py-2.5 rounded-full text-sm font-sans font-medium whitespace-nowrap min-h-[44px] tap ${
+                    isActive ? 'text-primary-foreground' : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  {isActive && (
+                    <motion.span
+                      layoutId="active-sub-pill"
+                      transition={{ type: 'spring', stiffness: 500, damping: 38 }}
+                      className="absolute inset-0 rounded-full bg-primary shadow-sm"
+                    />
+                  )}
+                  <span className="relative z-10">{getLocalizedName(sub as any, locale)}</span>
+                </button>
+              );
+            })}
           </div>
         )}
       </div>
