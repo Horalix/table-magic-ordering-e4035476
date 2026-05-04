@@ -110,14 +110,14 @@ const MenuItemDetail = ({ item, onClose, canOrder = true }: Props) => {
                 <div className="flex items-center gap-3 bg-muted rounded-full px-2 py-1">
                   <button
                     onClick={() => setQuantity(Math.max(1, quantity - 1))}
-                    className="w-9 h-9 rounded-full flex items-center justify-center hover:bg-card transition-colors min-w-[44px] min-h-[44px]"
+                    className="w-9 h-9 rounded-full flex items-center justify-center hover:bg-card transition-colors min-w-[44px] min-h-[44px] tap-sm"
                   >
                     <Minus className="w-4 h-4" />
                   </button>
-                  <span className="text-base font-sans font-semibold w-6 text-center">{quantity}</span>
+                  <span className="text-base font-sans font-semibold w-6 text-center tabular-nums">{quantity}</span>
                   <button
                     onClick={() => setQuantity(Math.min(10, quantity + 1))}
-                    className="w-9 h-9 rounded-full flex items-center justify-center hover:bg-card transition-colors min-w-[44px] min-h-[44px]"
+                    className="w-9 h-9 rounded-full flex items-center justify-center hover:bg-card transition-colors min-w-[44px] min-h-[44px] tap-sm"
                     disabled={quantity >= 10}
                   >
                     <Plus className="w-4 h-4" />
@@ -126,7 +126,7 @@ const MenuItemDetail = ({ item, onClose, canOrder = true }: Props) => {
 
                 <Button
                   onClick={handleAdd}
-                  className="flex-1 h-12 rounded-full bg-primary text-primary-foreground font-sans font-semibold text-base hover:bg-sage-dark transition-colors"
+                  className="flex-1 h-12 rounded-full bg-primary text-primary-foreground font-sans font-semibold text-base hover:bg-sage-dark hover:shadow-lg hover:shadow-primary/30 transition-all duration-200 tap tabular-nums"
                 >
                   {t('add_to_order')} · {(item.price * quantity).toFixed(2)} KM
                 </Button>
