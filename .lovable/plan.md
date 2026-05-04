@@ -1,91 +1,91 @@
-# Plan: Make Images Load Instantly + Snappier UX Throughout
+# Plan: Self-Host All Menu Images + Final Polish Pass
 
-## Root Cause of Slowness
-The menu images come from `menu.lasoul.net` at full resolution (~150–500 KB JPEGs). Even with lazy-load, an 80×80 thumbnail still downloads the full image. The fix is to route every image through an **on-the-fly resize CDN** so an 80px thumb downloads as ~5–10 KB WebP.
+## Why
+External images on `menu.lasoul.net` are slow, uncacheable on our edge, and a single point of failure. Even with the wsrv.nl proxy, we depend on a third party. Solution: **download every image once, store in Lovable Cloud Storage, rewrite `image_url` in the database to the new public URL.** Then images come from Supabase's global CDN — fast, reliable, free.
 
-## Part 1 — Instant Image Loading
+---
 
-### A. Route all images through wsrv.nl (free, no signup, no API key)
-`wsrv.nl` is a free Cloudflare-backed image proxy. We rewrite every image URL to:
-```
-https://wsrv.nl/?url=menu.lasoul.net/img/x.jpg&w=80&h=80&fit=cover&output=webp&q=78
-```
-Returns optimized WebP at the exact pixel size. Edge-cached globally.
-Updates `SmartImage.tsx` with:
-- `srcSet` with 1x and 2x variants (sharp on retina, small on mobile)
-- Subtle scale-in (1.02 → 1.0) + fade on load — feels alive instead of just popping in
-- Smarter error fallback (tries original URL before showing letter)
+## Part 1 — Migrate All Images to Cloud Storage
 
-### B. Replace shimmer with a real moving gradient (`src/index.css`)
-Current `animate-pulse` is fine but the new shimmer sweeps left-to-right — perceptually faster.
+### A. Create the storage bucket
+Migration creates a public `menu-images` bucket with read-everyone / write-admin RLS.
 
-### C. Pre-warm wsrv connection (`index.html`)
-Add `<link rel="preconnect" href="https://wsrv.nl" crossorigin>` and `<link rel="dns-prefetch" href="//wsrv.nl">` so the very first image avoids TLS handshake delay (~150ms on mobile).
+### B. One-time migration Edge Function: `migrate-images`
+Server-side Deno function that:
+1. Selects every row in `menu_items` where `image_url` starts with `http` and is NOT already on our Supabase domain.
+2. For each: `fetch(url)` → upload to `menu-images/<menu_item_id>.<ext>` with `cacheControl: '31536000, immutable'`.
+3. Updates the row's `image_url` to the new public URL.
+4. Returns a JSON summary `{ migrated, skipped, failed }`.
 
-### D. Eager-load the first **8** items (was 4)
-On a desktop viewport like the user's (1045px), 4 isn't enough above-the-fold. Bump priority count to 8.
+Runs in batches of 20 in parallel; safe to re-run (idempotent — skips items already on our domain).
 
-### E. Prefetch the **current** subcategory's later images on idle
-Right now we prefetch only adjacent subcategory. Also kick off a low-priority warmup for items 9–20 of the current view immediately after first paint, so scrolling never waits.
+Also handles category images if any exist.
 
-### F. Decode-before-paint
-Use `img.decode()` Promise so fade-in only fires after the image is fully decoded — no half-rendered flash.
+### C. Trigger it from a new admin page button: `/admin/menu` → "Migrate Images"
+- Shows progress, last-run summary.
+- Disabled while running.
+- Only visible to admins (existing `has_role('admin')` check).
 
-## Part 2 — Snappier UI / Satisfying Buttons & Transitions
+### D. Auto-upload future images
+Update the existing admin "edit menu item" flow so when an admin uploads a new image, it goes straight to the `menu-images` bucket instead of being a URL field. (Quick add: a small `<input type="file">` next to the URL field that uploads & fills the URL.)
 
-### A. Tactile button press (global) — `src/index.css`
-New utility `.tap` with `active:scale-95` + `transition-transform duration-100 ease-out` and a faint ring on tap. Apply to all primary tap targets (cart bar, place-order, +/-, category cards, subcategory tabs, add-to-cart pills).
+### E. Simplify `SmartImage`
+Once images are on Supabase, `?width=` query params actually work (Supabase Storage supports image transforms). Update `SmartImage`:
+- If URL is a Supabase Storage URL → append `?width=Wx&quality=78&format=webp`.
+- Otherwise → fall back to wsrv.nl proxy (still useful for any stragglers).
+- Remove the proxy dependency for the common case.
 
-### B. Page transitions
-Wrap routes in a **shared layout** with `framer-motion` `AnimatePresence` + a 180ms cross-fade & subtle slide. Already-cached React Query data means the next page renders instantly under the fade.
+---
 
-### C. Subcategory tab switch — instant content, animated underline
-- Animated active-pill (layoutId="activeSub") that **slides** between tabs instead of recoloring — feels Apple-grade.
-- Items use `placeholderData: keepPreviousData` (already done), but also stagger the **new** items with 20 ms delay so they cascade in.
+## Part 2 — Cleaner / Smoother / Faster Polish
 
-### D. Cart bar polish
-- Spring entrance (already there) + tiny pulse on the count badge whenever count changes.
-- Total amount uses `tabular-nums` and animates with a count-up (300ms) when changing.
-- Button gets a soft inner-glow on hover.
+### A. Smarter list virtualization (only if needed)
+For categories with 20+ items, mount only what's near the viewport (`react-window` or simple IntersectionObserver-based). On Drinks/Coffee (12 items) it's not needed; only kick in past N=15.
 
-### E. Card press feedback
-Menu item cards: on tap, briefly translate-y-[1px] + shadow drop. On hover (desktop), thumbnail scales 1.04 inside its frame (mask via `overflow-hidden`).
+### B. Route-level code splitting
+Convert admin/kitchen/waiter routes to `React.lazy()` so guests don't ship admin JS. Should drop initial bundle ~30%.
 
-### F. Snappier framer-motion config
-- Drop entrance durations from 0.3s → 0.18s.
-- Cap the staggered list entrance at the first 6 items only (currently every item delays — slow on long lists).
-- Honor `prefers-reduced-motion`.
+### C. Progressive image hint via `<link rel="preload">` for top 4
+After session creation, inject `<link rel="preload" as="image" href=...>` for the 4 hero items of Drinks. Browser starts fetching before React even mounts the page.
 
-### G. Skeleton sizes mirror real layout (already done) — verify and extend to the GuestMenu cards too.
+### D. Page-transition wrapper
+A tiny `<PageTransition>` using framer-motion `AnimatePresence` for a 160 ms fade between guest routes. Feels native.
 
-### H. Faster initial paint
-- Move the heavy framer-motion logo intro on `GuestMenu.tsx` from 1.0s/0.8s/0.7s delays down to 0.4s max — shaves perceived load by ~600 ms.
+### E. Sticky header elevation on scroll
+Shadow appears once `scrollY > 4` — adds depth, signals scroll position.
 
-### I. Sticky header subtle elevation on scroll
-Add a 1px shadow + slight bg darken once scrolled — gives depth, feels native-app.
+### F. Better empty / error states
+- Network error fallback on Category page: "Couldn't load menu — Tap to retry".
+- Empty cart already nice.
 
-### J. Optimistic add-to-cart
-The Plus button already triggers haptics; add a 250 ms scale bounce on the cart-bar count badge so the user *feels* the item land.
+### G. Cleanup dead code
+- Old `image-cache.ts` `prefetched` Set is fine, keep.
+- Remove unused `ShoppingBag` import in CartBar (verify).
+- Drop `framer-motion` from low-value places (e.g. plain divs that don't need animating).
 
-## Files Touched
+### H. Service worker (lightweight) for image cache
+Register a tiny SW that caches `menu-images/*` URLs with a stale-while-revalidate strategy. Second visit = 0 network for images. Optional, only if user wants offline-first.
+
+### I. Web manifest + PWA "Add to home screen"
+Add `manifest.webmanifest` + theme color so guests can add La Soul to home screen — repeat visits feel like an app.
+
+---
+
+## Files Touched / Created
 | Action | File |
 |---|---|
-| Edit | `src/components/ui/SmartImage.tsx` (wsrv proxy + 2x srcset + decode) |
-| Edit | `src/index.css` (shimmer keyframes, `.tap`, reduced-motion, sticky shadow) |
-| Edit | `index.html` (preconnect to wsrv.nl) |
-| Edit | `src/pages/CategoryPage.tsx` (priority=8, animated subcategory pill, snappier stagger, prefetch current tail) |
-| Edit | `src/pages/GuestMenu.tsx` (faster intro, tap utility) |
-| Edit | `src/pages/CartPage.tsx` (count-up total, button polish) |
-| Edit | `src/components/guest/CartBar.tsx` (badge bounce on change, count-up total) |
-| Edit | `src/components/guest/MenuItemDetail.tsx` (priority hero + spring) |
-| Edit | `tailwind.config.ts` (add `shimmer` keyframe + `.tap` plugin) |
-| New | `src/components/PageTransition.tsx` (shared route fade) |
-| Edit | `src/App.tsx` (wrap routes with PageTransition) |
+| New | `supabase/functions/migrate-images/index.ts` (one-shot uploader) |
+| New | `supabase/migrations/<ts>_menu_images_bucket.sql` |
+| Edit | `src/components/ui/SmartImage.tsx` (Supabase transform support) |
+| Edit | `src/pages/admin/AdminMenu.tsx` (Migrate button + progress + per-item file upload) |
+| Edit | `src/App.tsx` (lazy-load admin/kitchen/waiter routes, wrap guest routes in PageTransition) |
+| New | `src/components/PageTransition.tsx` |
+| Edit | `src/pages/TableEntry.tsx` (preload top 4 hero images) |
+| Edit | `src/index.css` (sticky-header shadow on scroll utility) |
+| New | `public/manifest.webmanifest` + `<link>` in `index.html` |
+| New (optional) | `public/sw.js` + register in `main.tsx` |
 
-## Expected Impact
-- Thumbnails: **~150 KB → ~6 KB** each. List paints in 1 RTT on 4G.
-- Hero image in modal: ~400 KB → ~25 KB WebP.
-- Subcategory switch feels instant due to keepPreviousData + animated pill.
-- Every tap has visible/haptic feedback within 16 ms.
+## Out of Scope (Ask if Wanted)
+- True service worker / offline mode (Section H, I) — adds complexity. **Want me to include PWA + SW now or keep it simple?**
 
-Approve and I'll implement.
+Approve and I'll implement Parts 1 + 2A–G, and skip H/I unless you say otherwise.
