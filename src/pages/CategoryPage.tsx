@@ -1,11 +1,13 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, Plus, QrCode } from 'lucide-react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useCartStore } from '@/lib/cart-store';
 import { Skeleton } from '@/components/ui/skeleton';
+import SmartImage from '@/components/ui/SmartImage';
+import { prefetchImages } from '@/lib/image-cache';
 import CartBar from '@/components/guest/CartBar';
 import MenuItemDetail from '@/components/guest/MenuItemDetail';
 import LanguageSelector from '@/components/guest/LanguageSelector';
@@ -76,7 +78,25 @@ const CategoryPage = () => {
       return data;
     },
     enabled: !!activeSubId,
+    placeholderData: keepPreviousData,
   });
+
+  // Prefetch images for adjacent subcategories on idle
+  useEffect(() => {
+    if (!subcategories.length || !activeSubId) return;
+    const idx = subcategories.findIndex((s) => s.id === activeSubId);
+    const next = subcategories[idx + 1];
+    if (!next) return;
+    supabase
+      .from('menu_items')
+      .select('image_url')
+      .eq('subcategory_id', next.id)
+      .eq('is_available', true)
+      .limit(8)
+      .then(({ data }) => {
+        if (data) prefetchImages(data.map((d: any) => d.image_url));
+      });
+  }, [activeSubId, subcategories]);
 
   const goBack = () => {
     const params = new URLSearchParams();
@@ -154,8 +174,15 @@ const CategoryPage = () => {
 
       {itemsLoading ? (
         <div className="px-4 pt-4 space-y-3">
-          {[1, 2, 3].map(i => (
-            <Skeleton key={i} className="h-24 w-full rounded-xl" />
+          {[1, 2, 3, 4].map(i => (
+            <div key={i} className="flex gap-4 p-4 rounded-xl border border-border bg-card">
+              <Skeleton className="w-20 h-20 rounded-lg flex-shrink-0" />
+              <div className="flex-1 space-y-2 py-1">
+                <Skeleton className="h-4 w-2/3 rounded" />
+                <Skeleton className="h-3 w-full rounded" />
+                <Skeleton className="h-4 w-16 rounded mt-2" />
+              </div>
+            </div>
           ))}
         </div>
       ) : items.length === 0 ? (
@@ -170,30 +197,30 @@ const CategoryPage = () => {
             return (
               <motion.div
                 key={item.id}
-                initial={{ opacity: 0, y: 10 }}
+                initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: i * 0.04, duration: 0.3 }}
+                transition={{ delay: Math.min(i, 6) * 0.03, duration: 0.25 }}
               >
                 <button
                   onClick={() => setSelectedItem(item)}
                   className="w-full text-left"
                 >
                   <div className="flex gap-4 p-4 rounded-xl border border-border bg-card hover:border-primary/25 hover:shadow-sm transition-all duration-200">
-                    {item.image_url ? (
-                      <div className="w-20 h-20 rounded-lg overflow-hidden flex-shrink-0 bg-muted">
-                        <img src={item.image_url} alt={localizedName} className="w-full h-full object-cover" />
-                      </div>
-                    ) : (
-                      <div className="w-20 h-20 rounded-lg flex-shrink-0 bg-primary/5 flex items-center justify-center">
-                        <span className="text-2xl font-serif text-primary/30">{localizedName[0]}</span>
-                      </div>
-                    )}
+                    <SmartImage
+                      src={item.image_url || undefined}
+                      alt={localizedName}
+                      width={80}
+                      height={80}
+                      priority={i < 4}
+                      fallbackText={localizedName}
+                      wrapperClassName="w-20 h-20 rounded-lg flex-shrink-0"
+                    />
                     <div className="flex-1 min-w-0">
                       <h3 className="font-serif text-base font-semibold text-foreground">{localizedName}</h3>
                       {localizedDesc && (
                         <p className="text-sm text-muted-foreground font-sans mt-0.5 line-clamp-2">{localizedDesc}</p>
                       )}
-                      <p className="text-sm font-sans font-bold text-primary mt-2">{Number(item.price).toFixed(2)} KM</p>
+                      <p className="text-sm font-sans font-bold text-primary mt-2 tabular-nums">{Number(item.price).toFixed(2)} KM</p>
                     </div>
                     {hasSession && (
                       <div className="flex items-center">
@@ -206,8 +233,11 @@ const CategoryPage = () => {
                               price: Number(item.price),
                               image_url: item.image_url || undefined,
                             });
+                            if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+                              try { (navigator as any).vibrate(8); } catch {}
+                            }
                           }}
-                          className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center hover:bg-primary hover:text-primary-foreground transition-all duration-200 cursor-pointer min-w-[44px] min-h-[44px]"
+                          className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center hover:bg-primary hover:text-primary-foreground active:scale-90 transition-all duration-200 cursor-pointer min-w-[44px] min-h-[44px]"
                         >
                           <Plus className="w-4 h-4" />
                         </div>

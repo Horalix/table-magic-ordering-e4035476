@@ -74,19 +74,36 @@ const TableEntry = () => {
         setLoading(false);
         setShowNameModal(true);
 
-        // Prefetch menu images in background
-        supabase.from('menu_items').select('image_url').not('image_url', 'is', null)
-          .then(({ data }) => {
-            data?.forEach(item => {
-              if (item.image_url) {
-                const link = document.createElement('link');
-                link.rel = 'prefetch';
-                link.as = 'image';
-                link.href = item.image_url;
-                document.head.appendChild(link);
-              }
-            });
+        // Prefetch first-category images on idle (non-blocking)
+        const idle = (cb: () => void) => {
+          // @ts-ignore
+          if (typeof window !== 'undefined' && window.requestIdleCallback) {
+            // @ts-ignore
+            window.requestIdleCallback(cb, { timeout: 1500 });
+          } else {
+            setTimeout(cb, 300);
+          }
+        };
+        idle(async () => {
+          const { data: cat } = await supabase
+            .from('categories').select('id').eq('name', 'Drinks').maybeSingle();
+          if (!cat) return;
+          const { data: subs } = await supabase
+            .from('subcategories').select('id').eq('category_id', cat.id).order('sort_order').limit(1);
+          const firstSub = subs?.[0]?.id;
+          if (!firstSub) return;
+          const { data } = await supabase
+            .from('menu_items').select('image_url').eq('subcategory_id', firstSub).eq('is_available', true).limit(8);
+          data?.forEach((item: any) => {
+            if (item.image_url) {
+              const img = new Image();
+              img.decoding = 'async';
+              // @ts-ignore
+              img.fetchpriority = 'low';
+              img.src = item.image_url;
+            }
           });
+        });
       } catch (err) {
         console.error('Table entry error:', err);
         setError(t('something_wrong'));
