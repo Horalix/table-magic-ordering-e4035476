@@ -12,14 +12,30 @@ interface SmartImageProps extends Omit<React.ImgHTMLAttributes<HTMLImageElement>
 }
 
 /**
- * Build a wsrv.nl URL — free image CDN that returns optimized WebP at the
- * exact size requested. Massive bandwidth savings vs serving full-res originals.
+ * Build optimized image URL.
+ * - Supabase Storage URLs → use native render endpoint (?width=&quality=&format=webp)
+ * - Other URLs → route through free wsrv.nl WebP CDN
  */
 const WSRV = 'https://wsrv.nl/?';
 
 const buildUrl = (src: string, w: number, h: number, dpr = 1) => {
   if (src.startsWith('data:') || src.startsWith('blob:')) return src;
   if (typeof window !== 'undefined' && src.startsWith(window.location.origin)) return src;
+
+  // Supabase Storage public URL → use native image transform endpoint
+  // /storage/v1/object/public/<bucket>/<path>  →  /storage/v1/render/image/public/<bucket>/<path>?...
+  const supaMatch = src.match(/^(https?:\/\/[^/]+)\/storage\/v1\/object\/public\/(.+)$/);
+  if (supaMatch) {
+    const [, origin, rest] = supaMatch;
+    const params = new URLSearchParams({
+      width: String(Math.round(w * dpr)),
+      height: String(Math.round(h * dpr)),
+      resize: 'cover',
+      quality: '78',
+    });
+    return `${origin}/storage/v1/render/image/public/${rest}?${params.toString()}`;
+  }
+
   const params = new URLSearchParams({
     url: src.replace(/^https?:\/\//, ''),
     w: String(Math.round(w * dpr)),

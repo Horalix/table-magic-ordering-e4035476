@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
-import { Plus, Trash2, ChevronDown, ChevronRight, Languages, Loader2, RefreshCw } from 'lucide-react';
+import { Plus, Trash2, ChevronDown, ChevronRight, Languages, Loader2, RefreshCw, Image as ImageIcon } from 'lucide-react';
 import { toast } from 'sonner';
 
 const AdminMenu = () => {
@@ -22,6 +22,8 @@ const AdminMenu = () => {
   const [newPrice, setNewPrice] = useState('');
   const [newImageUrl, setNewImageUrl] = useState('');
   const [isTranslating, setIsTranslating] = useState(false);
+  const [isMigrating, setIsMigrating] = useState(false);
+  const [migrateResult, setMigrateResult] = useState<string | null>(null);
 
   const fetchMenu = async () => {
     const { data } = await supabase
@@ -107,6 +109,24 @@ const AdminMenu = () => {
     }
   };
 
+  const migrateImages = async () => {
+    setIsMigrating(true);
+    setMigrateResult(null);
+    try {
+      const { data, error } = await supabase.functions.invoke('migrate-images');
+      if (error) throw error;
+      const msg = `Migrated ${data.migrated} • Skipped ${data.skipped} • Failed ${data.failed}`;
+      setMigrateResult(msg);
+      toast.success(msg);
+      fetchMenu();
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err?.message || 'Image migration failed');
+    } finally {
+      setIsMigrating(false);
+    }
+  };
+
   return (
     <div>
       <div className="flex items-center justify-between mb-6 flex-wrap gap-2">
@@ -132,11 +152,25 @@ const AdminMenu = () => {
             <RefreshCw className="w-4 h-4" />
             Re-translate All
           </Button>
+          <Button
+            onClick={migrateImages}
+            disabled={isMigrating}
+            variant="outline"
+            size="sm"
+            className="rounded-lg font-sans gap-1"
+            title="Download all external images and self-host them"
+          >
+            {isMigrating ? <Loader2 className="w-4 h-4 animate-spin" /> : <ImageIcon className="w-4 h-4" />}
+            {isMigrating ? 'Migrating…' : 'Self-host Images'}
+          </Button>
           <Button onClick={() => { setIsAddingCategory(true); resetForm(); }} className="rounded-lg font-sans" size="sm">
             <Plus className="w-4 h-4 mr-1" /> Add Category
           </Button>
         </div>
       </div>
+      {migrateResult && (
+        <div className="mb-4 px-3 py-2 rounded-md bg-muted text-xs font-sans text-muted-foreground">{migrateResult}</div>
+      )}
 
       {isAddingCategory && (
         <Card className="mb-4 border-primary/20">
