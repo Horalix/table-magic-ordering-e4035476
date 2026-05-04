@@ -233,14 +233,14 @@ const CartPage = () => {
                   <div className="flex items-center gap-2 bg-muted rounded-full px-1.5 py-0.5">
                     <button
                       onClick={() => updateQuantity(item.id, item.quantity - 1)}
-                      className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-card transition-colors"
+                      className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-card transition-colors tap-sm"
                     >
                       <Minus className="w-3.5 h-3.5" />
                     </button>
-                    <span className="text-sm font-sans font-semibold w-5 text-center">{item.quantity}</span>
+                    <span className="text-sm font-sans font-semibold w-5 text-center tabular-nums">{item.quantity}</span>
                     <button
                       onClick={() => updateQuantity(item.id, item.quantity + 1)}
-                      className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-card transition-colors"
+                      className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-card transition-colors tap-sm"
                     >
                       <Plus className="w-3.5 h-3.5" />
                     </button>
@@ -260,7 +260,7 @@ const CartPage = () => {
             <div className="p-4 rounded-xl border border-border bg-card">
               <div className="flex justify-between items-center">
                 <span className="font-sans text-sm text-muted-foreground">{t('total')}</span>
-                <span className="font-serif text-xl font-bold text-foreground">{total().toFixed(2)} KM</span>
+                <span className="font-serif text-xl font-bold text-foreground tabular-nums">{total().toFixed(2)} KM</span>
               </div>
             </div>
           </div>
@@ -269,7 +269,7 @@ const CartPage = () => {
             <Button
               onClick={handlePlaceOrderClick}
               disabled={isSubmitting || !sessionId}
-              className="w-full h-14 rounded-2xl bg-primary text-primary-foreground font-sans font-semibold text-base hover:bg-sage-dark disabled:opacity-50 transition-colors"
+              className="w-full h-14 rounded-2xl bg-primary text-primary-foreground font-sans font-semibold text-base hover:bg-sage-dark hover:shadow-lg hover:shadow-primary/30 disabled:opacity-50 transition-all duration-200 tap"
             >
               {isSubmitting ? (
                 <span className="flex items-center gap-2">
