@@ -174,8 +174,15 @@ const CategoryPage = () => {
 
       {itemsLoading ? (
         <div className="px-4 pt-4 space-y-3">
-          {[1, 2, 3].map(i => (
-            <Skeleton key={i} className="h-24 w-full rounded-xl" />
+          {[1, 2, 3, 4].map(i => (
+            <div key={i} className="flex gap-4 p-4 rounded-xl border border-border bg-card">
+              <Skeleton className="w-20 h-20 rounded-lg flex-shrink-0" />
+              <div className="flex-1 space-y-2 py-1">
+                <Skeleton className="h-4 w-2/3 rounded" />
+                <Skeleton className="h-3 w-full rounded" />
+                <Skeleton className="h-4 w-16 rounded mt-2" />
+              </div>
+            </div>
           ))}
         </div>
       ) : items.length === 0 ? (
@@ -190,24 +197,24 @@ const CategoryPage = () => {
             return (
               <motion.div
                 key={item.id}
-                initial={{ opacity: 0, y: 10 }}
+                initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: i * 0.04, duration: 0.3 }}
+                transition={{ delay: Math.min(i, 6) * 0.03, duration: 0.25 }}
               >
                 <button
                   onClick={() => setSelectedItem(item)}
                   className="w-full text-left"
                 >
                   <div className="flex gap-4 p-4 rounded-xl border border-border bg-card hover:border-primary/25 hover:shadow-sm transition-all duration-200">
-                    {item.image_url ? (
-                      <div className="w-20 h-20 rounded-lg overflow-hidden flex-shrink-0 bg-muted">
-                        <img src={item.image_url} alt={localizedName} className="w-full h-full object-cover" />
-                      </div>
-                    ) : (
-                      <div className="w-20 h-20 rounded-lg flex-shrink-0 bg-primary/5 flex items-center justify-center">
-                        <span className="text-2xl font-serif text-primary/30">{localizedName[0]}</span>
-                      </div>
-                    )}
+                    <SmartImage
+                      src={item.image_url || undefined}
+                      alt={localizedName}
+                      width={80}
+                      height={80}
+                      priority={i < 4}
+                      fallbackText={localizedName}
+                      wrapperClassName="w-20 h-20 rounded-lg flex-shrink-0"
+                    />
                     <div className="flex-1 min-w-0">
                       <h3 className="font-serif text-base font-semibold text-foreground">{localizedName}</h3>
                       {localizedDesc && (
