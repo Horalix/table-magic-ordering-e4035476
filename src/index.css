@@ -116,12 +116,8 @@
 }
 
 @layer utilities {
-  .font-serif {
-    font-family: 'Lora', serif;
-  }
-  .font-sans {
-    font-family: 'Inter', sans-serif;
-  }
+  .font-serif { font-family: 'Lora', serif; }
+  .font-sans { font-family: 'Inter', sans-serif; }
   /* [ART] Frosted glass effect */
   .glass {
     @apply bg-card/80 backdrop-blur-xl border-b border-border/50;
@@ -130,16 +126,58 @@
     background: hsla(140, 12%, 48%, 0.85);
     backdrop-filter: blur(20px);
   }
-  .text-gold {
-    color: hsl(var(--gold));
-  }
+  .text-gold { color: hsl(var(--gold)); }
   /* [UX] Hide scrollbar for tabs */
-  .scrollbar-hide::-webkit-scrollbar {
-    display: none;
+  .scrollbar-hide::-webkit-scrollbar { display: none; }
+  .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+
+  /* [UX] Tactile tap feedback — apply to any interactive element */
+  .tap {
+    @apply transition-transform duration-100 ease-out active:scale-[0.96];
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
   }
-  .scrollbar-hide {
-    -ms-overflow-style: none;
-    scrollbar-width: none;
+  .tap-sm {
+    @apply transition-transform duration-100 ease-out active:scale-[0.92];
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+  }
+
+  /* [UX] Image shimmer — sweeps left to right, perceptually faster than pulse */
+  .shimmer {
+    background: linear-gradient(
+      90deg,
+      hsl(var(--muted)) 0%,
+      hsl(var(--muted) / 0.5) 40%,
+      hsl(var(--muted) / 0.8) 50%,
+      hsl(var(--muted) / 0.5) 60%,
+      hsl(var(--muted)) 100%
+    );
+    background-size: 200% 100%;
+    animation: shimmer-sweep 1.2s linear infinite;
+  }
+
+  @keyframes shimmer-sweep {
+    from { background-position: 200% 0; }
+    to { background-position: -200% 0; }
+  }
+
+  /* [UX] Page transition */
+  .page-enter {
+    animation: page-in 220ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  @keyframes page-in {
+    from { opacity: 0; transform: translateY(6px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+}
+
+/* [a11y] Respect reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 }
 
