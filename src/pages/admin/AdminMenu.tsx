@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
-import { Plus, Trash2, ChevronDown, ChevronRight, Languages, Loader2, RefreshCw } from 'lucide-react';
+import { Plus, Trash2, ChevronDown, ChevronRight, Languages, Loader2, RefreshCw, Image as ImageIcon } from 'lucide-react';
 import { toast } from 'sonner';
 
 const AdminMenu = () => {
@@ -22,6 +22,8 @@ const AdminMenu = () => {
   const [newPrice, setNewPrice] = useState('');
   const [newImageUrl, setNewImageUrl] = useState('');
   const [isTranslating, setIsTranslating] = useState(false);
+  const [isMigrating, setIsMigrating] = useState(false);
+  const [migrateResult, setMigrateResult] = useState<string | null>(null);
 
   const fetchMenu = async () => {
     const { data } = await supabase
