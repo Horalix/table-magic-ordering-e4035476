@@ -1,10 +1,19 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { LogOut, ChefHat, Hand, CreditCard, Clock, PowerOff, Check } from 'lucide-react';
+import { Skeleton } from '@/components/ui/skeleton';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
+import {
+  LogOut, ChefHat, Hand, CreditCard, Clock, PowerOff, Check,
+  Sparkles, Users, Flame, Bell, Utensils, CheckCircle2,
+} from 'lucide-react';
 import { toast } from 'sonner';
 import { useElapsed, formatDuration, waitBg } from '@/lib/timing';
 
@@ -20,14 +29,12 @@ const WaiterDashboard = () => {
   const [loading, setLoading] = useState(true);
 
   const fetchAll = useCallback(async (waiterId: string) => {
-    // active sessions assigned to waiter
     const { data: sessions } = await supabase
       .from('table_sessions')
       .select('id, opened_at, guest_name, table_id, tables!inner(table_number, section_id)')
       .eq('is_active', true)
       .eq('assigned_waiter_id', waiterId);
 
-    // orders for these sessions
     const sessionIds = (sessions || []).map((s: any) => s.id);
     const { data: ord } = sessionIds.length > 0
       ? await supabase
@@ -95,110 +102,281 @@ const WaiterDashboard = () => {
   };
   const logout = async () => { await supabase.auth.signOut(); navigate('/admin/login'); };
 
-  if (loading) return <div className="min-h-screen flex items-center justify-center">Loading…</div>;
+  const ordersByTable = useMemo(() => {
+    const map: Record<string, number> = {};
+    orders.forEach((o: any) => {
+      const tn = o.table_sessions?.tables?.table_number;
+      if (tn != null) map[tn] = (map[tn] || 0) + 1;
+    });
+    return map;
+  }, [orders]);
+
+  const initials = (waiter?.display_name || '?').split(' ').map(s => s[0]).join('').slice(0, 2).toUpperCase();
+  const attentionCount = waiterCalls.length + billRequests.length;
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background p-4 sm:p-6">
+        <Skeleton className="h-14 w-full mb-6" />
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-32" />)}
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-background p-4 sm:p-6">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="font-serif text-2xl font-bold">Hi, {waiter?.display_name}</h1>
-          <p className="text-sm text-muted-foreground">My section · {tables.length} active table{tables.length !== 1 ? 's' : ''}</p>
-        </div>
-        <Button variant="outline" size="sm" onClick={logout}><LogOut className="w-4 h-4 mr-1" /> Sign out</Button>
-      </div>
-
-      {(waiterCalls.length > 0 || billRequests.length > 0) && (
-        <div className="grid sm:grid-cols-2 gap-3 mb-6">
-          {waiterCalls.map((c: any) => (
-            <Card key={c.id} className="border-accent/40 bg-accent/5">
-              <CardContent className="p-4 flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Hand className="w-5 h-5 text-accent" />
-                  <div>
-                    <p className="font-sans font-semibold">Table {c.table_sessions.tables.table_number} needs you</p>
-                    <p className="text-xs text-muted-foreground"><Elapsed since={c.created_at} /> ago</p>
-                  </div>
-                </div>
-                <Button size="sm" onClick={() => resolveCall(c.id)}><Check className="w-4 h-4 mr-1" /> Done</Button>
-              </CardContent>
-            </Card>
-          ))}
-          {billRequests.map((b: any) => (
-            <Card key={b.id} className="border-primary/40 bg-primary/5">
-              <CardContent className="p-4 flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <CreditCard className="w-5 h-5 text-primary" />
-                  <div>
-                    <p className="font-sans font-semibold">Table {b.table_sessions.tables.table_number} wants the bill</p>
-                    <p className="text-xs text-muted-foreground"><Elapsed since={b.created_at} /> ago</p>
-                  </div>
-                </div>
-                <Button size="sm" onClick={() => resolveBill(b.id)}><Check className="w-4 h-4 mr-1" /> Done</Button>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      )}
-
-      <h2 className="font-serif text-lg font-bold mb-3">Active Tables</h2>
-      <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-6">
-        {tables.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No active tables in your section.</p>
-        ) : tables.map((s: any) => (
-          <Card key={s.id}>
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between mb-2">
-                <p className="font-serif text-xl font-bold">Table {s.tables.table_number}</p>
-                <Badge variant="outline" className="text-xs"><Clock className="w-3 h-3 mr-1" /><Elapsed since={s.opened_at} /></Badge>
+    <div className="min-h-screen bg-background pb-[env(safe-area-inset-bottom)]">
+      {/* Sticky header */}
+      <header className="sticky top-0 z-40 border-b border-border/60 bg-background/80 backdrop-blur-md">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary to-accent text-primary-foreground grid place-items-center font-serif font-bold text-sm">
+              {initials}
+            </div>
+            <div>
+              <h1 className="font-serif text-lg sm:text-xl font-bold leading-tight">{waiter?.display_name}</h1>
+              <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <span className="relative flex w-2 h-2">
+                  <span className="absolute inline-flex h-full w-full rounded-full bg-emerald-500 opacity-75 animate-ping" />
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+                </span>
+                On shift · {tables.length} table{tables.length !== 1 ? 's' : ''}
               </div>
-              {s.guest_name && <p className="text-sm text-muted-foreground mb-2">{s.guest_name}</p>}
-              <Button size="sm" variant="outline" className="w-full" onClick={() => closeSession(s.id)}>
-                <PowerOff className="w-3.5 h-3.5 mr-1 text-destructive" /> Close & free table
-              </Button>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+            </div>
+          </div>
+          <Button variant="ghost" size="sm" onClick={logout} className="tap-sm">
+            <LogOut className="w-4 h-4 sm:mr-1" /><span className="hidden sm:inline">Sign out</span>
+          </Button>
+        </div>
+      </header>
 
-      <h2 className="font-serif text-lg font-bold mb-3 flex items-center gap-2"><ChefHat className="w-5 h-5" /> Live Orders</h2>
-      <div className="grid sm:grid-cols-2 gap-3">
-        {orders.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No active orders.</p>
-        ) : orders.map((o: any) => (
-          <OrderCard key={o.id} order={o} onUpdate={updateOrderStatus} />
-        ))}
-      </div>
+      <main className="max-w-6xl mx-auto px-4 sm:px-6 py-5 space-y-7">
+        {/* Attention */}
+        <section>
+          <SectionTitle icon={<Bell className="w-4 h-4" />} title="Attention needed" count={attentionCount} />
+          {attentionCount === 0 ? (
+            <div className="rounded-xl border border-dashed border-border/60 bg-muted/30 px-4 py-6 text-center text-sm text-muted-foreground flex items-center justify-center gap-2">
+              <Sparkles className="w-4 h-4" /> All caught up
+            </div>
+          ) : (
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              <AnimatePresence mode="popLayout">
+                {waiterCalls.map((c: any) => (
+                  <AlertPill
+                    key={c.id}
+                    color="amber"
+                    icon={<Hand className="w-4 h-4" />}
+                    title={`Table ${c.table_sessions.tables.table_number}`}
+                    label="Needs you"
+                    since={c.created_at}
+                    onDone={() => resolveCall(c.id)}
+                  />
+                ))}
+                {billRequests.map((b: any) => (
+                  <AlertPill
+                    key={b.id}
+                    color="primary"
+                    icon={<CreditCard className="w-4 h-4" />}
+                    title={`Table ${b.table_sessions.tables.table_number}`}
+                    label="Wants the bill"
+                    since={b.created_at}
+                    onDone={() => resolveBill(b.id)}
+                  />
+                ))}
+              </AnimatePresence>
+            </div>
+          )}
+        </section>
+
+        {/* Tables */}
+        <section>
+          <SectionTitle icon={<Users className="w-4 h-4" />} title="My tables" count={tables.length} />
+          {tables.length === 0 ? (
+            <EmptyState icon={<Users className="w-5 h-5" />} text="No active tables in your section yet." />
+          ) : (
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {tables.map((s: any, i: number) => (
+                <motion.div
+                  key={s.id}
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: i * 0.04, duration: 0.2 }}
+                >
+                  <TableCard
+                    session={s}
+                    activeOrders={ordersByTable[s.tables.table_number] || 0}
+                    onClose={() => closeSession(s.id)}
+                  />
+                </motion.div>
+              ))}
+            </div>
+          )}
+        </section>
+
+        {/* Live orders */}
+        <section>
+          <SectionTitle icon={<ChefHat className="w-4 h-4" />} title="Live orders" count={orders.length} />
+          {orders.length === 0 ? (
+            <EmptyState icon={<Utensils className="w-5 h-5" />} text="No active orders right now." />
+          ) : (
+            <div className="grid sm:grid-cols-2 gap-3">
+              <AnimatePresence mode="popLayout">
+                {orders.map((o: any, i: number) => (
+                  <motion.div
+                    key={o.id}
+                    layout
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.96 }}
+                    transition={{ delay: i * 0.03, duration: 0.2 }}
+                  >
+                    <OrderCard order={o} onUpdate={updateOrderStatus} />
+                  </motion.div>
+                ))}
+              </AnimatePresence>
+            </div>
+          )}
+        </section>
+      </main>
     </div>
   );
 };
+
+const SectionTitle = ({ icon, title, count }: { icon: React.ReactNode; title: string; count: number }) => (
+  <div className="flex items-center gap-2 mb-3">
+    <span className="text-muted-foreground">{icon}</span>
+    <h2 className="font-serif text-base sm:text-lg font-bold">{title}</h2>
+    <span className="text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground tabular-nums">{count}</span>
+  </div>
+);
+
+const EmptyState = ({ icon, text }: { icon: React.ReactNode; text: string }) => (
+  <div className="rounded-xl border border-dashed border-border/60 bg-muted/30 px-4 py-8 text-center text-sm text-muted-foreground flex flex-col items-center gap-2">
+    <span className="opacity-60">{icon}</span>
+    {text}
+  </div>
+);
 
 const Elapsed = ({ since }: { since: string }) => {
   const ms = useElapsed(since);
   return <>{formatDuration(ms)}</>;
 };
 
+const AlertPill = ({
+  color, icon, title, label, since, onDone,
+}: {
+  color: 'amber' | 'primary'; icon: React.ReactNode;
+  title: string; label: string; since: string; onDone: () => void;
+}) => {
+  const accent = color === 'amber' ? 'bg-amber-500' : 'bg-primary';
+  const tint = color === 'amber' ? 'bg-amber-500/5 border-amber-500/30' : 'bg-primary/5 border-primary/30';
+  return (
+    <motion.div
+      layout
+      initial={{ opacity: 0, x: -8 }}
+      animate={{ opacity: 1, x: 0 }}
+      exit={{ opacity: 0, scale: 0.95 }}
+      transition={{ duration: 0.18 }}
+    >
+      <div className={`relative overflow-hidden rounded-xl border ${tint} pl-3 pr-2 py-2.5 flex items-center gap-3`}>
+        <div className={`absolute left-0 top-0 bottom-0 w-1 ${accent}`} />
+        <div className={`w-9 h-9 rounded-lg ${accent} text-white grid place-items-center shrink-0`}>
+          {icon}
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="font-sans font-semibold text-sm truncate">{title}</p>
+          <p className="text-xs text-muted-foreground truncate">{label} · <Elapsed since={since} /></p>
+        </div>
+        <Button size="sm" variant="ghost" className="tap-sm shrink-0" onClick={onDone}>
+          <CheckCircle2 className="w-4 h-4 mr-1" /> Done
+        </Button>
+      </div>
+    </motion.div>
+  );
+};
+
+const TableCard = ({ session, activeOrders, onClose }: { session: any; activeOrders: number; onClose: () => void }) => {
+  const ms = useElapsed(session.opened_at);
+  return (
+    <Card className="overflow-hidden transition-shadow hover:shadow-md">
+      <CardContent className="p-4">
+        <div className="flex items-start justify-between mb-2">
+          <div>
+            <p className="font-serif text-2xl font-bold leading-none">T{session.tables.table_number}</p>
+            {session.guest_name && <p className="text-xs text-muted-foreground mt-1 truncate max-w-[160px]">{session.guest_name}</p>}
+          </div>
+          <span className={`text-[11px] px-2 py-0.5 rounded-full border tabular-nums ${waitBg(ms)}`}>
+            <Clock className="w-3 h-3 inline -mt-0.5 mr-1" />{formatDuration(ms)}
+          </span>
+        </div>
+        <div className="flex items-center justify-between text-xs text-muted-foreground mb-3">
+          <span>{activeOrders > 0 ? `${activeOrders} active order${activeOrders !== 1 ? 's' : ''}` : 'No active orders'}</span>
+        </div>
+        <div className="border-t border-border/60 pt-3">
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button size="sm" variant="ghost" className="w-full tap-sm text-muted-foreground hover:text-destructive">
+                <PowerOff className="w-3.5 h-3.5 mr-1.5" /> Free table
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Free table T{session.tables.table_number}?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This closes the session. The guest will need a new QR scan to order again.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction onClick={onClose}>Free table</AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        </div>
+      </CardContent>
+    </Card>
+  );
+};
+
+const STATUS_META: Record<string, { dot: string; label: string }> = {
+  pending:   { dot: 'bg-muted-foreground', label: 'Pending' },
+  confirmed: { dot: 'bg-blue-500',         label: 'Confirmed' },
+  preparing: { dot: 'bg-amber-500',        label: 'Preparing' },
+  ready:     { dot: 'bg-emerald-500',      label: 'Ready' },
+};
+const NEXT_META: Record<string, { status: string; label: string; icon: React.ReactNode }> = {
+  pending:   { status: 'confirmed', label: 'Confirm',     icon: <Check className="w-4 h-4 mr-1.5" /> },
+  confirmed: { status: 'preparing', label: 'Start prep',  icon: <Flame className="w-4 h-4 mr-1.5" /> },
+  preparing: { status: 'ready',     label: 'Mark ready',  icon: <Bell className="w-4 h-4 mr-1.5" /> },
+  ready:     { status: 'served',    label: 'Mark served', icon: <Utensils className="w-4 h-4 mr-1.5" /> },
+};
+
 const OrderCard = ({ order, onUpdate }: { order: any; onUpdate: (id: string, s: string) => void }) => {
   const ms = useElapsed(order.created_at);
-  const next: Record<string, string> = { pending: 'confirmed', confirmed: 'preparing', preparing: 'ready', ready: 'served' };
-  const nextStatus = next[order.status];
+  const next = NEXT_META[order.status];
+  const meta = STATUS_META[order.status] || STATUS_META.pending;
   return (
-    <Card>
+    <Card className="transition-shadow hover:shadow-md">
       <CardContent className="p-4">
-        <div className="flex items-center justify-between mb-2">
-          <div className="flex items-center gap-2">
-            <p className="font-serif text-base font-bold">Table {order.table_sessions.tables.table_number}</p>
-            <Badge variant="outline" className="text-xs capitalize">{order.status}</Badge>
+        <div className="flex items-center justify-between mb-2.5">
+          <div className="flex items-center gap-2 min-w-0">
+            <p className="font-serif text-lg font-bold shrink-0">T{order.table_sessions.tables.table_number}</p>
+            <Badge variant="outline" className="text-[11px] gap-1.5">
+              <span className={`w-1.5 h-1.5 rounded-full ${meta.dot}`} />
+              {meta.label}
+            </Badge>
           </div>
-          <span className={`text-xs px-2 py-0.5 rounded-full border ${waitBg(ms)}`}>{formatDuration(ms)}</span>
+          <span className={`text-[11px] px-2 py-0.5 rounded-full border tabular-nums ${waitBg(ms)}`}>{formatDuration(ms)}</span>
         </div>
-        <ul className="text-sm font-sans space-y-0.5 mb-3">
+        <ul className="text-sm font-sans space-y-0.5 mb-3 text-foreground/90">
           {(order.order_items || []).map((it: any, i: number) => (
-            <li key={i}>{it.quantity}× {it.menu_items?.name}</li>
+            <li key={i} className="flex gap-2"><span className="tabular-nums text-muted-foreground w-6">{it.quantity}×</span>{it.menu_items?.name}</li>
           ))}
         </ul>
-        {nextStatus && (
-          <Button size="sm" className="w-full" onClick={() => onUpdate(order.id, nextStatus)}>
-            Mark as {nextStatus}
+        {next && (
+          <Button size="sm" className="w-full tap" onClick={() => onUpdate(order.id, next.status)}>
+            {next.icon}{next.label}
           </Button>
         )}
       </CardContent>
