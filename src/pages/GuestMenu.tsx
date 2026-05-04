@@ -60,21 +60,21 @@ const GuestMenu = () => {
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
-        transition={{ duration: 1 }}
+        transition={{ duration: 0.4 }}
         className="relative flex flex-col items-center justify-center px-6 pt-16 pb-10"
         style={{ backgroundColor: 'hsl(140, 12%, 53%)' }}
       >
         <motion.div
           initial={{ scaleX: 0 }}
           animate={{ scaleX: 1 }}
-          transition={{ delay: 0.1, duration: 0.5, ease: 'easeOut' }}
+          transition={{ delay: 0.05, duration: 0.3, ease: 'easeOut' }}
           className="w-12 h-px bg-white/30 mb-10"
         />
 
         <motion.div
-          initial={{ opacity: 0, scale: 0.85 }}
+          initial={{ opacity: 0, scale: 0.9 }}
           animate={{ opacity: 1, scale: 1 }}
-          transition={{ delay: 0.15, duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+          transition={{ delay: 0.08, duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
           className="mb-6"
         >
           <img src="/lasoul-logo.svg" alt="La Soul" className="w-36 h-36 object-contain brightness-0 invert" />
@@ -84,9 +84,9 @@ const GuestMenu = () => {
           {'LA SOUL'.split('').map((letter, i) => (
             <motion.span
               key={i}
-              initial={{ opacity: 0, y: 12 }}
+              initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.3 + i * 0.04, duration: 0.4 }}
+              transition={{ delay: 0.15 + i * 0.025, duration: 0.25 }}
               className="font-serif text-[28px] font-bold text-white tracking-[0.15em]"
             >
               {letter === ' ' ? '\u00A0' : letter}
@@ -97,7 +97,7 @@ const GuestMenu = () => {
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
-          transition={{ delay: 0.7, duration: 0.4 }}
+          transition={{ delay: 0.3, duration: 0.25 }}
           className="mt-4 flex items-center gap-4"
         >
           <div className="h-px w-10 bg-white/25" />
@@ -106,9 +106,9 @@ const GuestMenu = () => {
         </motion.div>
 
         <motion.div
-          initial={{ opacity: 0, y: 8 }}
+          initial={{ opacity: 0, y: 6 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.8, duration: 0.4 }}
+          transition={{ delay: 0.35, duration: 0.25 }}
           className="mt-6 flex items-center gap-3"
         >
           {table && (
@@ -124,7 +124,7 @@ const GuestMenu = () => {
           <motion.p
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            transition={{ delay: 0.9, duration: 0.4 }}
+            transition={{ delay: 0.4, duration: 0.25 }}
             className="mt-4 text-[11px] font-sans text-white/50 text-center leading-relaxed"
           >
             {t('scan_qr_order')}
@@ -134,7 +134,7 @@ const GuestMenu = () => {
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
-          transition={{ delay: 0.9, duration: 0.5 }}
+          transition={{ delay: 0.45, duration: 0.3 }}
           className="mt-8 flex flex-col items-center gap-2"
         >
           <div className="flex items-center gap-2 text-white/40">
@@ -156,14 +156,14 @@ const GuestMenu = () => {
           return (
             <motion.button
               key={cat.id}
-              initial={{ opacity: 0, y: 20 }}
+              initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.6 + i * 0.08, duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
-              whileTap={{ scale: 0.98 }}
+              transition={{ delay: 0.25 + i * 0.05, duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
+              whileTap={{ scale: 0.97 }}
               onClick={() => handleCategoryClick(path)}
-              className="w-full group"
+              className="w-full group tap"
             >
-              <div className="relative overflow-hidden rounded-2xl border border-border bg-card p-5 transition-all duration-300 hover:shadow-md hover:border-primary/30 hover:-translate-y-0.5 active:scale-[0.99]">
+              <div className="relative overflow-hidden rounded-2xl border border-border bg-card p-5 transition-all duration-300 hover:shadow-lg hover:border-primary/40 hover:-translate-y-0.5">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-4">
                     <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 transition-colors duration-300">
