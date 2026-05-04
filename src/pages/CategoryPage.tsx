@@ -220,7 +220,7 @@ const CategoryPage = () => {
                       {localizedDesc && (
                         <p className="text-sm text-muted-foreground font-sans mt-0.5 line-clamp-2">{localizedDesc}</p>
                       )}
-                      <p className="text-sm font-sans font-bold text-primary mt-2">{Number(item.price).toFixed(2)} KM</p>
+                      <p className="text-sm font-sans font-bold text-primary mt-2 tabular-nums">{Number(item.price).toFixed(2)} KM</p>
                     </div>
                     {hasSession && (
                       <div className="flex items-center">
@@ -233,8 +233,11 @@ const CategoryPage = () => {
                               price: Number(item.price),
                               image_url: item.image_url || undefined,
                             });
+                            if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+                              try { (navigator as any).vibrate(8); } catch {}
+                            }
                           }}
-                          className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center hover:bg-primary hover:text-primary-foreground transition-all duration-200 cursor-pointer min-w-[44px] min-h-[44px]"
+                          className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center hover:bg-primary hover:text-primary-foreground active:scale-90 transition-all duration-200 cursor-pointer min-w-[44px] min-h-[44px]"
                         >
                           <Plus className="w-4 h-4" />
                         </div>
