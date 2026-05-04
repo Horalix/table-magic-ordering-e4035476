@@ -1,11 +1,13 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, Plus, QrCode } from 'lucide-react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useCartStore } from '@/lib/cart-store';
 import { Skeleton } from '@/components/ui/skeleton';
+import SmartImage from '@/components/ui/SmartImage';
+import { prefetchImages } from '@/lib/image-cache';
 import CartBar from '@/components/guest/CartBar';
 import MenuItemDetail from '@/components/guest/MenuItemDetail';
 import LanguageSelector from '@/components/guest/LanguageSelector';
@@ -76,7 +78,25 @@ const CategoryPage = () => {
       return data;
     },
     enabled: !!activeSubId,
+    placeholderData: keepPreviousData,
   });
+
+  // Prefetch images for adjacent subcategories on idle
+  useEffect(() => {
+    if (!subcategories.length || !activeSubId) return;
+    const idx = subcategories.findIndex((s) => s.id === activeSubId);
+    const next = subcategories[idx + 1];
+    if (!next) return;
+    supabase
+      .from('menu_items')
+      .select('image_url')
+      .eq('subcategory_id', next.id)
+      .eq('is_available', true)
+      .limit(8)
+      .then(({ data }) => {
+        if (data) prefetchImages(data.map((d: any) => d.image_url));
+      });
+  }, [activeSubId, subcategories]);
 
   const goBack = () => {
     const params = new URLSearchParams();
