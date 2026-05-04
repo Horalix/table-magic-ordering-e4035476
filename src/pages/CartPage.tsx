@@ -7,6 +7,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import { useT, useLanguageStore } from '@/lib/i18n';
+import SmartImage from '@/components/ui/SmartImage';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -204,9 +205,13 @@ const CartPage = () => {
                 className="flex gap-4 p-4 rounded-xl border border-border bg-card"
               >
                 {item.image_url && (
-                  <div className="w-16 h-16 rounded-lg overflow-hidden flex-shrink-0 bg-muted">
-                    <img src={item.image_url} alt={item.name} className="w-full h-full object-cover" />
-                  </div>
+                  <SmartImage
+                    src={item.image_url}
+                    alt={item.name}
+                    width={64}
+                    height={64}
+                    wrapperClassName="w-16 h-16 rounded-lg flex-shrink-0"
+                  />
                 )}
                 <div className="flex-1 min-w-0">
                   <h3 className="font-serif text-base font-semibold text-foreground">{item.name}</h3>

@@ -4,6 +4,7 @@ import { X, Plus, Minus, QrCode, UtensilsCrossed } from 'lucide-react';
 import { useCartStore } from '@/lib/cart-store';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
+import SmartImage from '@/components/ui/SmartImage';
 import { useT, useLanguageStore, getLocalizedName, getLocalizedDescription } from '@/lib/i18n';
 
 interface Props {
@@ -71,9 +72,14 @@ const MenuItemDetail = ({ item, onClose, canOrder = true }: Props) => {
         </button>
 
         {item.image_url ? (
-          <div className="w-full h-52 bg-muted overflow-hidden">
-            <img src={item.image_url} alt={localizedName} className="w-full h-full object-cover" />
-          </div>
+          <SmartImage
+            src={item.image_url}
+            alt={localizedName}
+            width={800}
+            height={520}
+            priority
+            wrapperClassName="w-full h-52"
+          />
         ) : (
           <div className="w-full h-36 bg-primary/5 flex items-center justify-center">
             <UtensilsCrossed className="w-10 h-10 text-primary/20" />
