@@ -205,23 +205,24 @@ const CategoryPage = () => {
             return (
               <motion.div
                 key={item.id}
-                initial={{ opacity: 0, y: 8 }}
+                initial={{ opacity: 0, y: 6 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: Math.min(i, 6) * 0.03, duration: 0.25 }}
+                transition={{ delay: Math.min(i, 5) * 0.02, duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
               >
                 <button
                   onClick={() => setSelectedItem(item)}
-                  className="w-full text-left"
+                  className="w-full text-left tap"
                 >
-                  <div className="flex gap-4 p-4 rounded-xl border border-border bg-card hover:border-primary/25 hover:shadow-sm transition-all duration-200">
+                  <div className="group flex gap-4 p-4 rounded-xl border border-border bg-card hover:border-primary/30 hover:shadow-md hover:-translate-y-0.5 transition-all duration-200">
                     <SmartImage
                       src={item.image_url || undefined}
                       alt={localizedName}
                       width={80}
                       height={80}
-                      priority={i < 4}
+                      priority={i < 8}
                       fallbackText={localizedName}
                       wrapperClassName="w-20 h-20 rounded-lg flex-shrink-0"
+                      className="group-hover:scale-105 transition-transform duration-300"
                     />
                     <div className="flex-1 min-w-0">
                       <h3 className="font-serif text-base font-semibold text-foreground">{localizedName}</h3>
@@ -245,7 +246,7 @@ const CategoryPage = () => {
                               try { (navigator as any).vibrate(8); } catch {}
                             }
                           }}
-                          className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center hover:bg-primary hover:text-primary-foreground active:scale-90 transition-all duration-200 cursor-pointer min-w-[44px] min-h-[44px]"
+                          className="w-10 h-10 rounded-full bg-primary/10 text-primary flex items-center justify-center hover:bg-primary hover:text-primary-foreground active:scale-90 transition-all duration-150 cursor-pointer min-w-[44px] min-h-[44px] tap-sm"
                         >
                           <Plus className="w-4 h-4" />
                         </div>
