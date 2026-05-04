@@ -218,7 +218,7 @@ const CartPage = () => {
                   {item.notes && (
                     <p className="text-xs text-muted-foreground mt-0.5 italic">"{item.notes}"</p>
                   )}
-                  <p className="text-sm font-sans font-bold text-primary mt-1">
+                  <p className="text-sm font-sans font-bold text-primary mt-1 tabular-nums">
                     {(item.price * item.quantity).toFixed(2)} KM
                   </p>
                 </div>
