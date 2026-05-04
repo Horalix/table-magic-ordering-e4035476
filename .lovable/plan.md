@@ -1,90 +1,72 @@
-# Plan: Sections, Waiter Assignments, Timing & Server Ratings
+# Plan: Faster Image Loading + UX Polish
 
-## 1. Database (migration)
+## Problem
+Menu images come from `menu.lasoul.net` at full resolution (~hundreds of KB each). They load slowly on mobile, cause layout shift, and there's no progressive feedback. Combined with several small UX rough edges across the guest flow.
 
-**New tables:**
-- `sections` — `id, name, color, sort_order, created_at`
-- `waiters` (extends staff) — `id, user_id (auth.users), display_name, is_active, created_at`
-- `section_assignments` — `id, section_id, waiter_id, shift_date (date), created_at` (which waiter covers which section today)
-- `server_ratings` — `id, table_session_id, waiter_id, rating (1-5), comment, created_at` (validation trigger 1–5)
+## Part 1 — Image Loading Speed
 
-**Modify existing:**
-- `tables` → add `section_id uuid` (nullable)
-- `table_sessions` → add `assigned_waiter_id uuid` (set when session opens, from current shift assignment), add `first_order_at timestamptz`, add `served_at timestamptz`
-- `orders` → add `confirmed_at`, `preparing_at`, `ready_at`, `served_at` timestamptz columns (populated by triggers when status changes), and `assigned_waiter_id` (denormalized from session for fast filter)
+### A. Smart `<Image>` component (`src/components/ui/SmartImage.tsx` — new)
+Single reusable component handling:
+- **Responsive `srcset`** with `width` query param (most CDNs/Supabase Storage honor it). For external URLs that don't, falls back to original.
+- **`loading="lazy"`** for off-screen items, **`loading="eager"` + `fetchpriority="high"`** for above-the-fold (first 4 cards).
+- **`decoding="async"`**.
+- **Blur-up placeholder**: tiny solid color (from a hash of name) shown until `onLoad` fires, then fades in.
+- **Explicit `width`/`height`** props → reserves space, kills CLS.
+- **IntersectionObserver pre-decode** for the next viewport's images.
 
-**Trigger:** on `orders` UPDATE, when `status` changes set the matching timestamp column.
+### B. Replace `<img>` usages
+Swap raw `<img>` in:
+- `src/pages/CategoryPage.tsx` (list thumbnails — 80×80, eager for first 4)
+- `src/pages/GuestMenu.tsx` (category cards)
+- `src/components/guest/MenuItemDetail.tsx` (modal hero — eager, high priority)
+- `src/pages/CartPage.tsx` (cart thumbnails)
 
-**RLS:**
-- `sections`, `waiters`, `section_assignments` — public SELECT, admin manage
-- `server_ratings` — public INSERT for active sessions, admin SELECT
-- Add helper SQL function `get_waiter_id(_user_id uuid)` so a logged-in waiter can filter their own data without recursion
+### C. Smarter prefetch in `TableEntry.tsx`
+Currently prefetches **every** menu image on session start (wasteful, can saturate mobile). Change to:
+- Only prefetch images for the **first category** (Drinks) at small thumbnail size.
+- Use `<link rel="preload" as="image" imagesrcset=...>` for top 8 items.
+- Move full prefetch to idle time via `requestIdleCallback`.
 
-## 2. Admin: Sections & Staff Management
-**New page `/admin/sections`** (added to sidebar):
-- Create/edit/delete sections (name + color swatch)
-- Assign tables to sections (drag-drop or dropdown per table; reuse `AdminTables` with section column)
-- Manage waiters list (create auth users with `staff` role, link to `waiters` row, set display name)
-- Daily shift assignment UI: pick date → assign waiter to each section
+### D. React Query caching
+- Set `staleTime: 5 * 60 * 1000` and `gcTime: 30 * 60 * 1000` on menu/category/subcategory queries so back-navigation is instant.
+- Add `placeholderData: keepPreviousData` on subcategory item switches so the list doesn't blank out.
 
-## 3. Waiter Login & Filtered Kitchen/Orders
-- Reuse `/admin/login` (staff role already exists)
-- New page `/waiter` (or filter inside `/kitchen`): when logged-in user is a waiter, query joins `tables.section_id` and shows **only orders for tables in sections assigned to that waiter today**
-- Add a "My Tables" view: list of active sessions in their section with live timers
-- Admin sees everything (toggle: "All sections" / per-section filter)
+### E. Service worker–style cache via `Cache Storage` (lightweight)
+Small util `src/lib/image-cache.ts` that warms the browser HTTP cache for next likely subcategory's images when user hovers/taps a tab.
 
-## 4. Live Timers (occupancy + order wait)
-Computed client-side from timestamps, refreshed each second:
-- **Table occupancy** = `now - table_sessions.opened_at` (shown on `AdminTables`, waiter view, kitchen)
-- **Order wait** = `now - orders.created_at` while not served; color escalates (green <10m, amber 10–20m, red >20m)
-- Per-status durations from new timestamp columns shown in order cards
+## Part 2 — UX Polish
 
-## 5. Customer Rates Their Server
-Extend existing `ReviewPrompt` (after bill request):
-- Step 1: overall experience stars (existing → goes to `ratings`)
-- Step 2: **"How was your server, {waiter_name}?"** — stars + optional one-line comment → inserts `server_ratings` linked to `assigned_waiter_id`
-- Step 3: Google review CTA (existing)
-- Skippable per step
+1. **Skeletons match real layout** — current skeletons are generic rectangles. Make item skeletons mirror the 80×80 thumb + 2 text lines layout so transition is seamless (no jump).
+2. **Tab bar sticky shadow** — add subtle shadow only when scrolled (IntersectionObserver sentinel).
+3. **Empty-state illustration** — replace the bare "no items" text with a small icon + helpful copy.
+4. **Cart bar bounce** — when an item is added, briefly pulse the count badge (already mounted, just animate).
+5. **Add-to-cart toast** — small bottom toast "Added Americano · 5.00 KM" with undo (3s). Reduces accidental adds.
+6. **Quantity stepper haptic** — `navigator.vibrate(10)` on +/- on mobile.
+7. **Image fallback** — when image 404s, show the existing letter-circle fallback instead of broken icon.
+8. **Sticky header blur tweak** — increase `backdrop-blur` and add `bg-background/70` for readability over images.
+9. **RTL fixes** — verify Arabic locale: cart bar item count badge position, back-arrow rotation already handled, ensure category card text alignment.
+10. **Reduce motion respect** — wrap framer-motion entrance animations in `prefers-reduced-motion` check.
+11. **Faster route transitions** — preload `/cart` and `/tab` route components on idle (React.lazy + dynamic import warm-up).
+12. **Menu item modal** — close on swipe-down gesture (currently only close button / backdrop tap).
+13. **Price emphasis** — slightly larger price font, tabular-nums so prices align vertically in lists.
+14. **Network status banner** — already exists; ensure it doesn't overlap CartBar (add padding when offline).
 
-## 6. Admin Performance Analytics
-**New page `/admin/performance`** (added to sidebar):
-- Per-waiter cards with: avg server rating (★), total ratings, tables served, avg table-turn time, avg order-confirm time, avg order-served time, total revenue handled, bill-request response time, waiter-call response time
-- Date range filter (today / week / month / custom)
-- Section leaderboard
-- Recent low ratings (<3★) with timestamps for follow-up
-- Lightweight charts using `recharts` (already installed)
+## Files Touched
+| Action | File |
+|---|---|
+| New | `src/components/ui/SmartImage.tsx` |
+| New | `src/lib/image-cache.ts` |
+| New | `src/components/guest/AddedToast.tsx` |
+| Edit | `src/pages/CategoryPage.tsx` |
+| Edit | `src/pages/GuestMenu.tsx` |
+| Edit | `src/pages/CartPage.tsx` |
+| Edit | `src/pages/TableEntry.tsx` |
+| Edit | `src/components/guest/MenuItemDetail.tsx` |
+| Edit | `src/components/guest/CartBar.tsx` |
+| Edit | `src/main.tsx` (QueryClient defaults) |
+| Edit | `src/index.css` (skeleton shimmer, reduced motion) |
 
-## 7. Extra polish (high-value, low-effort)
-- **Waiter-call & bill-request routing**: notification on the assigned waiter's screen first, with a "claim" action; falls back to all staff after 60s
-- **Idle session warning**: highlight tables with no orders >20m and no recent activity
-- **Section color tags** on QR sticker print so staff can sort printed stickers per section
-- **Response-time SLA badge** on dashboard (e.g., "Avg waiter-call response: 2m 14s")
-- **Anti-spam reinforcement**: tie order rate-limit window to `assigned_waiter_id` so one waiter can override the cap from their device for legit large orders
+## Out of Scope
+- Migrating images to Supabase Storage (would give true on-the-fly resizing). Can be a follow-up if speedups here aren't enough — let me know and I'll plan that migration separately.
 
-## Files Summary
-**Create:**
-- `supabase/migrations/<ts>_sections_waiters.sql`
-- `src/pages/admin/AdminSections.tsx`
-- `src/pages/admin/AdminWaiters.tsx`
-- `src/pages/admin/AdminPerformance.tsx`
-- `src/pages/WaiterDashboard.tsx` (`/waiter` route)
-- `src/components/admin/SectionPicker.tsx`
-- `src/components/guest/ServerRatingStep.tsx`
-- `src/lib/timing.ts` (formatDuration, useLiveTimer hook)
-
-**Modify:**
-- `src/App.tsx` — new routes
-- `src/components/admin/AdminLayout.tsx` — add Sections, Waiters, Performance nav
-- `src/pages/admin/AdminTables.tsx` — section column + filter, occupancy timer
-- `src/pages/KitchenDisplay.tsx` — section filter, waiter-scoped view, per-status timestamps
-- `src/pages/admin/AdminDashboard.tsx` — SLA badges
-- `src/pages/admin/AdminQRCodes.tsx` — section tag on stickers
-- `src/components/guest/ReviewPrompt.tsx` — multi-step with server rating
-- `src/pages/TableEntry.tsx` — set `assigned_waiter_id` on session creation from today's section assignment
-- `src/lib/i18n.ts` — new keys (rate_your_server, comment, section, waiter, etc. in en/bs/ar)
-- `src/integrations/supabase/types.ts` — auto-regenerated
-
-## Notes
-- Waiter accounts use existing `staff` role; admin creates them via `/admin/waiters` (calls a small edge function with service role to create the auth user + role + waiters row, since client SDK can't create users)
-- One new edge function: `create-waiter` (service-role, admin-guarded)
-- All timing UI is client-side derived; no extra DB load
+Approve and I'll implement.
