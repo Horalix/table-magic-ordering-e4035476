@@ -106,7 +106,26 @@ const AdminOrders = () => {
                   </div>
                   <p className="text-xs text-muted-foreground font-sans mt-1">{new Date(order.created_at).toLocaleString()}</p>
                 </div>
-                <p className="font-serif font-bold text-foreground">{Number(order.total).toFixed(2)} KM</p>
+                <div className="flex items-start gap-2">
+                  <p className="font-serif font-bold text-foreground">{Number(order.total).toFixed(2)} KM</p>
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button variant="ghost" size="icon" className="h-7 w-7"><Trash2 className="w-4 h-4 text-destructive" /></Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Delete this order?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          Permanently removes the order and its items. This cannot be undone.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction onClick={() => deleteOrder(order.id)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Delete</AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                </div>
               </div>
 
               <div className="mt-3 space-y-1">
