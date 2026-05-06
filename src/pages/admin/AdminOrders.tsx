@@ -4,6 +4,12 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
+import { Trash2 } from 'lucide-react';
+import { toast } from 'sonner';
 
 const AdminOrders = () => {
   const [orders, setOrders] = useState<any[]>([]);
@@ -35,6 +41,15 @@ const AdminOrders = () => {
 
   const updateStatus = async (orderId: string, status: string) => {
     await supabase.from('orders').update({ status: status as any }).eq('id', orderId);
+    fetchOrders();
+  };
+
+  const deleteOrder = async (orderId: string) => {
+    const { error: e1 } = await supabase.from('order_items').delete().eq('order_id', orderId);
+    if (e1) { toast.error(e1.message); return; }
+    const { error: e2 } = await supabase.from('orders').delete().eq('id', orderId);
+    if (e2) { toast.error(e2.message); return; }
+    toast.success('Order deleted');
     fetchOrders();
   };
 
@@ -91,7 +106,26 @@ const AdminOrders = () => {
                   </div>
                   <p className="text-xs text-muted-foreground font-sans mt-1">{new Date(order.created_at).toLocaleString()}</p>
                 </div>
-                <p className="font-serif font-bold text-foreground">{Number(order.total).toFixed(2)} KM</p>
+                <div className="flex items-start gap-2">
+                  <p className="font-serif font-bold text-foreground">{Number(order.total).toFixed(2)} KM</p>
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button variant="ghost" size="icon" className="h-7 w-7"><Trash2 className="w-4 h-4 text-destructive" /></Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Delete this order?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          Permanently removes the order and its items. This cannot be undone.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction onClick={() => deleteOrder(order.id)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Delete</AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                </div>
               </div>
 
               <div className="mt-3 space-y-1">
