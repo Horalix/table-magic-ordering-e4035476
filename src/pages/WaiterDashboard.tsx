@@ -301,6 +301,21 @@ const WaiterDashboard = () => {
   );
 };
 
+const StatChip = ({ label, value, tone = 'idle' }: { label: string; value: React.ReactNode; tone?: 'idle' | 'active' | 'warn' | 'urgent' }) => {
+  const toneCls = {
+    idle: 'bg-muted/50 text-foreground',
+    active: 'bg-primary/10 text-primary',
+    warn: 'bg-amber-500/10 text-amber-700 dark:text-amber-400',
+    urgent: 'bg-destructive/10 text-destructive',
+  }[tone];
+  return (
+    <div className={`rounded-lg ${toneCls} px-2 py-1.5`}>
+      <p className="text-[10px] uppercase tracking-wide opacity-70 leading-none">{label}</p>
+      <p className="font-serif font-bold text-base leading-tight tabular-nums mt-0.5">{value}</p>
+    </div>
+  );
+};
+
 const SectionTitle = ({ icon, title, count }: { icon: React.ReactNode; title: string; count: number }) => (
   <div className="flex items-center gap-2 mb-3">
     <span className="text-muted-foreground">{icon}</span>
