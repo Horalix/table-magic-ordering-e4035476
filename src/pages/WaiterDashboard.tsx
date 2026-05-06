@@ -42,6 +42,8 @@ const WaiterDashboard = () => {
   const [waiterCalls, setWaiterCalls] = useState<any[]>([]);
   const [billRequests, setBillRequests] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [soundOn, setSoundOn] = useState<boolean>(() => localStorage.getItem(SOUND_KEY) !== 'false');
+  const prevAlertIds = useRef<Set<string>>(new Set());
 
   const fetchAll = useCallback(async (waiterId: string) => {
     const { data: sessions } = await supabase
