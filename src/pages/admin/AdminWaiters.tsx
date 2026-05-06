@@ -106,14 +106,35 @@ const AdminWaiters = () => {
           ) : (
             <div className="divide-y divide-border">
               {waiters.map(w => (
-                <div key={w.id} className="flex items-center justify-between py-3">
-                  <div>
-                    <p className="font-sans font-medium">{w.display_name}</p>
+                <div key={w.id} className="flex items-center justify-between py-3 gap-3">
+                  <div className="min-w-0">
+                    <p className="font-sans font-medium truncate">{w.display_name}</p>
                     <p className="text-xs font-sans text-muted-foreground">
                       {w.username ? `@${w.username}` : 'no username (legacy)'} · {w.is_active ? 'Active' : 'Inactive'}
                     </p>
                   </div>
-                  <Switch checked={w.is_active} onCheckedChange={() => toggleActive(w)} />
+                  <div className="flex items-center gap-2 shrink-0">
+                    <Switch checked={w.is_active} onCheckedChange={() => toggleActive(w)} />
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button variant="ghost" size="icon"><Trash2 className="w-4 h-4 text-destructive" /></Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>Remove {w.display_name}?</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            This permanently deletes the waiter account and login. Past orders are kept but unassigned. This cannot be undone.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Cancel</AlertDialogCancel>
+                          <AlertDialogAction onClick={() => deleteWaiter(w)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                            Remove
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
+                  </div>
                 </div>
               ))}
             </div>
