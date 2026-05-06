@@ -6,10 +6,12 @@ const corsHeaders = {
 };
 
 interface Body {
-  email?: string;
+  username?: string;
   password?: string;
   display_name?: string;
 }
+
+const synthEmail = (u: string) => `${u}@waiter.lasoul.local`;
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
@@ -22,7 +24,6 @@ Deno.serve(async (req) => {
     const authHeader = req.headers.get('Authorization') || '';
     const token = authHeader.replace('Bearer ', '');
 
-    // Verify caller is admin
     const userClient = createClient(SUPABASE_URL, ANON, {
       global: { headers: { Authorization: authHeader } },
     });
@@ -38,14 +39,21 @@ Deno.serve(async (req) => {
     }
 
     const body: Body = await req.json();
-    const email = (body.email || '').trim().toLowerCase();
+    const username = (body.username || '').trim().toLowerCase().replace(/[^a-z0-9_.-]/g, '');
     const password = body.password || '';
     const display_name = (body.display_name || '').trim();
 
-    if (!email || !password || password.length < 8 || !display_name) {
-      return new Response(JSON.stringify({ error: 'Invalid input' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    if (!username || username.length < 3 || !password || password.length < 6 || !display_name) {
+      return new Response(JSON.stringify({ error: 'Username (3+ chars), password (6+ chars), and display name are required' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
+    // Check if username already taken
+    const { data: existing } = await admin.from('waiters').select('id').eq('username', username).maybeSingle();
+    if (existing) {
+      return new Response(JSON.stringify({ error: 'Username already taken' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
+    const email = synthEmail(username);
     const { data: created, error: createErr } = await admin.auth.admin.createUser({
       email,
       password,
@@ -64,7 +72,7 @@ Deno.serve(async (req) => {
 
     const { data: waiter, error: wErr } = await admin
       .from('waiters')
-      .insert({ user_id: userId, display_name })
+      .insert({ user_id: userId, display_name, username })
       .select()
       .single();
     if (wErr) {

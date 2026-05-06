@@ -63,11 +63,11 @@ const WaiterDashboard = () => {
   useEffect(() => {
     (async () => {
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session) { navigate('/admin/login'); return; }
+      if (!session) { navigate('/waiter/login'); return; }
       const { data: w } = await supabase.from('waiters').select('id, display_name').eq('user_id', session.user.id).maybeSingle();
       if (!w) {
         toast.error('No waiter profile linked to this account');
-        navigate('/admin');
+        navigate('/waiter/login');
         return;
       }
       setWaiter(w);
@@ -100,7 +100,7 @@ const WaiterDashboard = () => {
     await supabase.from('table_sessions').update({ is_active: false, closed_at: new Date().toISOString() }).eq('id', id);
     toast.success('Table freed');
   };
-  const logout = async () => { await supabase.auth.signOut(); navigate('/admin/login'); };
+  const logout = async () => { await supabase.auth.signOut(); navigate('/waiter/login'); };
 
   const ordersByTable = useMemo(() => {
     const map: Record<string, number> = {};

@@ -1,0 +1,1 @@
+ALTER TABLE public.waiters ADD COLUMN IF NOT EXISTS username text UNIQUE;
