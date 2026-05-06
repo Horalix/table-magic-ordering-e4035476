@@ -100,7 +100,7 @@ const WaiterDashboard = () => {
     await supabase.from('table_sessions').update({ is_active: false, closed_at: new Date().toISOString() }).eq('id', id);
     toast.success('Table freed');
   };
-  const logout = async () => { await supabase.auth.signOut(); navigate('/admin/login'); };
+  const logout = async () => { await supabase.auth.signOut(); navigate('/waiter/login'); };
 
   const ordersByTable = useMemo(() => {
     const map: Record<string, number> = {};
