@@ -188,9 +188,24 @@ const WaiterDashboard = () => {
               </div>
             </div>
           </div>
-          <Button variant="ghost" size="sm" onClick={logout} className="tap-sm">
-            <LogOut className="w-4 h-4 sm:mr-1" /><span className="hidden sm:inline">Sign out</span>
-          </Button>
+          <div className="flex items-center gap-1">
+            <Button variant="ghost" size="sm" onClick={toggleSound} className="tap-sm" aria-label="Toggle sound">
+              {soundOn ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4 text-muted-foreground" />}
+            </Button>
+            <Button variant="ghost" size="sm" onClick={logout} className="tap-sm">
+              <LogOut className="w-4 h-4 sm:mr-1" /><span className="hidden sm:inline">Sign out</span>
+            </Button>
+          </div>
+        </div>
+        {/* Stats strip */}
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 pb-3 grid grid-cols-3 gap-2 text-center">
+          <StatChip label="Tables" value={tables.length} />
+          <StatChip label="Orders" value={ordersWaiting} tone={ordersWaiting > 0 ? 'active' : 'idle'} />
+          <StatChip
+            label="Oldest wait"
+            value={oldestOrderMs > 0 ? formatDuration(oldestOrderMs) : '—'}
+            tone={oldestOrderMs > 10 * 60_000 ? 'urgent' : oldestOrderMs > 5 * 60_000 ? 'warn' : 'idle'}
+          />
         </div>
       </header>
 
