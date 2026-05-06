@@ -63,11 +63,11 @@ const WaiterDashboard = () => {
   useEffect(() => {
     (async () => {
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session) { navigate('/admin/login'); return; }
+      if (!session) { navigate('/waiter/login'); return; }
       const { data: w } = await supabase.from('waiters').select('id, display_name').eq('user_id', session.user.id).maybeSingle();
       if (!w) {
         toast.error('No waiter profile linked to this account');
-        navigate('/admin');
+        navigate('/waiter/login');
         return;
       }
       setWaiter(w);
