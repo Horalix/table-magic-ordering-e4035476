@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '@/integrations/supabase/client';
@@ -12,10 +12,25 @@ import {
 } from '@/components/ui/alert-dialog';
 import {
   LogOut, ChefHat, Hand, CreditCard, Clock, PowerOff, Check,
-  Sparkles, Users, Flame, Bell, Utensils, CheckCircle2,
+  Sparkles, Users, Flame, Bell, Utensils, CheckCircle2, Volume2, VolumeX,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useElapsed, formatDuration, waitBg } from '@/lib/timing';
+
+const SOUND_KEY = 'waiter-sound-on';
+const playBeep = () => {
+  try {
+    const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+    const o = ctx.createOscillator();
+    const g = ctx.createGain();
+    o.connect(g); g.connect(ctx.destination);
+    o.frequency.value = 880; o.type = 'sine';
+    g.gain.setValueAtTime(0.0001, ctx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.18, ctx.currentTime + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.45);
+    o.start(); o.stop(ctx.currentTime + 0.5);
+  } catch {}
+};
 
 interface WaiterInfo { id: string; display_name: string; }
 
@@ -27,6 +42,8 @@ const WaiterDashboard = () => {
   const [waiterCalls, setWaiterCalls] = useState<any[]>([]);
   const [billRequests, setBillRequests] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [soundOn, setSoundOn] = useState<boolean>(() => localStorage.getItem(SOUND_KEY) !== 'false');
+  const prevAlertIds = useRef<Set<string>>(new Set());
 
   const fetchAll = useCallback(async (waiterId: string) => {
     const { data: sessions } = await supabase
@@ -113,6 +130,32 @@ const WaiterDashboard = () => {
 
   const initials = (waiter?.display_name || '?').split(' ').map(s => s[0]).join('').slice(0, 2).toUpperCase();
   const attentionCount = waiterCalls.length + billRequests.length;
+  const ordersWaiting = orders.filter((o: any) => o.status !== 'served' && o.status !== 'cancelled').length;
+  const oldestOrderMs = orders.reduce((max: number, o: any) => {
+    const ms = Date.now() - new Date(o.created_at).getTime();
+    return ms > max ? ms : max;
+  }, 0);
+
+  // Sound on new alerts
+  useEffect(() => {
+    const ids = new Set<string>([
+      ...waiterCalls.map((c: any) => 'c:' + c.id),
+      ...billRequests.map((b: any) => 'b:' + b.id),
+    ]);
+    if (prevAlertIds.current.size > 0) {
+      let isNew = false;
+      ids.forEach(id => { if (!prevAlertIds.current.has(id)) isNew = true; });
+      if (isNew && soundOn) playBeep();
+    }
+    prevAlertIds.current = ids;
+  }, [waiterCalls, billRequests, soundOn]);
+
+  const toggleSound = () => {
+    const next = !soundOn;
+    setSoundOn(next);
+    localStorage.setItem(SOUND_KEY, String(next));
+    if (next) playBeep();
+  };
 
   if (loading) {
     return (
@@ -145,9 +188,24 @@ const WaiterDashboard = () => {
               </div>
             </div>
           </div>
-          <Button variant="ghost" size="sm" onClick={logout} className="tap-sm">
-            <LogOut className="w-4 h-4 sm:mr-1" /><span className="hidden sm:inline">Sign out</span>
-          </Button>
+          <div className="flex items-center gap-1">
+            <Button variant="ghost" size="sm" onClick={toggleSound} className="tap-sm" aria-label="Toggle sound">
+              {soundOn ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4 text-muted-foreground" />}
+            </Button>
+            <Button variant="ghost" size="sm" onClick={logout} className="tap-sm">
+              <LogOut className="w-4 h-4 sm:mr-1" /><span className="hidden sm:inline">Sign out</span>
+            </Button>
+          </div>
+        </div>
+        {/* Stats strip */}
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 pb-3 grid grid-cols-3 gap-2 text-center">
+          <StatChip label="Tables" value={tables.length} />
+          <StatChip label="Orders" value={ordersWaiting} tone={ordersWaiting > 0 ? 'active' : 'idle'} />
+          <StatChip
+            label="Oldest wait"
+            value={oldestOrderMs > 0 ? formatDuration(oldestOrderMs) : '—'}
+            tone={oldestOrderMs > 10 * 60_000 ? 'urgent' : oldestOrderMs > 5 * 60_000 ? 'warn' : 'idle'}
+          />
         </div>
       </header>
 
@@ -239,6 +297,21 @@ const WaiterDashboard = () => {
           )}
         </section>
       </main>
+    </div>
+  );
+};
+
+const StatChip = ({ label, value, tone = 'idle' }: { label: string; value: React.ReactNode; tone?: 'idle' | 'active' | 'warn' | 'urgent' }) => {
+  const toneCls = {
+    idle: 'bg-muted/50 text-foreground',
+    active: 'bg-primary/10 text-primary',
+    warn: 'bg-amber-500/10 text-amber-700 dark:text-amber-400',
+    urgent: 'bg-destructive/10 text-destructive',
+  }[tone];
+  return (
+    <div className={`rounded-lg ${toneCls} px-2 py-1.5`}>
+      <p className="text-[10px] uppercase tracking-wide opacity-70 leading-none">{label}</p>
+      <p className="font-serif font-bold text-base leading-tight tabular-nums mt-0.5">{value}</p>
     </div>
   );
 };
