@@ -44,6 +44,15 @@ const AdminOrders = () => {
     fetchOrders();
   };
 
+  const deleteOrder = async (orderId: string) => {
+    const { error: e1 } = await supabase.from('order_items').delete().eq('order_id', orderId);
+    if (e1) { toast.error(e1.message); return; }
+    const { error: e2 } = await supabase.from('orders').delete().eq('id', orderId);
+    if (e2) { toast.error(e2.message); return; }
+    toast.success('Order deleted');
+    fetchOrders();
+  };
+
   const statusColors: Record<string, string> = {
     pending: 'bg-destructive/10 text-destructive',
     confirmed: 'bg-accent/10 text-accent',
