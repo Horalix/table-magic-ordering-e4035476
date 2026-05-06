@@ -130,6 +130,32 @@ const WaiterDashboard = () => {
 
   const initials = (waiter?.display_name || '?').split(' ').map(s => s[0]).join('').slice(0, 2).toUpperCase();
   const attentionCount = waiterCalls.length + billRequests.length;
+  const ordersWaiting = orders.filter((o: any) => o.status !== 'served' && o.status !== 'cancelled').length;
+  const oldestOrderMs = orders.reduce((max: number, o: any) => {
+    const ms = Date.now() - new Date(o.created_at).getTime();
+    return ms > max ? ms : max;
+  }, 0);
+
+  // Sound on new alerts
+  useEffect(() => {
+    const ids = new Set<string>([
+      ...waiterCalls.map((c: any) => 'c:' + c.id),
+      ...billRequests.map((b: any) => 'b:' + b.id),
+    ]);
+    if (prevAlertIds.current.size > 0) {
+      let isNew = false;
+      ids.forEach(id => { if (!prevAlertIds.current.has(id)) isNew = true; });
+      if (isNew && soundOn) playBeep();
+    }
+    prevAlertIds.current = ids;
+  }, [waiterCalls, billRequests, soundOn]);
+
+  const toggleSound = () => {
+    const next = !soundOn;
+    setSoundOn(next);
+    localStorage.setItem(SOUND_KEY, String(next));
+    if (next) playBeep();
+  };
 
   if (loading) {
     return (
