@@ -50,6 +50,16 @@ const AdminWaiters = () => {
     }
   };
 
+  const deleteWaiter = async (w: Waiter) => {
+    const { data, error } = await supabase.functions.invoke('delete-waiter', { body: { waiter_id: w.id } });
+    if (error || (data as any)?.error) {
+      toast.error((data as any)?.error || error?.message || 'Failed to delete');
+    } else {
+      toast.success(`${w.display_name} removed`);
+      fetchAll();
+    }
+  };
+
   const toggleActive = async (w: Waiter) => {
     await supabase.from('waiters').update({ is_active: !w.is_active }).eq('id', w.id);
     fetchAll();
