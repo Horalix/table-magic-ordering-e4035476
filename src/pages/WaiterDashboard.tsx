@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '@/integrations/supabase/client';
@@ -12,10 +12,25 @@ import {
 } from '@/components/ui/alert-dialog';
 import {
   LogOut, ChefHat, Hand, CreditCard, Clock, PowerOff, Check,
-  Sparkles, Users, Flame, Bell, Utensils, CheckCircle2,
+  Sparkles, Users, Flame, Bell, Utensils, CheckCircle2, Volume2, VolumeX,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useElapsed, formatDuration, waitBg } from '@/lib/timing';
+
+const SOUND_KEY = 'waiter-sound-on';
+const playBeep = () => {
+  try {
+    const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+    const o = ctx.createOscillator();
+    const g = ctx.createGain();
+    o.connect(g); g.connect(ctx.destination);
+    o.frequency.value = 880; o.type = 'sine';
+    g.gain.setValueAtTime(0.0001, ctx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.18, ctx.currentTime + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.45);
+    o.start(); o.stop(ctx.currentTime + 0.5);
+  } catch {}
+};
 
 interface WaiterInfo { id: string; display_name: string; }
 
