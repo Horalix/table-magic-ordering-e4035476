@@ -52,6 +52,7 @@ const OrderSuccess = ({ table, onContinue }: { table: string | null; onContinue:
 
 const CartPage = () => {
   const navigate = useNavigate();
+  useSessionHeartbeat();
   const [searchParams] = useSearchParams();
   const { items, total, updateQuantity, removeItem, clearCart, sessionId, guestName, lastOrderTime, setLastOrderTime, itemCount } = useCartStore();
   const [isSubmitting, setIsSubmitting] = useState(false);
