@@ -12,6 +12,7 @@ import CartBar from '@/components/guest/CartBar';
 import MenuItemDetail from '@/components/guest/MenuItemDetail';
 import LanguageSelector from '@/components/guest/LanguageSelector';
 import { useT, useLanguageStore, getLocalizedName, getLocalizedDescription } from '@/lib/i18n';
+import { useSessionHeartbeat } from '@/hooks/useSessionHeartbeat';
 
 const categoryNameMap: Record<string, string> = {
   drinks: 'Drinks',
