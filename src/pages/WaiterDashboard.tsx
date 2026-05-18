@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent } from '@/components/ui/card';
@@ -12,7 +12,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import {
   LogOut, ChefHat, Hand, CreditCard, Clock, PowerOff, Check,
-  Sparkles, Users, Flame, Bell, Utensils, CheckCircle2, Volume2, VolumeX,
+  Sparkles, Users, Flame, Bell, Utensils, CheckCircle2, Volume2, VolumeX, Monitor,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useElapsed, formatDuration, waitBg } from '@/lib/timing';
@@ -189,6 +189,9 @@ const WaiterDashboard = () => {
             </div>
           </div>
           <div className="flex items-center gap-1">
+            <Button variant="ghost" size="sm" asChild className="tap-sm">
+              <Link to="/waiter/monitor"><Monitor className="w-4 h-4 sm:mr-1" /><span className="hidden sm:inline">Floor</span></Link>
+            </Button>
             <Button variant="ghost" size="sm" onClick={toggleSound} className="tap-sm" aria-label="Toggle sound">
               {soundOn ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4 text-muted-foreground" />}
             </Button>

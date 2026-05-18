@@ -7,6 +7,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import { useT, useLanguageStore } from '@/lib/i18n';
+import { useSessionHeartbeat } from '@/hooks/useSessionHeartbeat';
 import SmartImage from '@/components/ui/SmartImage';
 import {
   AlertDialog,
@@ -51,6 +52,7 @@ const OrderSuccess = ({ table, onContinue }: { table: string | null; onContinue:
 
 const CartPage = () => {
   const navigate = useNavigate();
+  useSessionHeartbeat();
   const [searchParams] = useSearchParams();
   const { items, total, updateQuantity, removeItem, clearCart, sessionId, guestName, lastOrderTime, setLastOrderTime, itemCount } = useCartStore();
   const [isSubmitting, setIsSubmitting] = useState(false);

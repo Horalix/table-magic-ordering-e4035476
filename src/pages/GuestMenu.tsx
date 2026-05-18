@@ -8,6 +8,7 @@ import CallWaiterButton from '@/components/guest/CallWaiterButton';
 import CartBar from '@/components/guest/CartBar';
 import LanguageSelector from '@/components/guest/LanguageSelector';
 import { useT, useLanguageStore, getLocalizedName } from '@/lib/i18n';
+import { useSessionHeartbeat } from '@/hooks/useSessionHeartbeat';
 
 const iconMap: Record<string, any> = {
   Drinks: Wine,
@@ -29,6 +30,7 @@ const descKeyMap: Record<string, string> = {
 
 const GuestMenu = () => {
   const navigate = useNavigate();
+  useSessionHeartbeat();
   const [searchParams] = useSearchParams();
   const t = useT();
   const locale = useLanguageStore((s) => s.locale);

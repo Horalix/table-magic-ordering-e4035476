@@ -12,6 +12,7 @@ import CartBar from '@/components/guest/CartBar';
 import MenuItemDetail from '@/components/guest/MenuItemDetail';
 import LanguageSelector from '@/components/guest/LanguageSelector';
 import { useT, useLanguageStore, getLocalizedName, getLocalizedDescription } from '@/lib/i18n';
+import { useSessionHeartbeat } from '@/hooks/useSessionHeartbeat';
 
 const categoryNameMap: Record<string, string> = {
   drinks: 'Drinks',
@@ -23,6 +24,7 @@ const categoryNameMap: Record<string, string> = {
 const CategoryPage = () => {
   const { type } = useParams<{ type: string }>();
   const navigate = useNavigate();
+  useSessionHeartbeat();
   const [searchParams] = useSearchParams();
   const [selectedSubcategory, setSelectedSubcategory] = useState<string | null>(null);
   const [selectedItem, setSelectedItem] = useState<any | null>(null);

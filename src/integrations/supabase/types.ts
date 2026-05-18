@@ -426,6 +426,7 @@ export type Database = {
           guest_name: string | null
           id: string
           is_active: boolean
+          last_heartbeat_at: string
           last_served_at: string | null
           opened_at: string
           table_id: string
@@ -438,6 +439,7 @@ export type Database = {
           guest_name?: string | null
           id?: string
           is_active?: boolean
+          last_heartbeat_at?: string
           last_served_at?: string | null
           opened_at?: string
           table_id: string
@@ -450,6 +452,7 @@ export type Database = {
           guest_name?: string | null
           id?: string
           is_active?: boolean
+          last_heartbeat_at?: string
           last_served_at?: string | null
           opened_at?: string
           table_id?: string
@@ -597,6 +600,7 @@ export type Database = {
         }
         Returns: boolean
       }
+      touch_session: { Args: { _id: string }; Returns: undefined }
     }
     Enums: {
       app_role: "admin" | "staff"

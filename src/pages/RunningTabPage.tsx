@@ -10,9 +10,11 @@ import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import { useT, useLanguageStore, getLocalizedName } from '@/lib/i18n';
 import ReviewPrompt from '@/components/guest/ReviewPrompt';
+import { useSessionHeartbeat } from '@/hooks/useSessionHeartbeat';
 
 const RunningTabPage = () => {
   const navigate = useNavigate();
+  useSessionHeartbeat();
   const [searchParams] = useSearchParams();
   const { sessionId } = useCartStore();
   const [requestingBill, setRequestingBill] = useState(false);

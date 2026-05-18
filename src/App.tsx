@@ -26,6 +26,7 @@ const AdminPerformance = lazy(() => import("./pages/admin/AdminPerformance"));
 const KitchenDisplay = lazy(() => import("./pages/KitchenDisplay"));
 const WaiterDashboard = lazy(() => import("./pages/WaiterDashboard"));
 const WaiterLogin = lazy(() => import("./pages/WaiterLogin"));
+const WaiterMonitor = lazy(() => import("./pages/WaiterMonitor"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
 const queryClient = new QueryClient({
@@ -78,6 +79,7 @@ const App = () => (
             {/* Kitchen & Waiter */}
             <Route path="/kitchen" element={<KitchenDisplay />} />
             <Route path="/waiter/login" element={<WaiterLogin />} />
+            <Route path="/waiter/monitor" element={<WaiterMonitor />} />
             <Route path="/waiter" element={<WaiterDashboard />} />
 
             <Route path="*" element={<NotFound />} />

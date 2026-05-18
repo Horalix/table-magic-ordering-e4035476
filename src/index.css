@@ -190,33 +190,60 @@
   flex-direction: row-reverse;
 }
 
-/* Print styles for QR codes — each card prints as its own sticker page */
+/* Print styles for QR codes */
 @media print {
-  /* Hide everything by default */
-  body * {
-    visibility: hidden;
-  }
+  @page { size: A4; margin: 10mm; }
 
-  /* Hide admin chrome */
-  .no-print,
-  [data-sidebar], nav, header, .sidebar {
-    display: none !important;
-  }
+  body * { visibility: hidden; }
+  .no-print, [data-sidebar], nav, header, .sidebar { display: none !important; }
 
-  /* Hide cards marked as hidden for single-print */
-  .qr-card.print-hidden, .qr-card.print-hidden * {
-    display: none !important;
-  }
-
-  /* Reset layout for print */
-  .qr-print-grid {
-    display: block !important;
-    padding: 0 !important;
+  /* ===== Sheet mode (multi-up A4) ===== */
+  .qr-sheet, .qr-sheet * { visibility: visible !important; }
+  .qr-sheet {
+    display: grid !important;
+    grid-template-columns: repeat(3, 1fr) !important;
+    grid-auto-rows: 1fr;
+    gap: 0 !important;
+    width: 100%;
     margin: 0 !important;
+    padding: 0 !important;
+  }
+  .qr-cell {
+    break-inside: avoid;
+    page-break-inside: avoid;
+    border: 1px dashed #999 !important;
+    padding: 6mm !important;
+    display: flex !important;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    background: #fff !important;
+  }
+  .qr-cell .qr-brand {
+    font-size: 12px !important;
+    letter-spacing: 0.28em !important;
+    margin-bottom: 4mm !important;
+    color: #000 !important;
+    font-weight: 600;
+  }
+  .qr-cell svg { width: 42mm !important; height: 42mm !important; }
+  .qr-cell .qr-table-label {
+    font-size: 18px !important;
+    margin-top: 4mm !important;
+    color: #000 !important;
+    font-weight: 700;
+  }
+  .qr-cell .qr-subtitle {
+    font-size: 9px !important;
+    color: #555 !important;
+    margin-top: 1mm !important;
   }
 
-  /* Each QR card = one sticker page, centered */
-  .qr-card {
+  /* ===== Single mode (one big sticker per page) ===== */
+  .qr-card.print-hidden, .qr-card.print-hidden * { display: none !important; }
+  .qr-print-grid:not(.qr-sheet) { display: block !important; padding: 0 !important; margin: 0 !important; }
+  .qr-print-grid:not(.qr-sheet) .qr-card {
     visibility: visible !important;
     display: flex !important;
     align-items: center;
@@ -227,16 +254,9 @@
     break-inside: avoid;
     width: 100% !important;
     height: 100vh;
-    padding: 0;
-    margin: 0;
   }
-
-  .qr-card * {
-    visibility: visible !important;
-  }
-
-  /* Remove card border/shadow for clean sticker look */
-  .qr-card .border-border {
+  .qr-print-grid:not(.qr-sheet) .qr-card * { visibility: visible !important; }
+  .qr-print-grid:not(.qr-sheet) .qr-card .border-border {
     border: 2px dashed #ccc !important;
     border-radius: 16px !important;
     box-shadow: none !important;
@@ -244,40 +264,11 @@
     margin: 0 auto;
     padding: 32px 24px !important;
   }
-
-  /* Make QR code larger for print */
-  .qr-card svg {
-    width: 200px !important;
-    height: 200px !important;
-  }
-
-  /* Branding */
-  .qr-brand {
-    font-size: 14px !important;
-    letter-spacing: 0.25em !important;
-    margin-bottom: 12px !important;
-    color: #000 !important;
-  }
-
-  .qr-table-label {
-    font-size: 28px !important;
-    color: #000 !important;
-  }
-
-  .qr-divider {
-    background: #999 !important;
-    width: 40px !important;
-    margin: 10px auto !important;
-  }
-
-  .qr-subtitle {
-    font-size: 12px !important;
-    color: #555 !important;
-  }
-
-  /* Remove last page break to avoid trailing blank page */
-  .qr-card:last-child {
-    page-break-after: auto;
-    break-after: auto;
-  }
+  .qr-print-grid:not(.qr-sheet) .qr-card svg { width: 200px !important; height: 200px !important; }
+  .qr-print-grid:not(.qr-sheet) .qr-brand { font-size: 14px !important; letter-spacing: 0.25em !important; margin-bottom: 12px !important; color: #000 !important; }
+  .qr-print-grid:not(.qr-sheet) .qr-table-label { font-size: 28px !important; color: #000 !important; }
+  .qr-print-grid:not(.qr-sheet) .qr-divider { background: #999 !important; width: 40px !important; margin: 10px auto !important; }
+  .qr-print-grid:not(.qr-sheet) .qr-subtitle { font-size: 12px !important; color: #555 !important; }
+  .qr-print-grid:not(.qr-sheet) .qr-card:last-child { page-break-after: auto; break-after: auto; }
 }
+
