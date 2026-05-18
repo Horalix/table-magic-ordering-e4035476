@@ -24,6 +24,7 @@ const categoryNameMap: Record<string, string> = {
 const CategoryPage = () => {
   const { type } = useParams<{ type: string }>();
   const navigate = useNavigate();
+  useSessionHeartbeat();
   const [searchParams] = useSearchParams();
   const [selectedSubcategory, setSelectedSubcategory] = useState<string | null>(null);
   const [selectedItem, setSelectedItem] = useState<any | null>(null);
