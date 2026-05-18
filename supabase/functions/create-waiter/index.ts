@@ -9,6 +9,7 @@ interface Body {
   username?: string;
   password?: string;
   display_name?: string;
+  pin?: string;
 }
 
 const synthEmail = (u: string) => `${u}@waiter.lasoul.local`;
@@ -79,9 +80,22 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ error: wErr.message }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    return new Response(JSON.stringify({ ok: true, waiter }), {
+    // Set PIN (provided or auto-generated). Use the admin's JWT so the RPC's auth check passes.
+    let pin = (body.pin || '').replace(/\D/g, '');
+    if (pin && pin.length !== 4) pin = '';
+    if (!pin) pin = String(Math.floor(1000 + Math.random() * 9000));
+    const { error: pinErr } = await userClient.rpc('admin_set_waiter_pin' as any, { _waiter_id: waiter.id, _pin: pin });
+    if (pinErr) {
+      return new Response(JSON.stringify({ ok: true, waiter, pin: null, warning: `Created but PIN not set: ${pinErr.message}` }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    return new Response(JSON.stringify({ ok: true, waiter, pin }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
+
+
   } catch (e: any) {
     return new Response(JSON.stringify({ error: e?.message || 'Server error' }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   }

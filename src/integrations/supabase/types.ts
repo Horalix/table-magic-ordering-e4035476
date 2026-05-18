@@ -566,6 +566,8 @@ export type Database = {
           display_name: string
           id: string
           is_active: boolean
+          pin_hash: string | null
+          pin_set_at: string | null
           user_id: string
           username: string | null
         }
@@ -574,6 +576,8 @@ export type Database = {
           display_name: string
           id?: string
           is_active?: boolean
+          pin_hash?: string | null
+          pin_set_at?: string | null
           user_id: string
           username?: string | null
         }
@@ -582,6 +586,8 @@ export type Database = {
           display_name?: string
           id?: string
           is_active?: boolean
+          pin_hash?: string | null
+          pin_set_at?: string | null
           user_id?: string
           username?: string | null
         }
@@ -592,6 +598,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      admin_set_waiter_pin: {
+        Args: { _pin: string; _waiter_id: string }
+        Returns: undefined
+      }
       get_waiter_id: { Args: { _user_id: string }; Returns: string }
       has_role: {
         Args: {
@@ -601,6 +611,10 @@ export type Database = {
         Returns: boolean
       }
       touch_session: { Args: { _id: string }; Returns: undefined }
+      verify_waiter_pin: {
+        Args: { _pin: string; _waiter_id: string }
+        Returns: boolean
+      }
     }
     Enums: {
       app_role: "admin" | "staff"
