@@ -12,7 +12,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import {
   LogOut, ChefHat, Hand, CreditCard, Clock, PowerOff, Check,
-  Sparkles, Users, Flame, Bell, Utensils, CheckCircle2, Volume2, VolumeX,
+  Sparkles, Users, Flame, Bell, Utensils, CheckCircle2, Volume2, VolumeX, Monitor,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useElapsed, formatDuration, waitBg } from '@/lib/timing';
