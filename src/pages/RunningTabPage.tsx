@@ -14,6 +14,7 @@ import { useSessionHeartbeat } from '@/hooks/useSessionHeartbeat';
 
 const RunningTabPage = () => {
   const navigate = useNavigate();
+  useSessionHeartbeat();
   const [searchParams] = useSearchParams();
   const { sessionId } = useCartStore();
   const [requestingBill, setRequestingBill] = useState(false);
