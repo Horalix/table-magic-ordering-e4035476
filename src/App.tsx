@@ -79,6 +79,7 @@ const App = () => (
             {/* Kitchen & Waiter */}
             <Route path="/kitchen" element={<KitchenDisplay />} />
             <Route path="/waiter/login" element={<WaiterLogin />} />
+            <Route path="/waiter/monitor" element={<WaiterMonitor />} />
             <Route path="/waiter" element={<WaiterDashboard />} />
 
             <Route path="*" element={<NotFound />} />
