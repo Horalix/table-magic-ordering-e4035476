@@ -3,7 +3,7 @@ import { useNavigate, Outlet, Link, useLocation } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import {
   LayoutDashboard, UtensilsCrossed, TableProperties, ClipboardList,
-  BarChart3, QrCode, LogOut, ChefHat, Menu, X, Layers, Users, Star
+  BarChart3, QrCode, LogOut, ChefHat, Menu, X, Layers, Users, Star, Monitor
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
@@ -18,6 +18,7 @@ const navItems = [
   { label: 'Performance', icon: Star, path: '/admin/performance' },
   { label: 'Analytics', icon: BarChart3, path: '/admin/analytics' },
   { label: 'QR Codes', icon: QrCode, path: '/admin/qr-codes' },
+  { label: 'Floor Monitor', icon: Monitor, path: '/waiter/monitor' },
   { label: 'Kitchen', icon: ChefHat, path: '/kitchen' },
 ];
 
