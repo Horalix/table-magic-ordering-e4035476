@@ -30,6 +30,7 @@ const descKeyMap: Record<string, string> = {
 
 const GuestMenu = () => {
   const navigate = useNavigate();
+  useSessionHeartbeat();
   const [searchParams] = useSearchParams();
   const t = useT();
   const locale = useLanguageStore((s) => s.locale);
