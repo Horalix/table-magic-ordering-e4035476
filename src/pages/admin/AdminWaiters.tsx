@@ -5,13 +5,14 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { toast } from 'sonner';
-import { UserPlus, Loader2, Copy, Trash2 } from 'lucide-react';
+import { UserPlus, Loader2, Copy, Trash2, KeyRound, CheckCircle2 } from 'lucide-react';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 
-interface Waiter { id: string; user_id: string; display_name: string; is_active: boolean; username: string | null; }
+interface Waiter { id: string; user_id: string; display_name: string; is_active: boolean; username: string | null; pin_hash: string | null; }
 
 const AdminWaiters = () => {
   const [waiters, setWaiters] = useState<Waiter[]>([]);
