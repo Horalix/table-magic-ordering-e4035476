@@ -113,18 +113,26 @@ const AdminWaiters = () => {
       <Card className="mb-6">
         <CardHeader><CardTitle className="font-serif text-lg flex items-center gap-2"><UserPlus className="w-5 h-5" /> Add Waiter</CardTitle></CardHeader>
         <CardContent>
-          <div className="grid sm:grid-cols-3 gap-2">
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-2">
             <Input placeholder="Display name (e.g. John)" value={name} onChange={(e) => setName(e.target.value)} />
             <Input placeholder="Username (e.g. john)" value={username} onChange={(e) => setUsername(e.target.value)} autoCapitalize="none" />
             <Input type="text" placeholder="Password (6+ chars)" value={password} onChange={(e) => setPassword(e.target.value)} />
+            <Input
+              inputMode="numeric"
+              maxLength={4}
+              placeholder="Floor PIN (4 digits, auto if blank)"
+              value={pin}
+              onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 4))}
+            />
           </div>
           <Button onClick={createWaiter} disabled={creating} className="mt-3">
             {creating ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <UserPlus className="w-4 h-4 mr-2" />}
             Create
           </Button>
           <p className="text-xs font-sans text-muted-foreground mt-2">
-            They sign in at <span className="font-medium">/waiter/login</span> with just their username and password — no email needed.
+            Login at <span className="font-medium">/waiter/login</span> with username + password. The <span className="font-medium">Floor PIN</span> is used on the shared monitor to quickly see only their tables.
           </p>
+
         </CardContent>
       </Card>
 
