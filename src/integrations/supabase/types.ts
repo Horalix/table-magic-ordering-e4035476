@@ -600,10 +600,7 @@ export type Database = {
         }
         Returns: boolean
       }
-      touch_session: {
-        Args: { _id: string; _token: string }
-        Returns: undefined
-      }
+      touch_session: { Args: { _id: string }; Returns: undefined }
     }
     Enums: {
       app_role: "admin" | "staff"
