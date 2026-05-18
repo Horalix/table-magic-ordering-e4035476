@@ -19,7 +19,11 @@ const AdminWaiters = () => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
+  const [pin, setPin] = useState('');
   const [creating, setCreating] = useState(false);
+  const [pinTarget, setPinTarget] = useState<Waiter | null>(null);
+  const [pinValue, setPinValue] = useState('');
+  const [savingPin, setSavingPin] = useState(false);
 
   const fetchAll = async () => {
     const { data } = await supabase.from('waiters').select('*').order('display_name');
