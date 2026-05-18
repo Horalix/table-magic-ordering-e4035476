@@ -147,11 +147,22 @@ const AdminWaiters = () => {
                 <div key={w.id} className="flex items-center justify-between py-3 gap-3">
                   <div className="min-w-0">
                     <p className="font-sans font-medium truncate">{w.display_name}</p>
-                    <p className="text-xs font-sans text-muted-foreground">
-                      {w.username ? `@${w.username}` : 'no username (legacy)'} · {w.is_active ? 'Active' : 'Inactive'}
+                    <p className="text-xs font-sans text-muted-foreground flex items-center gap-2 flex-wrap">
+                      <span>{w.username ? `@${w.username}` : 'no username (legacy)'}</span>
+                      <span>·</span>
+                      <span>{w.is_active ? 'Active' : 'Inactive'}</span>
+                      <span>·</span>
+                      {w.pin_hash ? (
+                        <span className="inline-flex items-center gap-1 text-primary"><CheckCircle2 className="w-3 h-3" /> PIN set</span>
+                      ) : (
+                        <span className="text-destructive">no PIN</span>
+                      )}
                     </p>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
+                    <Button variant="outline" size="sm" onClick={() => { setPinTarget(w); setPinValue(''); }} className="gap-1.5">
+                      <KeyRound className="w-3.5 h-3.5" /> PIN
+                    </Button>
                     <Switch checked={w.is_active} onCheckedChange={() => toggleActive(w)} />
                     <AlertDialog>
                       <AlertDialogTrigger asChild>
@@ -179,6 +190,32 @@ const AdminWaiters = () => {
           )}
         </CardContent>
       </Card>
+
+      <Dialog open={!!pinTarget} onOpenChange={(o) => { if (!o) { setPinTarget(null); setPinValue(''); } }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="font-serif">Set Floor PIN — {pinTarget?.display_name}</DialogTitle>
+            <DialogDescription>
+              4-digit code the waiter taps on the floor monitor to see only their tables.
+            </DialogDescription>
+          </DialogHeader>
+          <Input
+            inputMode="numeric"
+            maxLength={4}
+            placeholder="••••"
+            value={pinValue}
+            onChange={(e) => setPinValue(e.target.value.replace(/\D/g, '').slice(0, 4))}
+            className="text-center text-2xl tracking-[0.5em] h-14"
+            autoFocus
+          />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setPinTarget(null); setPinValue(''); }}>Cancel</Button>
+            <Button onClick={setWaiterPin} disabled={savingPin || pinValue.length !== 4}>
+              {savingPin ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Save PIN'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
