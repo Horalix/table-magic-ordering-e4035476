@@ -38,22 +38,47 @@ const AdminWaiters = () => {
       toast.error('Username (3+), password (6+), and display name are required');
       return;
     }
+    if (pin && !/^\d{4}$/.test(pin)) {
+      toast.error('PIN must be exactly 4 digits');
+      return;
+    }
     setCreating(true);
     try {
       const { data, error } = await supabase.functions.invoke('create-waiter', {
-        body: { username: u, password, display_name: name.trim() },
+        body: { username: u, password, display_name: name.trim(), pin: pin || undefined },
       });
       if (error || (data as any)?.error) {
         toast.error((data as any)?.error || error?.message || 'Failed');
       } else {
-        toast.success(`Waiter "${name}" created — they can sign in at /waiter/login`);
-        setUsername(''); setPassword(''); setName('');
+        const newPin = (data as any)?.pin;
+        toast.success(`Waiter "${name}" created${newPin ? ` — Floor PIN: ${newPin}` : ''}`, { duration: 8000 });
+        setUsername(''); setPassword(''); setName(''); setPin('');
         fetchAll();
       }
     } finally {
       setCreating(false);
     }
   };
+
+  const setWaiterPin = async () => {
+    if (!pinTarget) return;
+    if (!/^\d{4}$/.test(pinValue)) {
+      toast.error('PIN must be exactly 4 digits');
+      return;
+    }
+    setSavingPin(true);
+    const { error } = await supabase.rpc('admin_set_waiter_pin', { _waiter_id: pinTarget.id, _pin: pinValue } as any);
+    setSavingPin(false);
+    if (error) {
+      toast.error(error.message);
+    } else {
+      toast.success(`PIN set for ${pinTarget.display_name}`);
+      setPinTarget(null);
+      setPinValue('');
+      fetchAll();
+    }
+  };
+
 
   const deleteWaiter = async (w: Waiter) => {
     const { data, error } = await supabase.functions.invoke('delete-waiter', { body: { waiter_id: w.id } });
