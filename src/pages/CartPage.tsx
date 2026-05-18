@@ -7,6 +7,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import { useT, useLanguageStore } from '@/lib/i18n';
+import { useSessionHeartbeat } from '@/hooks/useSessionHeartbeat';
 import SmartImage from '@/components/ui/SmartImage';
 import {
   AlertDialog,
