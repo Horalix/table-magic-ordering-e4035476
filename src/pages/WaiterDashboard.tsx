@@ -189,6 +189,9 @@ const WaiterDashboard = () => {
             </div>
           </div>
           <div className="flex items-center gap-1">
+            <Button variant="ghost" size="sm" asChild className="tap-sm">
+              <Link to="/waiter/monitor"><Monitor className="w-4 h-4 sm:mr-1" /><span className="hidden sm:inline">Floor</span></Link>
+            </Button>
             <Button variant="ghost" size="sm" onClick={toggleSound} className="tap-sm" aria-label="Toggle sound">
               {soundOn ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4 text-muted-foreground" />}
             </Button>
