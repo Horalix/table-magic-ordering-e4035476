@@ -9,6 +9,7 @@ interface Body {
   username?: string;
   password?: string;
   display_name?: string;
+  pin?: string;
 }
 
 const synthEmail = (u: string) => `${u}@waiter.lasoul.local`;
