@@ -1,47 +1,85 @@
-## 1. Fix "Failed to send a request to the Edge Function"
+# Plan
 
-Root cause confirmed in edge function logs:
-```
-TypeError: userClient.auth.getClaims is not a function
-```
-The `migrate-images` function calls `userClient.auth.getClaims(token)`, which doesn't exist in supabase-js 2.45.0. The function crashes before responding, so the browser sees a network failure.
+Three focused improvements to the restaurant app.
 
-**Fix `supabase/functions/migrate-images/index.ts`:**
-- Replace `getClaims` with `userClient.auth.getUser(token)` (standard, supported API).
-- Use the returned `user.id` for the admin role lookup against `user_roles`.
-- Keep the rest of the migration flow (batched download → upload to `menu-images` → update row) unchanged.
-- Redeploy the function.
+## 1. QR Codes — printable A4 sheet (cut-friendly)
 
-After this, clicking **Self-host Images** in `/admin/menu` will return `{ migrated, skipped, failed, total }` and the toast will show real progress.
+File: `src/pages/admin/AdminQRCodes.tsx` (+ small additions to `src/index.css` for print styles).
 
-## 2. Clean up the Waiter app (`src/pages/WaiterDashboard.tsx`)
+- Replace the "one QR per page" behavior with a **multi-up A4 grid** designed for cutting.
+- Layout: 3 columns × 4 rows per A4 page (12 QRs/page), each cell:
+  - "La Soul" wordmark on top (serif, centered)
+  - QR code (high error correction, ~50mm)
+  - "Table N" below (large, serif)
+  - Dashed cut border around each cell
+- Print CSS:
+  - `@page { size: A4; margin: 10mm; }`
+  - `.qr-sheet { display:grid; grid-template-columns: repeat(3, 1fr); gap: 0; }`
+  - `.qr-cell { break-inside: avoid; border: 1px dashed #999; padding: 8mm; }`
+  - Page-break only between full pages, not per QR.
+- Keep existing "Print Single" (still one-per-page) and add the new **"Print Sheet (A4)"** as the primary action.
+- Add an on-screen preview that mirrors the print grid so admins see what they'll get.
 
-Currently it's a plain stack of cards with no header chrome, mixed density, and weak visual hierarchy. Bring it in line with the polished guest/admin look.
+## 2. Waiter Monitor — all-tables overview + filter by waiter
 
-**Layout & header**
-- Add a sticky top bar (matches AdminLayout style): waiter name + avatar circle on the left, live "On shift" status dot, sign-out button on the right. Subtle border-bottom + backdrop blur.
-- Section the page into clearly titled blocks: **Attention needed**, **My tables**, **Live orders** — each with a count chip.
+Goal: a screen shown on a restaurant monitor where staff see every table at a glance, and any waiter can tap their name to filter to just their tables.
 
-**Attention needed (waiter calls + bill requests)**
-- Promote to a single horizontal-scroll row of compact "alert pills" with colored left accent (amber for call, primary for bill), big table number, elapsed time, and a single tap "Done" button with `.tap` feedback.
-- Empty state: muted "All caught up ✨" line so the section doesn't disappear/reappear jarringly.
+- New route: `/waiter/monitor` (public, no login — it's an in-house display).
+- New file: `src/pages/WaiterMonitor.tsx`.
+- Layout:
+  - Header strip: restaurant name + live clock + global stats (occupied / free / oldest wait / pending calls).
+  - **Waiter pill bar**: "All" + one pill per active waiter (from `waiters` table). Tapping a pill filters the grid to tables whose `assigned_waiter_id` (via session/section) matches; selection persists in `localStorage` for that device.
+  - **Tables grid**: large cards, color-coded by state:
+    - Free (muted), Occupied (primary), Needs attention — waiter call (amber, pulsing), Bill requested (red), Order ready to serve (blue).
+    - Each card shows: table #, section dot+name, guest name, elapsed time, # active orders, oldest order wait, assigned waiter initials.
+  - Realtime subscriptions on `tables`, `table_sessions`, `orders`, `waiter_calls`, `bill_requests`.
+- Add a link to `/waiter/monitor` from `WaiterDashboard` header and from `AdminLayout` sidebar ("Floor Monitor").
+- Filtering rules:
+  - "All" shows everything.
+  - Waiter pill shows tables where the active session's `assigned_waiter_id` = that waiter OR table's `section_id` is assigned to that waiter for today (`section_assignments` for `CURRENT_DATE`).
 
-**My tables grid**
-- Restyle cards: large table number top-left, elapsed-time pill top-right using `waitBg(ms)` color thresholds (consistent with kitchen), guest name as subtitle, and a soft divider before the action row.
-- Replace the destructive-looking "Close & free table" with a ghost "Free table" button + small confirm (using existing AlertDialog pattern) so it's not misclicked.
-- Show count of active orders for that table inline.
+## 3. Anti-spam / abuse hardening
 
-**Live orders**
-- Group orders under their table number, sorted by oldest-first.
-- Status badge becomes a colored dot + label; the "Mark as next" button becomes the primary CTA full-width with `.tap` press effect and an icon matching the next state (Check, Flame, Bell, Utensils).
-- Add subtle entrance animation via existing framer-motion (stagger 40ms, fade+slide 8px).
+Goal: stop guests ordering when not at the table or spamming.
 
-**Loading / empty**
-- Replace the bare "Loading…" with a 3-card skeleton grid (reusing shadcn `Skeleton`).
-- Empty states get a small icon + 1-line copy instead of plain text.
+Backend (migration):
+- Add `last_heartbeat_at timestamptz` to `table_sessions` (default `now()`).
+- Add DB trigger on `orders` INSERT that rejects when:
+  - session is not active, OR
+  - `now() - last_heartbeat_at > interval '2 minutes'` (guest device not present), OR
+  - more than **5 orders in the last 60 seconds** for the same session.
+- Add trigger on `waiter_calls` INSERT: max 1 pending call per session at a time; min 60s between resolved calls.
+- Add trigger on `bill_requests` INSERT: only 1 pending per session.
+- Tighten RLS INSERT policy on `orders` to also require `last_heartbeat_at > now() - interval '2 minutes'`.
 
-**Responsiveness**
-- Mobile: single column, sticky bottom-safe padding so last card isn't hidden behind iOS bars (`pb-[env(safe-area-inset-bottom)]`).
-- Tablet/desktop: 2–3 column grid as today.
+Frontend:
+- Guest pages (`GuestMenu`, `CartPage`, `RunningTabPage`): existing 60s heartbeat already pings session; extend it to also write `last_heartbeat_at = now()` via an RPC `touch_session(session_id, token)` (SECURITY DEFINER, validates token).
+- On `visibilitychange` → tab hidden > 5 min, force re-validation before next order.
+- Keep existing 30s order cooldown + 10-per-item cap; surface clearer toast messages tied to the new trigger errors.
 
-No schema changes, no new dependencies — only `supabase/functions/migrate-images/index.ts` and `src/pages/WaiterDashboard.tsx` are modified.
+## Technical notes
+
+- Print: rely on CSS `@media print` only; no extra libs.
+- Monitor page is read-only and public-safe (only reads already-public tables). No new RLS needed beyond what exists.
+- All new colors use semantic tokens from `index.css` (no raw hex in components).
+- Realtime: ensure `tables`, `table_sessions`, `orders`, `waiter_calls`, `bill_requests` are in `supabase_realtime` publication (add any missing in the migration).
+- `touch_session` RPC signature:
+  ```sql
+  create or replace function public.touch_session(_id uuid, _token text)
+  returns void language sql security definer set search_path=public as $$
+    update public.table_sessions
+       set last_heartbeat_at = now()
+     where id = _id and token = _token and is_active = true;
+  $$;
+  ```
+
+## Files touched
+
+- `src/pages/admin/AdminQRCodes.tsx` (rewrite print layout)
+- `src/index.css` (print styles)
+- `src/pages/WaiterMonitor.tsx` (new)
+- `src/App.tsx` (add `/waiter/monitor` route)
+- `src/pages/WaiterDashboard.tsx` (link to monitor)
+- `src/components/admin/AdminLayout.tsx` (sidebar link)
+- One migration: `last_heartbeat_at`, triggers, `touch_session` RPC, realtime publication
+- Guest pages: extend heartbeat to call `touch_session`
