@@ -355,7 +355,7 @@ const CategoryPage = () => {
           </div>
         );
       })()}
-      )}
+
 
       <AnimatePresence>
         {selectedItem && (
