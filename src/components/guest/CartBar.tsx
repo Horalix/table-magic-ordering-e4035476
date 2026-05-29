@@ -69,7 +69,10 @@ const CartBar = () => {
                   {count}
                 </motion.span>
               </div>
-              <span className="font-sans font-semibold text-sm">{t('view_order')}</span>
+              <span className="font-sans font-semibold text-sm">
+                {t('view_order')}
+                <span className="opacity-70 font-medium"> · {count} {count === 1 ? t('items_count_one') : t('items_count_other')}</span>
+              </span>
             </div>
             <motion.span
               key={total().toFixed(2)}

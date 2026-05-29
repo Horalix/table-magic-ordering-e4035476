@@ -116,6 +116,13 @@ const translations: Record<string, Record<Locale, string>> = {
 
   // No items
   'no_items_category': { en: 'No items available in this category yet.', bs: 'Još nema stavki u ovoj kategoriji.', ar: 'لا توجد عناصر متاحة في هذه الفئة بعد.' },
+  'search_placeholder': { en: 'Search dishes, drinks, desserts…', bs: 'Pretraži jela, pića, deserte…', ar: 'ابحث عن الأطباق والمشروبات والحلويات…' },
+  'no_results_title': { en: 'No dishes found', bs: 'Nema rezultata', ar: 'لم يتم العثور على أطباق' },
+  'no_results_hint': { en: 'Try another search or browse categories.', bs: 'Pokušaj drugu pretragu ili pregledaj kategorije.', ar: 'جرب بحثًا آخر أو تصفح الفئات.' },
+  'added_to_order': { en: 'Added to order', bs: 'Dodano u narudžbu', ar: 'تمت الإضافة إلى الطلب' },
+  'items_count_one': { en: 'item', bs: 'stavka', ar: 'عنصر' },
+  'items_count_other': { en: 'items', bs: 'stavki', ar: 'عناصر' },
+  'clear_search': { en: 'Clear search', bs: 'Očisti pretragu', ar: 'مسح البحث' },
 
   // Just now / time
   'just_now': { en: 'Just now', bs: 'Upravo', ar: 'الآن' },
