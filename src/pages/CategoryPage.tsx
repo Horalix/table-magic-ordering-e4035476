@@ -29,7 +29,9 @@ const CategoryPage = () => {
   const [searchParams] = useSearchParams();
   const [selectedSubcategory, setSelectedSubcategory] = useState<string | null>(null);
   const [selectedItem, setSelectedItem] = useState<any | null>(null);
-  const { addItem } = useCartStore();
+  const [search, setSearch] = useState('');
+  const deferredSearch = useDeferredValue(search);
+  const { addItem, removeItem, updateQuantity, items: cartItems } = useCartStore();
   const t = useT();
   const locale = useLanguageStore((s) => s.locale);
 
