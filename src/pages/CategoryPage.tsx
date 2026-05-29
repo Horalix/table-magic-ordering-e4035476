@@ -172,6 +172,30 @@ const CategoryPage = () => {
             })}
           </div>
         )}
+
+        <div className="px-4 pb-3">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+            <input
+              type="search"
+              inputMode="search"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder={t('search_placeholder')}
+              aria-label={t('search_placeholder')}
+              className="w-full h-11 pl-10 pr-10 rounded-full bg-muted/60 border border-border/60 text-sm font-sans text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/40 transition-all"
+            />
+            {search && (
+              <button
+                onClick={() => setSearch('')}
+                aria-label={t('clear_search')}
+                className="absolute right-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full flex items-center justify-center text-muted-foreground hover:bg-muted transition-colors"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+        </div>
       </div>
 
       {!hasSession && (
@@ -185,84 +209,152 @@ const CategoryPage = () => {
         </motion.div>
       )}
 
-      {itemsLoading ? (
-        <div className="px-4 pt-4 space-y-3">
-          {[1, 2, 3, 4].map(i => (
-            <div key={i} className="flex gap-4 p-4 rounded-xl border border-border bg-card">
-              <Skeleton className="w-20 h-20 rounded-lg flex-shrink-0" />
-              <div className="flex-1 space-y-2 py-1">
-                <Skeleton className="h-4 w-2/3 rounded" />
-                <Skeleton className="h-3 w-full rounded" />
-                <Skeleton className="h-4 w-16 rounded mt-2" />
-              </div>
-            </div>
-          ))}
-        </div>
-      ) : items.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-20 px-6">
-          <p className="text-muted-foreground font-sans text-sm text-center">{t('no_items_category')}</p>
-        </div>
-      ) : (
-        <div className="px-4 pt-4 space-y-3">
-          {items.map((item, i) => {
-            const localizedName = getLocalizedName(item as any, locale);
-            const localizedDesc = getLocalizedDescription(item as any, locale);
-            return (
-              <motion.div
-                key={item.id}
-                initial={{ opacity: 0, y: 6 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: Math.min(i, 5) * 0.02, duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
-              >
-                <button
-                  onClick={() => setSelectedItem(item)}
-                  className="w-full text-left tap"
-                >
-                  <div className="group flex gap-4 p-4 rounded-xl border border-border bg-card hover:border-primary/30 hover:shadow-md hover:-translate-y-0.5 transition-all duration-200">
-                    <SmartImage
-                      src={item.image_url || undefined}
-                      alt={localizedName}
-                      width={80}
-                      height={80}
-                      priority={i < 8}
-                      fallbackText={localizedName}
-                      wrapperClassName="w-20 h-20 rounded-lg flex-shrink-0"
-                      className="group-hover:scale-105 transition-transform duration-300"
-                    />
-                    <div className="flex-1 min-w-0">
-                      <h3 className="font-serif text-base font-semibold text-foreground">{localizedName}</h3>
-                      {localizedDesc && (
-                        <p className="text-sm text-muted-foreground font-sans mt-0.5 line-clamp-2">{localizedDesc}</p>
-                      )}
-                      <p className="text-sm font-sans font-bold text-primary mt-2 tabular-nums">{Number(item.price).toFixed(2)} KM</p>
-                    </div>
-                    {hasSession && (
-                      <div className="flex items-center">
-                        <div
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            addItem({
-                              id: item.id,
-                              name: item.name,
-                              price: Number(item.price),
-                              image_url: item.image_url || undefined,
-                            });
-                            if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
-                              try { (navigator as any).vibrate(8); } catch {}
-                            }
-                          }}
-                          className="w-10 h-10 rounded-full bg-primary/10 text-primary flex items-center justify-center hover:bg-primary hover:text-primary-foreground active:scale-90 transition-all duration-150 cursor-pointer min-w-[44px] min-h-[44px] tap-sm"
-                        >
-                          <Plus className="w-4 h-4" />
-                        </div>
-                      </div>
-                    )}
+      {(() => {
+        const q = deferredSearch.trim().toLowerCase();
+        const filtered = q
+          ? items.filter((it: any) => {
+              const fields = [it.name, it.name_bs, it.name_ar, it.description, it.description_bs, it.description_ar]
+                .filter(Boolean)
+                .map((s: string) => s.toLowerCase());
+              return fields.some((f) => f.includes(q));
+            })
+          : items;
+
+        if (itemsLoading) {
+          return (
+            <div className="px-4 pt-4 space-y-3">
+              {[1, 2, 3, 4].map(i => (
+                <div key={i} className="flex gap-4 p-4 rounded-xl border border-border bg-card">
+                  <Skeleton className="w-20 h-20 rounded-lg flex-shrink-0" />
+                  <div className="flex-1 space-y-2 py-1">
+                    <Skeleton className="h-4 w-2/3 rounded" />
+                    <Skeleton className="h-3 w-full rounded" />
+                    <Skeleton className="h-4 w-16 rounded mt-2" />
                   </div>
-                </button>
-              </motion.div>
-            );
-          })}
-        </div>
+                </div>
+              ))}
+            </div>
+          );
+        }
+
+        if (filtered.length === 0) {
+          return (
+            <div className="flex flex-col items-center justify-center py-20 px-6 text-center">
+              <div className="w-14 h-14 rounded-full bg-muted flex items-center justify-center mb-4">
+                <Search className="w-5 h-5 text-muted-foreground" />
+              </div>
+              <p className="font-serif text-base font-semibold text-foreground">
+                {q ? t('no_results_title') : t('no_items_category')}
+              </p>
+              {q && (
+                <p className="text-sm text-muted-foreground font-sans mt-1.5">{t('no_results_hint')}</p>
+              )}
+            </div>
+          );
+        }
+
+        return (
+          <div className="px-4 pt-4 space-y-3">
+            {filtered.map((item: any, i: number) => {
+              const localizedName = getLocalizedName(item as any, locale);
+              const localizedDesc = getLocalizedDescription(item as any, locale);
+              const inCart = cartItems.find((c) => c.id === item.id);
+              const qty = inCart?.quantity ?? 0;
+              return (
+                <motion.div
+                  key={item.id}
+                  initial={{ opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: Math.min(i, 5) * 0.02, duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+                >
+                  <button
+                    onClick={() => setSelectedItem(item)}
+                    className="w-full text-left tap"
+                  >
+                    <div className="group flex gap-4 p-4 rounded-xl border border-border bg-card hover:border-primary/30 hover:shadow-md hover:-translate-y-0.5 transition-all duration-200">
+                      <SmartImage
+                        src={item.image_url || undefined}
+                        alt={localizedName}
+                        width={80}
+                        height={80}
+                        priority={i < 8}
+                        fallbackText={localizedName}
+                        wrapperClassName="w-20 h-20 rounded-lg flex-shrink-0"
+                        className="group-hover:scale-105 transition-transform duration-300"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <h3 className="font-serif text-base font-semibold text-foreground">{localizedName}</h3>
+                        {localizedDesc && (
+                          <p className="text-sm text-muted-foreground font-sans mt-0.5 line-clamp-2">{localizedDesc}</p>
+                        )}
+                        <p className="text-sm font-sans font-bold text-primary mt-2 tabular-nums">{Number(item.price).toFixed(2)} KM</p>
+                      </div>
+                      {hasSession && (
+                        <div className="flex items-center" onClick={(e) => e.stopPropagation()}>
+                          {qty > 0 ? (
+                            <div
+                              role="group"
+                              aria-label={`${localizedName} quantity`}
+                              className="flex items-center gap-1 bg-primary/10 rounded-full p-1"
+                            >
+                              <button
+                                type="button"
+                                aria-label="Decrease"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (qty <= 1) removeItem(item.id);
+                                  else updateQuantity(item.id, qty - 1);
+                                }}
+                                className="w-9 h-9 rounded-full bg-card text-primary flex items-center justify-center hover:bg-muted active:scale-90 transition-all min-w-[36px] min-h-[36px]"
+                              >
+                                <Minus className="w-3.5 h-3.5" />
+                              </button>
+                              <span className="min-w-[20px] text-center text-sm font-sans font-bold text-primary tabular-nums">{qty}</span>
+                              <button
+                                type="button"
+                                aria-label="Increase"
+                                disabled={qty >= 10}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  updateQuantity(item.id, qty + 1);
+                                }}
+                                className="w-9 h-9 rounded-full bg-primary text-primary-foreground flex items-center justify-center hover:bg-sage-dark active:scale-90 transition-all min-w-[36px] min-h-[36px] disabled:opacity-50"
+                              >
+                                <Plus className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              aria-label={`${t('add_to_order')} ${localizedName}`}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                addItem({
+                                  id: item.id,
+                                  name: item.name,
+                                  price: Number(item.price),
+                                  image_url: item.image_url || undefined,
+                                });
+                                toast.success(t('added_to_order'), { description: localizedName, duration: 1600 });
+                                if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+                                  try { (navigator as any).vibrate(8); } catch {}
+                                }
+                              }}
+                              className="w-10 h-10 rounded-full bg-primary/10 text-primary flex items-center justify-center hover:bg-primary hover:text-primary-foreground active:scale-90 transition-all duration-150 min-w-[44px] min-h-[44px] tap-sm"
+                            >
+                              <Plus className="w-4 h-4" />
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </button>
+                </motion.div>
+              );
+            })}
+          </div>
+        );
+      })()}
       )}
 
       <AnimatePresence>
