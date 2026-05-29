@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useDeferredValue } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, Plus, QrCode } from 'lucide-react';
+import { ArrowLeft, Plus, Minus, QrCode, Search, X } from 'lucide-react';
 import { useQuery, keepPreviousData } from '@tanstack/react-query';
+import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useCartStore } from '@/lib/cart-store';
 import { Skeleton } from '@/components/ui/skeleton';
