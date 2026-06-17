@@ -8,6 +8,18 @@ import { toast } from 'sonner';
 import { User, Lock, Loader2 } from 'lucide-react';
 
 const synthEmail = (u: string) => `${u}@waiter.lasoul.local`;
+const normalizeUsername = (value: string) =>
+  value.trim().toLowerCase().replace(/[^a-z0-9_.-]/g, '');
+
+interface WaiterLoginSession {
+  access_token: string;
+  refresh_token: string;
+}
+
+interface WaiterLoginResponse {
+  session?: WaiterLoginSession;
+  error?: string;
+}
 
 const WaiterLogin = () => {
   const [username, setUsername] = useState('');
@@ -15,40 +27,85 @@ const WaiterLogin = () => {
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
+  const setWaiterSessionFromFunction = async (u: string) => {
+    const { data, error } = await supabase.functions.invoke<WaiterLoginResponse>('waiter-login', {
+      body: { username: u, password },
+    });
+
+    if (error || data?.error || !data?.session) {
+      return false;
+    }
+
+    const { error: sessionError } = await supabase.auth.setSession({
+      access_token: data.session.access_token,
+      refresh_token: data.session.refresh_token,
+    });
+
+    if (sessionError) throw sessionError;
+    return true;
+  };
+
+  const signInWithSyntheticEmail = async (u: string) => {
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: synthEmail(u),
+      password,
+    });
+
+    if (error) throw error;
+    return data.user.id;
+  };
+
+  const getSignedInUserId = async () => {
+    const { data: { user }, error } = await supabase.auth.getUser();
+    if (error || !user) throw error || new Error('Missing waiter session');
+    return user.id;
+  };
+
+  const ensureActiveWaiterProfile = async (userId: string) => {
+    const { data: waiter, error } = await supabase
+      .from('waiters')
+      .select('id, is_active')
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    if (error) throw error;
+
+    if (!waiter) {
+      await supabase.auth.signOut();
+      toast.error('No waiter profile linked to this account');
+      return false;
+    }
+
+    if (!waiter.is_active) {
+      await supabase.auth.signOut();
+      toast.error('Your account is inactive. Contact your manager.');
+      return false;
+    }
+
+    return true;
+  };
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     try {
-      const u = username.trim().toLowerCase().replace(/[^a-z0-9_.-]/g, '');
+      const u = normalizeUsername(username);
       if (!u) {
         toast.error('Enter your username');
         return;
       }
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: synthEmail(u),
-        password,
-      });
-      if (error) throw error;
 
-      const { data: waiter } = await supabase
-        .from('waiters')
-        .select('id, is_active')
-        .eq('user_id', data.user.id)
-        .maybeSingle();
+      const didUseServerLogin = await setWaiterSessionFromFunction(u);
+      const userId = didUseServerLogin ? await getSignedInUserId() : await signInWithSyntheticEmail(u);
+      const hasProfile = await ensureActiveWaiterProfile(userId);
 
-      if (!waiter) {
-        await supabase.auth.signOut();
-        toast.error('No waiter profile linked to this account');
-        return;
-      }
-      if (!waiter.is_active) {
-        await supabase.auth.signOut();
-        toast.error('Your account is inactive. Contact your manager.');
+      if (!hasProfile) {
         return;
       }
 
-      navigate('/waiter');
-    } catch (err: any) {
+      navigate('/waiter', { replace: true });
+    } catch (err) {
+      console.error('Waiter login failed:', err);
       toast.error('Wrong username or password');
     } finally {
       setLoading(false);

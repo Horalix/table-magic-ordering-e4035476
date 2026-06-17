@@ -5,3 +5,6 @@ verify_jwt = false
 
 [functions.translate-menu]
 verify_jwt = false
+
+[functions.waiter-login]
+verify_jwt = false
