@@ -151,6 +151,21 @@ const translations: Record<string, Record<Locale, string>> = {
   'occupied_for': { en: 'Occupied for', bs: 'Zauzet', ar: 'مشغولة منذ' },
   'waiting': { en: 'Waiting', bs: 'Čeka', ar: 'في الانتظار' },
   'performance': { en: 'Performance', bs: 'Performanse', ar: 'الأداء' },
+
+  // Shared table — join + approval
+  'waiting_to_join': { en: 'Waiting for the table to let you in…', bs: 'Čekanje da vas sto prihvati…', ar: 'بانتظار أن تسمح لك الطاولة بالدخول…' },
+  'waiting_to_join_sub': { en: 'Someone at the table just needs to accept you. This happens automatically in a moment.', bs: 'Neko za stolom vas treba prihvatiti. Ovo se dešava automatski za trenutak.', ar: 'يحتاج شخص ما على الطاولة إلى قبولك. سيحدث هذا تلقائيًا بعد لحظة.' },
+  'wants_to_join': { en: 'wants to join your table', bs: 'želi se pridružiti vašem stolu', ar: 'يريد الانضمام إلى طاولتك' },
+  'someone_wants_to_join': { en: 'Someone wants to join your table', bs: 'Neko se želi pridružiti vašem stolu', ar: 'شخص ما يريد الانضمام إلى طاولتك' },
+  'accept': { en: 'Accept', bs: 'Prihvati', ar: 'قبول' },
+  'decline': { en: 'Decline', bs: 'Odbij', ar: 'رفض' },
+  'join_approved': { en: "You're in — welcome to the table!", bs: 'Ušli ste — dobrodošli za sto!', ar: 'تم قبولك — أهلاً بك على الطاولة!' },
+  'join_declined': { en: "The table didn't accept your request.", bs: 'Sto nije prihvatio vaš zahtjev.', ar: 'لم تقبل الطاولة طلبك.' },
+  'joining_table': { en: 'Joining the table…', bs: 'Pridruživanje stolu…', ar: 'جارٍ الانضمام إلى الطاولة…' },
+  'at_this_table': { en: 'At this table', bs: 'Za ovim stolom', ar: 'على هذه الطاولة' },
+  'table_not_active': { en: 'This table is no longer active. Please scan the QR code again.', bs: 'Ovaj sto više nije aktivan. Skenirajte QR kod ponovo.', ar: 'هذه الطاولة لم تعد نشطة. يرجى مسح رمز QR مرة أخرى.' },
+  'new_guest': { en: 'New guest', bs: 'Novi gost', ar: 'ضيف جديد' },
+  'try_again': { en: 'Try again', bs: 'Pokušaj ponovo', ar: 'حاول مرة أخرى' },
 };
 
 export function t(key: string): string {

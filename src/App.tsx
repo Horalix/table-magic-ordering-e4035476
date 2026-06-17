@@ -10,6 +10,7 @@ import CartPage from "./pages/CartPage";
 import RunningTabPage from "./pages/RunningTabPage";
 import TableEntry from "./pages/TableEntry";
 import PageTransition from "./components/PageTransition";
+import TablePresence from "./components/guest/TablePresence";
 
 // Code-split admin/staff bundles — guests never download this code
 const AdminLogin = lazy(() => import("./pages/AdminLogin"));
@@ -52,6 +53,9 @@ const App = () => (
       <Toaster />
       <Sonner />
       <BrowserRouter>
+        {/* Guest-only: shows a join-approval prompt whenever this device is
+            in an active table session. No-op for staff/admin (no sessionId). */}
+        <TablePresence />
         <Suspense fallback={<RouteFallback />}>
           <Routes>
             {/* Guest Routes — wrapped in soft page transition */}

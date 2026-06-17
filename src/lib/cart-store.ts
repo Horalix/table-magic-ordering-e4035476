@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
@@ -18,6 +19,8 @@ interface CartStore {
   sessionId: string | null;
   guestName: string | null;
   lastOrderTime: number | null;
+  /** Stable per-device id — identifies this phone across reloads (join flow). */
+  clientId: string;
   addItem: (item: Omit<CartItem, 'quantity'>) => void;
   removeItem: (id: string) => void;
   updateQuantity: (id: string, quantity: number) => void;
@@ -35,13 +38,21 @@ interface CartStore {
 
 let heartbeatInterval: ReturnType<typeof setInterval> | null = null;
 
-export const useCartStore = create<CartStore>((set, get) => ({
+const genId = (): string => {
+  try {
+    if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) return crypto.randomUUID();
+  } catch { /* fall through */ }
+  return `c_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+};
+
+export const useCartStore = create<CartStore>()(persist((set, get) => ({
   items: [],
   tableNumber: null,
   sessionToken: null,
   sessionId: null,
   guestName: null,
   lastOrderTime: null,
+  clientId: genId(),
 
   addItem: (item) => {
     set((state) => {
@@ -124,4 +135,17 @@ export const useCartStore = create<CartStore>((set, get) => ({
       heartbeatInterval = null;
     }
   },
+}), {
+  name: 'lasoul-cart',
+  // Persist session identity + cart so a refresh doesn't drop the table
+  // (which previously blocked re-ordering). clientId stays stable per device.
+  partialize: (s) => ({
+    items: s.items,
+    tableNumber: s.tableNumber,
+    sessionToken: s.sessionToken,
+    sessionId: s.sessionId,
+    guestName: s.guestName,
+    lastOrderTime: s.lastOrderTime,
+    clientId: s.clientId,
+  }),
 }));

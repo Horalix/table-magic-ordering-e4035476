@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Clock, CheckCircle, ChefHat, Utensils, Receipt, CreditCard, Loader2 } from 'lucide-react';
+import { ArrowLeft, Clock, CheckCircle, ChefHat, Utensils, Receipt, CreditCard, Loader2, Users } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useCartStore } from '@/lib/cart-store';
@@ -63,6 +63,22 @@ const RunningTabPage = () => {
     },
     enabled: !!sessionId,
     refetchInterval: 10000,
+  });
+
+  const { data: members = [] } = useQuery({
+    queryKey: ['session-members', sessionId],
+    queryFn: async () => {
+      const [{ data: sess }, { data: joiners }] = await Promise.all([
+        (supabase as any).from('table_sessions').select('guest_name').eq('id', sessionId).maybeSingle(),
+        (supabase as any).from('session_join_requests').select('guest_name').eq('table_session_id', sessionId).eq('status', 'approved'),
+      ]);
+      const names: string[] = [];
+      if (sess?.guest_name) names.push(sess.guest_name);
+      (joiners || []).forEach((j: any) => { if (j.guest_name) names.push(j.guest_name); });
+      return Array.from(new Set(names));
+    },
+    enabled: !!sessionId,
+    refetchInterval: 15000,
   });
 
   const grandTotal = orders.reduce((sum, o) => sum + Number(o.total), 0);
@@ -163,6 +179,19 @@ const RunningTabPage = () => {
               </div>
             </motion.div>
           </div>
+
+          {members.length > 0 && (
+            <div className="px-4 pt-3">
+              <div className="flex items-center gap-1.5 flex-wrap text-xs font-sans">
+                <span className="inline-flex items-center gap-1 text-muted-foreground">
+                  <Users className="w-3.5 h-3.5" />{t('at_this_table')}:
+                </span>
+                {members.map((n, i) => (
+                  <span key={i} className="px-2 py-0.5 rounded-full bg-primary/10 text-primary font-medium">{n}</span>
+                ))}
+              </div>
+            </div>
+          )}
 
           <div className="px-4 pt-3">
             <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>

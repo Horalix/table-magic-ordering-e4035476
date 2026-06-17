@@ -21,7 +21,6 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 
-const ORDER_COOLDOWN_MS = 30000; // 30 seconds
 const LARGE_ORDER_THRESHOLD = 20;
 
 const OrderSuccess = ({ table, onContinue }: { table: string | null; onContinue: () => void }) => {
@@ -55,7 +54,7 @@ const CartPage = () => {
   const navigate = useNavigate();
   useSessionHeartbeat();
   const [searchParams] = useSearchParams();
-  const { items, total, updateQuantity, removeItem, clearCart, sessionId, guestName, lastOrderTime, setLastOrderTime, itemCount } = useCartStore();
+  const { items, total, updateQuantity, removeItem, clearCart, sessionId, guestName, setLastOrderTime, itemCount } = useCartStore();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [orderPlaced, setOrderPlaced] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
@@ -76,11 +75,6 @@ const CartPage = () => {
   const isLargeOrder = itemCount() > LARGE_ORDER_THRESHOLD;
 
   const handlePlaceOrderClick = () => {
-    // Anti-spam: check cooldown
-    if (lastOrderTime && Date.now() - lastOrderTime < ORDER_COOLDOWN_MS) {
-      toast.error(t('order_cooldown'));
-      return;
-    }
     setShowConfirm(true);
   };
 
@@ -92,6 +86,10 @@ const CartPage = () => {
 
     setIsSubmitting(true);
     try {
+      // Refresh the heartbeat first so an active table isn't rejected by the
+      // server's 2-minute staleness guard on the orders trigger.
+      await supabase.rpc('touch_session', { _id: sessionId });
+
       const { data: session, error: sessionError } = await supabase
         .from('table_sessions')
         .select('id, is_active')
@@ -151,7 +149,9 @@ const CartPage = () => {
       toast.success(t('order_confirmed'));
     } catch (err: any) {
       console.error('Order error:', err);
-      toast.error('Failed to place order. Please try again.');
+      // Surface the actual reason (e.g. server rate-limit / session guard)
+      // instead of a generic message, so failures are actionable.
+      toast.error(err?.message ? String(err.message) : 'Failed to place order. Please try again.');
     } finally {
       setIsSubmitting(false);
     }
