@@ -13,6 +13,7 @@ import MenuItemDetail from '@/components/guest/MenuItemDetail';
 import LanguageSelector from '@/components/guest/LanguageSelector';
 import { useT, useLanguageStore, getLocalizedName, getLocalizedDescription } from '@/lib/i18n';
 import { useSessionHeartbeat } from '@/hooks/useSessionHeartbeat';
+import { staggerContainer, fadeUp, springPill } from '@/lib/motion';
 
 const categoryNameMap: Record<string, string> = {
   drinks: 'Drinks',
@@ -159,7 +160,7 @@ const CategoryPage = () => {
                   {isActive && (
                     <motion.span
                       layoutId="active-sub-pill"
-                      transition={{ type: 'spring', stiffness: 500, damping: 38 }}
+                      transition={springPill}
                       className="absolute inset-0 rounded-full bg-primary shadow-sm"
                     />
                   )}
@@ -200,24 +201,27 @@ const CategoryPage = () => {
           <p className="text-muted-foreground font-sans text-sm text-center">{t('no_items_category')}</p>
         </div>
       ) : (
-        <div className="px-4 pt-4 space-y-3">
+        <motion.div
+          key={activeSubId}
+          variants={staggerContainer(0.04)}
+          initial="hidden"
+          animate="show"
+          className="px-4 pt-4 space-y-3"
+        >
           {items.map((item, i) => {
             const localizedName = getLocalizedName(item as any, locale);
             const localizedDesc = getLocalizedDescription(item as any, locale);
             return (
-              <motion.div
-                key={item.id}
-                initial={{ opacity: 0, y: 6 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: Math.min(i, 5) * 0.02, duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
-              >
+              <motion.div key={item.id} variants={fadeUp}>
                 <button
                   onClick={() => setSelectedItem(item)}
                   className="w-full text-left tap"
                 >
-                  <div className="group flex gap-4 p-4 rounded-xl border border-border bg-card hover:border-primary/30 hover:shadow-md hover:-translate-y-0.5 transition-all duration-200">
+                  <div className="group flex gap-4 p-4 card-lux card-lux-hover">
                     <SmartImage
                       src={item.image_url || undefined}
+                      id={item.id}
+                      layoutId={`item-img-${item.id}`}
                       alt={localizedName}
                       width={80}
                       height={80}
@@ -259,7 +263,7 @@ const CategoryPage = () => {
               </motion.div>
             );
           })}
-        </div>
+        </motion.div>
       )}
 
       <AnimatePresence>

@@ -9,6 +9,7 @@ import CartBar from '@/components/guest/CartBar';
 import LanguageSelector from '@/components/guest/LanguageSelector';
 import { useT, useLanguageStore, getLocalizedName } from '@/lib/i18n';
 import { useSessionHeartbeat } from '@/hooks/useSessionHeartbeat';
+import { staggerContainer, fadeUp } from '@/lib/motion';
 
 const iconMap: Record<string, any> = {
   Drinks: Wine,
@@ -63,9 +64,10 @@ const GuestMenu = () => {
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ duration: 0.4 }}
-        className="relative flex flex-col items-center justify-center px-6 pt-16 pb-10"
+        className="hero-depth relative overflow-hidden flex flex-col items-center justify-center px-6 pt-16 pb-10"
         style={{ backgroundColor: 'hsl(140, 12%, 53%)' }}
       >
+       <div className="relative z-10 flex flex-col items-center w-full">
         <motion.div
           initial={{ scaleX: 0 }}
           animate={{ scaleX: 1 }}
@@ -148,24 +150,28 @@ const GuestMenu = () => {
             <span className="text-[11px] font-sans tracking-wide">{t('address')}</span>
           </div>
         </motion.div>
+       </div>
       </motion.div>
 
-      <div className="flex-1 bg-background px-5 py-6 pb-36 space-y-3 -mt-3 rounded-t-3xl relative z-10">
-        {categories.map((cat, i) => {
+      <motion.div
+        variants={staggerContainer(0.06, 0.2)}
+        initial="hidden"
+        animate="show"
+        className="flex-1 bg-background px-5 py-6 pb-36 space-y-3 -mt-3 rounded-t-3xl relative z-10"
+      >
+        {categories.map((cat) => {
           const Icon = iconMap[cat.name] || UtensilsCrossed;
           const path = pathMap[cat.name] || `/menu/${cat.name.toLowerCase()}`;
           const localizedName = getLocalizedName(cat as any, locale);
           return (
             <motion.button
               key={cat.id}
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.25 + i * 0.05, duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
+              variants={fadeUp}
               whileTap={{ scale: 0.97 }}
               onClick={() => handleCategoryClick(path)}
               className="w-full group tap"
             >
-              <div className="relative overflow-hidden rounded-2xl border border-border bg-card p-5 transition-all duration-300 hover:shadow-lg hover:border-primary/40 hover:-translate-y-0.5">
+              <div className="card-lux card-lux-hover relative overflow-hidden p-5">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-4">
                     <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 transition-colors duration-300">
@@ -184,7 +190,7 @@ const GuestMenu = () => {
             </motion.button>
           );
         })}
-      </div>
+      </motion.div>
 
       {hasSession && <CartBar />}
     </div>

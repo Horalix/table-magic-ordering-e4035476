@@ -170,6 +170,50 @@
     from { opacity: 0; transform: translateY(6px); }
     to { opacity: 1; transform: translateY(0); }
   }
+
+  /* [ART] Luxury elevation — soft, layered, faintly sage-tinted shadows.
+     Reads as expensive because it's diffuse rather than hard. */
+  .shadow-lux {
+    box-shadow:
+      0 1px 2px -1px hsl(150 10% 15% / 0.06),
+      0 4px 12px -2px hsl(150 10% 15% / 0.07);
+  }
+  .shadow-lux-lg {
+    box-shadow:
+      0 2px 4px -2px hsl(150 10% 15% / 0.08),
+      0 12px 32px -6px hsl(140 14% 30% / 0.12);
+  }
+
+  /* [ART] Shared card language — gentle lift + sage border on hover. */
+  .card-lux {
+    @apply rounded-2xl border border-border bg-card shadow-lux transition-all duration-300 ease-out;
+  }
+  .card-lux-hover {
+    @apply hover:-translate-y-0.5 hover:shadow-lux-lg hover:border-primary/30;
+  }
+
+  /* [ART] Hero depth — faint radial sheen + soft vignette for premium depth.
+     Apply to a relatively-positioned hero; sits above the base color,
+     below the content (content should be position:relative z-10). */
+  .hero-depth::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background:
+      radial-gradient(120% 80% at 50% -10%, hsl(0 0% 100% / 0.16), transparent 60%),
+      radial-gradient(100% 100% at 50% 120%, hsl(150 14% 20% / 0.28), transparent 70%);
+  }
+
+  /* [UX] Calm breathing ring — replaces harsh pulse for urgent items.
+     A slow, low-amplitude glow that draws the eye without flashing. */
+  .breathe {
+    animation: breathe 2.4s ease-in-out infinite;
+  }
+  @keyframes breathe {
+    0%, 100% { box-shadow: 0 0 0 0 hsl(var(--destructive) / 0.0), 0 0 0 1px hsl(var(--destructive) / 0.25); }
+    50% { box-shadow: 0 0 16px -2px hsl(var(--destructive) / 0.35), 0 0 0 1px hsl(var(--destructive) / 0.45); }
+  }
 }
 
 /* [a11y] Respect reduced motion */

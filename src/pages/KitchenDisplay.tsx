@@ -60,6 +60,14 @@ const statusIcons: Record<string, React.ReactNode> = {
   served: <Utensils className="w-3.5 h-3.5" />,
 };
 
+// Active-view kanban columns — the line cook reads order state by position.
+const KANBAN: { status: string; label: string; dot: string }[] = [
+  { status: 'pending', label: 'New', dot: 'bg-destructive' },
+  { status: 'confirmed', label: 'Confirmed', dot: 'bg-accent' },
+  { status: 'preparing', label: 'Preparing', dot: 'bg-accent' },
+  { status: 'ready', label: 'Ready', dot: 'bg-primary' },
+];
+
 const KitchenDisplay = () => {
   const [orders, setOrders] = useState<OrderWithItems[]>([]);
   const [waiterCalls, setWaiterCalls] = useState<WaiterCall[]>([]);
@@ -330,62 +338,107 @@ const KitchenDisplay = () => {
         )}
       </AnimatePresence>
 
-      <div className="p-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-        <AnimatePresence>
-          {orders.filter(o => sectionFilter === 'all' || o.section_id === sectionFilter).map((order) => (
-            <motion.div key={order.id} initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
-              className={`rounded-xl border bg-card overflow-hidden transition-all ${isUrgent(order) ? 'border-destructive/50 shadow-[0_0_12px_-3px_hsl(var(--destructive)/0.3)] animate-pulse' : 'border-border'}`}>
-              <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-                <div className="flex items-center gap-2 flex-wrap">
-                  {order.section_name && (
-                    <span className="inline-flex items-center gap-1 text-[10px] uppercase font-sans px-1.5 py-0.5 rounded" style={{ background: `${order.section_color}33`, color: order.section_color || undefined }}>
-                      {order.section_name}
-                    </span>
-                  )}
-                  <span className="font-serif text-lg font-bold text-foreground">Table {order.table_number}</span>
-                  {order.guest_name && <span className="text-xs text-muted-foreground font-sans">({order.guest_name})</span>}
+      {(() => {
+        const visible = orders.filter(o => sectionFilter === 'all' || o.section_id === sectionFilter);
+
+        const renderCard = (order: OrderWithItems, showStatus: boolean) => (
+          <motion.div
+            key={order.id}
+            layout
+            initial={{ opacity: 0, scale: 0.96 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.96 }}
+            transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
+            className={`rounded-xl border bg-card overflow-hidden shadow-lux ${isUrgent(order) ? 'border-destructive/50 breathe' : 'border-border'}`}
+          >
+            <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+              <div className="flex items-center gap-2 flex-wrap">
+                {order.section_name && (
+                  <span className="inline-flex items-center gap-1 text-[10px] uppercase font-sans px-1.5 py-0.5 rounded" style={{ background: `${order.section_color}33`, color: order.section_color || undefined }}>
+                    {order.section_name}
+                  </span>
+                )}
+                <span className="font-serif text-lg font-bold text-foreground">Table {order.table_number}</span>
+                {order.guest_name && <span className="text-xs text-muted-foreground font-sans">({order.guest_name})</span>}
+                {showStatus && (
                   <Badge className={`text-[11px] font-sans ${statusColors[order.status]}`}>
                     <span className="flex items-center gap-1">{statusIcons[order.status]}{order.status}</span>
                   </Badge>
-                </div>
-                <span className={`text-xs font-sans ${isUrgent(order) ? 'text-destructive font-semibold' : 'text-muted-foreground'}`}>{timeSince(order.created_at)}</span>
+                )}
               </div>
+              <span className={`text-xs font-sans tabular-nums ${isUrgent(order) ? 'text-destructive font-semibold' : 'text-muted-foreground'}`}>{timeSince(order.created_at)}</span>
+            </div>
 
-              <div className="px-4 py-3 space-y-2">
-                {order.items.map((item) => (
-                  <div key={item.id} className="flex justify-between items-start">
-                    <div>
-                      <p className="text-sm font-sans font-medium text-foreground">{item.quantity}× {item.menu_item_name}</p>
-                      {item.notes && <p className="text-xs text-accent italic mt-0.5">⚠ {item.notes}</p>}
-                    </div>
+            <div className="px-4 py-3 space-y-2">
+              {order.items.map((item) => (
+                <div key={item.id} className="flex justify-between items-start">
+                  <div>
+                    <p className="text-sm font-sans font-medium text-foreground">{item.quantity}× {item.menu_item_name}</p>
+                    {item.notes && <p className="text-xs text-accent italic mt-0.5">⚠ {item.notes}</p>}
                   </div>
-                ))}
+                </div>
+              ))}
+            </div>
+
+            {order.notes && (
+              <div className="px-4 pb-2">
+                <p className="text-xs text-accent italic">Note: {order.notes}</p>
               </div>
+            )}
 
-              {order.notes && (
-                <div className="px-4 pb-2">
-                  <p className="text-xs text-accent italic">Note: {order.notes}</p>
+            {getNextStatus(order.status) && (
+              <div className="px-4 pb-4">
+                <Button onClick={() => updateOrderStatus(order.id, getNextStatus(order.status)!)} className="w-full rounded-lg bg-primary text-primary-foreground font-sans text-sm min-h-[44px]" size="sm">
+                  Mark as {getNextStatus(order.status)}
+                </Button>
+              </div>
+            )}
+          </motion.div>
+        );
+
+        if (orders.length === 0) {
+          return (
+            <div className="flex flex-col items-center justify-center py-20">
+              <ChefHat className="w-12 h-12 text-muted-foreground mb-4" />
+              <p className="text-muted-foreground font-sans">No {filter} orders</p>
+            </div>
+          );
+        }
+
+        // History → flat grid. Active → status kanban columns.
+        if (filter === 'history') {
+          return (
+            <div className="p-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+              <AnimatePresence>{visible.map((o) => renderCard(o, true))}</AnimatePresence>
+            </div>
+          );
+        }
+
+        return (
+          <div className="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-start">
+            {KANBAN.map((col) => {
+              const colOrders = visible.filter((o) => o.status === col.status);
+              return (
+                <div key={col.status} className="min-w-0">
+                  <div className="flex items-center gap-2 mb-3 px-1">
+                    <span className={`w-2 h-2 rounded-full ${col.dot}`} />
+                    <h2 className="font-serif text-sm font-bold uppercase tracking-wide text-foreground/80">{col.label}</h2>
+                    <span className="text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground tabular-nums">{colOrders.length}</span>
+                  </div>
+                  <div className="space-y-3">
+                    <AnimatePresence>{colOrders.map((o) => renderCard(o, false))}</AnimatePresence>
+                    {colOrders.length === 0 && (
+                      <div className="rounded-xl border border-dashed border-border/50 py-8 text-center text-xs text-muted-foreground/60 font-sans">
+                        Empty
+                      </div>
+                    )}
+                  </div>
                 </div>
-              )}
-
-              {getNextStatus(order.status) && (
-                <div className="px-4 pb-4">
-                  <Button onClick={() => updateOrderStatus(order.id, getNextStatus(order.status)!)} className="w-full rounded-lg bg-primary text-primary-foreground font-sans text-sm min-h-[44px]" size="sm">
-                    Mark as {getNextStatus(order.status)}
-                  </Button>
-                </div>
-              )}
-            </motion.div>
-          ))}
-        </AnimatePresence>
-      </div>
-
-      {orders.length === 0 && (
-        <div className="flex flex-col items-center justify-center py-20">
-          <ChefHat className="w-12 h-12 text-muted-foreground mb-4" />
-          <p className="text-muted-foreground font-sans">No {filter} orders</p>
-        </div>
-      )}
+              );
+            })}
+          </div>
+        );
+      })()}
     </div>
   );
 };

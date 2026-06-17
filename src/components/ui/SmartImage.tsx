@@ -1,20 +1,41 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
+import imageManifest from '@/lib/image-manifest.json';
 
 interface SmartImageProps extends Omit<React.ImgHTMLAttributes<HTMLImageElement>, 'loading' | 'srcSet'> {
   src?: string;
+  /** framer-motion shared-element id — morphs this image between views. */
+  layoutId?: string;
+  /**
+   * Stable row id (menu_item / category). When this id exists in the local
+   * image manifest, SmartImage serves the prebuilt same-origin WebP ladder
+   * with blur-up instead of hitting an external CDN. Falls back to `src`
+   * (via CDN) when the id is missing — so newly added rows never break.
+   */
+  id?: string;
   alt: string;
   width: number;
   height: number;
   priority?: boolean;
   wrapperClassName?: string;
   fallbackText?: string;
+  /** Override the responsive `sizes` hint (defaults to the intrinsic width). */
+  sizes?: string;
 }
 
+interface ManifestEntry {
+  widths: number[];
+  blur: string;
+  ext: string;
+}
+const manifest = imageManifest as Record<string, ManifestEntry>;
+
 /**
- * Build optimized image URL.
- * - Supabase Storage URLs → use native render endpoint (?width=&quality=&format=webp)
- * - Other URLs → route through free wsrv.nl WebP CDN
+ * Build optimized CDN URL (fallback path — used only when an image is not in
+ * the local manifest, e.g. added after the last `npm run images`).
+ * - Supabase Storage URLs → native render endpoint (?width=&quality=&format=webp)
+ * - Other URLs → free wsrv.nl WebP CDN
  */
 const WSRV = 'https://wsrv.nl/?';
 
@@ -22,8 +43,6 @@ const buildUrl = (src: string, w: number, h: number, dpr = 1) => {
   if (src.startsWith('data:') || src.startsWith('blob:')) return src;
   if (typeof window !== 'undefined' && src.startsWith(window.location.origin)) return src;
 
-  // Supabase Storage public URL → use native image transform endpoint
-  // /storage/v1/object/public/<bucket>/<path>  →  /storage/v1/render/image/public/<bucket>/<path>?...
   const supaMatch = src.match(/^(https?:\/\/[^/]+)\/storage\/v1\/object\/public\/(.+)$/);
   if (supaMatch) {
     const [, origin, rest] = supaMatch;
@@ -49,19 +68,23 @@ const buildUrl = (src: string, w: number, h: number, dpr = 1) => {
 };
 
 const SmartImage = ({
-  src, alt, width, height, priority = false, wrapperClassName, fallbackText, className, ...rest
+  src, id, layoutId, alt, width, height, priority = false, wrapperClassName, fallbackText, className, sizes, ...rest
 }: SmartImageProps) => {
   const [loaded, setLoaded] = useState(false);
   const [errored, setErrored] = useState(false);
+  // When the local asset 404s, drop to the CDN/original path for this render.
+  const [forceRemote, setForceRemote] = useState(false);
   const imgRef = useRef<HTMLImageElement>(null);
 
-  useEffect(() => { setLoaded(false); setErrored(false); }, [src]);
+  useEffect(() => { setLoaded(false); setErrored(false); setForceRemote(false); }, [src, id]);
   useEffect(() => {
     const el = imgRef.current;
     if (el && el.complete && el.naturalWidth > 0) setLoaded(true);
-  }, [src]);
+  }, [src, id]);
 
-  if (!src || errored) {
+  const local = id && !forceRemote ? manifest[id] : undefined;
+
+  if ((!src && !local) || errored) {
     return (
       <div
         className={cn('flex items-center justify-center bg-primary/5 text-primary/40 font-serif', wrapperClassName)}
@@ -73,16 +96,48 @@ const SmartImage = ({
     );
   }
 
-  const url1x = buildUrl(src, width, height, 1);
-  const url2x = buildUrl(src, width, height, 2);
+  // ---- Resolve src / srcSet -------------------------------------------
+  let url1x: string;
+  let srcSet: string;
+  let blur: string | undefined;
+
+  if (local) {
+    const base = `/menu/${id}`;
+    blur = local.blur;
+    srcSet = local.widths.map((w) => `${base}/${w}.webp ${w}w`).join(', ');
+    // Default `src` = largest variant (browser overrides via srcSet+sizes).
+    url1x = `${base}/${local.widths[local.widths.length - 1]}.webp`;
+  } else {
+    url1x = buildUrl(src!, width, height, 1);
+    srcSet = `${url1x} 1x, ${buildUrl(src!, width, height, 2)} 2x`;
+  }
+
+  const resolvedSizes = sizes ?? (local ? `${width}px` : undefined);
 
   return (
-    <div className={cn('relative overflow-hidden bg-muted', wrapperClassName)} style={{ aspectRatio: `${width}/${height}` }}>
-      {!loaded && <div className="absolute inset-0 shimmer" />}
+    <motion.div
+      layoutId={layoutId}
+      className={cn('relative overflow-hidden bg-muted', wrapperClassName)}
+      style={{ aspectRatio: `${width}/${height}` }}
+    >
+      {/* Placeholder: blur-up for local assets, shimmer otherwise. */}
+      {!loaded && (
+        blur ? (
+          <img
+            src={blur}
+            alt=""
+            aria-hidden
+            className="absolute inset-0 w-full h-full object-cover scale-110 blur-xl"
+          />
+        ) : (
+          <div className="absolute inset-0 shimmer" />
+        )
+      )}
       <img
         ref={imgRef}
         src={url1x}
-        srcSet={`${url1x} 1x, ${url2x} 2x`}
+        srcSet={srcSet}
+        sizes={resolvedSizes}
         alt={alt}
         width={width}
         height={height}
@@ -92,7 +147,10 @@ const SmartImage = ({
         fetchpriority={priority ? 'high' : 'auto'}
         onLoad={() => setLoaded(true)}
         onError={() => {
-          if (imgRef.current && imgRef.current.src !== src) {
+          // Local asset missing → retry via CDN/original for this id.
+          if (local) { setForceRemote(true); return; }
+          // CDN transform failed → try the raw original URL once.
+          if (src && imgRef.current && imgRef.current.src !== src) {
             imgRef.current.srcset = '';
             imgRef.current.src = src;
             return;
@@ -106,7 +164,7 @@ const SmartImage = ({
         )}
         {...rest}
       />
-    </div>
+    </motion.div>
   );
 };
 

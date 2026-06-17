@@ -11,6 +11,7 @@ import { toast } from 'sonner';
 import { useT, useLanguageStore, getLocalizedName } from '@/lib/i18n';
 import ReviewPrompt from '@/components/guest/ReviewPrompt';
 import { useSessionHeartbeat } from '@/hooks/useSessionHeartbeat';
+import { staggerContainer, fadeUp, useCountUp } from '@/lib/motion';
 
 const RunningTabPage = () => {
   const navigate = useNavigate();
@@ -65,6 +66,7 @@ const RunningTabPage = () => {
   });
 
   const grandTotal = orders.reduce((sum, o) => sum + Number(o.total), 0);
+  const displayGrandTotal = useCountUp(grandTotal);
 
   const goBack = () => {
     const params = new URLSearchParams();
@@ -148,12 +150,12 @@ const RunningTabPage = () => {
       ) : (
         <>
           <div className="px-4 pt-4">
-            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="p-5 rounded-2xl text-white relative overflow-hidden bg-primary">
+            <motion.div variants={fadeUp} initial="hidden" animate="show" className="hero-depth p-5 rounded-2xl text-white relative overflow-hidden bg-primary shadow-lux-lg">
               <div className="absolute inset-0 bg-gradient-to-br from-white/10 to-transparent" />
-              <div className="relative flex justify-between items-center">
+              <div className="relative z-10 flex justify-between items-center">
                 <div>
                   <p className="text-[11px] font-sans text-white/60 uppercase tracking-wider">{t('running_total')}</p>
-                  <p className="font-serif text-3xl font-bold text-white mt-1">{grandTotal.toFixed(2)} KM</p>
+                  <p className="font-serif text-3xl font-bold text-white mt-1 tabular-nums">{displayGrandTotal.toFixed(2)} KM</p>
                 </div>
                 <div className="text-right">
                   <p className="text-xs font-sans text-white/60">{orders.length} order{orders.length !== 1 ? 's' : ''}</p>
@@ -181,8 +183,13 @@ const RunningTabPage = () => {
             </motion.div>
           </div>
 
-          <div className="px-4 pt-4 space-y-4">
-            {orders.map((order, idx) => {
+          <motion.div
+            variants={staggerContainer(0.05)}
+            initial="hidden"
+            animate="show"
+            className="px-4 pt-4 space-y-4"
+          >
+            {orders.map((order) => {
               const status = statusConfig[order.status] || statusConfig.pending;
               const items = (order as any).order_items || [];
               const waitTime = getWaitTime(order.created_at, order.status);
@@ -190,10 +197,8 @@ const RunningTabPage = () => {
               return (
                 <motion.div
                   key={order.id}
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: idx * 0.05 }}
-                  className="rounded-xl border border-border bg-card overflow-hidden"
+                  variants={fadeUp}
+                  className="card-lux overflow-hidden"
                 >
                   <div className="flex items-center justify-between px-4 py-3 border-b border-border/50">
                     <div className="flex items-center gap-2">
@@ -222,7 +227,7 @@ const RunningTabPage = () => {
                 </motion.div>
               );
             })}
-          </div>
+          </motion.div>
         </>
       )}
 

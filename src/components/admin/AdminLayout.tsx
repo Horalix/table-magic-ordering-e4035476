@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, Outlet, Link, useLocation } from 'react-router-dom';
+import { motion } from 'framer-motion';
 import { supabase } from '@/integrations/supabase/client';
 import {
   LayoutDashboard, UtensilsCrossed, TableProperties, ClipboardList,
@@ -7,19 +8,36 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
+import { springPill } from '@/lib/motion';
 
-const navItems = [
-  { label: 'Dashboard', icon: LayoutDashboard, path: '/admin' },
-  { label: 'Menu', icon: UtensilsCrossed, path: '/admin/menu' },
-  { label: 'Tables', icon: TableProperties, path: '/admin/tables' },
-  { label: 'Sections', icon: Layers, path: '/admin/sections' },
-  { label: 'Waiters', icon: Users, path: '/admin/waiters' },
-  { label: 'Orders', icon: ClipboardList, path: '/admin/orders' },
-  { label: 'Performance', icon: Star, path: '/admin/performance' },
-  { label: 'Analytics', icon: BarChart3, path: '/admin/analytics' },
-  { label: 'QR Codes', icon: QrCode, path: '/admin/qr-codes' },
-  { label: 'Floor Monitor', icon: Monitor, path: '/waiter/monitor' },
-  { label: 'Kitchen', icon: ChefHat, path: '/kitchen' },
+// Grouped so the sidebar reads as a hierarchy, not a flat list.
+const navGroups = [
+  {
+    heading: 'Operations',
+    items: [
+      { label: 'Dashboard', icon: LayoutDashboard, path: '/admin' },
+      { label: 'Orders', icon: ClipboardList, path: '/admin/orders' },
+      { label: 'Tables', icon: TableProperties, path: '/admin/tables' },
+      { label: 'Floor Monitor', icon: Monitor, path: '/waiter/monitor' },
+      { label: 'Kitchen', icon: ChefHat, path: '/kitchen' },
+    ],
+  },
+  {
+    heading: 'Menu & Setup',
+    items: [
+      { label: 'Menu', icon: UtensilsCrossed, path: '/admin/menu' },
+      { label: 'Sections', icon: Layers, path: '/admin/sections' },
+      { label: 'Waiters', icon: Users, path: '/admin/waiters' },
+      { label: 'QR Codes', icon: QrCode, path: '/admin/qr-codes' },
+    ],
+  },
+  {
+    heading: 'Insights',
+    items: [
+      { label: 'Performance', icon: Star, path: '/admin/performance' },
+      { label: 'Analytics', icon: BarChart3, path: '/admin/analytics' },
+    ],
+  },
 ];
 
 const AdminLayout = () => {
@@ -87,25 +105,39 @@ const AdminLayout = () => {
             <p className="text-xs text-sidebar-foreground/60 font-sans mt-0.5">Admin Dashboard</p>
           </div>
 
-          <nav className="flex-1 px-3 py-4 space-y-1">
-            {navItems.map((item) => {
-              const isActive = location.pathname === item.path;
-              return (
-                <Link
-                  key={item.path}
-                  to={item.path}
-                  onClick={() => setSidebarOpen(false)}
-                  className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-sans transition-colors ${
-                    isActive
-                      ? 'bg-sidebar-accent text-sidebar-accent-foreground font-medium'
-                      : 'text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground'
-                  }`}
-                >
-                  <item.icon className="w-4 h-4" />
-                  {item.label}
-                </Link>
-              );
-            })}
+          <nav className="flex-1 px-3 py-4 overflow-y-auto space-y-4">
+            {navGroups.map((group) => (
+              <div key={group.heading} className="space-y-1">
+                <p className="px-3 mb-1 text-[10px] font-sans font-semibold uppercase tracking-[0.14em] text-sidebar-foreground/40">
+                  {group.heading}
+                </p>
+                {group.items.map((item) => {
+                  const isActive = location.pathname === item.path;
+                  return (
+                    <Link
+                      key={item.path}
+                      to={item.path}
+                      onClick={() => setSidebarOpen(false)}
+                      className={`relative flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-sans transition-colors ${
+                        isActive
+                          ? 'text-sidebar-accent-foreground font-medium'
+                          : 'text-sidebar-foreground/70 hover:bg-sidebar-accent/40 hover:text-sidebar-foreground'
+                      }`}
+                    >
+                      {isActive && (
+                        <motion.span
+                          layoutId="admin-nav-active"
+                          transition={springPill}
+                          className="absolute inset-0 rounded-lg bg-sidebar-accent"
+                        />
+                      )}
+                      <item.icon className="relative z-10 w-4 h-4" />
+                      <span className="relative z-10">{item.label}</span>
+                    </Link>
+                  );
+                })}
+              </div>
+            ))}
           </nav>
 
           <div className="px-3 py-4 border-t border-sidebar-border">

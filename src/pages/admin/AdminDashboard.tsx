@@ -1,7 +1,10 @@
 import React, { useEffect, useState } from 'react';
+import { motion } from 'framer-motion';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
 import { DollarSign, ShoppingBag, Clock, TrendingUp, Timer, CreditCard, Hand, Users } from 'lucide-react';
+import { staggerContainer, fadeUp, useCountUp } from '@/lib/motion';
 
 interface WaitTimeStats {
   pending: { avg: number; count: number };
@@ -11,7 +14,38 @@ interface WaitTimeStats {
   served: { avg: number; count: number };
 }
 
+/** Single stat tile — count-up animation + consistent elevation. */
+const StatCard = ({
+  label, value, format, icon: Icon, color,
+}: {
+  label: string;
+  value: number;
+  format: (n: number) => string;
+  icon: React.ElementType;
+  color: string;
+}) => {
+  const n = useCountUp(value);
+  return (
+    <motion.div variants={fadeUp}>
+      <Card className="border-border card-lux-hover">
+        <CardContent className="p-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-sans text-muted-foreground">{label}</p>
+              <p className="text-2xl font-serif font-bold text-foreground mt-1 tabular-nums">{format(n)}</p>
+            </div>
+            <div className={`w-10 h-10 rounded-lg bg-muted flex items-center justify-center ${color}`}>
+              <Icon className="w-5 h-5" />
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    </motion.div>
+  );
+};
+
 const AdminDashboard = () => {
+  const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({
     todayRevenue: 0,
     totalOrders: 0,
@@ -48,19 +82,16 @@ const AdminDashboard = () => {
         .select('*', { count: 'exact', head: true })
         .eq('is_active', true);
 
-      // Bill requests count (pending)
       const { count: billReqCount } = await supabase
         .from('bill_requests')
         .select('*', { count: 'exact', head: true })
         .eq('status', 'pending');
 
-      // Waiter calls count (pending)
       const { count: waiterCallCount } = await supabase
         .from('waiter_calls')
         .select('*', { count: 'exact', head: true })
         .eq('status', 'pending');
 
-      // Guest count today
       const { count: guestCount } = await supabase
         .from('table_sessions')
         .select('*', { count: 'exact', head: true })
@@ -103,6 +134,7 @@ const AdminDashboard = () => {
         .limit(10);
 
       setRecentOrders(recent || []);
+      setLoading(false);
     };
 
     fetchStats();
@@ -117,14 +149,17 @@ const AdminDashboard = () => {
     return () => { supabase.removeChannel(channel); };
   }, []);
 
+  const money = (n: number) => `${n.toFixed(2)} KM`;
+  const whole = (n: number) => Math.round(n).toString();
+
   const statCards = [
-    { label: "Today's Revenue", value: `${stats.todayRevenue.toFixed(2)} KM`, icon: DollarSign, color: 'text-primary' },
-    { label: 'Total Orders', value: stats.totalOrders.toString(), icon: ShoppingBag, color: 'text-accent' },
-    { label: 'Active Tables', value: stats.activeTables.toString(), icon: Clock, color: 'text-primary' },
-    { label: 'Avg Order', value: `${stats.avgOrderValue.toFixed(2)} KM`, icon: TrendingUp, color: 'text-accent' },
-    { label: 'Bill Requests', value: stats.billRequests.toString(), icon: CreditCard, color: 'text-primary' },
-    { label: 'Waiter Calls', value: stats.waiterCalls.toString(), icon: Hand, color: 'text-accent' },
-    { label: 'Guests Today', value: stats.guestCount.toString(), icon: Users, color: 'text-primary' },
+    { label: "Today's Revenue", value: stats.todayRevenue, format: money, icon: DollarSign, color: 'text-primary' },
+    { label: 'Total Orders', value: stats.totalOrders, format: whole, icon: ShoppingBag, color: 'text-accent' },
+    { label: 'Active Tables', value: stats.activeTables, format: whole, icon: Clock, color: 'text-primary' },
+    { label: 'Avg Order', value: stats.avgOrderValue, format: money, icon: TrendingUp, color: 'text-accent' },
+    { label: 'Bill Requests', value: stats.billRequests, format: whole, icon: CreditCard, color: 'text-primary' },
+    { label: 'Waiter Calls', value: stats.waiterCalls, format: whole, icon: Hand, color: 'text-accent' },
+    { label: 'Guests Today', value: stats.guestCount, format: whole, icon: Users, color: 'text-primary' },
   ];
 
   const waitTimeRows = [
@@ -137,25 +172,33 @@ const AdminDashboard = () => {
 
   return (
     <div>
-      <h1 className="font-serif text-3xl font-bold text-foreground mb-6">Dashboard</h1>
+      <motion.h1
+        initial={{ opacity: 0, y: 6 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
+        className="font-serif text-3xl font-bold text-foreground mb-6"
+      >
+        Dashboard
+      </motion.h1>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        {statCards.map((stat) => (
-          <Card key={stat.label} className="border-border">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-sans text-muted-foreground">{stat.label}</p>
-                  <p className="text-2xl font-serif font-bold text-foreground mt-1">{stat.value}</p>
-                </div>
-                <div className={`w-10 h-10 rounded-lg bg-muted flex items-center justify-center ${stat.color}`}>
-                  <stat.icon className="w-5 h-5" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+      {loading ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+          {Array.from({ length: 7 }).map((_, i) => (
+            <Skeleton key={i} className="h-[92px] rounded-xl" />
+          ))}
+        </div>
+      ) : (
+        <motion.div
+          variants={staggerContainer(0.05)}
+          initial="hidden"
+          animate="show"
+          className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8"
+        >
+          {statCards.map((stat) => (
+            <StatCard key={stat.label} {...stat} />
+          ))}
+        </motion.div>
+      )}
 
       <Card className="border-border mb-8">
         <CardHeader>
@@ -171,7 +214,7 @@ const AdminDashboard = () => {
               return (
                 <div key={row.status} className="rounded-xl border border-border p-4 text-center">
                   <span className={`text-xs font-sans font-medium px-2 py-0.5 rounded-full ${row.color}`}>{row.label}</span>
-                  <p className="font-serif text-2xl font-bold text-foreground mt-2">
+                  <p className="font-serif text-2xl font-bold text-foreground mt-2 tabular-nums">
                     {data.avg}<span className="text-sm font-sans text-muted-foreground ml-1">min</span>
                   </p>
                   <p className="text-xs font-sans text-muted-foreground mt-1">{data.count} order{data.count !== 1 ? 's' : ''}</p>
@@ -187,7 +230,19 @@ const AdminDashboard = () => {
           <CardTitle className="font-serif text-lg">Recent Orders</CardTitle>
         </CardHeader>
         <CardContent>
-          {recentOrders.length === 0 ? (
+          {loading ? (
+            <div className="space-y-3">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <div key={i} className="flex items-center justify-between py-2">
+                  <div className="space-y-1.5">
+                    <Skeleton className="h-4 w-32 rounded" />
+                    <Skeleton className="h-3 w-20 rounded" />
+                  </div>
+                  <Skeleton className="h-4 w-16 rounded" />
+                </div>
+              ))}
+            </div>
+          ) : recentOrders.length === 0 ? (
             <p className="text-muted-foreground font-sans text-sm py-4">No orders yet</p>
           ) : (
             <div className="space-y-3">
@@ -201,7 +256,7 @@ const AdminDashboard = () => {
                     <p className="text-xs text-muted-foreground">{new Date(order.created_at).toLocaleTimeString()}</p>
                   </div>
                   <div className="text-right">
-                    <p className="text-sm font-sans font-semibold text-foreground">{Number(order.total).toFixed(2)} KM</p>
+                    <p className="text-sm font-sans font-semibold text-foreground tabular-nums">{Number(order.total).toFixed(2)} KM</p>
                     <span className={`text-xs px-2 py-0.5 rounded-full ${
                       order.status === 'pending' ? 'bg-destructive/10 text-destructive' :
                       order.status === 'served' ? 'bg-primary/10 text-primary' :

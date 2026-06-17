@@ -9,6 +9,7 @@ import { toast } from 'sonner';
 import { useT, useLanguageStore } from '@/lib/i18n';
 import { useSessionHeartbeat } from '@/hooks/useSessionHeartbeat';
 import SmartImage from '@/components/ui/SmartImage';
+import { staggerContainer, fadeUp, useCountUp } from '@/lib/motion';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -60,6 +61,7 @@ const CartPage = () => {
   const [showConfirm, setShowConfirm] = useState(false);
   const t = useT();
   const locale = useLanguageStore((s) => s.locale);
+  const displayTotal = useCountUp(total());
 
   const table = searchParams.get('table');
   const token = searchParams.get('token');
@@ -197,18 +199,22 @@ const CartPage = () => {
         </div>
       ) : (
         <>
-          <div className="px-4 pt-4 space-y-3">
-            {items.map((item, i) => (
+          <motion.div
+            variants={staggerContainer(0.04)}
+            initial="hidden"
+            animate="show"
+            className="px-4 pt-4 space-y-3"
+          >
+            {items.map((item) => (
               <motion.div
                 key={item.id}
-                initial={{ opacity: 0, x: -10 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: i * 0.05 }}
-                className="flex gap-4 p-4 rounded-xl border border-border bg-card"
+                variants={fadeUp}
+                className="flex gap-4 p-4 card-lux"
               >
                 {item.image_url && (
                   <SmartImage
                     src={item.image_url}
+                    id={item.id}
                     alt={item.name}
                     width={64}
                     height={64}
@@ -250,7 +256,7 @@ const CartPage = () => {
                 </div>
               </motion.div>
             ))}
-          </div>
+          </motion.div>
 
           <div className="px-4 mt-6 space-y-3">
             {isLargeOrder && (
@@ -259,10 +265,10 @@ const CartPage = () => {
                 <p className="text-xs font-sans text-accent">{t('large_order_suggestion')}</p>
               </div>
             )}
-            <div className="p-4 rounded-xl border border-border bg-card">
+            <div className="p-4 card-lux">
               <div className="flex justify-between items-center">
                 <span className="font-sans text-sm text-muted-foreground">{t('total')}</span>
-                <span className="font-serif text-xl font-bold text-foreground tabular-nums">{total().toFixed(2)} KM</span>
+                <span className="font-serif text-xl font-bold text-foreground tabular-nums">{displayTotal.toFixed(2)} KM</span>
               </div>
             </div>
           </div>
@@ -281,7 +287,7 @@ const CartPage = () => {
               ) : (
                 <span className="flex items-center gap-2">
                   <Send className="w-4 h-4" />
-                  {t('place_order')} · {total().toFixed(2)} KM
+                  {t('place_order')} · {displayTotal.toFixed(2)} KM
                 </span>
               )}
             </Button>

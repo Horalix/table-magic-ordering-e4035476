@@ -375,7 +375,7 @@ const AlertPill = ({
 const TableCard = ({ session, activeOrders, onClose }: { session: any; activeOrders: number; onClose: () => void }) => {
   const ms = useElapsed(session.opened_at);
   return (
-    <Card className="overflow-hidden transition-shadow hover:shadow-md">
+    <Card className="overflow-hidden card-lux-hover">
       <CardContent className="p-4">
         <div className="flex items-start justify-between mb-2">
           <div>
@@ -433,7 +433,7 @@ const OrderCard = ({ order, onUpdate }: { order: any; onUpdate: (id: string, s: 
   const next = NEXT_META[order.status];
   const meta = STATUS_META[order.status] || STATUS_META.pending;
   return (
-    <Card className="transition-shadow hover:shadow-md">
+    <Card className="card-lux-hover">
       <CardContent className="p-4">
         <div className="flex items-center justify-between mb-2.5">
           <div className="flex items-center gap-2 min-w-0">

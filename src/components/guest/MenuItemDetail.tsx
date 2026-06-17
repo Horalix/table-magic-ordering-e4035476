@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import SmartImage from '@/components/ui/SmartImage';
 import { useT, useLanguageStore, getLocalizedName, getLocalizedDescription } from '@/lib/i18n';
+import { sheetUp, fade } from '@/lib/motion';
 
 interface Props {
   item: {
@@ -49,20 +50,30 @@ const MenuItemDetail = ({ item, onClose, canOrder = true }: Props) => {
 
   return (
     <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
+      variants={fade}
+      initial="hidden"
+      animate="show"
+      exit="exit"
       className="fixed inset-0 z-50 flex items-end sm:items-center justify-center"
     >
       <div className="absolute inset-0 bg-foreground/40 backdrop-blur-sm" onClick={onClose} />
 
       <motion.div
-        initial={{ y: '100%' }}
-        animate={{ y: 0 }}
-        exit={{ y: '100%' }}
-        transition={{ type: 'spring', damping: 28, stiffness: 300 }}
+        variants={sheetUp}
+        initial="hidden"
+        animate="show"
+        exit="exit"
+        drag="y"
+        dragConstraints={{ top: 0, bottom: 0 }}
+        dragElastic={0.2}
+        onDragEnd={(_, info) => {
+          if (info.offset.y > 120 || info.velocity.y > 600) onClose();
+        }}
         className="relative w-full max-w-lg bg-card rounded-t-3xl sm:rounded-3xl overflow-hidden"
       >
+        {/* Drag handle — signals the sheet can be flicked away. */}
+        <div className="absolute top-2.5 left-1/2 -translate-x-1/2 z-10 h-1.5 w-10 rounded-full bg-white/70 sm:hidden" />
+
         <button
           onClick={onClose}
           className="absolute top-4 right-4 z-10 w-10 h-10 rounded-full bg-card/80 backdrop-blur flex items-center justify-center min-w-[44px] min-h-[44px]"
@@ -74,6 +85,8 @@ const MenuItemDetail = ({ item, onClose, canOrder = true }: Props) => {
         {item.image_url ? (
           <SmartImage
             src={item.image_url}
+            id={item.id}
+            layoutId={`item-img-${item.id}`}
             alt={localizedName}
             width={800}
             height={520}
@@ -81,7 +94,7 @@ const MenuItemDetail = ({ item, onClose, canOrder = true }: Props) => {
             wrapperClassName="w-full h-52"
           />
         ) : (
-          <div className="w-full h-36 bg-primary/5 flex items-center justify-center">
+          <div className="w-full h-52 bg-primary/5 flex items-center justify-center">
             <UtensilsCrossed className="w-10 h-10 text-primary/20" />
           </div>
         )}

@@ -4,6 +4,7 @@ import { ShoppingBag, Receipt } from 'lucide-react';
 import { useCartStore } from '@/lib/cart-store';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useT } from '@/lib/i18n';
+import { springSnappy, useCountUp } from '@/lib/motion';
 
 const CartBar = () => {
   const { total, itemCount, sessionId } = useCartStore();
@@ -11,6 +12,7 @@ const CartBar = () => {
   const [searchParams] = useSearchParams();
   const count = itemCount();
   const t = useT();
+  const displayTotal = useCountUp(total());
 
   const table = searchParams.get('table');
   const token = searchParams.get('token');
@@ -36,7 +38,7 @@ const CartBar = () => {
         <motion.button
           initial={{ y: 50, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
-          transition={{ type: 'spring', damping: 22, stiffness: 320 }}
+          transition={springSnappy}
           onClick={() => navigate(`/tab?${buildParams()}`)}
           className="pointer-events-auto w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-card/90 backdrop-blur-lg border border-border text-foreground font-sans text-sm font-medium hover:bg-muted transition-colors min-h-[44px] tap"
         >
@@ -51,7 +53,7 @@ const CartBar = () => {
             initial={{ y: 100, opacity: 0, scale: 0.95 }}
             animate={{ y: 0, opacity: 1, scale: 1 }}
             exit={{ y: 100, opacity: 0, scale: 0.95 }}
-            transition={{ type: 'spring', damping: 22, stiffness: 320 }}
+            transition={springSnappy}
             onClick={() => navigate(`/cart?${buildParams()}`)}
             className="pointer-events-auto w-full flex items-center justify-between px-6 py-4 rounded-2xl text-white shadow-xl shadow-primary/30 hover:shadow-primary/40 transition-shadow min-h-[56px] tap"
             style={{ backgroundColor: 'hsl(140, 12%, 53%)' }}
@@ -71,15 +73,9 @@ const CartBar = () => {
               </div>
               <span className="font-sans font-semibold text-sm">{t('view_order')}</span>
             </div>
-            <motion.span
-              key={total().toFixed(2)}
-              initial={{ y: -4, opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
-              transition={{ duration: 0.18 }}
-              className="font-sans font-bold text-base tabular-nums"
-            >
-              {total().toFixed(2)} KM
-            </motion.span>
+            <span className="font-sans font-bold text-base tabular-nums">
+              {displayTotal.toFixed(2)} KM
+            </span>
           </motion.button>
         )}
       </AnimatePresence>
