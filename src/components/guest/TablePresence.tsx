@@ -36,7 +36,7 @@ const TablePresence = () => {
       .eq('status', 'pending')
       .order('created_at', { ascending: true });
     // Never prompt a device to approve its own request.
-    setPending((data || []).filter((r: JoinReq) => r.client_id !== clientId));
+    setPending((data || []).filter((r) => r.client_id !== clientId) as JoinReq[]);
   }, [sessionId, clientId]);
 
   useEffect(() => {
