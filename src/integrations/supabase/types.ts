@@ -191,8 +191,6 @@ export type Database = {
           guest_name: string | null
           id: string
           notes: string | null
-          payment_method: string | null
-          payment_status: string
           preparing_at: string | null
           ready_at: string | null
           served_at: string | null
@@ -208,8 +206,6 @@ export type Database = {
           guest_name?: string | null
           id?: string
           notes?: string | null
-          payment_method?: string | null
-          payment_status?: string
           preparing_at?: string | null
           ready_at?: string | null
           served_at?: string | null
@@ -225,8 +221,6 @@ export type Database = {
           guest_name?: string | null
           id?: string
           notes?: string | null
-          payment_method?: string | null
-          payment_status?: string
           preparing_at?: string | null
           ready_at?: string | null
           served_at?: string | null
@@ -394,7 +388,7 @@ export type Database = {
           id: string
           resolved_at: string | null
           resolved_by_name: string | null
-          status: "pending" | "approved" | "declined"
+          status: string
           table_session_id: string
         }
         Insert: {
@@ -404,7 +398,7 @@ export type Database = {
           id?: string
           resolved_at?: string | null
           resolved_by_name?: string | null
-          status?: "pending" | "approved" | "declined"
+          status?: string
           table_session_id: string
         }
         Update: {
@@ -414,7 +408,7 @@ export type Database = {
           id?: string
           resolved_at?: string | null
           resolved_by_name?: string | null
-          status?: "pending" | "approved" | "declined"
+          status?: string
           table_session_id?: string
         }
         Relationships: [
@@ -582,7 +576,6 @@ export type Database = {
         Row: {
           created_at: string
           id: string
-          reason: string | null
           resolved_at: string | null
           status: string
           table_session_id: string
@@ -590,7 +583,6 @@ export type Database = {
         Insert: {
           created_at?: string
           id?: string
-          reason?: string | null
           resolved_at?: string | null
           status?: string
           table_session_id: string
@@ -598,7 +590,6 @@ export type Database = {
         Update: {
           created_at?: string
           id?: string
-          reason?: string | null
           resolved_at?: string | null
           status?: string
           table_session_id?: string
@@ -654,13 +645,6 @@ export type Database = {
       admin_set_waiter_pin: {
         Args: { _pin: string; _waiter_id: string }
         Returns: undefined
-      }
-      get_popular_items: {
-        Args: { _days?: number; _limit?: number }
-        Returns: {
-          menu_item_id: string
-          qty: number
-        }[]
       }
       get_waiter_id: { Args: { _user_id: string }; Returns: string }
       has_role: {
