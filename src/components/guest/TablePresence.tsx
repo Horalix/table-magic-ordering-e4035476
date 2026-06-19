@@ -7,9 +7,12 @@ import { Button } from '@/components/ui/button';
 import { useT } from '@/lib/i18n';
 import { springSoft, fade } from '@/lib/motion';
 
-interface JoinReq { id: string; guest_name: string; client_id: string; status: string }
-
-const sjr = () => (supabase as any).from('session_join_requests');
+interface JoinReq {
+  id: string;
+  guest_name: string;
+  client_id: string;
+  status: 'pending' | 'approved' | 'declined';
+}
 
 /**
  * Mounted globally for guests. When this device is in an active table session,
@@ -26,7 +29,8 @@ const TablePresence = () => {
 
   const load = useCallback(async () => {
     if (!sessionId) { setPending([]); return; }
-    const { data } = await sjr()
+    const { data } = await supabase
+      .from('session_join_requests')
       .select('id, guest_name, client_id, status')
       .eq('table_session_id', sessionId)
       .eq('status', 'pending')
@@ -51,7 +55,11 @@ const TablePresence = () => {
 
   const resolve = async (id: string, status: 'approved' | 'declined') => {
     setPending((p) => p.filter((r) => r.id !== id)); // optimistic
-    await sjr().update({ status, resolved_by_name: guestName || null }).eq('id', id).eq('status', 'pending');
+    await supabase
+      .from('session_join_requests')
+      .update({ status, resolved_by_name: guestName || null })
+      .eq('id', id)
+      .eq('status', 'pending');
   };
 
   const current = pending[0];

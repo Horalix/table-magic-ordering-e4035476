@@ -12,7 +12,12 @@ interface Body {
   pin?: string;
 }
 
+interface RoleRow {
+  role: string;
+}
+
 const synthEmail = (u: string) => `${u}@waiter.lasoul.local`;
+const errorMessage = (error: unknown) => error instanceof Error ? error.message : 'Server error';
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
@@ -34,7 +39,7 @@ Deno.serve(async (req) => {
     }
     const admin = createClient(SUPABASE_URL, SERVICE_ROLE);
     const { data: roles } = await admin.from('user_roles').select('role').eq('user_id', userData.user.id);
-    const isAdmin = roles?.some((r: any) => r.role === 'admin');
+    const isAdmin = (roles as RoleRow[] | null)?.some((r) => r.role === 'admin');
     if (!isAdmin) {
       return new Response(JSON.stringify({ error: 'Admin only' }), { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
@@ -84,7 +89,7 @@ Deno.serve(async (req) => {
     let pin = (body.pin || '').replace(/\D/g, '');
     if (pin && pin.length !== 4) pin = '';
     if (!pin) pin = String(Math.floor(1000 + Math.random() * 9000));
-    const { error: pinErr } = await userClient.rpc('admin_set_waiter_pin' as any, { _waiter_id: waiter.id, _pin: pin });
+    const { error: pinErr } = await userClient.rpc('admin_set_waiter_pin', { _waiter_id: waiter.id, _pin: pin });
     if (pinErr) {
       return new Response(JSON.stringify({ ok: true, waiter, pin: null, warning: `Created but PIN not set: ${pinErr.message}` }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -96,7 +101,7 @@ Deno.serve(async (req) => {
     });
 
 
-  } catch (e: any) {
-    return new Response(JSON.stringify({ error: e?.message || 'Server error' }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+  } catch (e: unknown) {
+    return new Response(JSON.stringify({ error: errorMessage(e) }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   }
 });

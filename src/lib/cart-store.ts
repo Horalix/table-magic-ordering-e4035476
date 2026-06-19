@@ -4,7 +4,10 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
 export interface CartItem {
+  /** Cart-line id. For plain items this is the menu item id; special requests get a distinct line id. */
   id: string;
+  /** Stable menu item id used when writing order_items.menu_item_id. */
+  menuItemId?: string;
   name: string;
   price: number;
   quantity: number;
@@ -45,6 +48,18 @@ const genId = (): string => {
   return `c_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
 };
 
+const normalizeNotes = (notes?: string): string | undefined => {
+  const trimmed = notes?.trim();
+  return trimmed ? trimmed : undefined;
+};
+
+const getMenuItemId = (item: Pick<CartItem, 'id' | 'menuItemId'>): string => item.menuItemId ?? item.id;
+
+const buildCartLineId = (menuItemId: string, notes?: string): string => {
+  if (!notes) return menuItemId;
+  return `${menuItemId}::${encodeURIComponent(notes.toLowerCase())}`;
+};
+
 export const useCartStore = create<CartStore>()(persist((set, get) => ({
   items: [],
   tableNumber: null,
@@ -56,15 +71,18 @@ export const useCartStore = create<CartStore>()(persist((set, get) => ({
 
   addItem: (item) => {
     set((state) => {
-      const existing = state.items.find((i) => i.id === item.id);
+      const notes = normalizeNotes(item.notes);
+      const menuItemId = item.menuItemId ?? item.id;
+      const id = buildCartLineId(menuItemId, notes);
+      const existing = state.items.find((i) => getMenuItemId(i) === menuItemId && normalizeNotes(i.notes) === notes);
       if (existing) {
         return {
           items: state.items.map((i) =>
-            i.id === item.id ? { ...i, quantity: i.quantity + 1 } : i
+            i.id === existing.id ? { ...i, quantity: i.quantity + 1 } : i
           ),
         };
       }
-      return { items: [...state.items, { ...item, quantity: 1 }] };
+      return { items: [...state.items, { ...item, id, menuItemId, notes, quantity: 1 }] };
     });
   },
 

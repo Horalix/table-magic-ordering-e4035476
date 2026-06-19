@@ -1,150 +1,279 @@
-import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { AnimatePresence, motion } from 'framer-motion';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
-  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
-  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import {
-  LogOut, ChefHat, Hand, CreditCard, Clock, PowerOff, Check,
-  Sparkles, Users, Flame, Bell, Utensils, CheckCircle2, Volume2, VolumeX, Monitor,
+  Bell,
+  Check,
+  CheckCircle2,
+  ChefHat,
+  Clock,
+  CreditCard,
+  Flame,
+  Hand,
+  LogOut,
+  Monitor,
+  PowerOff,
+  Sparkles,
+  Users,
+  Utensils,
+  Volume2,
+  VolumeX,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { useElapsed, formatDuration, waitBg } from '@/lib/timing';
+import { formatDuration, useElapsed, waitBg } from '@/lib/timing';
+import type { Database } from '@/integrations/supabase/types';
 
-const SOUND_KEY = 'waiter-sound-on';
-const playBeep = () => {
-  try {
-    const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
-    const o = ctx.createOscillator();
-    const g = ctx.createGain();
-    o.connect(g); g.connect(ctx.destination);
-    o.frequency.value = 880; o.type = 'sine';
-    g.gain.setValueAtTime(0.0001, ctx.currentTime);
-    g.gain.exponentialRampToValueAtTime(0.18, ctx.currentTime + 0.02);
-    g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.45);
-    o.start(); o.stop(ctx.currentTime + 0.5);
-  } catch {}
+type OrderStatus = Database['public']['Enums']['order_status'];
+type OrderItemStatus = Database['public']['Enums']['order_item_status'];
+type WaiterRow = Database['public']['Tables']['waiters']['Row'];
+type WaiterInfo = Pick<WaiterRow, 'id' | 'display_name'>;
+type WaiterSession = Pick<Database['public']['Tables']['table_sessions']['Row'], 'id' | 'opened_at' | 'guest_name' | 'table_id'> & {
+  tables: { table_number: number; section_id: string | null } | null;
+};
+type WaiterOrderItem = {
+  quantity: number;
+  status: OrderItemStatus;
+  menu_items: { name: string } | null;
+};
+type WaiterOrder = Pick<Database['public']['Tables']['orders']['Row'], 'id' | 'created_at' | 'status' | 'table_session_id'> & {
+  table_sessions: { tables: { table_number: number } | null } | null;
+  order_items: WaiterOrderItem[] | null;
+};
+type WaiterCall = Pick<Database['public']['Tables']['waiter_calls']['Row'], 'id' | 'created_at' | 'table_session_id'> & {
+  table_sessions: { tables: { table_number: number } | null } | null;
+};
+type BillRequest = Pick<Database['public']['Tables']['bill_requests']['Row'], 'id' | 'created_at' | 'table_session_id'> & {
+  table_sessions: { tables: { table_number: number } | null } | null;
+};
+type WindowWithWebAudioFallback = Window & typeof globalThis & {
+  webkitAudioContext?: typeof AudioContext;
 };
 
-interface WaiterInfo { id: string; display_name: string; }
+const SOUND_KEY = 'waiter-sound-on';
+
+const playBeep = () => {
+  try {
+    const AudioContextCtor = window.AudioContext ?? (window as WindowWithWebAudioFallback).webkitAudioContext;
+    if (!AudioContextCtor) return;
+
+    const ctx = new AudioContextCtor();
+    const oscillator = ctx.createOscillator();
+    const gain = ctx.createGain();
+    oscillator.connect(gain);
+    gain.connect(ctx.destination);
+    oscillator.frequency.value = 880;
+    oscillator.type = 'sine';
+    gain.gain.setValueAtTime(0.0001, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.18, ctx.currentTime + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.45);
+    oscillator.start();
+    oscillator.stop(ctx.currentTime + 0.5);
+  } catch (error) {
+    console.warn('Unable to play waiter alert sound', error);
+  }
+};
 
 const WaiterDashboard = () => {
   const navigate = useNavigate();
   const [waiter, setWaiter] = useState<WaiterInfo | null>(null);
-  const [tables, setTables] = useState<any[]>([]);
-  const [orders, setOrders] = useState<any[]>([]);
-  const [waiterCalls, setWaiterCalls] = useState<any[]>([]);
-  const [billRequests, setBillRequests] = useState<any[]>([]);
+  const [tables, setTables] = useState<WaiterSession[]>([]);
+  const [orders, setOrders] = useState<WaiterOrder[]>([]);
+  const [waiterCalls, setWaiterCalls] = useState<WaiterCall[]>([]);
+  const [billRequests, setBillRequests] = useState<BillRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [soundOn, setSoundOn] = useState<boolean>(() => localStorage.getItem(SOUND_KEY) !== 'false');
   const prevAlertIds = useRef<Set<string>>(new Set());
 
   const fetchAll = useCallback(async (waiterId: string) => {
-    const { data: sessions } = await supabase
+    const { data: sessions, error: sessionsError } = await supabase
       .from('table_sessions')
       .select('id, opened_at, guest_name, table_id, tables!inner(table_number, section_id)')
       .eq('is_active', true)
       .eq('assigned_waiter_id', waiterId);
 
-    const sessionIds = (sessions || []).map((s: any) => s.id);
-    const { data: ord } = sessionIds.length > 0
+    if (sessionsError) {
+      toast.error('Failed to load tables');
+      return;
+    }
+
+    const activeSessions = (sessions ?? []) as WaiterSession[];
+    const sessionIds = activeSessions.map((session) => session.id);
+
+    const { data: ord, error: ordersError } = sessionIds.length > 0
       ? await supabase
           .from('orders')
-          .select(`*, table_sessions!inner(tables!inner(table_number)), order_items(quantity, status, menu_items(name))`)
+          .select('*, table_sessions!inner(tables!inner(table_number)), order_items(quantity, status, menu_items(name))')
           .in('table_session_id', sessionIds)
           .neq('status', 'served')
           .neq('status', 'cancelled')
           .order('created_at', { ascending: true })
-      : { data: [] };
+      : { data: [], error: null };
 
-    const { data: calls } = sessionIds.length > 0
-      ? await supabase.from('waiter_calls').select('*, table_sessions!inner(tables!inner(table_number))').in('table_session_id', sessionIds).eq('status', 'pending')
-      : { data: [] };
+    const { data: calls, error: callsError } = sessionIds.length > 0
+      ? await supabase
+          .from('waiter_calls')
+          .select('*, table_sessions!inner(tables!inner(table_number))')
+          .in('table_session_id', sessionIds)
+          .eq('status', 'pending')
+      : { data: [], error: null };
 
-    const { data: bills } = sessionIds.length > 0
-      ? await supabase.from('bill_requests').select('*, table_sessions!inner(tables!inner(table_number))').in('table_session_id', sessionIds).eq('status', 'pending')
-      : { data: [] };
+    const { data: bills, error: billsError } = sessionIds.length > 0
+      ? await supabase
+          .from('bill_requests')
+          .select('*, table_sessions!inner(tables!inner(table_number))')
+          .in('table_session_id', sessionIds)
+          .eq('status', 'pending')
+      : { data: [], error: null };
 
-    setTables(sessions || []);
-    setOrders(ord || []);
-    setWaiterCalls(calls || []);
-    setBillRequests(bills || []);
+    if (ordersError || callsError || billsError) {
+      toast.error('Failed to load live service queue');
+      return;
+    }
+
+    setTables(activeSessions);
+    setOrders((ord ?? []) as WaiterOrder[]);
+    setWaiterCalls((calls ?? []) as WaiterCall[]);
+    setBillRequests((bills ?? []) as BillRequest[]);
   }, []);
 
   useEffect(() => {
-    (async () => {
+    let mounted = true;
+
+    const init = async () => {
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session) { navigate('/waiter/login'); return; }
-      const { data: w } = await supabase.from('waiters').select('id, display_name').eq('user_id', session.user.id).maybeSingle();
-      if (!w) {
+      if (!session) {
+        navigate('/waiter/login');
+        return;
+      }
+
+      const { data: waiterProfile, error } = await supabase
+        .from('waiters')
+        .select('id, display_name')
+        .eq('user_id', session.user.id)
+        .maybeSingle();
+
+      if (error || !waiterProfile) {
         toast.error('No waiter profile linked to this account');
         navigate('/waiter/login');
         return;
       }
-      setWaiter(w);
-      await fetchAll(w.id);
-      setLoading(false);
+
+      if (!mounted) return;
+      setWaiter(waiterProfile);
+      await fetchAll(waiterProfile.id);
+      if (mounted) setLoading(false);
 
       const ch = supabase
-        .channel('waiter-' + w.id)
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => fetchAll(w.id))
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'waiter_calls' }, () => fetchAll(w.id))
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'bill_requests' }, () => fetchAll(w.id))
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'table_sessions' }, () => fetchAll(w.id))
+        .channel(`waiter-${waiterProfile.id}`)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => { void fetchAll(waiterProfile.id); })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'waiter_calls' }, () => { void fetchAll(waiterProfile.id); })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'bill_requests' }, () => { void fetchAll(waiterProfile.id); })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'table_sessions' }, () => { void fetchAll(waiterProfile.id); })
         .subscribe();
-      return () => { supabase.removeChannel(ch); };
-    })();
+
+      return () => {
+        supabase.removeChannel(ch);
+      };
+    };
+
+    const cleanupPromise = init();
+
+    return () => {
+      mounted = false;
+      void cleanupPromise.then((cleanup) => cleanup?.());
+    };
   }, [fetchAll, navigate]);
 
-  const updateOrderStatus = async (id: string, status: string) => {
-    const { error } = await supabase.from('orders').update({ status: status as any }).eq('id', id);
-    if (error) toast.error(error.message); else toast.success('Updated');
+  const updateOrderStatus = async (id: string, status: OrderStatus) => {
+    const { error } = await supabase.from('orders').update({ status }).eq('id', id);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    toast.success('Updated');
   };
 
   const resolveCall = async (id: string) => {
-    await supabase.from('waiter_calls').update({ status: 'resolved', resolved_at: new Date().toISOString() }).eq('id', id);
+    const { error } = await supabase
+      .from('waiter_calls')
+      .update({ status: 'resolved', resolved_at: new Date().toISOString() })
+      .eq('id', id);
+    if (error) toast.error(error.message);
   };
+
   const resolveBill = async (id: string) => {
-    await supabase.from('bill_requests').update({ status: 'resolved', resolved_at: new Date().toISOString() }).eq('id', id);
+    const { error } = await supabase
+      .from('bill_requests')
+      .update({ status: 'resolved', resolved_at: new Date().toISOString() })
+      .eq('id', id);
+    if (error) toast.error(error.message);
   };
+
   const closeSession = async (id: string) => {
-    await supabase.from('table_sessions').update({ is_active: false, closed_at: new Date().toISOString() }).eq('id', id);
+    const { error } = await supabase
+      .from('table_sessions')
+      .update({ is_active: false, closed_at: new Date().toISOString() })
+      .eq('id', id);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
     toast.success('Table freed');
   };
-  const logout = async () => { await supabase.auth.signOut(); navigate('/waiter/login'); };
+
+  const logout = async () => {
+    await supabase.auth.signOut();
+    navigate('/waiter/login');
+  };
 
   const ordersByTable = useMemo(() => {
     const map: Record<string, number> = {};
-    orders.forEach((o: any) => {
-      const tn = o.table_sessions?.tables?.table_number;
-      if (tn != null) map[tn] = (map[tn] || 0) + 1;
+    orders.forEach((order) => {
+      const tableNumber = order.table_sessions?.tables?.table_number;
+      if (tableNumber != null) map[tableNumber] = (map[tableNumber] ?? 0) + 1;
     });
     return map;
   }, [orders]);
 
-  const initials = (waiter?.display_name || '?').split(' ').map(s => s[0]).join('').slice(0, 2).toUpperCase();
+  const initials = (waiter?.display_name || '?')
+    .split(' ')
+    .map((part) => part[0])
+    .join('')
+    .slice(0, 2)
+    .toUpperCase();
   const attentionCount = waiterCalls.length + billRequests.length;
-  const ordersWaiting = orders.filter((o: any) => o.status !== 'served' && o.status !== 'cancelled').length;
-  const oldestOrderMs = orders.reduce((max: number, o: any) => {
-    const ms = Date.now() - new Date(o.created_at).getTime();
+  const ordersWaiting = orders.filter((order) => order.status !== 'served' && order.status !== 'cancelled').length;
+  const oldestOrderMs = orders.reduce((max, order) => {
+    const ms = Date.now() - new Date(order.created_at).getTime();
     return ms > max ? ms : max;
   }, 0);
 
-  // Sound on new alerts
   useEffect(() => {
     const ids = new Set<string>([
-      ...waiterCalls.map((c: any) => 'c:' + c.id),
-      ...billRequests.map((b: any) => 'b:' + b.id),
+      ...waiterCalls.map((call) => `c:${call.id}`),
+      ...billRequests.map((bill) => `b:${bill.id}`),
     ]);
     if (prevAlertIds.current.size > 0) {
       let isNew = false;
-      ids.forEach(id => { if (!prevAlertIds.current.has(id)) isNew = true; });
+      ids.forEach((id) => {
+        if (!prevAlertIds.current.has(id)) isNew = true;
+      });
       if (isNew && soundOn) playBeep();
     }
     prevAlertIds.current = ids;
@@ -170,7 +299,6 @@ const WaiterDashboard = () => {
 
   return (
     <div className="min-h-screen bg-background pb-[env(safe-area-inset-bottom)]">
-      {/* Sticky header */}
       <header className="sticky top-0 z-40 border-b border-border/60 bg-background/80 backdrop-blur-md">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -184,7 +312,7 @@ const WaiterDashboard = () => {
                   <span className="absolute inline-flex h-full w-full rounded-full bg-emerald-500 opacity-75 animate-ping" />
                   <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
                 </span>
-                On shift · {tables.length} table{tables.length !== 1 ? 's' : ''}
+                On shift | {tables.length} table{tables.length !== 1 ? 's' : ''}
               </div>
             </div>
           </div>
@@ -192,7 +320,13 @@ const WaiterDashboard = () => {
             <Button variant="ghost" size="sm" asChild className="tap-sm">
               <Link to="/waiter/monitor"><Monitor className="w-4 h-4 sm:mr-1" /><span className="hidden sm:inline">Floor</span></Link>
             </Button>
-            <Button variant="ghost" size="sm" onClick={toggleSound} className="tap-sm" aria-label="Toggle sound">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={toggleSound}
+              className="tap-sm"
+              aria-label={soundOn ? 'Mute waiter alert sound' : 'Enable waiter alert sound'}
+            >
               {soundOn ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4 text-muted-foreground" />}
             </Button>
             <Button variant="ghost" size="sm" onClick={logout} className="tap-sm">
@@ -200,20 +334,18 @@ const WaiterDashboard = () => {
             </Button>
           </div>
         </div>
-        {/* Stats strip */}
         <div className="max-w-6xl mx-auto px-4 sm:px-6 pb-3 grid grid-cols-3 gap-2 text-center">
           <StatChip label="Tables" value={tables.length} />
           <StatChip label="Orders" value={ordersWaiting} tone={ordersWaiting > 0 ? 'active' : 'idle'} />
           <StatChip
             label="Oldest wait"
-            value={oldestOrderMs > 0 ? formatDuration(oldestOrderMs) : '—'}
+            value={oldestOrderMs > 0 ? formatDuration(oldestOrderMs) : '-'}
             tone={oldestOrderMs > 10 * 60_000 ? 'urgent' : oldestOrderMs > 5 * 60_000 ? 'warn' : 'idle'}
           />
         </div>
       </header>
 
       <main className="max-w-6xl mx-auto px-4 sm:px-6 py-5 space-y-7">
-        {/* Attention */}
         <section>
           <SectionTitle icon={<Bell className="w-4 h-4" />} title="Attention needed" count={attentionCount} />
           {attentionCount === 0 ? (
@@ -223,26 +355,26 @@ const WaiterDashboard = () => {
           ) : (
             <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
               <AnimatePresence mode="popLayout">
-                {waiterCalls.map((c: any) => (
+                {waiterCalls.map((call) => (
                   <AlertPill
-                    key={c.id}
+                    key={call.id}
                     color="amber"
                     icon={<Hand className="w-4 h-4" />}
-                    title={`Table ${c.table_sessions.tables.table_number}`}
+                    title={`Table ${call.table_sessions?.tables?.table_number ?? '?'}`}
                     label="Needs you"
-                    since={c.created_at}
-                    onDone={() => resolveCall(c.id)}
+                    since={call.created_at}
+                    onDone={() => { void resolveCall(call.id); }}
                   />
                 ))}
-                {billRequests.map((b: any) => (
+                {billRequests.map((bill) => (
                   <AlertPill
-                    key={b.id}
+                    key={bill.id}
                     color="primary"
                     icon={<CreditCard className="w-4 h-4" />}
-                    title={`Table ${b.table_sessions.tables.table_number}`}
+                    title={`Table ${bill.table_sessions?.tables?.table_number ?? '?'}`}
                     label="Wants the bill"
-                    since={b.created_at}
-                    onDone={() => resolveBill(b.id)}
+                    since={bill.created_at}
+                    onDone={() => { void resolveBill(bill.id); }}
                   />
                 ))}
               </AnimatePresence>
@@ -250,24 +382,23 @@ const WaiterDashboard = () => {
           )}
         </section>
 
-        {/* Tables */}
         <section>
           <SectionTitle icon={<Users className="w-4 h-4" />} title="My tables" count={tables.length} />
           {tables.length === 0 ? (
-            <EmptyState icon={<Users className="w-5 h-5" />} text="No active tables in your section yet." />
+            <EmptyState icon={<Users className="w-5 h-5" />} text="No tables yet. Tables appear here once your manager assigns your section for today and a guest sits down." />
           ) : (
             <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {tables.map((s: any, i: number) => (
+              {tables.map((session, index) => (
                 <motion.div
-                  key={s.id}
+                  key={session.id}
                   initial={{ opacity: 0, y: 8 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: i * 0.04, duration: 0.2 }}
+                  transition={{ delay: index * 0.04, duration: 0.2 }}
                 >
                   <TableCard
-                    session={s}
-                    activeOrders={ordersByTable[s.tables.table_number] || 0}
-                    onClose={() => closeSession(s.id)}
+                    session={session}
+                    activeOrders={ordersByTable[String(session.tables?.table_number ?? '')] ?? 0}
+                    onClose={() => { void closeSession(session.id); }}
                   />
                 </motion.div>
               ))}
@@ -275,7 +406,6 @@ const WaiterDashboard = () => {
           )}
         </section>
 
-        {/* Live orders */}
         <section>
           <SectionTitle icon={<ChefHat className="w-4 h-4" />} title="Live orders" count={orders.length} />
           {orders.length === 0 ? (
@@ -283,16 +413,16 @@ const WaiterDashboard = () => {
           ) : (
             <div className="grid sm:grid-cols-2 gap-3">
               <AnimatePresence mode="popLayout">
-                {orders.map((o: any, i: number) => (
+                {orders.map((order, index) => (
                   <motion.div
-                    key={o.id}
+                    key={order.id}
                     layout
                     initial={{ opacity: 0, y: 8 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, scale: 0.96 }}
-                    transition={{ delay: i * 0.03, duration: 0.2 }}
+                    transition={{ delay: index * 0.03, duration: 0.2 }}
                   >
-                    <OrderCard order={o} onUpdate={updateOrderStatus} />
+                    <OrderCard order={order} onUpdate={updateOrderStatus} />
                   </motion.div>
                 ))}
               </AnimatePresence>
@@ -304,7 +434,15 @@ const WaiterDashboard = () => {
   );
 };
 
-const StatChip = ({ label, value, tone = 'idle' }: { label: string; value: React.ReactNode; tone?: 'idle' | 'active' | 'warn' | 'urgent' }) => {
+const StatChip = ({
+  label,
+  value,
+  tone = 'idle',
+}: {
+  label: string;
+  value: React.ReactNode;
+  tone?: 'idle' | 'active' | 'warn' | 'urgent';
+}) => {
   const toneCls = {
     idle: 'bg-muted/50 text-foreground',
     active: 'bg-primary/10 text-primary',
@@ -340,10 +478,19 @@ const Elapsed = ({ since }: { since: string }) => {
 };
 
 const AlertPill = ({
-  color, icon, title, label, since, onDone,
+  color,
+  icon,
+  title,
+  label,
+  since,
+  onDone,
 }: {
-  color: 'amber' | 'primary'; icon: React.ReactNode;
-  title: string; label: string; since: string; onDone: () => void;
+  color: 'amber' | 'primary';
+  icon: React.ReactNode;
+  title: string;
+  label: string;
+  since: string;
+  onDone: () => void;
 }) => {
   const accent = color === 'amber' ? 'bg-amber-500' : 'bg-primary';
   const tint = color === 'amber' ? 'bg-amber-500/5 border-amber-500/30' : 'bg-primary/5 border-primary/30';
@@ -362,7 +509,7 @@ const AlertPill = ({
         </div>
         <div className="min-w-0 flex-1">
           <p className="font-sans font-semibold text-sm truncate">{title}</p>
-          <p className="text-xs text-muted-foreground truncate">{label} · <Elapsed since={since} /></p>
+          <p className="text-xs text-muted-foreground truncate">{label} | <Elapsed since={since} /></p>
         </div>
         <Button size="sm" variant="ghost" className="tap-sm shrink-0" onClick={onDone}>
           <CheckCircle2 className="w-4 h-4 mr-1" /> Done
@@ -372,14 +519,15 @@ const AlertPill = ({
   );
 };
 
-const TableCard = ({ session, activeOrders, onClose }: { session: any; activeOrders: number; onClose: () => void }) => {
+const TableCard = ({ session, activeOrders, onClose }: { session: WaiterSession; activeOrders: number; onClose: () => void }) => {
   const ms = useElapsed(session.opened_at);
+  const tableNumber = session.tables?.table_number ?? '?';
   return (
     <Card className="overflow-hidden card-lux-hover">
       <CardContent className="p-4">
         <div className="flex items-start justify-between mb-2">
           <div>
-            <p className="font-serif text-2xl font-bold leading-none">T{session.tables.table_number}</p>
+            <p className="font-serif text-2xl font-bold leading-none">T{tableNumber}</p>
             {session.guest_name && <p className="text-xs text-muted-foreground mt-1 truncate max-w-[160px]">{session.guest_name}</p>}
           </div>
           <span className={`text-[11px] px-2 py-0.5 rounded-full border tabular-nums ${waitBg(ms)}`}>
@@ -398,7 +546,7 @@ const TableCard = ({ session, activeOrders, onClose }: { session: any; activeOrd
             </AlertDialogTrigger>
             <AlertDialogContent>
               <AlertDialogHeader>
-                <AlertDialogTitle>Free table T{session.tables.table_number}?</AlertDialogTitle>
+                <AlertDialogTitle>Free table T{tableNumber}?</AlertDialogTitle>
                 <AlertDialogDescription>
                   This closes the session. The guest will need a new QR scan to order again.
                 </AlertDialogDescription>
@@ -415,39 +563,45 @@ const TableCard = ({ session, activeOrders, onClose }: { session: any; activeOrd
   );
 };
 
-const STATUS_META: Record<string, { dot: string; label: string }> = {
-  pending:   { dot: 'bg-muted-foreground', label: 'Pending' },
-  confirmed: { dot: 'bg-blue-500',         label: 'Confirmed' },
-  preparing: { dot: 'bg-amber-500',        label: 'Preparing' },
-  ready:     { dot: 'bg-emerald-500',      label: 'Ready' },
-};
-const NEXT_META: Record<string, { status: string; label: string; icon: React.ReactNode }> = {
-  pending:   { status: 'confirmed', label: 'Confirm',     icon: <Check className="w-4 h-4 mr-1.5" /> },
-  confirmed: { status: 'preparing', label: 'Start prep',  icon: <Flame className="w-4 h-4 mr-1.5" /> },
-  preparing: { status: 'ready',     label: 'Mark ready',  icon: <Bell className="w-4 h-4 mr-1.5" /> },
-  ready:     { status: 'served',    label: 'Mark served', icon: <Utensils className="w-4 h-4 mr-1.5" /> },
+const STATUS_META: Partial<Record<OrderStatus, { dot: string; label: string }>> = {
+  pending: { dot: 'bg-muted-foreground', label: 'Pending' },
+  confirmed: { dot: 'bg-blue-500', label: 'Confirmed' },
+  preparing: { dot: 'bg-amber-500', label: 'Preparing' },
+  ready: { dot: 'bg-emerald-500', label: 'Ready' },
 };
 
-const OrderCard = ({ order, onUpdate }: { order: any; onUpdate: (id: string, s: string) => void }) => {
+const NEXT_META: Partial<Record<OrderStatus, { status: OrderStatus; label: string; icon: React.ReactNode }>> = {
+  pending: { status: 'confirmed', label: 'Confirm', icon: <Check className="w-4 h-4 mr-1.5" /> },
+  confirmed: { status: 'preparing', label: 'Start prep', icon: <Flame className="w-4 h-4 mr-1.5" /> },
+  preparing: { status: 'ready', label: 'Mark ready', icon: <Bell className="w-4 h-4 mr-1.5" /> },
+  ready: { status: 'served', label: 'Mark served', icon: <Utensils className="w-4 h-4 mr-1.5" /> },
+};
+
+const OrderCard = ({ order, onUpdate }: { order: WaiterOrder; onUpdate: (id: string, status: OrderStatus) => void }) => {
   const ms = useElapsed(order.created_at);
   const next = NEXT_META[order.status];
-  const meta = STATUS_META[order.status] || STATUS_META.pending;
+  const meta = STATUS_META[order.status] ?? STATUS_META.pending;
+  const tableNumber = order.table_sessions?.tables?.table_number ?? '?';
+
   return (
     <Card className="card-lux-hover">
       <CardContent className="p-4">
         <div className="flex items-center justify-between mb-2.5">
           <div className="flex items-center gap-2 min-w-0">
-            <p className="font-serif text-lg font-bold shrink-0">T{order.table_sessions.tables.table_number}</p>
+            <p className="font-serif text-lg font-bold shrink-0">T{tableNumber}</p>
             <Badge variant="outline" className="text-[11px] gap-1.5">
-              <span className={`w-1.5 h-1.5 rounded-full ${meta.dot}`} />
-              {meta.label}
+              <span className={`w-1.5 h-1.5 rounded-full ${meta?.dot ?? ''}`} />
+              {meta?.label ?? order.status}
             </Badge>
           </div>
           <span className={`text-[11px] px-2 py-0.5 rounded-full border tabular-nums ${waitBg(ms)}`}>{formatDuration(ms)}</span>
         </div>
         <ul className="text-sm font-sans space-y-0.5 mb-3 text-foreground/90">
-          {(order.order_items || []).map((it: any, i: number) => (
-            <li key={i} className="flex gap-2"><span className="tabular-nums text-muted-foreground w-6">{it.quantity}×</span>{it.menu_items?.name}</li>
+          {(order.order_items ?? []).map((item, index) => (
+            <li key={`${item.menu_items?.name ?? 'item'}-${index}`} className="flex gap-2">
+              <span className="tabular-nums text-muted-foreground w-6">{item.quantity}x</span>
+              {item.menu_items?.name ?? 'Menu item'}
+            </li>
           ))}
         </ul>
         {next && (

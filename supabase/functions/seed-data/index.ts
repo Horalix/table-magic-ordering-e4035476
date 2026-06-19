@@ -5,6 +5,15 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+interface AuthUser {
+  id: string;
+  email?: string;
+}
+
+interface ExistingTable {
+  table_number: number;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -37,7 +46,7 @@ Deno.serve(async (req) => {
     } else {
       // User exists, find them
       const { data: users } = await supabase.auth.admin.listUsers();
-      const existing = users?.users?.find((u: any) => u.email === "kerim.sabic@gmail.com");
+      const existing = (users?.users as AuthUser[] | undefined)?.find((u) => u.email === "kerim.sabic@gmail.com");
       if (existing) {
         await supabase.from("user_roles").upsert({ user_id: existing.id, role: "admin" }, { onConflict: "user_id,role" });
         results.push(`Admin role assigned to existing user: ${existing.id}`);
@@ -50,7 +59,7 @@ Deno.serve(async (req) => {
     if (tablesError) {
       // table_number might not have unique constraint, just insert
       const { data: existingTables } = await supabase.from("tables").select("table_number");
-      const existingNums = new Set((existingTables || []).map((t: any) => t.table_number));
+      const existingNums = new Set(((existingTables ?? []) as ExistingTable[]).map((t) => t.table_number));
       const newTables = tables.filter((t) => !existingNums.has(t.table_number));
       if (newTables.length > 0) {
         const { error: insertErr } = await supabase.from("tables").insert(newTables);
@@ -183,8 +192,8 @@ Deno.serve(async (req) => {
     return new Response(JSON.stringify({ success: true, results }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
-  } catch (error: any) {
-    return new Response(JSON.stringify({ error: error.message }), {
+  } catch (error: unknown) {
+    return new Response(JSON.stringify({ error: error instanceof Error ? error.message : "Server error" }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

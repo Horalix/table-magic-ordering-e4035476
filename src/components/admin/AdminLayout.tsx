@@ -4,11 +4,11 @@ import { motion } from 'framer-motion';
 import { supabase } from '@/integrations/supabase/client';
 import {
   LayoutDashboard, UtensilsCrossed, TableProperties, ClipboardList,
-  BarChart3, QrCode, LogOut, ChefHat, Menu, X, Layers, Users, Star, Monitor
+  BarChart3, QrCode, LogOut, ChefHat, Menu, X, Layers, Users, Star, Monitor, CalendarCheck
 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import { springPill } from '@/lib/motion';
+import type { User } from '@supabase/supabase-js';
 
 // Grouped so the sidebar reads as a hierarchy, not a flat list.
 const navGroups = [
@@ -16,6 +16,7 @@ const navGroups = [
     heading: 'Operations',
     items: [
       { label: 'Dashboard', icon: LayoutDashboard, path: '/admin' },
+      { label: 'Tonight', icon: CalendarCheck, path: '/admin/tonight' },
       { label: 'Orders', icon: ClipboardList, path: '/admin/orders' },
       { label: 'Tables', icon: TableProperties, path: '/admin/tables' },
       { label: 'Floor Monitor', icon: Monitor, path: '/waiter/monitor' },
@@ -44,50 +45,75 @@ const AdminLayout = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState<User | null>(null);
+  const [authChecked, setAuthChecked] = useState(false);
 
   useEffect(() => {
+    let cancelled = false;
+
     const checkAuth = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
+        if (!cancelled) setAuthChecked(true);
         navigate('/admin/login');
         return;
       }
 
-      const { data: roles } = await supabase
-        .from('user_roles')
-        .select('role')
-        .eq('user_id', session.user.id);
+      const { data: hasAdminRole } = await supabase.rpc('has_role', {
+        _user_id: session.user.id,
+        _role: 'admin',
+      });
 
-      if (!roles || roles.length === 0) {
+      if (!hasAdminRole) {
         await supabase.auth.signOut();
+        if (!cancelled) setAuthChecked(true);
         navigate('/admin/login');
         toast.error('Unauthorized access');
         return;
       }
 
-      setUser(session.user);
+      if (!cancelled) {
+        setUser(session.user);
+        setAuthChecked(true);
+      }
     };
 
     checkAuth();
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
       if (event === 'SIGNED_OUT') navigate('/admin/login');
     });
 
-    return () => subscription.unsubscribe();
-  }, []);
+    return () => {
+      cancelled = true;
+      subscription.unsubscribe();
+    };
+  }, [navigate]);
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
     navigate('/admin/login');
   };
 
+  if (!authChecked) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="w-6 h-6 border-2 border-primary/20 border-t-primary rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  if (!user) {
+    return null;
+  }
+
   return (
     <div className="min-h-screen bg-background flex">
       {/* Mobile menu button */}
       <button
         onClick={() => setSidebarOpen(!sidebarOpen)}
+        aria-label={sidebarOpen ? 'Close admin navigation' : 'Open admin navigation'}
+        aria-expanded={sidebarOpen}
         className="lg:hidden fixed top-4 left-4 z-50 p-2 rounded-lg bg-card border border-border shadow-sm"
       >
         {sidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}

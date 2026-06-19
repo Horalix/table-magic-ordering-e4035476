@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { supabase } from '@/integrations/supabase/client';
@@ -13,10 +13,6 @@ type Phase = 'loading' | 'error' | 'name' | 'waiting' | 'declined';
 // If nobody at the table responds in this window, the joiner is let in
 // automatically so a sleeping host phone never leaves them stuck.
 const AUTO_APPROVE_MS = 30000;
-
-// The join-request table isn't in the generated Supabase types yet; the
-// codebase casts anon writes as any, so we follow that convention here.
-const sjr = () => (supabase as any).from('session_join_requests');
 
 const TableEntry = () => {
   const { tableNumber } = useParams<{ tableNumber: string }>();
@@ -34,14 +30,15 @@ const TableEntry = () => {
 
   const token = searchParams.get('token');
 
-  const enterMenu = (sid: string, name: string) => {
-    setTable(parseInt(tableNumber!), token!);
+  const enterMenu = useCallback((sid: string, name: string) => {
+    if (!tableNumber || !token) return;
+    setTable(Number.parseInt(tableNumber, 10), token);
     setSessionId(sid);
     setGuestName(name);
     startHeartbeat();
-    const params = new URLSearchParams({ table: tableNumber!, token: token! });
+    const params = new URLSearchParams({ table: tableNumber, token });
     navigate(`/menu?${params.toString()}`, { replace: true });
-  };
+  }, [navigate, setGuestName, setSessionId, setTable, startHeartbeat, tableNumber, token]);
 
   // 1. Validate QR and resolve whether this device is host / returning / joiner.
   useEffect(() => {
@@ -54,7 +51,7 @@ const TableEntry = () => {
         if (cancelled) return;
         if (tableError || !table) { setError(t('qr_expired')); setPhase('error'); return; }
 
-        const { data: existing } = await (supabase as any)
+        const { data: existing } = await supabase
           .from('table_sessions')
           .select('*')
           .eq('table_id', table.id).eq('is_active', true).maybeSingle();
@@ -71,7 +68,8 @@ const TableEntry = () => {
           enterMenu(existing.id, existing.guest_name || t('new_guest'));
           return;
         }
-        const { data: mine } = await sjr()
+        const { data: mine } = await supabase
+          .from('session_join_requests')
           .select('guest_name, status')
           .eq('table_session_id', existing.id).eq('client_id', clientId)
           .eq('status', 'approved').maybeSingle();
@@ -86,17 +84,18 @@ const TableEntry = () => {
       }
     })();
     return () => { cancelled = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tableNumber, token]);
+  }, [clientId, enterMenu, setTable, t, tableNumber, token]);
 
-  const createJoinRequest = async (sid: string, name: string) => {
-    const { data, error: rErr } = await sjr()
+  const createJoinRequest = useCallback(async (sid: string, name: string) => {
+    const { data, error: rErr } = await supabase
+      .from('session_join_requests')
       .insert({ table_session_id: sid, guest_name: name, client_id: clientId, status: 'pending' })
       .select('id').single();
 
     if (rErr) {
-      // A pending/approved request may already exist for this device — resume it.
-      const { data: existingReq } = await sjr()
+      // A pending/approved request may already exist for this device; resume it.
+      const { data: existingReq } = await supabase
+        .from('session_join_requests')
         .select('id, status')
         .eq('table_session_id', sid).eq('client_id', clientId)
         .order('created_at', { ascending: false }).limit(1).maybeSingle();
@@ -106,7 +105,7 @@ const TableEntry = () => {
     }
     setRequestId(data.id);
     setPhase('waiting');
-  };
+  }, [clientId, enterMenu, t]);
 
   const handleNameSubmit = async (name: string) => {
     nameRef.current = name;
@@ -122,7 +121,7 @@ const TableEntry = () => {
       .from('tables').select('id').eq('table_number', parseInt(tableNumber!)).eq('qr_token', token!).single();
     if (!table) { setError(t('qr_expired')); setPhase('error'); return; }
 
-    const { data: existing2 } = await (supabase as any)
+    const { data: existing2 } = await supabase
       .from('table_sessions').select('*')
       .eq('table_id', table.id).eq('is_active', true).maybeSingle();
 
@@ -137,12 +136,12 @@ const TableEntry = () => {
     // Create the session as host. Fall back to a plain insert if the join
     // migration (host_client_id column) hasn't been applied yet, so single-
     // phone ordering keeps working regardless.
-    let created = await (supabase as any)
+    let created = await supabase
       .from('table_sessions')
       .insert({ table_id: table.id, host_client_id: clientId, guest_name: name })
       .select('id').single();
     if (created.error) {
-      created = await (supabase as any)
+      created = await supabase
         .from('table_sessions')
         .insert({ table_id: table.id })
         .select('id').single();
@@ -163,21 +162,31 @@ const TableEntry = () => {
     };
 
     // Catch a status that may have changed before the subscription attached.
-    sjr().select('status').eq('id', requestId).maybeSingle()
-      .then(({ data }: any) => { if (data) resolve(data.status); });
+    supabase
+      .from('session_join_requests')
+      .select('status')
+      .eq('id', requestId)
+      .maybeSingle()
+      .then(({ data }) => { if (data) resolve(data.status); });
 
     const ch = supabase.channel(`join-req-${requestId}`)
       .on('postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'session_join_requests', filter: `id=eq.${requestId}` },
-        (payload: any) => resolve(payload.new.status))
+        (payload) => resolve(payload.new.status))
       .subscribe();
 
     const timer = setTimeout(async () => {
       if (done) return;
-      const { data } = await sjr().select('status').eq('id', requestId).maybeSingle();
+      const { data } = await supabase
+        .from('session_join_requests')
+        .select('status')
+        .eq('id', requestId)
+        .maybeSingle();
       if (data?.status === 'pending') {
         // Atomic guard: only self-approve if still pending (never override a decline).
-        await sjr().update({ status: 'approved', resolved_by_name: 'auto' })
+        await supabase
+          .from('session_join_requests')
+          .update({ status: 'approved', resolved_by_name: 'auto' })
           .eq('id', requestId).eq('status', 'pending');
         if (!done) { done = true; enterMenu(sessionId, nameRef.current); }
       } else if (data) {
@@ -186,8 +195,7 @@ const TableEntry = () => {
     }, AUTO_APPROVE_MS);
 
     return () => { done = true; clearTimeout(timer); supabase.removeChannel(ch); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase, requestId, sessionId]);
+  }, [enterMenu, phase, requestId, sessionId]);
 
   if (phase === 'loading') {
     return (

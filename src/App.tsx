@@ -4,15 +4,16 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { lazy, Suspense } from "react";
-import GuestMenu from "./pages/GuestMenu";
-import CategoryPage from "./pages/CategoryPage";
-import CartPage from "./pages/CartPage";
-import RunningTabPage from "./pages/RunningTabPage";
-import TableEntry from "./pages/TableEntry";
-import PageTransition from "./components/PageTransition";
-import TablePresence from "./components/guest/TablePresence";
+import StaffGate from "./components/auth/StaffGate";
 
-// Code-split admin/staff bundles — guests never download this code
+// Code-split route bundles so guests, staff, and admin screens load only when needed.
+const GuestMenu = lazy(() => import("./pages/GuestMenu"));
+const CategoryPage = lazy(() => import("./pages/CategoryPage"));
+const CartPage = lazy(() => import("./pages/CartPage"));
+const RunningTabPage = lazy(() => import("./pages/RunningTabPage"));
+const TableEntry = lazy(() => import("./pages/TableEntry"));
+const PageTransition = lazy(() => import("./components/PageTransition"));
+const TablePresence = lazy(() => import("./components/guest/TablePresence"));
 const AdminLogin = lazy(() => import("./pages/AdminLogin"));
 const AdminLayout = lazy(() => import("./components/admin/AdminLayout"));
 const AdminDashboard = lazy(() => import("./pages/admin/AdminDashboard"));
@@ -22,6 +23,7 @@ const AdminOrders = lazy(() => import("./pages/admin/AdminOrders"));
 const AdminAnalytics = lazy(() => import("./pages/admin/AdminAnalytics"));
 const AdminQRCodes = lazy(() => import("./pages/admin/AdminQRCodes"));
 const AdminSections = lazy(() => import("./pages/admin/AdminSections"));
+const AdminFloorTonight = lazy(() => import("./pages/admin/AdminFloorTonight"));
 const AdminWaiters = lazy(() => import("./pages/admin/AdminWaiters"));
 const AdminPerformance = lazy(() => import("./pages/admin/AdminPerformance"));
 const KitchenDisplay = lazy(() => import("./pages/KitchenDisplay"));
@@ -52,13 +54,15 @@ const App = () => (
     <TooltipProvider>
       <Toaster />
       <Sonner />
-      <BrowserRouter>
-        {/* Guest-only: shows a join-approval prompt whenever this device is
-            in an active table session. No-op for staff/admin (no sessionId). */}
-        <TablePresence />
+      <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <Suspense fallback={null}>
+          {/* Guest-only: shows a join-approval prompt whenever this device is
+              in an active table session. No-op for staff/admin (no sessionId). */}
+          <TablePresence />
+        </Suspense>
         <Suspense fallback={<RouteFallback />}>
           <Routes>
-            {/* Guest Routes — wrapped in soft page transition */}
+            {/* Guest routes wrapped in soft page transition. */}
             <Route path="/" element={<PageTransition><GuestMenu /></PageTransition>} />
             <Route path="/menu" element={<PageTransition><GuestMenu /></PageTransition>} />
             <Route path="/menu/:type" element={<PageTransition><CategoryPage /></PageTransition>} />
@@ -76,15 +80,16 @@ const App = () => (
               <Route path="analytics" element={<AdminAnalytics />} />
               <Route path="qr-codes" element={<AdminQRCodes />} />
               <Route path="sections" element={<AdminSections />} />
+              <Route path="tonight" element={<AdminFloorTonight />} />
               <Route path="waiters" element={<AdminWaiters />} />
               <Route path="performance" element={<AdminPerformance />} />
             </Route>
 
             {/* Kitchen & Waiter */}
-            <Route path="/kitchen" element={<KitchenDisplay />} />
+            <Route path="/kitchen" element={<StaffGate><KitchenDisplay /></StaffGate>} />
             <Route path="/waiter/login" element={<WaiterLogin />} />
-            <Route path="/waiter/monitor" element={<WaiterMonitor />} />
-            <Route path="/waiter" element={<WaiterDashboard />} />
+            <Route path="/waiter/monitor" element={<StaffGate redirectTo="/waiter/login"><WaiterMonitor /></StaffGate>} />
+            <Route path="/waiter" element={<StaffGate redirectTo="/waiter/login"><WaiterDashboard /></StaffGate>} />
 
             <Route path="*" element={<NotFound />} />
           </Routes>

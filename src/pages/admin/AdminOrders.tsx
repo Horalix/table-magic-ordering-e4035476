@@ -1,8 +1,9 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -10,12 +11,21 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
+import type { Database } from '@/integrations/supabase/types';
+
+type OrderStatus = Database['public']['Enums']['order_status'];
+type OrderFilter = OrderStatus | 'all';
+type AdminOrder = Database['public']['Tables']['orders']['Row'] & {
+  table_sessions?: { tables?: { table_number?: number | null } | null } | null;
+  order_items?: (Database['public']['Tables']['order_items']['Row'] & { menu_items?: { name?: string | null } | null })[] | null;
+};
 
 const AdminOrders = () => {
-  const [orders, setOrders] = useState<any[]>([]);
-  const [filter, setFilter] = useState('all');
+  const [orders, setOrders] = useState<AdminOrder[]>([]);
+  const [filter, setFilter] = useState<OrderFilter>('all');
+  const [loading, setLoading] = useState(true);
 
-  const fetchOrders = async () => {
+  const fetchOrders = useCallback(async () => {
     let query = supabase
       .from('orders')
       .select(`*, table_sessions!inner(tables!inner(table_number)), order_items(*, menu_items(name))`)
@@ -23,25 +33,26 @@ const AdminOrders = () => {
       .limit(100);
 
     if (filter !== 'all') {
-      query = query.eq('status', filter as any);
+      query = query.eq('status', filter);
     }
 
     const { data } = await query;
     setOrders(data || []);
-  };
-
-  useEffect(() => {
-    fetchOrders();
-    const channel = supabase
-      .channel('admin-orders')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, fetchOrders)
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
+    setLoading(false);
   }, [filter]);
 
-  const updateStatus = async (orderId: string, status: string) => {
-    await supabase.from('orders').update({ status: status as any }).eq('id', orderId);
-    fetchOrders();
+  useEffect(() => {
+    void fetchOrders();
+    const channel = supabase
+      .channel('admin-orders')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => { void fetchOrders(); })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [fetchOrders]);
+
+  const updateStatus = async (orderId: string, status: OrderStatus) => {
+    await supabase.from('orders').update({ status }).eq('id', orderId);
+    await fetchOrders();
   };
 
   const deleteOrder = async (orderId: string) => {
@@ -50,10 +61,10 @@ const AdminOrders = () => {
     const { error: e2 } = await supabase.from('orders').delete().eq('id', orderId);
     if (e2) { toast.error(e2.message); return; }
     toast.success('Order deleted');
-    fetchOrders();
+    await fetchOrders();
   };
 
-  const statusColors: Record<string, string> = {
+  const statusColors: Record<OrderStatus, string> = {
     pending: 'bg-destructive/10 text-destructive',
     confirmed: 'bg-accent/10 text-accent',
     preparing: 'bg-gold/10 text-gold',
@@ -66,7 +77,7 @@ const AdminOrders = () => {
     <div>
       <div className="flex items-center justify-between mb-6">
         <h1 className="font-serif text-3xl font-bold text-foreground">Orders</h1>
-        <Select value={filter} onValueChange={setFilter}>
+        <Select value={filter} onValueChange={(value) => setFilter(value as OrderFilter)}>
           <SelectTrigger className="w-[150px] font-sans"><SelectValue /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Orders</SelectItem>
@@ -80,9 +91,14 @@ const AdminOrders = () => {
         </Select>
       </div>
 
+      {loading ? (
+        <div className="space-y-3">
+          {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-28 w-full rounded-xl" />)}
+        </div>
+      ) : (
       <div className="space-y-3">
-        {orders.map((order: any) => (
-          <Card key={order.id} className="border-border">
+        {orders.map((order) => (
+          <Card key={order.id} className="border-border card-lux-hover">
             <CardContent className="p-4">
               <div className="flex items-start justify-between">
                 <div>
@@ -91,7 +107,7 @@ const AdminOrders = () => {
                       Table {order.table_sessions?.tables?.table_number}
                     </span>
                     {order.guest_name && (
-                      <span className="text-sm font-sans text-muted-foreground">— {order.guest_name}</span>
+                      <span className="text-sm font-sans text-muted-foreground">- {order.guest_name}</span>
                     )}
                     <Badge className={`text-xs ${statusColors[order.status]}`}>{order.status}</Badge>
                     {!['served', 'cancelled'].includes(order.status) && (() => {
@@ -99,7 +115,7 @@ const AdminOrders = () => {
                       const label = mins < 1 ? 'Just now' : mins < 60 ? `${mins}m` : `${Math.floor(mins / 60)}h ${mins % 60}m`;
                       return (
                         <span className={`text-xs font-sans flex items-center gap-1 ${mins >= 10 ? 'text-destructive font-semibold' : 'text-muted-foreground'}`}>
-                          ⏱ {label}
+                          Wait {label}
                         </span>
                       );
                     })()}
@@ -110,7 +126,9 @@ const AdminOrders = () => {
                   <p className="font-serif font-bold text-foreground">{Number(order.total).toFixed(2)} KM</p>
                   <AlertDialog>
                     <AlertDialogTrigger asChild>
-                      <Button variant="ghost" size="icon" className="h-7 w-7"><Trash2 className="w-4 h-4 text-destructive" /></Button>
+                      <Button variant="ghost" size="icon" className="h-7 w-7" aria-label={`Delete order ${order.id}`}>
+                        <Trash2 className="w-4 h-4 text-destructive" />
+                      </Button>
                     </AlertDialogTrigger>
                     <AlertDialogContent>
                       <AlertDialogHeader>
@@ -129,7 +147,7 @@ const AdminOrders = () => {
               </div>
 
               <div className="mt-3 space-y-1">
-                {order.order_items?.map((item: any) => (
+                {order.order_items?.map((item) => (
                   <div key={item.id} className="flex justify-between text-sm font-sans">
                     <span className="text-foreground">{item.quantity}x {item.menu_items?.name}</span>
                     <span className="text-muted-foreground">{(item.quantity * Number(item.unit_price)).toFixed(2)} KM</span>
@@ -161,9 +179,12 @@ const AdminOrders = () => {
         ))}
 
         {orders.length === 0 && (
-          <p className="text-center text-muted-foreground font-sans py-10">No orders found</p>
+          <p className="text-center text-muted-foreground font-sans py-10">
+            {filter === 'all' ? 'No orders yet — they’ll appear here as guests order.' : `No ${filter} orders.`}
+          </p>
         )}
       </div>
+      )}
     </div>
   );
 };

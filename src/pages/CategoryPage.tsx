@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useDeferredValue } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, Plus, Minus, QrCode, Search, X } from 'lucide-react';
+import { ArrowLeft, Plus, Minus, QrCode, Search, X, Star } from 'lucide-react';
 import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
@@ -15,6 +15,11 @@ import LanguageSelector from '@/components/guest/LanguageSelector';
 import { useT, useLanguageStore, getLocalizedName, getLocalizedDescription } from '@/lib/i18n';
 import { useSessionHeartbeat } from '@/hooks/useSessionHeartbeat';
 import { staggerContainer, fadeUp, springPill } from '@/lib/motion';
+import type { Database } from '@/integrations/supabase/types';
+
+type CategoryRow = Database['public']['Tables']['categories']['Row'];
+type MenuItemRow = Database['public']['Tables']['menu_items']['Row'];
+type SubcategoryRow = Database['public']['Tables']['subcategories']['Row'];
 
 const categoryNameMap: Record<string, string> = {
   drinks: 'Drinks',
@@ -29,7 +34,7 @@ const CategoryPage = () => {
   useSessionHeartbeat();
   const [searchParams] = useSearchParams();
   const [selectedSubcategory, setSelectedSubcategory] = useState<string | null>(null);
-  const [selectedItem, setSelectedItem] = useState<any | null>(null);
+  const [selectedItem, setSelectedItem] = useState<MenuItemRow | null>(null);
   const [search, setSearch] = useState('');
   const deferredSearch = useDeferredValue(search);
   const { addItem, removeItem, updateQuantity, items: cartItems } = useCartStore();
@@ -100,9 +105,21 @@ const CategoryPage = () => {
       .eq('is_available', true)
       .limit(8)
       .then(({ data }) => {
-        if (data) prefetchImages(data.map((d: any) => d.image_url));
+        if (data) prefetchImages(data.map((d) => d.image_url));
       });
   }, [activeSubId, subcategories]);
+
+  // Popular / Chef's picks — top sellers (degrades to none if RPC unavailable).
+  const { data: popular = [] } = useQuery({
+    queryKey: ['popular-items'],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc('get_popular_items' as never, { _limit: 12, _days: 30 } as never);
+      if (error) return [] as { menu_item_id: string }[];
+      return (data ?? []) as { menu_item_id: string }[];
+    },
+    staleTime: 10 * 60 * 1000,
+  });
+  const popularIds = new Set(popular.map((p) => p.menu_item_id));
 
   const goBack = () => {
     const params = new URLSearchParams();
@@ -131,11 +148,11 @@ const CategoryPage = () => {
     <div className="min-h-screen bg-background pb-32">
       <div className="sticky top-0 z-30 glass">
         <div className="flex items-center gap-3 px-4 py-4">
-          <button onClick={goBack} className="p-2.5 -ml-2 rounded-full hover:bg-muted transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center">
+          <button onClick={goBack} aria-label={t('back_to_menu')} className="p-2.5 -ml-2 rounded-full hover:bg-muted transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center">
             <ArrowLeft className={`w-5 h-5 text-foreground ${locale === 'ar' ? 'rotate-180' : ''}`} />
           </button>
           <h1 className="font-serif text-xl font-semibold text-foreground">
-            {getLocalizedName(category as any, locale)}
+            {getLocalizedName(category as CategoryRow, locale)}
           </h1>
           <div className="ml-auto flex items-center gap-2">
             {table && (
@@ -167,7 +184,7 @@ const CategoryPage = () => {
                       className="absolute inset-0 rounded-full bg-primary shadow-sm"
                     />
                   )}
-                  <span className="relative z-10">{getLocalizedName(sub as any, locale)}</span>
+                  <span className="relative z-10">{getLocalizedName(sub as SubcategoryRow, locale)}</span>
                 </button>
               );
             })}
@@ -213,10 +230,10 @@ const CategoryPage = () => {
       {(() => {
         const q = deferredSearch.trim().toLowerCase();
         const filtered = q
-          ? items.filter((it: any) => {
+          ? items.filter((it) => {
               const fields = [it.name, it.name_bs, it.name_ar, it.description, it.description_bs, it.description_ar]
-                .filter(Boolean)
-                .map((s: string) => s.toLowerCase());
+                .filter((value): value is string => Boolean(value))
+                .map((value) => value.toLowerCase());
               return fields.some((f) => f.includes(q));
             })
           : items;
@@ -262,10 +279,10 @@ const CategoryPage = () => {
             animate="show"
             className="px-4 pt-4 space-y-3"
           >
-            {filtered.map((item: any, i: number) => {
-              const localizedName = getLocalizedName(item as any, locale);
-              const localizedDesc = getLocalizedDescription(item as any, locale);
-              const inCart = cartItems.find((c) => c.id === item.id);
+            {filtered.map((item: MenuItemRow, i: number) => {
+              const localizedName = getLocalizedName(item, locale);
+              const localizedDesc = getLocalizedDescription(item, locale);
+              const inCart = cartItems.find((c) => (c.menuItemId ?? c.id) === item.id && !c.notes);
               const qty = inCart?.quantity ?? 0;
               return (
                 <motion.div
@@ -290,7 +307,14 @@ const CategoryPage = () => {
                         className="group-hover:scale-105 transition-transform duration-300"
                       />
                       <div className="flex-1 min-w-0">
-                        <h3 className="font-serif text-base font-semibold text-foreground">{localizedName}</h3>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <h3 className="font-serif text-base font-semibold text-foreground">{localizedName}</h3>
+                          {popularIds.has(item.id) && (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-gold/15 text-[10px] font-sans font-semibold text-gold">
+                              <Star className="w-2.5 h-2.5 fill-gold" /> {t('popular')}
+                            </span>
+                          )}
+                        </div>
                         {localizedDesc && (
                           <p className="text-sm text-muted-foreground font-sans mt-0.5 line-clamp-2">{localizedDesc}</p>
                         )}
@@ -306,7 +330,7 @@ const CategoryPage = () => {
                             >
                               <button
                                 type="button"
-                                aria-label="Decrease"
+                                aria-label={`Decrease ${localizedName} quantity`}
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   if (qty <= 1) removeItem(item.id);
@@ -319,7 +343,7 @@ const CategoryPage = () => {
                               <span className="min-w-[20px] text-center text-sm font-sans font-bold text-primary tabular-nums">{qty}</span>
                               <button
                                 type="button"
-                                aria-label="Increase"
+                                aria-label={`Increase ${localizedName} quantity`}
                                 disabled={qty >= 10}
                                 onClick={(e) => {
                                   e.stopPropagation();
@@ -344,7 +368,9 @@ const CategoryPage = () => {
                                 });
                                 toast.success(t('added_to_order'), { description: localizedName, duration: 1600 });
                                 if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
-                                  try { (navigator as any).vibrate(8); } catch {}
+                                  try { navigator.vibrate(8); } catch {
+                                    // Some browsers expose vibrate but reject it outside user-gesture contexts.
+                                  }
                                 }
                               }}
                               className="w-10 h-10 rounded-full bg-primary/10 text-primary flex items-center justify-center hover:bg-primary hover:text-primary-foreground active:scale-90 transition-all duration-150 min-w-[44px] min-h-[44px] tap-sm"

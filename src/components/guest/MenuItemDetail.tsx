@@ -31,8 +31,8 @@ const MenuItemDetail = ({ item, onClose, canOrder = true }: Props) => {
   const t = useT();
   const locale = useLanguageStore((s) => s.locale);
 
-  const localizedName = getLocalizedName(item as any, locale);
-  const localizedDesc = getLocalizedDescription(item as any, locale);
+  const localizedName = getLocalizedName(item, locale);
+  const localizedDesc = getLocalizedDescription(item, locale);
 
   const handleAdd = () => {
     if (!canOrder) return;
@@ -42,7 +42,7 @@ const MenuItemDetail = ({ item, onClose, canOrder = true }: Props) => {
         name: item.name,
         price: item.price,
         image_url: item.image_url,
-        notes: notes || undefined,
+        notes: notes.trim() || undefined,
       });
     }
     onClose();
@@ -123,6 +123,7 @@ const MenuItemDetail = ({ item, onClose, canOrder = true }: Props) => {
                 <div className="flex items-center gap-3 bg-muted rounded-full px-2 py-1">
                   <button
                     onClick={() => setQuantity(Math.max(1, quantity - 1))}
+                    aria-label={`Decrease ${localizedName} quantity`}
                     className="w-9 h-9 rounded-full flex items-center justify-center hover:bg-card transition-colors min-w-[44px] min-h-[44px] tap-sm"
                   >
                     <Minus className="w-4 h-4" />
@@ -130,6 +131,7 @@ const MenuItemDetail = ({ item, onClose, canOrder = true }: Props) => {
                   <span className="text-base font-sans font-semibold w-6 text-center tabular-nums">{quantity}</span>
                   <button
                     onClick={() => setQuantity(Math.min(10, quantity + 1))}
+                    aria-label={`Increase ${localizedName} quantity`}
                     className="w-9 h-9 rounded-full flex items-center justify-center hover:bg-card transition-colors min-w-[44px] min-h-[44px] tap-sm"
                     disabled={quantity >= 10}
                   >

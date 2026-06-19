@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Minus, Plus, Trash2, Send, CheckCircle, ShoppingBag, UtensilsCrossed } from 'lucide-react';
+import { ArrowLeft, Minus, Plus, Trash2, CreditCard, CheckCircle, ShoppingBag, UtensilsCrossed, Hand } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useCartStore } from '@/lib/cart-store';
 import { supabase } from '@/integrations/supabase/client';
@@ -10,24 +10,27 @@ import { useT, useLanguageStore } from '@/lib/i18n';
 import { useSessionHeartbeat } from '@/hooks/useSessionHeartbeat';
 import SmartImage from '@/components/ui/SmartImage';
 import { staggerContainer, fadeUp, useCountUp } from '@/lib/motion';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
+import CheckoutSheet, { type PayMethod } from '@/components/guest/CheckoutSheet';
+import { startCardPayment } from '@/lib/payments';
+import type { Database } from '@/integrations/supabase/types';
 
 const LARGE_ORDER_THRESHOLD = 20;
+// payment_method is added by the checkout migration; intersect so we can write it
+// before the generated types are regenerated.
+type OrderInsert = Database['public']['Tables']['orders']['Insert'] & { payment_method?: string | null };
+type OrderItemInsert = Database['public']['Tables']['order_items']['Insert'];
 
-const OrderSuccess = ({ table, onContinue }: { table: string | null; onContinue: () => void }) => {
+const OrderSuccess = ({ table, cardComingSoon, waiterCalled, onCallWaiter, onContinue }: {
+  table: string | null;
+  cardComingSoon: boolean;
+  waiterCalled: boolean;
+  onCallWaiter: () => void;
+  onContinue: () => void;
+}) => {
   const t = useT();
   return (
     <div className="min-h-screen bg-background flex items-center justify-center px-6">
-      <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="text-center">
+      <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="text-center max-w-sm">
         <motion.div
           initial={{ scale: 0 }}
           animate={{ scale: 1 }}
@@ -37,11 +40,31 @@ const OrderSuccess = ({ table, onContinue }: { table: string | null; onContinue:
           <CheckCircle className="w-10 h-10 text-primary" />
         </motion.div>
         <h2 className="font-serif text-2xl font-bold text-foreground">{t('order_confirmed')}</h2>
-        <p className="text-muted-foreground font-sans mt-2 text-sm">{t('order_sent_kitchen')}</p>
+        <p className="text-muted-foreground font-sans mt-2 text-sm">{t('order_in_kitchen')}</p>
         {table && <p className="text-sm text-primary font-sans mt-1 font-medium">{t('table')} {table}</p>}
+
+        {cardComingSoon ? (
+          <div className="mt-6 p-4 rounded-2xl border border-accent/20 bg-accent/5 text-left">
+            <p className="font-sans font-semibold text-foreground text-sm flex items-center gap-2">
+              <CreditCard className="w-4 h-4 text-accent" /> {t('card_coming_soon_title')}
+            </p>
+            <p className="text-xs text-muted-foreground font-sans mt-1.5 leading-relaxed">{t('card_coming_soon_body')}</p>
+            {waiterCalled ? (
+              <p className="mt-3 text-sm font-sans font-medium text-primary flex items-center gap-2"><CheckCircle className="w-4 h-4" /> {t('waiter_on_the_way')}</p>
+            ) : (
+              <Button onClick={onCallWaiter} className="mt-3 w-full rounded-full bg-primary text-primary-foreground hover:bg-sage-dark font-sans gap-2">
+                <Hand className="w-4 h-4" /> {t('call_waiter_to_pay')}
+              </Button>
+            )}
+          </div>
+        ) : (
+          <p className="mt-4 text-sm font-sans font-medium text-primary flex items-center justify-center gap-2"><Hand className="w-4 h-4" /> {t('waiter_on_the_way')}</p>
+        )}
+
         <Button
           onClick={onContinue}
-          className="mt-8 rounded-full px-8 h-12 bg-primary text-primary-foreground hover:bg-sage-dark font-sans font-semibold"
+          variant={cardComingSoon ? 'outline' : 'default'}
+          className={`mt-6 rounded-full px-8 h-12 font-sans font-semibold ${cardComingSoon ? '' : 'bg-primary text-primary-foreground hover:bg-sage-dark'}`}
         >
           {t('order_more')}
         </Button>
@@ -55,9 +78,12 @@ const CartPage = () => {
   useSessionHeartbeat();
   const [searchParams] = useSearchParams();
   const { items, total, updateQuantity, removeItem, clearCart, sessionId, guestName, setLastOrderTime, itemCount } = useCartStore();
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitting, setSubmitting] = useState<PayMethod | null>(null);
   const [orderPlaced, setOrderPlaced] = useState(false);
-  const [showConfirm, setShowConfirm] = useState(false);
+  const [checkoutOpen, setCheckoutOpen] = useState(false);
+  const [cardComingSoon, setCardComingSoon] = useState(false);
+  const [waiterCalled, setWaiterCalled] = useState(false);
+  const submittingRef = useRef(false);
   const t = useT();
   const locale = useLanguageStore((s) => s.locale);
   const displayTotal = useCountUp(total());
@@ -74,17 +100,32 @@ const CartPage = () => {
 
   const isLargeOrder = itemCount() > LARGE_ORDER_THRESHOLD;
 
-  const handlePlaceOrderClick = () => {
-    setShowConfirm(true);
+  const handleCheckoutClick = () => {
+    setCheckoutOpen(true);
   };
 
-  const placeOrder = async () => {
+  // Signal a waiter to the table (best-effort — the anti-spam trigger may
+  // reject if one is already pending, which is fine: a waiter is coming).
+  const pingWaiter = async () => {
+    if (!sessionId) return;
+    const res = await supabase.from('waiter_calls').insert({ table_session_id: sessionId, reason: 'pay' } as never);
+    // Fall back if the `reason` column isn't in the DB yet (migration pending).
+    if (res.error && /reason/i.test(res.error.message)) {
+      await supabase.from('waiter_calls').insert({ table_session_id: sessionId });
+    }
+    setWaiterCalled(true);
+  };
+
+  const placeOrder = async (method: PayMethod) => {
+    if (submittingRef.current) return;
     if (!sessionId) {
       toast.error(t('scan_qr_again'));
       return;
     }
+    if (items.length === 0) return;
 
-    setIsSubmitting(true);
+    submittingRef.current = true;
+    setSubmitting(method);
     try {
       // Refresh the heartbeat first so an active table isn't rejected by the
       // server's 2-minute staleness guard on the orders trigger.
@@ -99,7 +140,6 @@ const CartPage = () => {
 
       if (sessionError || !session) {
         toast.error(t('session_expired'));
-        setIsSubmitting(false);
         return;
       }
 
@@ -112,48 +152,68 @@ const CartPage = () => {
 
       if (count !== null && count >= 10) {
         toast.error('Maximum orders reached for this session.');
-        setIsSubmitting(false);
         return;
       }
 
       const orderTotal = total();
 
-      const { data: order, error: orderError } = await supabase
+      const baseOrder: OrderInsert = {
+        table_session_id: sessionId,
+        total: orderTotal,
+        status: 'pending',
+        guest_name: guestName || null,
+      };
+
+      // Try with payment_method; if that column isn't in the DB yet (migration
+      // pending), retry without it so ordering keeps working regardless.
+      let { data: order, error: orderError } = await supabase
         .from('orders')
-        .insert({
-          table_session_id: sessionId,
-          total: orderTotal,
-          status: 'pending' as any,
-          guest_name: guestName || null,
-        } as any)
+        .insert({ ...baseOrder, payment_method: method })
         .select()
         .single();
-
+      if (orderError && /payment_(method|status)/i.test(orderError.message)) {
+        ({ data: order, error: orderError } = await supabase.from('orders').insert(baseOrder).select().single());
+      }
       if (orderError) throw orderError;
 
-      const orderItems = items.map((item) => ({
+      const orderItems: OrderItemInsert[] = items.map((item) => ({
         order_id: order.id,
-        menu_item_id: item.id,
+        menu_item_id: item.menuItemId ?? item.id,
         quantity: item.quantity,
         unit_price: item.price,
         notes: item.notes || null,
-        status: 'pending' as any,
+        status: 'pending',
       }));
 
       const { error: itemsError } = await supabase.from('order_items').insert(orderItems);
       if (itemsError) throw itemsError;
 
       setLastOrderTime();
+      setCardComingSoon(false);
+      setWaiterCalled(false);
+
+      if (method === 'cash') {
+        // Signal a waiter to come to the table (resilient + ignores the
+        // anti-spam trigger if a call is already pending — one is coming).
+        await pingWaiter();
+      } else {
+        const res = await startCardPayment({ id: order.id, total: orderTotal });
+        if (res.status === 'redirect') { window.location.href = res.url; return; }
+        setCardComingSoon(res.status === 'coming_soon');
+      }
+
+      setCheckoutOpen(false);
       setOrderPlaced(true);
       clearCart();
       toast.success(t('order_confirmed'));
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Order error:', err);
       // Surface the actual reason (e.g. server rate-limit / session guard)
       // instead of a generic message, so failures are actionable.
-      toast.error(err?.message ? String(err.message) : 'Failed to place order. Please try again.');
+      toast.error(err instanceof Error ? err.message : 'Failed to place order. Please try again.');
     } finally {
-      setIsSubmitting(false);
+      submittingRef.current = false;
+      setSubmitting(null);
     }
   };
 
@@ -161,6 +221,9 @@ const CartPage = () => {
     return (
       <OrderSuccess
         table={table}
+        cardComingSoon={cardComingSoon}
+        waiterCalled={waiterCalled}
+        onCallWaiter={pingWaiter}
         onContinue={() => {
           setOrderPlaced(false);
           navigate(buildMenuUrl());
@@ -173,7 +236,7 @@ const CartPage = () => {
     <div className="min-h-screen bg-background pb-32">
       <div className="sticky top-0 z-30 glass">
         <div className="flex items-center gap-3 px-4 py-4">
-          <button onClick={() => navigate(-1)} className="p-2.5 -ml-2 rounded-full hover:bg-muted transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center">
+          <button onClick={() => navigate(-1)} aria-label={t('back_to_menu')} className="p-2.5 -ml-2 rounded-full hover:bg-muted transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center">
             <ArrowLeft className={`w-5 h-5 text-foreground ${locale === 'ar' ? 'rotate-180' : ''}`} />
           </button>
           <h1 className="font-serif text-xl font-semibold text-foreground">{t('your_order')}</h1>
@@ -241,6 +304,7 @@ const CartPage = () => {
                   <div className="flex items-center gap-2 bg-muted rounded-full px-1.5 py-0.5">
                     <button
                       onClick={() => updateQuantity(item.id, item.quantity - 1)}
+                      aria-label={`Decrease ${item.name} quantity`}
                       className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-card transition-colors tap-sm"
                     >
                       <Minus className="w-3.5 h-3.5" />
@@ -248,6 +312,7 @@ const CartPage = () => {
                     <span className="text-sm font-sans font-semibold w-5 text-center tabular-nums">{item.quantity}</span>
                     <button
                       onClick={() => updateQuantity(item.id, item.quantity + 1)}
+                      aria-label={`Increase ${item.name} quantity`}
                       className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-card transition-colors tap-sm"
                     >
                       <Plus className="w-3.5 h-3.5" />
@@ -275,47 +340,28 @@ const CartPage = () => {
 
           <div className="fixed bottom-0 left-0 right-0 z-40 p-4 pb-6 bg-background/80 backdrop-blur-xl border-t border-border/50">
             <Button
-              onClick={handlePlaceOrderClick}
-              disabled={isSubmitting || !sessionId}
+              onClick={handleCheckoutClick}
+              disabled={!sessionId}
               className="w-full h-14 rounded-2xl bg-primary text-primary-foreground font-sans font-semibold text-base hover:bg-sage-dark hover:shadow-lg hover:shadow-primary/30 disabled:opacity-50 transition-all duration-200 tap"
             >
-              {isSubmitting ? (
-                <span className="flex items-center gap-2">
-                  <div className="w-4 h-4 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin" />
-                  {t('placing_order')}
-                </span>
-              ) : (
-                <span className="flex items-center gap-2">
-                  <Send className="w-4 h-4" />
-                  {t('place_order')} · {displayTotal.toFixed(2)} KM
-                </span>
-              )}
+              <span className="flex items-center gap-2">
+                <CreditCard className="w-4 h-4" />
+                {t('checkout')} · {displayTotal.toFixed(2)} KM
+              </span>
             </Button>
             {!sessionId && (
               <p className="text-xs text-destructive text-center mt-2 font-sans">{t('scan_qr_again')}</p>
             )}
           </div>
 
-          {/* No-Refund Confirmation Dialog */}
-          <AlertDialog open={showConfirm} onOpenChange={setShowConfirm}>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle className="font-serif">{t('confirm_order')}</AlertDialogTitle>
-                <AlertDialogDescription className="font-sans">
-                  {t('no_refund_message')}
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel className="font-sans">{t('go_back')}</AlertDialogCancel>
-                <AlertDialogAction
-                  onClick={placeOrder}
-                  className="bg-primary text-primary-foreground font-sans"
-                >
-                  {t('confirm_and_order')}
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
+          {/* Checkout — Pay now / Call waiter */}
+          <CheckoutSheet
+            open={checkoutOpen}
+            total={total()}
+            submitting={submitting}
+            onChoose={placeOrder}
+            onClose={() => setCheckoutOpen(false)}
+          />
         </>
       )}
     </div>

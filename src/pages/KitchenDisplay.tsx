@@ -6,10 +6,36 @@ import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { playOrderAlert, playWaiterCallAlert, playBillRequestAlert } from '@/lib/kitchen-sounds';
+import type { Database } from '@/integrations/supabase/types';
+
+type OrderStatus = Database['public']['Enums']['order_status'];
+type OrderItemRow = Database['public']['Tables']['order_items']['Row'];
+type OrderRow = Database['public']['Tables']['orders']['Row'];
+type WaiterCallRow = Database['public']['Tables']['waiter_calls']['Row'];
+type BillRequestRow = Database['public']['Tables']['bill_requests']['Row'];
+
+type KitchenOrderRow = OrderRow & {
+  table_sessions?: {
+    tables?: {
+      table_number?: number | null;
+      section_id?: string | null;
+      sections?: { name?: string | null; color?: string | null } | null;
+    } | null;
+  } | null;
+  order_items?: (OrderItemRow & { menu_items?: { name?: string | null } | null })[] | null;
+};
+
+type WaiterCallQueryRow = WaiterCallRow & {
+  table_sessions?: { tables?: { table_number?: number | null } | null } | null;
+};
+
+type BillRequestQueryRow = BillRequestRow & {
+  table_sessions?: { tables?: { table_number?: number | null } | null } | null;
+};
 
 interface OrderWithItems {
   id: string;
-  status: string;
+  status: OrderStatus;
   total: number;
   notes: string | null;
   created_at: string;
@@ -23,7 +49,7 @@ interface OrderWithItems {
     quantity: number;
     unit_price: number;
     notes: string | null;
-    status: string;
+    status: Database['public']['Enums']['order_item_status'];
     menu_item_name: string;
   }[];
 }
@@ -44,7 +70,7 @@ interface BillRequest {
   table_number: number;
 }
 
-const statusColors: Record<string, string> = {
+const statusColors: Partial<Record<OrderStatus, string>> = {
   pending: 'bg-destructive/10 text-destructive border-destructive/20',
   confirmed: 'bg-accent/10 text-accent border-accent/20',
   preparing: 'bg-accent/15 text-accent border-accent/25',
@@ -52,7 +78,7 @@ const statusColors: Record<string, string> = {
   served: 'bg-muted text-muted-foreground border-border',
 };
 
-const statusIcons: Record<string, React.ReactNode> = {
+const statusIcons: Partial<Record<OrderStatus, React.ReactNode>> = {
   pending: <Bell className="w-3.5 h-3.5" />,
   confirmed: <Clock className="w-3.5 h-3.5" />,
   preparing: <ChefHat className="w-3.5 h-3.5" />,
@@ -61,7 +87,7 @@ const statusIcons: Record<string, React.ReactNode> = {
 };
 
 // Active-view kanban columns — the line cook reads order state by position.
-const KANBAN: { status: string; label: string; dot: string }[] = [
+const KANBAN: { status: OrderStatus; label: string; dot: string }[] = [
   { status: 'pending', label: 'New', dot: 'bg-destructive' },
   { status: 'confirmed', label: 'Confirmed', dot: 'bg-accent' },
   { status: 'preparing', label: 'Preparing', dot: 'bg-accent' },
@@ -106,7 +132,7 @@ const KitchenDisplay = () => {
       return;
     }
 
-    const mapped: OrderWithItems[] = (ordersData || []).map((o: any) => ({
+    const mapped: OrderWithItems[] = ((ordersData || []) as KitchenOrderRow[]).map((o) => ({
       id: o.id,
       status: o.status,
       total: o.total,
@@ -117,7 +143,7 @@ const KitchenDisplay = () => {
       section_id: o.table_sessions?.tables?.section_id || null,
       section_name: o.table_sessions?.tables?.sections?.name || null,
       section_color: o.table_sessions?.tables?.sections?.color || null,
-      items: (o.order_items || []).map((oi: any) => ({
+      items: (o.order_items || []).map((oi) => ({
         id: oi.id,
         quantity: oi.quantity,
         unit_price: oi.unit_price,
@@ -139,7 +165,7 @@ const KitchenDisplay = () => {
 
     if (error) { console.error('Error fetching waiter calls:', error); return; }
 
-    setWaiterCalls((data || []).map((c: any) => ({
+    setWaiterCalls(((data || []) as WaiterCallQueryRow[]).map((c) => ({
       id: c.id,
       table_session_id: c.table_session_id,
       status: c.status,
@@ -157,7 +183,7 @@ const KitchenDisplay = () => {
 
     if (error) { console.error('Error fetching bill requests:', error); return; }
 
-    setBillRequests((data || []).map((b: any) => ({
+    setBillRequests(((data || []) as BillRequestQueryRow[]).map((b) => ({
       id: b.id,
       table_session_id: b.table_session_id,
       status: b.status,
@@ -219,14 +245,14 @@ const KitchenDisplay = () => {
     return () => { supabase.removeChannel(channel); };
   }, [filter, fetchOrders]);
 
-  const updateOrderStatus = async (orderId: string, newStatus: string) => {
-    const { error } = await supabase.from('orders').update({ status: newStatus as any }).eq('id', orderId);
+  const updateOrderStatus = async (orderId: string, newStatus: OrderStatus) => {
+    const { error } = await supabase.from('orders').update({ status: newStatus }).eq('id', orderId);
     if (error) toast.error('Failed to update order status');
     else { toast.success(`Order marked as ${newStatus}`); fetchOrders(); }
   };
 
   const resolveWaiterCall = async (callId: string) => {
-    const { error } = await supabase.from('waiter_calls').update({ status: 'resolved', resolved_at: new Date().toISOString() } as any).eq('id', callId);
+    const { error } = await supabase.from('waiter_calls').update({ status: 'resolved', resolved_at: new Date().toISOString() }).eq('id', callId);
     if (error) toast.error('Failed to resolve call');
     else { toast.success('Waiter call resolved'); fetchWaiterCalls(); }
   };
@@ -246,8 +272,8 @@ const KitchenDisplay = () => {
     fetchOrders();
   };
 
-  const getNextStatus = (current: string) => {
-    const flow: Record<string, string> = { pending: 'confirmed', confirmed: 'preparing', preparing: 'ready', ready: 'served' };
+  const getNextStatus = (current: OrderStatus) => {
+    const flow: Partial<Record<OrderStatus, OrderStatus>> = { pending: 'confirmed', confirmed: 'preparing', preparing: 'ready', ready: 'served' };
     return flow[current];
   };
 

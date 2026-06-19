@@ -20,25 +20,24 @@ const AdminLogin = () => {
       const { data, error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) throw error;
 
-      const { data: roles, error: roleError } = await supabase
-        .from('user_roles')
-        .select('role')
-        .eq('user_id', data.user.id);
+      const [{ data: hasAdminRole }, { data: hasStaffRole }] = await Promise.all([
+        supabase.rpc('has_role', { _user_id: data.user.id, _role: 'admin' }),
+        supabase.rpc('has_role', { _user_id: data.user.id, _role: 'staff' }),
+      ]);
 
-      if (roleError || !roles || roles.length === 0) {
+      if (!hasAdminRole && !hasStaffRole) {
         await supabase.auth.signOut();
         toast.error('You do not have admin access.');
         return;
       }
 
-      const userRole = roles[0].role;
-      if (userRole === 'admin') {
+      if (hasAdminRole) {
         navigate('/admin');
-      } else if (userRole === 'staff') {
+      } else if (hasStaffRole) {
         navigate('/kitchen');
       }
-    } catch (err: any) {
-      toast.error(err.message || 'Login failed');
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'Login failed');
     } finally {
       setLoading(false);
     }

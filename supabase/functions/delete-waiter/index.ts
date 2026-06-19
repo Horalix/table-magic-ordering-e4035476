@@ -5,6 +5,12 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+interface RoleRow {
+  role: string;
+}
+
+const errorMessage = (error: unknown) => error instanceof Error ? error.message : 'Server error';
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
 
@@ -26,7 +32,7 @@ Deno.serve(async (req) => {
 
     const admin = createClient(SUPABASE_URL, SERVICE_ROLE);
     const { data: roles } = await admin.from('user_roles').select('role').eq('user_id', userData.user.id);
-    const isAdmin = roles?.some((r: any) => r.role === 'admin');
+    const isAdmin = (roles as RoleRow[] | null)?.some((r) => r.role === 'admin');
     if (!isAdmin) {
       return new Response(JSON.stringify({ error: 'Admin only' }), { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
@@ -50,12 +56,16 @@ Deno.serve(async (req) => {
     await admin.from('user_roles').delete().eq('user_id', waiter.user_id);
 
     // Delete auth user (best effort)
-    try { await admin.auth.admin.deleteUser(waiter.user_id); } catch (_) {}
+    try {
+      await admin.auth.admin.deleteUser(waiter.user_id);
+    } catch (error) {
+      console.warn('Failed to delete waiter auth user', error);
+    }
 
     return new Response(JSON.stringify({ ok: true }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
-  } catch (e: any) {
-    return new Response(JSON.stringify({ error: e?.message || 'Server error' }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+  } catch (e: unknown) {
+    return new Response(JSON.stringify({ error: errorMessage(e) }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   }
 });

@@ -4,11 +4,13 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { QRCodeSVG } from 'qrcode.react';
 import { Printer, LayoutGrid, Square } from 'lucide-react';
+import type { Database } from '@/integrations/supabase/types';
 
 type Mode = 'sheet' | 'single';
+type TableRow = Database['public']['Tables']['tables']['Row'];
 
 const AdminQRCodes = () => {
-  const [tables, setTables] = useState<any[]>([]);
+  const [tables, setTables] = useState<TableRow[]>([]);
   const [mode, setMode] = useState<Mode>('sheet');
 
   useEffect(() => {
@@ -19,7 +21,7 @@ const AdminQRCodes = () => {
     fetchTables();
   }, []);
 
-  const getQRUrl = (table: any) =>
+  const getQRUrl = (table: TableRow) =>
     `${window.location.origin}/table/${table.table_number}?token=${table.qr_token}`;
 
   const printAll = () => window.print();

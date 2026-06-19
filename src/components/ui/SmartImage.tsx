@@ -29,13 +29,18 @@ interface ManifestEntry {
   blur: string;
   ext: string;
 }
+
+type FetchPriorityAttributes = {
+  fetchpriority?: 'high' | 'low' | 'auto';
+};
+
 const manifest = imageManifest as Record<string, ManifestEntry>;
 
 /**
  * Build optimized CDN URL (fallback path — used only when an image is not in
  * the local manifest, e.g. added after the last `npm run images`).
- * - Supabase Storage URLs → native render endpoint (?width=&quality=&format=webp)
- * - Other URLs → free wsrv.nl WebP CDN
+ * - Supabase Storage URLs use the native render endpoint (?width=&quality=&format=webp)
+ * - Other URLs use the free wsrv.nl WebP CDN
  */
 const WSRV = 'https://wsrv.nl/?';
 
@@ -91,7 +96,7 @@ const SmartImage = ({
         style={{ aspectRatio: `${width}/${height}` }}
         aria-label={alt}
       >
-        <span className="text-2xl">{(fallbackText || alt || '·')[0]}</span>
+        <span className="text-2xl">{(fallbackText || alt || '?')[0]}</span>
       </div>
     );
   }
@@ -113,6 +118,9 @@ const SmartImage = ({
   }
 
   const resolvedSizes = sizes ?? (local ? `${width}px` : undefined);
+  const fetchPriorityAttributes: FetchPriorityAttributes = {
+    fetchpriority: priority ? 'high' : 'auto',
+  };
 
   return (
     <motion.div
@@ -143,13 +151,12 @@ const SmartImage = ({
         height={height}
         loading={priority ? 'eager' : 'lazy'}
         decoding="async"
-        // @ts-ignore
-        fetchpriority={priority ? 'high' : 'auto'}
+        {...fetchPriorityAttributes}
         onLoad={() => setLoaded(true)}
         onError={() => {
-          // Local asset missing → retry via CDN/original for this id.
+          // Local asset missing: retry via CDN/original for this id.
           if (local) { setForceRemote(true); return; }
-          // CDN transform failed → try the raw original URL once.
+          // CDN transform failed: try the raw original URL once.
           if (src && imgRef.current && imgRef.current.src !== src) {
             imgRef.current.srcset = '';
             imgRef.current.src = src;

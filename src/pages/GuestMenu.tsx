@@ -10,8 +10,12 @@ import LanguageSelector from '@/components/guest/LanguageSelector';
 import { useT, useLanguageStore, getLocalizedName } from '@/lib/i18n';
 import { useSessionHeartbeat } from '@/hooks/useSessionHeartbeat';
 import { staggerContainer, fadeUp } from '@/lib/motion';
+import type { LucideIcon } from 'lucide-react';
+import type { Database } from '@/integrations/supabase/types';
 
-const iconMap: Record<string, any> = {
+type CategoryRow = Database['public']['Tables']['categories']['Row'];
+
+const iconMap: Record<string, LucideIcon> = {
   Drinks: Wine,
   Food: UtensilsCrossed,
   Desserts: Cake,
@@ -162,7 +166,7 @@ const GuestMenu = () => {
         {categories.map((cat) => {
           const Icon = iconMap[cat.name] || UtensilsCrossed;
           const path = pathMap[cat.name] || `/menu/${cat.name.toLowerCase()}`;
-          const localizedName = getLocalizedName(cat as any, locale);
+          const localizedName = getLocalizedName(cat as CategoryRow, locale);
           return (
             <motion.button
               key={cat.id}

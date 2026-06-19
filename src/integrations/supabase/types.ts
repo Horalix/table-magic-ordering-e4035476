@@ -380,6 +380,47 @@ export type Database = {
           },
         ]
       }
+      session_join_requests: {
+        Row: {
+          client_id: string
+          created_at: string
+          guest_name: string
+          id: string
+          resolved_at: string | null
+          resolved_by_name: string | null
+          status: "pending" | "approved" | "declined"
+          table_session_id: string
+        }
+        Insert: {
+          client_id: string
+          created_at?: string
+          guest_name: string
+          id?: string
+          resolved_at?: string | null
+          resolved_by_name?: string | null
+          status?: "pending" | "approved" | "declined"
+          table_session_id: string
+        }
+        Update: {
+          client_id?: string
+          created_at?: string
+          guest_name?: string
+          id?: string
+          resolved_at?: string | null
+          resolved_by_name?: string | null
+          status?: "pending" | "approved" | "declined"
+          table_session_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "session_join_requests_table_session_id_fkey"
+            columns: ["table_session_id"]
+            isOneToOne: false
+            referencedRelation: "table_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       subcategories: {
         Row: {
           category_id: string
@@ -424,6 +465,7 @@ export type Database = {
           closed_at: string | null
           first_order_at: string | null
           guest_name: string | null
+          host_client_id: string | null
           id: string
           is_active: boolean
           last_heartbeat_at: string
@@ -437,6 +479,7 @@ export type Database = {
           closed_at?: string | null
           first_order_at?: string | null
           guest_name?: string | null
+          host_client_id?: string | null
           id?: string
           is_active?: boolean
           last_heartbeat_at?: string
@@ -450,6 +493,7 @@ export type Database = {
           closed_at?: string | null
           first_order_at?: string | null
           guest_name?: string | null
+          host_client_id?: string | null
           id?: string
           is_active?: boolean
           last_heartbeat_at?: string

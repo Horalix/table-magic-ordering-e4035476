@@ -4,6 +4,10 @@
  */
 const prefetched = new Set<string>();
 
+type PriorityImage = HTMLImageElement & {
+  fetchPriority?: 'high' | 'low' | 'auto';
+};
+
 export function prefetchImages(urls: (string | null | undefined)[]) {
   const list = urls.filter(Boolean) as string[];
   if (list.length === 0) return;
@@ -12,17 +16,14 @@ export function prefetchImages(urls: (string | null | undefined)[]) {
     for (const url of list) {
       if (prefetched.has(url)) continue;
       prefetched.add(url);
-      const img = new Image();
+      const img: PriorityImage = new Image();
       img.decoding = 'async';
-      // @ts-ignore
-      img.fetchpriority = 'low';
+      img.fetchPriority = 'low';
       img.src = url;
     }
   };
 
-  // @ts-ignore
   if (typeof window !== 'undefined' && window.requestIdleCallback) {
-    // @ts-ignore
     window.requestIdleCallback(run, { timeout: 2000 });
   } else {
     setTimeout(run, 200);

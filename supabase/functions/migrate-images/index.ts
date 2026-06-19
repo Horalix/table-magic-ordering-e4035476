@@ -14,6 +14,11 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const BUCKET = "menu-images";
 
+interface MenuImageRow {
+  id: string;
+  image_url: string | null;
+}
+
 function extFromContentType(ct: string | null, fallback = "jpg"): string {
   if (!ct) return fallback;
   if (ct.includes("webp")) return "webp";
@@ -66,7 +71,8 @@ Deno.serve(async (req) => {
     });
   }
 
-  const todo = (items ?? []).filter((row: any) => {
+  const menuItems = (items ?? []) as MenuImageRow[];
+  const todo = menuItems.filter((row) => {
     if (!row.image_url) return false;
     try {
       const u = new URL(row.image_url);
@@ -74,14 +80,15 @@ Deno.serve(async (req) => {
     } catch { return false; }
   });
 
-  let migrated = 0, skipped = (items?.length ?? 0) - todo.length, failed = 0;
+  let migrated = 0, failed = 0;
+  const skipped = menuItems.length - todo.length;
   const errors: string[] = [];
 
   // Batch in chunks of 6 to avoid bursting the upstream
   const CHUNK = 6;
   for (let i = 0; i < todo.length; i += CHUNK) {
     const batch = todo.slice(i, i + CHUNK);
-    await Promise.all(batch.map(async (row: any) => {
+    await Promise.all(batch.map(async (row) => {
       try {
         const res = await fetch(row.image_url, { redirect: "follow" });
         if (!res.ok) throw new Error(`fetch ${res.status}`);
@@ -100,9 +107,9 @@ Deno.serve(async (req) => {
           .from("menu_items").update({ image_url: pub.publicUrl }).eq("id", row.id);
         if (updErr) throw updErr;
         migrated++;
-      } catch (e: any) {
+      } catch (e: unknown) {
         failed++;
-        errors.push(`${row.id}: ${e?.message ?? String(e)}`);
+        errors.push(`${row.id}: ${e instanceof Error ? e.message : String(e)}`);
       }
     }));
   }

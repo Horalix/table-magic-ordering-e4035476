@@ -1,5 +1,9 @@
 // [UX] Kitchen sound alert utility using Web Audio API — no external files needed
-const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
+type WindowWithWebAudioFallback = Window & {
+  webkitAudioContext?: typeof window.AudioContext;
+};
+
+const AudioContext = window.AudioContext || (window as WindowWithWebAudioFallback).webkitAudioContext;
 
 let audioCtx: AudioContext | null = null;
 
@@ -8,6 +12,20 @@ function getAudioContext(): AudioContext {
     audioCtx = new AudioContext();
   }
   return audioCtx;
+}
+
+/**
+ * Resume the audio context after a user gesture. Browsers block autoplay until
+ * the user interacts; call this from a one-time click/tap so later event-driven
+ * alerts (which have no gesture of their own) can play.
+ */
+export function unlockAudio(): void {
+  try {
+    const ctx = getAudioContext();
+    if (ctx.state === 'suspended') void ctx.resume();
+  } catch {
+    /* no-op */
+  }
 }
 
 // [PSYCH] Distinct tones for different alert types so staff can distinguish without looking

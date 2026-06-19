@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { ArrowLeft, Clock, CheckCircle, ChefHat, Utensils, Receipt, CreditCard, Loader2, Users } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -20,6 +20,7 @@ const RunningTabPage = () => {
   const { sessionId } = useCartStore();
   const [requestingBill, setRequestingBill] = useState(false);
   const [showReview, setShowReview] = useState(false);
+  const billRequestRef = useRef(false);
   const t = useT();
   const locale = useLanguageStore((s) => s.locale);
 
@@ -69,12 +70,12 @@ const RunningTabPage = () => {
     queryKey: ['session-members', sessionId],
     queryFn: async () => {
       const [{ data: sess }, { data: joiners }] = await Promise.all([
-        (supabase as any).from('table_sessions').select('guest_name').eq('id', sessionId).maybeSingle(),
-        (supabase as any).from('session_join_requests').select('guest_name').eq('table_session_id', sessionId).eq('status', 'approved'),
+        supabase.from('table_sessions').select('guest_name').eq('id', sessionId).maybeSingle(),
+        supabase.from('session_join_requests').select('guest_name').eq('table_session_id', sessionId).eq('status', 'approved'),
       ]);
       const names: string[] = [];
       if (sess?.guest_name) names.push(sess.guest_name);
-      (joiners || []).forEach((j: any) => { if (j.guest_name) names.push(j.guest_name); });
+      (joiners || []).forEach((j) => { if (j.guest_name) names.push(j.guest_name); });
       return Array.from(new Set(names));
     },
     enabled: !!sessionId,
@@ -104,7 +105,8 @@ const RunningTabPage = () => {
   };
 
   const requestBill = async () => {
-    if (!sessionId) return;
+    if (!sessionId || billRequestRef.current || existingBillRequest) return;
+    billRequestRef.current = true;
     setRequestingBill(true);
     try {
       const { error } = await supabase
@@ -116,6 +118,7 @@ const RunningTabPage = () => {
     } catch {
       toast.error('Could not request bill. Please try again.');
     } finally {
+      billRequestRef.current = false;
       setRequestingBill(false);
     }
   };
@@ -126,7 +129,7 @@ const RunningTabPage = () => {
     <div className="min-h-screen bg-background pb-32">
       <div className="sticky top-0 z-30 glass">
         <div className="flex items-center gap-3 px-4 py-4">
-          <button onClick={goBack} className="p-2.5 -ml-2 rounded-full hover:bg-muted transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center">
+          <button onClick={goBack} aria-label={t('back_to_menu')} className="p-2.5 -ml-2 rounded-full hover:bg-muted transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center">
             <ArrowLeft className={`w-5 h-5 text-foreground ${locale === 'ar' ? 'rotate-180' : ''}`} />
           </button>
           <div className="flex items-center gap-2">
@@ -220,7 +223,7 @@ const RunningTabPage = () => {
           >
             {orders.map((order) => {
               const status = statusConfig[order.status] || statusConfig.pending;
-              const items = (order as any).order_items || [];
+              const items = order.order_items || [];
               const waitTime = getWaitTime(order.created_at, order.status);
 
               return (
@@ -246,7 +249,7 @@ const RunningTabPage = () => {
                     <span className="text-sm font-sans font-bold text-foreground">{Number(order.total).toFixed(2)} KM</span>
                   </div>
                   <div className="px-4 py-3 space-y-2">
-                    {items.map((oi: any) => (
+                    {items.map((oi) => (
                       <div key={oi.id} className="flex justify-between items-center">
                         <span className="text-sm font-sans text-foreground">{oi.quantity}× {oi.menu_items ? getLocalizedName(oi.menu_items, locale) : 'Item'}</span>
                         <span className="text-xs font-sans text-muted-foreground">{(oi.quantity * Number(oi.unit_price)).toFixed(2)} KM</span>

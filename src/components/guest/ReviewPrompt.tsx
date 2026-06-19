@@ -53,8 +53,10 @@ const ReviewPrompt = ({ open, onClose, sessionId }: ReviewPromptProps) => {
       await supabase.from('ratings').insert({
         table_session_id: sessionId,
         rating: selectedRating,
-      } as any);
-    } catch {}
+      });
+    } catch (error) {
+      console.warn('Failed to submit visit rating', error);
+    }
     setStep(waiter ? 'server' : 'final');
   };
 
@@ -65,8 +67,10 @@ const ReviewPrompt = ({ open, onClose, sessionId }: ReviewPromptProps) => {
         waiter_id: waiter?.id,
         rating: serverRating,
         comment: comment || null,
-      } as any);
-    } catch {}
+      });
+    } catch (error) {
+      console.warn('Failed to submit server rating', error);
+    }
     setStep('final');
   };
 

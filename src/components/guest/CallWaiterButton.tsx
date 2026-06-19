@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Hand, Check } from 'lucide-react';
 import { useCartStore } from '@/lib/cart-store';
@@ -14,18 +14,20 @@ const CallWaiterButton = ({ variant = 'default' }: Props) => {
   const { sessionId } = useCartStore();
   const [called, setCalled] = useState(false);
   const [loading, setLoading] = useState(false);
+  const callingRef = useRef(false);
   const t = useT();
 
   if (!sessionId) return null;
 
   const handleCall = async () => {
-    if (called || loading) return;
+    if (called || callingRef.current) return;
+    callingRef.current = true;
     setLoading(true);
 
     try {
       const { error } = await supabase
         .from('waiter_calls')
-        .insert({ table_session_id: sessionId } as any);
+        .insert({ table_session_id: sessionId });
 
       if (error) throw error;
 
@@ -36,6 +38,7 @@ const CallWaiterButton = ({ variant = 'default' }: Props) => {
       console.error('Call waiter error:', err);
       toast.error('Could not notify waiter. Please try again.');
     } finally {
+      callingRef.current = false;
       setLoading(false);
     }
   };
@@ -45,6 +48,8 @@ const CallWaiterButton = ({ variant = 'default' }: Props) => {
   return (
     <motion.button
       onClick={handleCall}
+      disabled={called || loading}
+      aria-busy={loading}
       whileTap={{ scale: 0.95 }}
       className={`flex items-center gap-2 px-4 py-2.5 rounded-full font-sans text-sm font-medium transition-all duration-300 ${
         called

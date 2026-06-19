@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { useCallback } from 'react';
 
 export type Locale = 'en' | 'bs' | 'ar';
 
@@ -173,6 +174,22 @@ const translations: Record<string, Record<Locale, string>> = {
   'table_not_active': { en: 'This table is no longer active. Please scan the QR code again.', bs: 'Ovaj sto više nije aktivan. Skenirajte QR kod ponovo.', ar: 'هذه الطاولة لم تعد نشطة. يرجى مسح رمز QR مرة أخرى.' },
   'new_guest': { en: 'New guest', bs: 'Novi gost', ar: 'ضيف جديد' },
   'try_again': { en: 'Try again', bs: 'Pokušaj ponovo', ar: 'حاول مرة أخرى' },
+
+  // Checkout & payment
+  'checkout': { en: 'Checkout', bs: 'Plaćanje', ar: 'الدفع' },
+  'choose_how_to_pay': { en: 'How would you like to pay?', bs: 'Kako želite platiti?', ar: 'كيف تريد الدفع؟' },
+  'pay_now_card': { en: 'Pay now by card', bs: 'Plati odmah karticom', ar: 'ادفع الآن بالبطاقة' },
+  'pay_now_card_sub': { en: 'Instant — no waiting', bs: 'Trenutno — bez čekanja', ar: 'فوري — بدون انتظار' },
+  'call_waiter_to_pay': { en: 'Call a waiter', bs: 'Pozovi konobara', ar: 'استدعِ النادل' },
+  'call_waiter_to_pay_sub': { en: 'Pay at the table — cash or card', bs: 'Plati za stolom — gotovina ili kartica', ar: 'ادفع على الطاولة — نقداً أو بالبطاقة' },
+  'no_refund_short': { en: 'Orders can’t be cancelled or refunded once placed.', bs: 'Narudžbe se ne mogu otkazati ni vratiti nakon slanja.', ar: 'لا يمكن إلغاء الطلبات أو استردادها بعد تقديمها.' },
+  'card_coming_soon_title': { en: 'Card payment is coming soon', bs: 'Plaćanje karticom uskoro', ar: 'الدفع بالبطاقة قريباً' },
+  'card_coming_soon_body': { en: 'Online card payment isn’t available just yet. A waiter can bring the card terminal or take cash.', bs: 'Online plaćanje karticom još nije dostupno. Konobar može donijeti terminal ili uzeti gotovinu.', ar: 'الدفع الإلكتروني بالبطاقة غير متاح بعد. يمكن للنادل إحضار جهاز البطاقة أو أخذ النقود.' },
+  'order_in_kitchen': { en: 'Your order has been sent to the kitchen', bs: 'Vaša narudžba je poslana u kuhinju', ar: 'تم إرسال طلبك إلى المطبخ' },
+  'waiter_on_the_way': { en: 'A waiter is on the way', bs: 'Konobar je na putu', ar: 'النادل في الطريق' },
+  'sending': { en: 'Sending…', bs: 'Šaljem…', ar: 'جارٍ الإرسال…' },
+  'popular': { en: 'Popular', bs: 'Popularno', ar: 'شائع' },
+  'popular_picks': { en: 'Popular picks', bs: 'Popularni izbori', ar: 'الأكثر طلباً' },
 };
 
 export function t(key: string): string {
@@ -183,9 +200,9 @@ export function t(key: string): string {
 // Hook version for reactive updates
 export function useT() {
   const locale = useLanguageStore((s) => s.locale);
-  return (key: string): string => {
+  return useCallback((key: string): string => {
     return translations[key]?.[locale] || translations[key]?.en || key;
-  };
+  }, [locale]);
 }
 
 // Get localized menu item name

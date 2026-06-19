@@ -6,6 +6,40 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+type TranslationTargetType = "category" | "subcategory" | "item";
+
+interface TranslatableRow {
+  id: string;
+  name: string;
+  description?: string | null;
+  name_ar?: string | null;
+  name_bs?: string | null;
+}
+
+interface TranslationTarget {
+  type: TranslationTargetType;
+  id: string;
+  name: string;
+  description?: string;
+  needs_ar: boolean;
+  needs_bs: boolean;
+}
+
+interface TranslationResult {
+  id: string;
+  name_ar?: string;
+  name_bs?: string;
+  description_ar?: string;
+  description_bs?: string;
+}
+
+interface TranslationUpdates {
+  name_ar?: string;
+  name_bs?: string;
+  description_ar?: string;
+  description_bs?: string;
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
@@ -55,19 +89,19 @@ serve(async (req) => {
     const { data: categories } = await categoriesQuery;
     const { data: subcategories } = await subcategoriesQuery;
 
-    const toTranslate: { type: string; id: string; name: string; description?: string; needs_ar: boolean; needs_bs: boolean }[] = [];
+    const toTranslate: TranslationTarget[] = [];
 
-    categories?.forEach((c: any) => {
+    ((categories ?? []) as TranslatableRow[]).forEach((c) => {
       const needs_ar = force || !c.name_ar;
       const needs_bs = force || !c.name_bs;
       if (needs_ar || needs_bs) toTranslate.push({ type: "category", id: c.id, name: c.name, needs_ar, needs_bs });
     });
-    subcategories?.forEach((s: any) => {
+    ((subcategories ?? []) as TranslatableRow[]).forEach((s) => {
       const needs_ar = force || !s.name_ar;
       const needs_bs = force || !s.name_bs;
       if (needs_ar || needs_bs) toTranslate.push({ type: "subcategory", id: s.id, name: s.name, needs_ar, needs_bs });
     });
-    items?.forEach((i: any) => {
+    ((items ?? []) as TranslatableRow[]).forEach((i) => {
       const needs_ar = force || !i.name_ar;
       const needs_bs = force || !i.name_bs;
       if (needs_ar || needs_bs) toTranslate.push({ type: "item", id: i.id, name: i.name, description: i.description || undefined, needs_ar, needs_bs });
@@ -127,9 +161,11 @@ No markdown, no explanation, ONLY the JSON array.`;
     // Clean markdown code fences if present
     content = content.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
 
-    let translated: any[];
+    let translated: TranslationResult[];
     try {
-      translated = JSON.parse(content);
+      const parsed = JSON.parse(content) as unknown;
+      if (!Array.isArray(parsed)) throw new Error("Translation response was not an array");
+      translated = parsed as TranslationResult[];
     } catch {
       console.error("Failed to parse AI response:", content);
       throw new Error("Failed to parse translation response");
@@ -141,7 +177,7 @@ No markdown, no explanation, ONLY the JSON array.`;
       const original = toTranslate.find((o) => o.id === t.id);
       if (!original) continue;
 
-      const updates: Record<string, any> = {};
+      const updates: TranslationUpdates = {};
       if (original.needs_ar && t.name_ar) updates.name_ar = t.name_ar;
       if (original.needs_bs && t.name_bs) updates.name_bs = t.name_bs;
 
