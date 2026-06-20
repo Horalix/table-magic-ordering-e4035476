@@ -57,6 +57,31 @@ Still needed before live card payments:
 - Configure production merchant credentials after Monri test approval.
 - Decide whether La Soul wants `purchase` immediately or `authorize` plus later capture.
 
+## Go-live checklist
+
+When Monri test credentials arrive, this should take minutes:
+
+1. **Set Edge Function secrets** (Supabase → Edge Functions → Secrets):
+   `MONRI_MERCHANT_KEY`, `MONRI_AUTHENTICITY_TOKEN`, `MONRI_ENVIRONMENT=test`,
+   `MONRI_CALLBACK_URL=https://<project>.functions.supabase.co/monri-webhook`,
+   optional `MONRI_CURRENCY=BAM`.
+2. **Deploy** the `monri-create-payment` and `monri-webhook` Edge Functions.
+3. **Register the webhook URL** (the `MONRI_CALLBACK_URL`) in the Monri merchant dashboard.
+4. **Enable the front-end**: set `VITE_MONRI_ENABLED=true` and rebuild/redeploy.
+   The checkout "Pay now · card" then opens the Monri Components card form
+   (`src/components/guest/MonriCardForm.tsx`); the webhook flips
+   `orders.payment_status` to `paid`.
+5. **Test** with a Monri sandbox card; verify a row in `payment_transactions`
+   and `orders.payment_status='paid'` after the callback.
+6. **Go production**: flip `MONRI_ENVIRONMENT=production` (+ production
+   credentials) once Monri approves the live account.
+
+> The front-end card form follows Monri's documented Components API but has not
+> been run against a live account — verify field mounting and `confirmPayment`
+> behavior against the sandbox during step 5, and adjust
+> `MonriCardForm.confirmPayment` payload if your account needs extra customer/3DS
+> fields.
+
 ## Official References
 
 - Monri Components: https://ipg.monri.com/en/documentation/components

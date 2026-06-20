@@ -210,6 +210,12 @@ const RunningTabPage = () => {
                           {waitTime}
                         </span>
                       )}
+                      {order.payment_method === 'card' && (
+                        <span className={`inline-flex items-center gap-1 text-[11px] font-sans font-medium px-2 py-0.5 rounded-full ${order.payment_status === 'paid' ? 'bg-primary/10 text-primary' : 'bg-accent/10 text-accent'}`}>
+                          <CreditCard className="w-3 h-3" />
+                          {order.payment_status === 'paid' ? t('paid') : t('card_pending')}
+                        </span>
+                      )}
                     </div>
                     <span className="text-sm font-sans font-bold text-foreground">{Number(order.total).toFixed(2)} KM</span>
                   </div>

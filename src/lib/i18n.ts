@@ -190,6 +190,16 @@ const translations: Record<string, Record<Locale, string>> = {
   'sending': { en: 'Sending…', bs: 'Šaljem…', ar: 'جارٍ الإرسال…' },
   'popular': { en: 'Popular', bs: 'Popularno', ar: 'شائع' },
   'popular_picks': { en: 'Popular picks', bs: 'Popularni izbori', ar: 'الأكثر طلباً' },
+
+  // Card payment (Monri)
+  'pay_by_card': { en: 'Pay by card', bs: 'Plati karticom', ar: 'الدفع بالبطاقة' },
+  'paying': { en: 'Processing…', bs: 'Obrada…', ar: 'جارٍ المعالجة…' },
+  'payment_received': { en: 'Payment received — thank you!', bs: 'Plaćanje primljeno — hvala!', ar: 'تم استلام الدفعة — شكراً!' },
+  'payment_failed': { en: 'Payment could not be processed. Please try again.', bs: 'Plaćanje nije uspjelo. Pokušajte ponovo.', ar: 'تعذّر إتمام الدفع. يرجى المحاولة مرة أخرى.' },
+  'payment_declined': { en: 'Card declined. Try another card or call a waiter.', bs: 'Kartica odbijena. Probajte drugu karticu ili pozovite konobara.', ar: 'تم رفض البطاقة. جرّب بطاقة أخرى أو استدعِ النادل.' },
+  'secure_payment_monri': { en: 'Secure payment processed by Monri', bs: 'Sigurno plaćanje putem Monri', ar: 'دفع آمن عبر Monri' },
+  'paid': { en: 'Paid', bs: 'Plaćeno', ar: 'مدفوع' },
+  'card_pending': { en: 'Card · pending', bs: 'Kartica · na čekanju', ar: 'بطاقة · معلّق' },
 };
 
 export function t(key: string): string {

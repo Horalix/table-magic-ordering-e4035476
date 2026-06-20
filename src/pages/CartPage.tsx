@@ -10,14 +10,16 @@ import { useSessionHeartbeat } from '@/hooks/useSessionHeartbeat';
 import SmartImage from '@/components/ui/SmartImage';
 import { staggerContainer, fadeUp, useCountUp } from '@/lib/motion';
 import CheckoutSheet, { type PayMethod } from '@/components/guest/CheckoutSheet';
-import { startCardPayment } from '@/lib/payments';
+import MonriCardForm from '@/components/guest/MonriCardForm';
+import { startCardPayment, cardPaymentEnabled } from '@/lib/payments';
 import { callWaiter, placeGuestOrder, touchSession } from '@/lib/guest-api';
 
 const LARGE_ORDER_THRESHOLD = 20;
 
-const OrderSuccess = ({ table, cardComingSoon, waiterCalled, onCallWaiter, onContinue }: {
+const OrderSuccess = ({ table, cardComingSoon, cardPaid, waiterCalled, onCallWaiter, onContinue }: {
   table: string | null;
   cardComingSoon: boolean;
+  cardPaid: boolean;
   waiterCalled: boolean;
   onCallWaiter: () => void;
   onContinue: () => void;
@@ -38,7 +40,9 @@ const OrderSuccess = ({ table, cardComingSoon, waiterCalled, onCallWaiter, onCon
         <p className="text-muted-foreground font-sans mt-2 text-sm">{t('order_in_kitchen')}</p>
         {table && <p className="text-sm text-primary font-sans mt-1 font-medium">{t('table')} {table}</p>}
 
-        {cardComingSoon ? (
+        {cardPaid ? (
+          <p className="mt-4 text-sm font-sans font-semibold text-primary flex items-center justify-center gap-2"><CheckCircle className="w-4 h-4" /> {t('payment_received')}</p>
+        ) : cardComingSoon ? (
           <div className="mt-6 p-4 rounded-2xl border border-accent/20 bg-accent/5 text-left">
             <p className="font-sans font-semibold text-foreground text-sm flex items-center gap-2">
               <CreditCard className="w-4 h-4 text-accent" /> {t('card_coming_soon_title')}
@@ -77,7 +81,9 @@ const CartPage = () => {
   const [orderPlaced, setOrderPlaced] = useState(false);
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [cardComingSoon, setCardComingSoon] = useState(false);
+  const [cardPaid, setCardPaid] = useState(false);
   const [waiterCalled, setWaiterCalled] = useState(false);
+  const [cardSession, setCardSession] = useState<{ clientSecret: string; authenticityToken: string; environment: 'test' | 'production'; total: number } | null>(null);
   const submittingRef = useRef(false);
   const t = useT();
   const locale = useLanguageStore((s) => s.locale);
@@ -157,12 +163,21 @@ const CartPage = () => {
         });
         if (res.status === 'redirect') { window.location.href = res.url; return; }
         if (res.status === 'error') throw new Error(res.message);
-        if (res.status === 'monri_components') {
-          toast.info('Secure card payment session is ready. Card form UI is the next step.');
-          setCardComingSoon(true);
-        } else {
-          setCardComingSoon(true);
+        if (res.status === 'monri_components' && cardPaymentEnabled) {
+          // Order is placed (payment pending). Collect the card in the secure
+          // Monri form; the webhook confirms 'paid' server-side.
+          clearCart();
+          setCheckoutOpen(false);
+          setCardSession({
+            clientSecret: res.clientSecret,
+            authenticityToken: res.authenticityToken,
+            environment: res.environment,
+            total: Number(order.total),
+          });
+          return;
         }
+        // Monri disabled / not ready → graceful placeholder.
+        setCardComingSoon(true);
       }
 
       setCheckoutOpen(false);
@@ -185,10 +200,13 @@ const CartPage = () => {
       <OrderSuccess
         table={table}
         cardComingSoon={cardComingSoon}
+        cardPaid={cardPaid}
         waiterCalled={waiterCalled}
         onCallWaiter={pingWaiter}
         onContinue={() => {
           setOrderPlaced(false);
+          setCardPaid(false);
+          setCardComingSoon(false);
           navigate(buildMenuUrl());
         }}
       />
@@ -326,6 +344,30 @@ const CartPage = () => {
             onClose={() => setCheckoutOpen(false)}
           />
         </>
+      )}
+
+      {/* Secure card form (Monri) — overlays even after the cart is cleared */}
+      {cardSession && (
+        <MonriCardForm
+          open
+          clientSecret={cardSession.clientSecret}
+          authenticityToken={cardSession.authenticityToken}
+          environment={cardSession.environment}
+          amountLabel={`${cardSession.total.toFixed(2)} KM`}
+          onSuccess={() => {
+            setCardSession(null);
+            setCardPaid(true);
+            setCardComingSoon(false);
+            setWaiterCalled(false);
+            setOrderPlaced(true);
+          }}
+          onCancel={() => {
+            // Order is placed but unpaid — show the pay-at-table fallback.
+            setCardSession(null);
+            setCardComingSoon(true);
+            setOrderPlaced(true);
+          }}
+        />
       )}
     </div>
   );

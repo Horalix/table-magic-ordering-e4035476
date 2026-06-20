@@ -10,6 +10,7 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import { Trash2 } from 'lucide-react';
+import PaymentBadge from '@/components/PaymentBadge';
 import { toast } from 'sonner';
 import type { Database } from '@/integrations/supabase/types';
 
@@ -110,6 +111,7 @@ const AdminOrders = () => {
                       <span className="text-sm font-sans text-muted-foreground">- {order.guest_name}</span>
                     )}
                     <Badge className={`text-xs ${statusColors[order.status]}`}>{order.status}</Badge>
+                    <PaymentBadge method={order.payment_method} status={order.payment_status} />
                     {!['served', 'cancelled'].includes(order.status) && (() => {
                       const mins = Math.floor((Date.now() - new Date(order.created_at).getTime()) / 60000);
                       const label = mins < 1 ? 'Just now' : mins < 60 ? `${mins}m` : `${Math.floor(mins / 60)}h ${mins % 60}m`;

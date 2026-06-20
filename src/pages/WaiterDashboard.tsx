@@ -5,6 +5,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import PaymentBadge from '@/components/PaymentBadge';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   AlertDialog,
@@ -51,7 +52,7 @@ type WaiterOrderItem = {
   status: OrderItemStatus;
   menu_items: { name: string } | null;
 };
-type WaiterOrder = Pick<Database['public']['Tables']['orders']['Row'], 'id' | 'created_at' | 'status' | 'table_session_id'> & {
+type WaiterOrder = Pick<Database['public']['Tables']['orders']['Row'], 'id' | 'created_at' | 'status' | 'table_session_id' | 'payment_method' | 'payment_status'> & {
   table_sessions: { tables: { table_number: number } | null } | null;
   order_items: WaiterOrderItem[] | null;
 };
@@ -593,6 +594,7 @@ const OrderCard = ({ order, onUpdate }: { order: WaiterOrder; onUpdate: (id: str
               <span className={`w-1.5 h-1.5 rounded-full ${meta?.dot ?? ''}`} />
               {meta?.label ?? order.status}
             </Badge>
+            <PaymentBadge method={order.payment_method} status={order.payment_status} />
           </div>
           <span className={`text-[11px] px-2 py-0.5 rounded-full border tabular-nums ${waitBg(ms)}`}>{formatDuration(ms)}</span>
         </div>
