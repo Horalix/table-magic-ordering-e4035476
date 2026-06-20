@@ -254,6 +254,7 @@ export type Database = {
           served_at: string | null
           status: Database["public"]["Enums"]["order_status"]
           table_session_id: string
+          tip_amount: number
           total: number
           updated_at: string
         }
@@ -271,6 +272,7 @@ export type Database = {
           served_at?: string | null
           status?: Database["public"]["Enums"]["order_status"]
           table_session_id: string
+          tip_amount?: number
           total?: number
           updated_at?: string
         }
@@ -288,6 +290,7 @@ export type Database = {
           served_at?: string | null
           status?: Database["public"]["Enums"]["order_status"]
           table_session_id?: string
+          tip_amount?: number
           total?: number
           updated_at?: string
         }
@@ -389,6 +392,42 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      restaurant_settings: {
+        Row: {
+          id: number
+          print_auto: boolean
+          print_copies: number
+          print_enabled: boolean
+          print_footer: string
+          print_header: string
+          print_paper_width: number
+          print_show_prices: boolean
+          updated_at: string
+        }
+        Insert: {
+          id?: number
+          print_auto?: boolean
+          print_copies?: number
+          print_enabled?: boolean
+          print_footer?: string
+          print_header?: string
+          print_paper_width?: number
+          print_show_prices?: boolean
+          updated_at?: string
+        }
+        Update: {
+          id?: number
+          print_auto?: boolean
+          print_copies?: number
+          print_enabled?: boolean
+          print_footer?: string
+          print_header?: string
+          print_paper_width?: number
+          print_show_prices?: boolean
+          updated_at?: string
+        }
+        Relationships: []
       }
       section_assignments: {
         Row: {
@@ -853,6 +892,7 @@ export type Database = {
           _payment_method: string
           _session_id: string
           _session_token: string
+          _tip?: number
         }
         Returns: Json
       }
