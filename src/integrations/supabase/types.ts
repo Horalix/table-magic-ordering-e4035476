@@ -244,6 +244,8 @@ export type Database = {
           assigned_waiter_id: string | null
           confirmed_at: string | null
           created_at: string
+          fiscalized: boolean
+          fiscalized_at: string | null
           guest_name: string | null
           id: string
           notes: string | null
@@ -262,6 +264,8 @@ export type Database = {
           assigned_waiter_id?: string | null
           confirmed_at?: string | null
           created_at?: string
+          fiscalized?: boolean
+          fiscalized_at?: string | null
           guest_name?: string | null
           id?: string
           notes?: string | null
@@ -280,6 +284,8 @@ export type Database = {
           assigned_waiter_id?: string | null
           confirmed_at?: string | null
           created_at?: string
+          fiscalized?: boolean
+          fiscalized_at?: string | null
           guest_name?: string | null
           id?: string
           notes?: string | null
