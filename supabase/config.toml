@@ -1,10 +1,9 @@
 project_id = "jgxnvrrphxnmzongtmzs"
 
-[functions.seed-data]
-verify_jwt = false
-
+# translate-menu requires a valid JWT (and an admin role check inside the
+# function). seed-data has been removed (was unauthenticated + hardcoded creds).
 [functions.translate-menu]
-verify_jwt = false
+verify_jwt = true
 
 [functions.waiter-login]
 verify_jwt = false

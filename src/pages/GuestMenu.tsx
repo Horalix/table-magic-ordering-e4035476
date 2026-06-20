@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { UtensilsCrossed, Wine, Cake, Phone, MapPin, ChevronRight } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -194,6 +194,10 @@ const GuestMenu = () => {
             </motion.button>
           );
         })}
+
+        <Link to="/privacy" className="block text-center text-[11px] text-muted-foreground/70 font-sans hover:text-primary transition-colors pt-2">
+          {t('privacy_security')}
+        </Link>
       </motion.div>
 
       {hasSession && <CartBar />}

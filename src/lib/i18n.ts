@@ -200,6 +200,7 @@ const translations: Record<string, Record<Locale, string>> = {
   'secure_payment_monri': { en: 'Secure payment processed by Monri', bs: 'Sigurno plaćanje putem Monri', ar: 'دفع آمن عبر Monri' },
   'paid': { en: 'Paid', bs: 'Plaćeno', ar: 'مدفوع' },
   'card_pending': { en: 'Card · pending', bs: 'Kartica · na čekanju', ar: 'بطاقة · معلّق' },
+  'privacy_security': { en: 'Privacy & security', bs: 'Privatnost i sigurnost', ar: 'الخصوصية والأمان' },
 };
 
 export function t(key: string): string {

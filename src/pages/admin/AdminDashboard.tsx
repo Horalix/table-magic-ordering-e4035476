@@ -220,7 +220,7 @@ const AdminDashboard = () => {
         supabase.from('tables').select('*', { count: 'exact', head: true }),
         supabase.from('sections').select('*', { count: 'exact', head: true }),
         supabase.from('menu_items').select('*', { count: 'exact', head: true }),
-        supabase.from('waiters').select('*', { count: 'exact', head: true }).eq('is_active', true),
+        supabase.from('waiters').select('id', { count: 'exact', head: true }).eq('is_active', true),
         supabase.from('section_assignments').select('*', { count: 'exact', head: true }).eq('shift_date', todayISO()),
       ]);
       setSetup({

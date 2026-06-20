@@ -66,6 +66,18 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
+    // Admin only — translations are costly AI calls; any waiter must not trigger them.
+    const userId = (claimsData.claims as { sub?: string }).sub;
+    const { data: adminRole } = await supabase
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", userId ?? "")
+      .eq("role", "admin")
+      .maybeSingle();
+    if (!adminRole) {
+      return new Response(JSON.stringify({ error: "Admin access required" }), { status: 403, headers: corsHeaders });
+    }
+
     // Parse body for force param
     let force = false;
     try {

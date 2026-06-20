@@ -22,7 +22,9 @@ import {
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import type { Database } from '@/integrations/supabase/types';
 
-type Waiter = Database['public']['Tables']['waiters']['Row'];
+// pin_hash is never sent to the client (column SELECT revoked); has_pin is a
+// boolean generated column the UI uses instead.
+type Waiter = Omit<Database['public']['Tables']['waiters']['Row'], 'pin_hash'> & { has_pin?: boolean | null };
 
 interface CreateWaiterResponse {
   error?: string;
@@ -50,7 +52,7 @@ const AdminWaiters = () => {
 
   const fetchAll = useCallback(async () => {
     const [w, s, a] = await Promise.all([
-      supabase.from('waiters').select('*').order('display_name'),
+      supabase.from('waiters').select('id, display_name, username, is_active, has_pin, user_id, created_at, pin_set_at').order('display_name'),
       supabase.from('sections').select('id, name, color').order('sort_order'),
       supabase.from('section_assignments').select('section_id, waiter_id').eq('shift_date', todayISO()),
     ]);
@@ -229,7 +231,7 @@ const AdminWaiters = () => {
                       <span>|</span>
                       <span>{waiter.is_active ? 'Active' : 'Inactive'}</span>
                       <span>|</span>
-                      {waiter.pin_hash ? (
+                      {waiter.has_pin ? (
                         <span className="inline-flex items-center gap-1 text-primary"><CheckCircle2 className="w-3 h-3" /> PIN set</span>
                       ) : (
                         <span className="text-destructive">no PIN</span>

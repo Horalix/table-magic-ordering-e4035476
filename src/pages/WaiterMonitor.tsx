@@ -11,7 +11,7 @@ import { playOrderAlert, playWaiterCallAlert, playBillRequestAlert, unlockAudio 
 import type { Database } from '@/integrations/supabase/types';
 
 type Section = Pick<Database['public']['Tables']['sections']['Row'], 'id' | 'name' | 'color'>;
-type Waiter = Pick<Database['public']['Tables']['waiters']['Row'], 'id' | 'display_name' | 'is_active' | 'pin_hash'>;
+type Waiter = Pick<Database['public']['Tables']['waiters']['Row'], 'id' | 'display_name' | 'is_active'> & { has_pin?: boolean | null };
 type TableRow = Pick<Database['public']['Tables']['tables']['Row'], 'id' | 'table_number' | 'section_id'> & {
   sections?: Section | null;
 };
@@ -79,7 +79,7 @@ const WaiterMonitor = () => {
       supabase.from('orders').select('id, table_session_id, status, created_at, assigned_waiter_id').not('status', 'in', '("served","cancelled")'),
       supabase.from('waiter_calls').select('id, table_session_id, status, created_at').eq('status', 'pending'),
       supabase.from('bill_requests').select('id, table_session_id, status, created_at').eq('status', 'pending'),
-      supabase.from('waiters').select('id, display_name, is_active, pin_hash').eq('is_active', true).order('display_name'),
+      supabase.from('waiters').select('id, display_name, is_active, has_pin').eq('is_active', true).order('display_name'),
       supabase.from('section_assignments').select('section_id, waiter_id, shift_date').eq('shift_date', today),
     ]);
 
@@ -179,7 +179,7 @@ const WaiterMonitor = () => {
   const oldestOrderMs = orders.reduce((acc, order) => Math.max(acc, now.getTime() - new Date(order.created_at).getTime()), 0);
 
   const openWaiter = (waiter: Waiter) => {
-    if (!waiter.pin_hash) {
+    if (!waiter.has_pin) {
       toast.error(`${waiter.display_name} has no PIN yet - ask the manager to set one.`);
       return;
     }
@@ -407,7 +407,7 @@ const RailView = ({
                   {stats.total} tables | {stats.occupied} seated
                 </p>
               </div>
-              {!waiter.pin_hash ? (
+              {!waiter.has_pin ? (
                 <span className="text-[10px] font-sans px-2 py-1 rounded-full bg-muted text-muted-foreground">no PIN</span>
               ) : (
                 <Lock className="w-4 h-4 text-muted-foreground shrink-0" />
