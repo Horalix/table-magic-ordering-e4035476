@@ -115,7 +115,7 @@ const CartPage = () => {
     setWaiterCalled(true);
   };
 
-  const placeOrder = async (method: PayMethod) => {
+  const placeOrder = async (method: PayMethod, tip = 0) => {
     if (submittingRef.current) return;
     if (!sessionId || !sessionToken) {
       toast.error(t('scan_qr_again'));
@@ -144,6 +144,7 @@ const CartPage = () => {
           quantity: item.quantity,
           notes: item.notes || null,
         })),
+        tip,
       );
 
       setLastOrderTime();

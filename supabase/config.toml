@@ -7,3 +7,8 @@ verify_jwt = true
 
 [functions.waiter-login]
 verify_jwt = false
+
+# cloudprnt is polled by a network thermal printer (no Supabase JWT); it is
+# protected by the CLOUDPRNT_TOKEN shared secret instead.
+[functions.cloudprnt]
+verify_jwt = false

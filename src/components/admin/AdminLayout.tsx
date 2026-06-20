@@ -4,7 +4,7 @@ import { motion } from 'framer-motion';
 import { supabase } from '@/integrations/supabase/client';
 import {
   LayoutDashboard, UtensilsCrossed, TableProperties, ClipboardList,
-  BarChart3, QrCode, LogOut, ChefHat, Menu, X, Layers, Users, Star, Monitor, CalendarCheck
+  BarChart3, QrCode, LogOut, ChefHat, Menu, X, Layers, Users, Star, Monitor, CalendarCheck, Printer, Receipt
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { springPill } from '@/lib/motion';
@@ -30,11 +30,13 @@ const navGroups = [
       { label: 'Sections', icon: Layers, path: '/admin/sections' },
       { label: 'Waiters', icon: Users, path: '/admin/waiters' },
       { label: 'QR Codes', icon: QrCode, path: '/admin/qr-codes' },
+      { label: 'Printing', icon: Printer, path: '/admin/printing' },
     ],
   },
   {
     heading: 'Insights',
     items: [
+      { label: 'Daily Report', icon: Receipt, path: '/admin/reports' },
       { label: 'Performance', icon: Star, path: '/admin/performance' },
       { label: 'Analytics', icon: BarChart3, path: '/admin/analytics' },
     ],

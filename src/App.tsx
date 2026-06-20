@@ -25,6 +25,8 @@ const AdminAnalytics = lazy(() => import("./pages/admin/AdminAnalytics"));
 const AdminQRCodes = lazy(() => import("./pages/admin/AdminQRCodes"));
 const AdminSections = lazy(() => import("./pages/admin/AdminSections"));
 const AdminFloorTonight = lazy(() => import("./pages/admin/AdminFloorTonight"));
+const AdminPrinting = lazy(() => import("./pages/admin/AdminPrinting"));
+const AdminReports = lazy(() => import("./pages/admin/AdminReports"));
 const AdminWaiters = lazy(() => import("./pages/admin/AdminWaiters"));
 const AdminPerformance = lazy(() => import("./pages/admin/AdminPerformance"));
 const KitchenDisplay = lazy(() => import("./pages/KitchenDisplay"));
@@ -83,6 +85,8 @@ const App = () => (
               <Route path="qr-codes" element={<AdminQRCodes />} />
               <Route path="sections" element={<AdminSections />} />
               <Route path="tonight" element={<AdminFloorTonight />} />
+              <Route path="printing" element={<AdminPrinting />} />
+              <Route path="reports" element={<AdminReports />} />
               <Route path="waiters" element={<AdminWaiters />} />
               <Route path="performance" element={<AdminPerformance />} />
             </Route>

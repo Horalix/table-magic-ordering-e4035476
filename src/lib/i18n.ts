@@ -201,6 +201,10 @@ const translations: Record<string, Record<Locale, string>> = {
   'paid': { en: 'Paid', bs: 'Plaćeno', ar: 'مدفوع' },
   'card_pending': { en: 'Card · pending', bs: 'Kartica · na čekanju', ar: 'بطاقة · معلّق' },
   'privacy_security': { en: 'Privacy & security', bs: 'Privatnost i sigurnost', ar: 'الخصوصية والأمان' },
+  'add_a_tip': { en: 'Add a tip?', bs: 'Dodati napojnicu?', ar: 'إضافة بقشيش؟' },
+  'no_tip': { en: 'No tip', bs: 'Bez napojnice', ar: 'بدون بقشيش' },
+  'custom': { en: 'Custom', bs: 'Drugo', ar: 'مخصص' },
+  'tip': { en: 'Tip', bs: 'Napojnica', ar: 'بقشيش' },
 };
 
 export function t(key: string): string {

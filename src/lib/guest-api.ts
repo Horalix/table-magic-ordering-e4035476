@@ -38,6 +38,7 @@ export interface GuestOrderItemInput {
 export interface GuestPlaceOrderResult {
   order_id: string;
   total: number;
+  tip_amount?: number;
   payment_method: 'cash' | 'card';
   payment_status: string;
   ticket_id?: string;
@@ -169,6 +170,7 @@ export const placeGuestOrder = (
   guestName: string | null,
   paymentMethod: 'cash' | 'card',
   items: GuestOrderItemInput[],
+  tip = 0,
 ) =>
   rpcJson<GuestPlaceOrderResult>('guest_place_order', {
     _session_id: sessionId,
@@ -176,6 +178,7 @@ export const placeGuestOrder = (
     _guest_name: guestName,
     _payment_method: paymentMethod,
     _items: items as unknown as Json,
+    _tip: tip,
   });
 
 export const callWaiter = (sessionId: string, sessionToken: string, reason: 'assist' | 'pay' = 'assist') =>

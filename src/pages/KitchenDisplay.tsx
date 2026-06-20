@@ -1,13 +1,32 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
+import { Link } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Bell, Clock, ChefHat, Check, Utensils, Hand, X, CreditCard, Volume2, VolumeX, Printer, FileJson, FileText } from 'lucide-react';
+import { Bell, Clock, ChefHat, Check, Utensils, Hand, X, CreditCard, Volume2, VolumeX, Printer, FileJson, FileText, Settings } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { playOrderAlert, playWaiterCallAlert, playBillRequestAlert } from '@/lib/kitchen-sounds';
-import { downloadKitchenTicketCsv, downloadKitchenTicketJson, printKitchenTicket } from '@/lib/ticket-export';
+import { downloadKitchenTicketCsv, downloadKitchenTicketJson, printKitchenTicket, type KitchenPrintSettings } from '@/lib/ticket-export';
 import type { Database } from '@/integrations/supabase/types';
+
+interface PrintConfig {
+  print_enabled: boolean;
+  print_auto: boolean;
+  print_paper_width: number;
+  print_header: string;
+  print_footer: string;
+  print_show_prices: boolean;
+  print_copies: number;
+}
+const DEFAULT_PRINT: PrintConfig = {
+  print_enabled: true, print_auto: true, print_paper_width: 80,
+  print_header: 'La Soul', print_footer: '', print_show_prices: true, print_copies: 1,
+};
+const toPrintSettings = (c: PrintConfig): KitchenPrintSettings => ({
+  paperWidth: c.print_paper_width, header: c.print_header, footer: c.print_footer,
+  showPrices: c.print_show_prices, copies: c.print_copies,
+});
 
 type OrderStatus = Database['public']['Enums']['order_status'];
 type OrderItemRow = Database['public']['Tables']['order_items']['Row'];
@@ -38,6 +57,8 @@ interface OrderWithItems {
   id: string;
   status: OrderStatus;
   total: number;
+  tip_amount: number | null;
+  payment_method: string | null;
   notes: string | null;
   created_at: string;
   table_number: number;
@@ -106,6 +127,36 @@ const KitchenDisplay = () => {
   const soundEnabledRef = useRef(true);
   const initialLoadDone = useRef(false);
 
+  // Printing
+  const [isPrinter, setIsPrinter] = useState(() => localStorage.getItem('kitchen:isPrinter') === 'true');
+  const [printConfig, setPrintConfig] = useState<PrintConfig>(DEFAULT_PRINT);
+  const printedRef = useRef<Set<string>>(new Set());
+
+  // Load print settings + keep them live.
+  useEffect(() => {
+    const load = () => supabase.from('restaurant_settings').select('*').eq('id', 1).maybeSingle()
+      .then(({ data }) => { if (data) setPrintConfig({ ...DEFAULT_PRINT, ...(data as Partial<PrintConfig>) }); });
+    load();
+    const ch = supabase.channel('settings')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'restaurant_settings' }, () => load())
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, []);
+
+  // Auto-print newly-placed orders on the designated printer device.
+  useEffect(() => {
+    if (!isPrinter || !printConfig.print_enabled || !printConfig.print_auto) return;
+    const now = Date.now();
+    for (const o of orders) {
+      if (o.status !== 'pending' || printedRef.current.has(o.id)) continue;
+      printedRef.current.add(o.id);
+      // Skip the backlog on first load — only print genuinely fresh orders.
+      if (now - new Date(o.created_at).getTime() <= 60_000) {
+        printKitchenTicket(o, toPrintSettings(printConfig));
+      }
+    }
+  }, [orders, isPrinter, printConfig]);
+
   // Keep ref in sync with state
   useEffect(() => {
     soundEnabledRef.current = soundEnabled;
@@ -137,6 +188,8 @@ const KitchenDisplay = () => {
       id: o.id,
       status: o.status,
       total: o.total,
+      tip_amount: (o as { tip_amount?: number | null }).tip_amount ?? null,
+      payment_method: o.payment_method ?? null,
       notes: o.notes,
       created_at: o.created_at,
       table_number: o.table_sessions?.tables?.table_number || 0,
@@ -254,8 +307,7 @@ const KitchenDisplay = () => {
 
   const exportTicket = (order: OrderWithItems, format: 'print' | 'json' | 'csv') => {
     if (format === 'print') {
-      printKitchenTicket(order);
-      toast.success('Ticket opened for printing');
+      printKitchenTicket(order, toPrintSettings(printConfig));
       return;
     }
     if (format === 'json') {
@@ -325,6 +377,19 @@ const KitchenDisplay = () => {
                 {sections.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
               </select>
             )}
+            <Button
+              variant={isPrinter ? 'default' : 'ghost'}
+              size="icon"
+              onClick={() => { const next = !isPrinter; setIsPrinter(next); localStorage.setItem('kitchen:isPrinter', String(next)); toast.success(next ? 'This device will auto-print new orders' : 'Auto-print off for this device'); }}
+              className="rounded-full min-h-[44px] min-w-[44px]"
+              aria-label="Use this device as the ticket printer"
+              title="Auto-print new orders from this device"
+            >
+              <Printer className="w-5 h-5" />
+            </Button>
+            <Button asChild variant="ghost" size="icon" className="rounded-full min-h-[44px] min-w-[44px]" title="Printing settings">
+              <Link to="/admin/printing" aria-label="Printing settings"><Settings className="w-5 h-5" /></Link>
+            </Button>
             <Button variant="ghost" size="icon" onClick={() => setSoundEnabled(!soundEnabled)} className="rounded-full min-h-[44px] min-w-[44px]" aria-label={soundEnabled ? 'Mute alerts' : 'Enable alerts'}>
               {soundEnabled ? <Volume2 className="w-5 h-5" /> : <VolumeX className="w-5 h-5 text-muted-foreground" />}
             </Button>
