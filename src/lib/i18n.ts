@@ -205,6 +205,21 @@ const translations: Record<string, Record<Locale, string>> = {
   'no_tip': { en: 'No tip', bs: 'Bez napojnice', ar: 'بدون بقشيش' },
   'custom': { en: 'Custom', bs: 'Drugo', ar: 'مخصص' },
   'tip': { en: 'Tip', bs: 'Napojnica', ar: 'بقشيش' },
+
+  // Split the bill
+  'split_bill': { en: 'Split the bill', bs: 'Podijeli račun', ar: 'تقسيم الفاتورة' },
+  'split_evenly': { en: 'Evenly', bs: 'Podjednako', ar: 'بالتساوي' },
+  'split_by_person': { en: 'By person', bs: 'Po osobi', ar: 'حسب الشخص' },
+  'each_pays': { en: 'Each pays', bs: 'Svako plaća', ar: 'يدفع كل شخص' },
+  'people': { en: 'people', bs: 'osoba', ar: 'أشخاص' },
+  'your_share': { en: 'Your share', bs: 'Vaš dio', ar: 'حصتك' },
+  'split_hint': { en: 'Show this to your waiter, or call them to settle up.', bs: 'Pokažite ovo konobaru ili ga pozovite za naplatu.', ar: 'أظهر هذا للنادل أو استدعِه لإتمام الدفع.' },
+  'settle_with_waiter': { en: 'Call the waiter to settle', bs: 'Pozovi konobara za naplatu', ar: 'استدعِ النادل للدفع' },
+
+  // Upsell
+  'you_might_like': { en: 'You might also like', bs: 'Moglo bi vam se svidjeti', ar: 'قد يعجبك أيضاً' },
+  'add_a_drink': { en: 'Add a drink or dessert?', bs: 'Dodati piće ili desert?', ar: 'إضافة مشروب أو حلوى؟' },
+  'install_app': { en: 'Install app', bs: 'Instaliraj aplikaciju', ar: 'تثبيت التطبيق' },
 };
 
 export function t(key: string): string {

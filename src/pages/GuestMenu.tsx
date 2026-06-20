@@ -10,6 +10,7 @@ import LanguageSelector from '@/components/guest/LanguageSelector';
 import { useT, useLanguageStore, getLocalizedName } from '@/lib/i18n';
 import { useSessionHeartbeat } from '@/hooks/useSessionHeartbeat';
 import { staggerContainer, fadeUp } from '@/lib/motion';
+import InstallPrompt from '@/components/guest/InstallPrompt';
 import type { LucideIcon } from 'lucide-react';
 import type { Database } from '@/integrations/supabase/types';
 
@@ -194,6 +195,8 @@ const GuestMenu = () => {
             </motion.button>
           );
         })}
+
+        <InstallPrompt />
 
         <Link to="/privacy" className="block text-center text-[11px] text-muted-foreground/70 font-sans hover:text-primary transition-colors pt-2">
           {t('privacy_security')}

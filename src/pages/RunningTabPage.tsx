@@ -12,14 +12,16 @@ import ReviewPrompt from '@/components/guest/ReviewPrompt';
 import { useSessionHeartbeat } from '@/hooks/useSessionHeartbeat';
 import { staggerContainer, fadeUp, useCountUp } from '@/lib/motion';
 import { getGuestTab, requestBill as requestGuestBill } from '@/lib/guest-api';
+import SplitBillSheet from '@/components/guest/SplitBillSheet';
 
 const RunningTabPage = () => {
   const navigate = useNavigate();
   useSessionHeartbeat();
   const [searchParams] = useSearchParams();
-  const { sessionId, sessionToken } = useCartStore();
+  const { sessionId, sessionToken, guestName } = useCartStore();
   const [requestingBill, setRequestingBill] = useState(false);
   const [showReview, setShowReview] = useState(false);
+  const [splitOpen, setSplitOpen] = useState(false);
   const billRequestRef = useRef(false);
   const t = useT();
   const locale = useLanguageStore((s) => s.locale);
@@ -162,6 +164,12 @@ const RunningTabPage = () => {
           )}
 
           <div className="px-4 pt-3">
+            <Button onClick={() => setSplitOpen(true)} variant="outline" className="w-full rounded-xl min-h-[48px] font-sans text-sm gap-2">
+              <Users className="w-4 h-4" /> {t('split_bill')}
+            </Button>
+          </div>
+
+          <div className="px-4 pt-3">
             <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
               {billRequested ? (
                 <div className="flex items-center gap-3 p-4 rounded-xl border border-primary/20 bg-primary/5">
@@ -245,6 +253,18 @@ const RunningTabPage = () => {
           sessionToken={sessionToken}
         />
       )}
+
+      <SplitBillSheet
+        open={splitOpen}
+        total={grandTotal}
+        orders={orders.map((o) => ({ guest_name: o.guest_name, total: Number(o.total) }))}
+        members={members}
+        myName={guestName}
+        billRequested={billRequested}
+        requesting={requestingBill}
+        onSettle={() => { setSplitOpen(false); void requestBill(); }}
+        onClose={() => setSplitOpen(false)}
+      />
     </div>
   );
 };

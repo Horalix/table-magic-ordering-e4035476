@@ -11,6 +11,7 @@ import SmartImage from '@/components/ui/SmartImage';
 import { staggerContainer, fadeUp, useCountUp } from '@/lib/motion';
 import CheckoutSheet, { type PayMethod } from '@/components/guest/CheckoutSheet';
 import MonriCardForm from '@/components/guest/MonriCardForm';
+import UpsellRow from '@/components/guest/UpsellRow';
 import { startCardPayment, cardPaymentEnabled } from '@/lib/payments';
 import { callWaiter, placeGuestOrder, touchSession } from '@/lib/guest-api';
 
@@ -319,6 +320,8 @@ const CartPage = () => {
               </div>
             </div>
           </div>
+
+          {sessionId && sessionToken && <UpsellRow />}
 
           <div className="fixed bottom-0 left-0 right-0 z-40 p-4 pb-safe bg-background/80 backdrop-blur-xl border-t border-border/50">
             <Button
