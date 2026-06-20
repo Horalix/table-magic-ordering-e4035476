@@ -146,7 +146,7 @@ const MonriCardForm = ({ open, clientSecret, authenticityToken, environment, amo
       {open && (
         <motion.div variants={fade} initial="hidden" animate="show" exit="exit" className="fixed inset-0 z-[55] flex items-end sm:items-center justify-center">
           <div className="absolute inset-0 bg-foreground/40 backdrop-blur-sm" onClick={phase === 'submitting' ? undefined : onCancel} />
-          <motion.div variants={sheetUp} initial="hidden" animate="show" exit="exit" className="relative w-full max-w-lg bg-card rounded-t-3xl sm:rounded-3xl p-6 shadow-lux-lg">
+          <motion.div variants={sheetUp} initial="hidden" animate="show" exit="exit" className="relative w-full max-w-lg bg-card rounded-t-3xl sm:rounded-3xl p-6 pb-safe sm:pb-6 shadow-lux-lg">
             <div className="w-10 h-1.5 rounded-full bg-foreground/15 mx-auto mb-4 sm:hidden" />
             <div className="flex items-center justify-center gap-2 text-foreground">
               <CreditCard className="w-5 h-5 text-primary" />

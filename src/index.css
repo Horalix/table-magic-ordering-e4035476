@@ -131,6 +131,9 @@
   .scrollbar-hide::-webkit-scrollbar { display: none; }
   .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
 
+  /* [UX] Respect the iOS home-indicator / notch for fixed bottom bars & sheets */
+  .pb-safe { padding-bottom: calc(1.5rem + env(safe-area-inset-bottom, 0px)); }
+
   /* [UX] Tactile tap feedback — apply to any interactive element */
   .tap {
     @apply transition-transform duration-100 ease-out active:scale-[0.96];

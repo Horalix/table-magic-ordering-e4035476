@@ -33,7 +33,7 @@ const CartBar = () => {
   };
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 z-40 p-4 pb-6 space-y-2 pointer-events-none">
+    <div className="fixed bottom-0 left-0 right-0 z-40 p-4 pb-safe space-y-2 pointer-events-none">
       {sessionId && (
         <motion.button
           initial={{ y: 50, opacity: 0 }}

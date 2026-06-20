@@ -9,7 +9,7 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
-import { Trash2 } from 'lucide-react';
+import { Trash2, Check } from 'lucide-react';
 import PaymentBadge from '@/components/PaymentBadge';
 import { toast } from 'sonner';
 import type { Database } from '@/integrations/supabase/types';
@@ -17,6 +17,7 @@ import type { Database } from '@/integrations/supabase/types';
 type OrderStatus = Database['public']['Enums']['order_status'];
 type OrderFilter = OrderStatus | 'all';
 type AdminOrder = Database['public']['Tables']['orders']['Row'] & {
+  fiscalized?: boolean | null;
   table_sessions?: { tables?: { table_number?: number | null } | null } | null;
   order_items?: (Database['public']['Tables']['order_items']['Row'] & { menu_items?: { name?: string | null } | null })[] | null;
 };
@@ -54,6 +55,16 @@ const AdminOrders = () => {
   const updateStatus = async (orderId: string, status: OrderStatus) => {
     await supabase.from('orders').update({ status }).eq('id', orderId);
     await fetchOrders();
+  };
+
+  // Mark an order as rung into the certified fiscal POS (reconciliation).
+  const toggleFiscalized = async (order: AdminOrder) => {
+    const next = !order.fiscalized;
+    setOrders((prev) => prev.map((o) => o.id === order.id ? { ...o, fiscalized: next } : o)); // optimistic
+    const { error } = await supabase.from('orders')
+      .update({ fiscalized: next, fiscalized_at: next ? new Date().toISOString() : null } as never)
+      .eq('id', order.id);
+    if (error) { toast.error(error.message); void fetchOrders(); }
   };
 
   const deleteOrder = async (orderId: string) => {
@@ -112,6 +123,15 @@ const AdminOrders = () => {
                     )}
                     <Badge className={`text-xs ${statusColors[order.status]}`}>{order.status}</Badge>
                     <PaymentBadge method={order.payment_method} status={order.payment_status} />
+                    {order.status !== 'cancelled' && (
+                      <button
+                        onClick={() => toggleFiscalized(order)}
+                        title="Mark as rung into the fiscal POS"
+                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-sans font-medium transition-colors ${order.fiscalized ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground hover:bg-muted/70 border border-dashed border-border'}`}
+                      >
+                        {order.fiscalized ? <><Check className="w-3 h-3" /> Fiscalized</> : 'Mark fiscalized'}
+                      </button>
+                    )}
                     {!['served', 'cancelled'].includes(order.status) && (() => {
                       const mins = Math.floor((Date.now() - new Date(order.created_at).getTime()) / 60000);
                       const label = mins < 1 ? 'Just now' : mins < 60 ? `${mins}m` : `${Math.floor(mins / 60)}h ${mins % 60}m`;

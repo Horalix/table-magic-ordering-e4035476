@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Download, Printer, CalendarDays, DollarSign, ShoppingBag, CreditCard, Banknote, Coins, TrendingUp } from 'lucide-react';
+import { Download, Printer, CalendarDays, DollarSign, ShoppingBag, CreditCard, Banknote, Coins, TrendingUp, AlertTriangle, Check } from 'lucide-react';
 import { useCountUp } from '@/lib/motion';
 
 interface DayOrder {
@@ -15,6 +15,7 @@ interface DayOrder {
   payment_status: string | null;
   status: string;
   created_at: string;
+  fiscalized: boolean | null;
 }
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
@@ -46,7 +47,7 @@ const AdminReports = () => {
     const end = `${date}T23:59:59.999`;
     const { data } = await supabase
       .from('orders')
-      .select('id, total, tip_amount, payment_method, payment_status, status, created_at')
+      .select('id, total, tip_amount, payment_method, payment_status, status, created_at, fiscalized')
       .gte('created_at', start).lte('created_at', end)
       .order('created_at', { ascending: true });
     setOrders(((data ?? []) as DayOrder[]).filter((o) => o.status !== 'cancelled'));
@@ -70,6 +71,7 @@ const AdminReports = () => {
       cardPaidSum: cardPaid.reduce((a, o) => a + Number(o.total), 0),
       cashSum: cash.reduce((a, o) => a + Number(o.total), 0), cashCount: cash.length,
       peakHour: peak.h, peakSum: peak.v, byHour,
+      unfiscalized: orders.filter((o) => !o.fiscalized).length,
     };
   }, [orders]);
 
@@ -124,6 +126,18 @@ const AdminReports = () => {
         </div>
       ) : (
         <>
+          {s.count > 0 && (
+            s.unfiscalized > 0 ? (
+              <div className="mb-4 flex items-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm font-sans text-amber-700 dark:text-amber-400">
+                <AlertTriangle className="w-4 h-4 shrink-0" />
+                {s.unfiscalized} order{s.unfiscalized === 1 ? '' : 's'} not yet marked fiscalized — ring them into the POS, then mark them under Orders.
+              </div>
+            ) : (
+              <div className="mb-4 flex items-center gap-2 rounded-xl border border-primary/20 bg-primary/5 px-4 py-3 text-sm font-sans text-primary">
+                <Check className="w-4 h-4 shrink-0" /> All orders fiscalized.
+              </div>
+            )
+          )}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
             <Stat icon={DollarSign} label="Gross sales" value={km(grossAnim)} sub={`${s.count} orders`} />
             <Stat icon={Coins} label="Tips" value={km(s.tips)} color="text-accent" />
