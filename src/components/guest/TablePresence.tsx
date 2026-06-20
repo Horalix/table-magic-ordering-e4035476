@@ -1,11 +1,11 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { UserPlus } from 'lucide-react';
-import { supabase } from '@/integrations/supabase/client';
 import { useCartStore } from '@/lib/cart-store';
 import { Button } from '@/components/ui/button';
 import { useT } from '@/lib/i18n';
 import { springSoft, fade } from '@/lib/motion';
+import { listPendingJoinRequests, resolveJoinRequest } from '@/lib/guest-api';
 
 interface JoinReq {
   id: string;
@@ -22,44 +22,29 @@ interface JoinReq {
  */
 const TablePresence = () => {
   const sessionId = useCartStore((s) => s.sessionId);
+  const sessionToken = useCartStore((s) => s.sessionToken);
   const clientId = useCartStore((s) => s.clientId);
   const guestName = useCartStore((s) => s.guestName);
   const t = useT();
   const [pending, setPending] = useState<JoinReq[]>([]);
 
   const load = useCallback(async () => {
-    if (!sessionId) { setPending([]); return; }
-    const { data } = await supabase
-      .from('session_join_requests')
-      .select('id, guest_name, client_id, status')
-      .eq('table_session_id', sessionId)
-      .eq('status', 'pending')
-      .order('created_at', { ascending: true });
-    // Never prompt a device to approve its own request.
-    setPending((data || []).filter((r: JoinReq) => r.client_id !== clientId));
-  }, [sessionId, clientId]);
+    if (!sessionId || !sessionToken) { setPending([]); return; }
+    const data = await listPendingJoinRequests(sessionId, sessionToken, clientId).catch(() => []);
+    setPending(data as JoinReq[]);
+  }, [sessionId, sessionToken, clientId]);
 
   useEffect(() => {
-    if (!sessionId) { setPending([]); return; }
+    if (!sessionId || !sessionToken) { setPending([]); return; }
     load();
-    const ch = supabase
-      .channel(`presence-${sessionId}`)
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'session_join_requests', filter: `table_session_id=eq.${sessionId}` },
-        () => load(),
-      )
-      .subscribe();
-    return () => { supabase.removeChannel(ch); };
-  }, [sessionId, load]);
+    const id = setInterval(load, 5000);
+    return () => { clearInterval(id); };
+  }, [sessionId, sessionToken, load]);
 
   const resolve = async (id: string, status: 'approved' | 'declined') => {
     setPending((p) => p.filter((r) => r.id !== id)); // optimistic
-    await supabase
-      .from('session_join_requests')
-      .update({ status, resolved_by_name: guestName || null })
-      .eq('id', id)
-      .eq('status', 'pending');
+    if (!sessionId || !sessionToken) return;
+    await resolveJoinRequest(sessionId, sessionToken, id, status, guestName || null).catch(() => load());
   };
 
   const current = pending[0];

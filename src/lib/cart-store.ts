@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { touchSession } from '@/lib/guest-api';
 
 export interface CartItem {
   /** Cart-line id. For plain items this is the menu item id; special requests get a distinct line id. */
@@ -18,6 +18,7 @@ export interface CartItem {
 interface CartStore {
   items: CartItem[];
   tableNumber: number | null;
+  qrToken: string | null;
   sessionToken: string | null;
   sessionId: string | null;
   guestName: string | null;
@@ -31,6 +32,7 @@ interface CartStore {
   clearCart: () => void;
   setTable: (tableNumber: number, token: string) => void;
   setSessionId: (id: string) => void;
+  setSession: (id: string, token: string) => void;
   setGuestName: (name: string) => void;
   setLastOrderTime: () => void;
   total: () => number;
@@ -63,6 +65,7 @@ const buildCartLineId = (menuItemId: string, notes?: string): string => {
 export const useCartStore = create<CartStore>()(persist((set, get) => ({
   items: [],
   tableNumber: null,
+  qrToken: null,
   sessionToken: null,
   sessionId: null,
   guestName: null,
@@ -109,9 +112,11 @@ export const useCartStore = create<CartStore>()(persist((set, get) => ({
 
   clearCart: () => set({ items: [] }),
 
-  setTable: (tableNumber, token) => set({ tableNumber, sessionToken: token }),
+  setTable: (tableNumber, token) => set({ tableNumber, qrToken: token, sessionId: null, sessionToken: null }),
 
   setSessionId: (id) => set({ sessionId: id }),
+
+  setSession: (id, token) => set({ sessionId: id, sessionToken: token }),
 
   setGuestName: (name) => set({ guestName: name }),
 
@@ -125,17 +130,14 @@ export const useCartStore = create<CartStore>()(persist((set, get) => ({
     if (heartbeatInterval) clearInterval(heartbeatInterval);
     heartbeatInterval = setInterval(async () => {
       const { sessionId } = get();
-      if (!sessionId) return;
+      const { sessionToken } = get();
+      if (!sessionId || !sessionToken) return;
 
-      const { data, error } = await supabase
-        .from('table_sessions')
-        .select('is_active')
-        .eq('id', sessionId)
-        .single();
+      const isActive = await touchSession(sessionId, sessionToken).catch(() => false);
 
-      if (error || !data?.is_active) {
+      if (!isActive) {
         get().clearCart();
-        set({ sessionId: null, sessionToken: null, tableNumber: null, guestName: null });
+        set({ sessionId: null, sessionToken: null, tableNumber: null, qrToken: null, guestName: null });
         toast.error('Your session has expired. Please scan the QR code again.');
         if (heartbeatInterval) {
           clearInterval(heartbeatInterval);
@@ -160,6 +162,7 @@ export const useCartStore = create<CartStore>()(persist((set, get) => ({
   partialize: (s) => ({
     items: s.items,
     tableNumber: s.tableNumber,
+    qrToken: s.qrToken,
     sessionToken: s.sessionToken,
     sessionId: s.sessionId,
     guestName: s.guestName,

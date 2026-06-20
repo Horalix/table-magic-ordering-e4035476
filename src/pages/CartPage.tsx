@@ -3,7 +3,6 @@ import { motion } from 'framer-motion';
 import { ArrowLeft, Minus, Plus, Trash2, CreditCard, CheckCircle, ShoppingBag, UtensilsCrossed, Hand } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useCartStore } from '@/lib/cart-store';
-import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import { useT, useLanguageStore } from '@/lib/i18n';
@@ -12,13 +11,9 @@ import SmartImage from '@/components/ui/SmartImage';
 import { staggerContainer, fadeUp, useCountUp } from '@/lib/motion';
 import CheckoutSheet, { type PayMethod } from '@/components/guest/CheckoutSheet';
 import { startCardPayment } from '@/lib/payments';
-import type { Database } from '@/integrations/supabase/types';
+import { callWaiter, placeGuestOrder, touchSession } from '@/lib/guest-api';
 
 const LARGE_ORDER_THRESHOLD = 20;
-// payment_method is added by the checkout migration; intersect so we can write it
-// before the generated types are regenerated.
-type OrderInsert = Database['public']['Tables']['orders']['Insert'] & { payment_method?: string | null };
-type OrderItemInsert = Database['public']['Tables']['order_items']['Insert'];
 
 const OrderSuccess = ({ table, cardComingSoon, waiterCalled, onCallWaiter, onContinue }: {
   table: string | null;
@@ -77,7 +72,7 @@ const CartPage = () => {
   const navigate = useNavigate();
   useSessionHeartbeat();
   const [searchParams] = useSearchParams();
-  const { items, total, updateQuantity, removeItem, clearCart, sessionId, guestName, setLastOrderTime, itemCount } = useCartStore();
+  const { items, total, updateQuantity, removeItem, clearCart, sessionId, sessionToken, guestName, setLastOrderTime, itemCount } = useCartStore();
   const [submitting, setSubmitting] = useState<PayMethod | null>(null);
   const [orderPlaced, setOrderPlaced] = useState(false);
   const [checkoutOpen, setCheckoutOpen] = useState(false);
@@ -107,18 +102,16 @@ const CartPage = () => {
   // Signal a waiter to the table (best-effort — the anti-spam trigger may
   // reject if one is already pending, which is fine: a waiter is coming).
   const pingWaiter = async () => {
-    if (!sessionId) return;
-    const res = await supabase.from('waiter_calls').insert({ table_session_id: sessionId, reason: 'pay' } as never);
-    // Fall back if the `reason` column isn't in the DB yet (migration pending).
-    if (res.error && /reason/i.test(res.error.message)) {
-      await supabase.from('waiter_calls').insert({ table_session_id: sessionId });
-    }
+    if (!sessionId || !sessionToken) return;
+    await callWaiter(sessionId, sessionToken, 'pay').catch((err) => {
+      console.warn('Waiter call was not inserted, likely already pending', err);
+    });
     setWaiterCalled(true);
   };
 
   const placeOrder = async (method: PayMethod) => {
     if (submittingRef.current) return;
-    if (!sessionId) {
+    if (!sessionId || !sessionToken) {
       toast.error(t('scan_qr_again'));
       return;
     }
@@ -129,64 +122,23 @@ const CartPage = () => {
     try {
       // Refresh the heartbeat first so an active table isn't rejected by the
       // server's 2-minute staleness guard on the orders trigger.
-      await supabase.rpc('touch_session', { _id: sessionId });
-
-      const { data: session, error: sessionError } = await supabase
-        .from('table_sessions')
-        .select('id, is_active')
-        .eq('id', sessionId)
-        .eq('is_active', true)
-        .single();
-
-      if (sessionError || !session) {
+      const isActive = await touchSession(sessionId, sessionToken);
+      if (!isActive) {
         toast.error(t('session_expired'));
         return;
       }
 
-      // Anti-spam: check total orders for this session (max 10)
-      const { count } = await supabase
-        .from('orders')
-        .select('id', { count: 'exact', head: true })
-        .eq('table_session_id', sessionId)
-        .neq('status', 'cancelled');
-
-      if (count !== null && count >= 10) {
-        toast.error('Maximum orders reached for this session.');
-        return;
-      }
-
-      const orderTotal = total();
-
-      const baseOrder: OrderInsert = {
-        table_session_id: sessionId,
-        total: orderTotal,
-        status: 'pending',
-        guest_name: guestName || null,
-      };
-
-      // Try with payment_method; if that column isn't in the DB yet (migration
-      // pending), retry without it so ordering keeps working regardless.
-      let { data: order, error: orderError } = await supabase
-        .from('orders')
-        .insert({ ...baseOrder, payment_method: method })
-        .select()
-        .single();
-      if (orderError && /payment_(method|status)/i.test(orderError.message)) {
-        ({ data: order, error: orderError } = await supabase.from('orders').insert(baseOrder).select().single());
-      }
-      if (orderError) throw orderError;
-
-      const orderItems: OrderItemInsert[] = items.map((item) => ({
-        order_id: order.id,
-        menu_item_id: item.menuItemId ?? item.id,
-        quantity: item.quantity,
-        unit_price: item.price,
-        notes: item.notes || null,
-        status: 'pending',
-      }));
-
-      const { error: itemsError } = await supabase.from('order_items').insert(orderItems);
-      if (itemsError) throw itemsError;
+      const order = await placeGuestOrder(
+        sessionId,
+        sessionToken,
+        guestName,
+        method,
+        items.map((item) => ({
+          menu_item_id: item.menuItemId ?? item.id,
+          quantity: item.quantity,
+          notes: item.notes || null,
+        })),
+      );
 
       setLastOrderTime();
       setCardComingSoon(false);
@@ -197,9 +149,20 @@ const CartPage = () => {
         // anti-spam trigger if a call is already pending — one is coming).
         await pingWaiter();
       } else {
-        const res = await startCardPayment({ id: order.id, total: orderTotal });
+        const res = await startCardPayment({
+          id: order.order_id,
+          total: Number(order.total),
+          sessionId,
+          sessionToken,
+        });
         if (res.status === 'redirect') { window.location.href = res.url; return; }
-        setCardComingSoon(res.status === 'coming_soon');
+        if (res.status === 'error') throw new Error(res.message);
+        if (res.status === 'monri_components') {
+          toast.info('Secure card payment session is ready. Card form UI is the next step.');
+          setCardComingSoon(true);
+        } else {
+          setCardComingSoon(true);
+        }
       }
 
       setCheckoutOpen(false);
@@ -341,7 +304,7 @@ const CartPage = () => {
           <div className="fixed bottom-0 left-0 right-0 z-40 p-4 pb-6 bg-background/80 backdrop-blur-xl border-t border-border/50">
             <Button
               onClick={handleCheckoutClick}
-              disabled={!sessionId}
+              disabled={!sessionId || !sessionToken}
               className="w-full h-14 rounded-2xl bg-primary text-primary-foreground font-sans font-semibold text-base hover:bg-sage-dark hover:shadow-lg hover:shadow-primary/30 disabled:opacity-50 transition-all duration-200 tap"
             >
               <span className="flex items-center gap-2">
@@ -349,7 +312,7 @@ const CartPage = () => {
                 {t('checkout')} · {displayTotal.toFixed(2)} KM
               </span>
             </Button>
-            {!sessionId && (
+            {(!sessionId || !sessionToken) && (
               <p className="text-xs text-destructive text-center mt-2 font-sans">{t('scan_qr_again')}</p>
             )}
           </div>

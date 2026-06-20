@@ -2,22 +2,23 @@ import React, { useEffect, useState } from 'react';
 import { Star, ExternalLink } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { supabase } from '@/integrations/supabase/client';
 import { useT } from '@/lib/i18n';
 import { motion } from 'framer-motion';
 import ServerRatingStep from './ServerRatingStep';
+import { getWaiterForReview, submitServerRating, submitVisitRating } from '@/lib/guest-api';
 
 interface ReviewPromptProps {
   open: boolean;
   onClose: () => void;
   sessionId: string;
+  sessionToken: string;
 }
 
 const GOOGLE_REVIEW_URL = 'https://share.google/al1h37etpg3lpIXGn';
 
 type Step = 'overall' | 'server' | 'final';
 
-const ReviewPrompt = ({ open, onClose, sessionId }: ReviewPromptProps) => {
+const ReviewPrompt = ({ open, onClose, sessionId, sessionToken }: ReviewPromptProps) => {
   const t = useT();
   const [step, setStep] = useState<Step>('overall');
   const [rating, setRating] = useState(0);
@@ -25,35 +26,19 @@ const ReviewPrompt = ({ open, onClose, sessionId }: ReviewPromptProps) => {
   const [waiter, setWaiter] = useState<{ id: string; display_name: string } | null>(null);
 
   useEffect(() => {
-    if (!open || !sessionId) return;
+    if (!open || !sessionId || !sessionToken) return;
     setStep('overall');
     setRating(0);
     (async () => {
-      const { data: session } = await supabase
-        .from('table_sessions')
-        .select('assigned_waiter_id')
-        .eq('id', sessionId)
-        .maybeSingle();
-      if (session?.assigned_waiter_id) {
-        const { data: w } = await supabase
-          .from('waiters')
-          .select('id, display_name')
-          .eq('id', session.assigned_waiter_id)
-          .maybeSingle();
-        if (w) setWaiter(w);
-      } else {
-        setWaiter(null);
-      }
+      const w = await getWaiterForReview(sessionId, sessionToken).catch(() => null);
+      setWaiter(w);
     })();
-  }, [open, sessionId]);
+  }, [open, sessionId, sessionToken]);
 
   const submitOverall = async (selectedRating: number) => {
     setRating(selectedRating);
     try {
-      await supabase.from('ratings').insert({
-        table_session_id: sessionId,
-        rating: selectedRating,
-      });
+      await submitVisitRating(sessionId, sessionToken, selectedRating);
     } catch (error) {
       console.warn('Failed to submit visit rating', error);
     }
@@ -62,12 +47,9 @@ const ReviewPrompt = ({ open, onClose, sessionId }: ReviewPromptProps) => {
 
   const submitServer = async (serverRating: number, comment: string) => {
     try {
-      await supabase.from('server_ratings').insert({
-        table_session_id: sessionId,
-        waiter_id: waiter?.id,
-        rating: serverRating,
-        comment: comment || null,
-      });
+      if (waiter?.id) {
+        await submitServerRating(sessionId, sessionToken, waiter.id, serverRating, comment);
+      }
     } catch (error) {
       console.warn('Failed to submit server rating', error);
     }

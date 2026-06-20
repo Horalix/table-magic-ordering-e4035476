@@ -2,22 +2,22 @@ import React, { useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Hand, Check } from 'lucide-react';
 import { useCartStore } from '@/lib/cart-store';
-import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useT } from '@/lib/i18n';
+import { callWaiter } from '@/lib/guest-api';
 
 interface Props {
   variant?: 'default' | 'hero';
 }
 
 const CallWaiterButton = ({ variant = 'default' }: Props) => {
-  const { sessionId } = useCartStore();
+  const { sessionId, sessionToken } = useCartStore();
   const [called, setCalled] = useState(false);
   const [loading, setLoading] = useState(false);
   const callingRef = useRef(false);
   const t = useT();
 
-  if (!sessionId) return null;
+  if (!sessionId || !sessionToken) return null;
 
   const handleCall = async () => {
     if (called || callingRef.current) return;
@@ -25,11 +25,7 @@ const CallWaiterButton = ({ variant = 'default' }: Props) => {
     setLoading(true);
 
     try {
-      const { error } = await supabase
-        .from('waiter_calls')
-        .insert({ table_session_id: sessionId });
-
-      if (error) throw error;
+      await callWaiter(sessionId, sessionToken, 'assist');
 
       setCalled(true);
       toast.success(t('waiter_notified'));

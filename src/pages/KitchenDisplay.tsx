@@ -1,11 +1,12 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Bell, Clock, ChefHat, Check, Utensils, Hand, X, CreditCard, Volume2, VolumeX } from 'lucide-react';
+import { Bell, Clock, ChefHat, Check, Utensils, Hand, X, CreditCard, Volume2, VolumeX, Printer, FileJson, FileText } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { playOrderAlert, playWaiterCallAlert, playBillRequestAlert } from '@/lib/kitchen-sounds';
+import { downloadKitchenTicketCsv, downloadKitchenTicketJson, printKitchenTicket } from '@/lib/ticket-export';
 import type { Database } from '@/integrations/supabase/types';
 
 type OrderStatus = Database['public']['Enums']['order_status'];
@@ -251,6 +252,21 @@ const KitchenDisplay = () => {
     else { toast.success(`Order marked as ${newStatus}`); fetchOrders(); }
   };
 
+  const exportTicket = (order: OrderWithItems, format: 'print' | 'json' | 'csv') => {
+    if (format === 'print') {
+      printKitchenTicket(order);
+      toast.success('Ticket opened for printing');
+      return;
+    }
+    if (format === 'json') {
+      downloadKitchenTicketJson(order);
+      toast.success('Ticket JSON exported');
+      return;
+    }
+    downloadKitchenTicketCsv(order);
+    toast.success('Ticket CSV exported');
+  };
+
   const resolveWaiterCall = async (callId: string) => {
     const { error } = await supabase.from('waiter_calls').update({ status: 'resolved', resolved_at: new Date().toISOString() }).eq('id', callId);
     if (error) toast.error('Failed to resolve call');
@@ -411,6 +427,18 @@ const KitchenDisplay = () => {
                 <p className="text-xs text-accent italic">Note: {order.notes}</p>
               </div>
             )}
+
+            <div className="px-4 pb-3 flex flex-wrap gap-2">
+              <Button variant="outline" size="sm" className="h-9 rounded-lg gap-1.5 text-xs" onClick={() => exportTicket(order, 'print')}>
+                <Printer className="w-3.5 h-3.5" /> Print
+              </Button>
+              <Button variant="outline" size="sm" className="h-9 rounded-lg gap-1.5 text-xs" onClick={() => exportTicket(order, 'json')}>
+                <FileJson className="w-3.5 h-3.5" /> JSON
+              </Button>
+              <Button variant="outline" size="sm" className="h-9 rounded-lg gap-1.5 text-xs" onClick={() => exportTicket(order, 'csv')}>
+                <FileText className="w-3.5 h-3.5" /> CSV
+              </Button>
+            </div>
 
             {getNextStatus(order.status) && (
               <div className="px-4 pb-4">

@@ -4,7 +4,6 @@ import { ArrowLeft, Clock, CheckCircle, ChefHat, Utensils, Receipt, CreditCard, 
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useCartStore } from '@/lib/cart-store';
-import { supabase } from '@/integrations/supabase/client';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
@@ -12,12 +11,13 @@ import { useT, useLanguageStore, getLocalizedName } from '@/lib/i18n';
 import ReviewPrompt from '@/components/guest/ReviewPrompt';
 import { useSessionHeartbeat } from '@/hooks/useSessionHeartbeat';
 import { staggerContainer, fadeUp, useCountUp } from '@/lib/motion';
+import { getGuestTab, requestBill as requestGuestBill } from '@/lib/guest-api';
 
 const RunningTabPage = () => {
   const navigate = useNavigate();
   useSessionHeartbeat();
   const [searchParams] = useSearchParams();
-  const { sessionId } = useCartStore();
+  const { sessionId, sessionToken } = useCartStore();
   const [requestingBill, setRequestingBill] = useState(false);
   const [showReview, setShowReview] = useState(false);
   const billRequestRef = useRef(false);
@@ -36,51 +36,19 @@ const RunningTabPage = () => {
     cancelled: { icon: <Clock className="w-3.5 h-3.5" />, label: t('status_cancelled'), color: 'bg-destructive/10 text-destructive border-destructive/20' },
   };
 
-  const { data: orders = [], isLoading } = useQuery({
-    queryKey: ['session-orders', sessionId],
+  const { data: tab, isLoading, refetch } = useQuery({
+    queryKey: ['guest-tab', sessionId, sessionToken],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('orders')
-        .select(`*, order_items(*, menu_items(name, name_ar, name_bs))`)
-        .eq('table_session_id', sessionId!)
-        .order('created_at', { ascending: false });
-      if (error) throw error;
-      return data;
+      if (!sessionId || !sessionToken) throw new Error('Missing session');
+      return getGuestTab(sessionId, sessionToken);
     },
-    enabled: !!sessionId,
+    enabled: !!sessionId && !!sessionToken,
     refetchInterval: 10000,
   });
 
-  const { data: existingBillRequest } = useQuery({
-    queryKey: ['bill-request', sessionId],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from('bill_requests')
-        .select('*')
-        .eq('table_session_id', sessionId!)
-        .eq('status', 'pending')
-        .maybeSingle();
-      return data;
-    },
-    enabled: !!sessionId,
-    refetchInterval: 10000,
-  });
-
-  const { data: members = [] } = useQuery({
-    queryKey: ['session-members', sessionId],
-    queryFn: async () => {
-      const [{ data: sess }, { data: joiners }] = await Promise.all([
-        supabase.from('table_sessions').select('guest_name').eq('id', sessionId).maybeSingle(),
-        supabase.from('session_join_requests').select('guest_name').eq('table_session_id', sessionId).eq('status', 'approved'),
-      ]);
-      const names: string[] = [];
-      if (sess?.guest_name) names.push(sess.guest_name);
-      (joiners || []).forEach((j) => { if (j.guest_name) names.push(j.guest_name); });
-      return Array.from(new Set(names));
-    },
-    enabled: !!sessionId,
-    refetchInterval: 15000,
-  });
+  const orders = tab?.orders ?? [];
+  const existingBillRequest = tab?.bill_request ?? null;
+  const members = tab?.members ?? [];
 
   const grandTotal = orders.reduce((sum, o) => sum + Number(o.total), 0);
   const displayGrandTotal = useCountUp(grandTotal);
@@ -105,15 +73,12 @@ const RunningTabPage = () => {
   };
 
   const requestBill = async () => {
-    if (!sessionId || billRequestRef.current || existingBillRequest) return;
+    if (!sessionId || !sessionToken || billRequestRef.current || existingBillRequest) return;
     billRequestRef.current = true;
     setRequestingBill(true);
     try {
-      const { error } = await supabase
-        .from('bill_requests')
-        .insert({ table_session_id: sessionId });
-      if (error) throw error;
-      // Show review prompt after successful bill request
+      await requestGuestBill(sessionId, sessionToken);
+      await refetch();
       setShowReview(true);
     } catch {
       toast.error('Could not request bill. Please try again.');
@@ -145,7 +110,7 @@ const RunningTabPage = () => {
         <div className="h-px bg-gradient-to-r from-transparent via-primary/20 to-transparent" />
       </div>
 
-      {!sessionId ? (
+      {!sessionId || !sessionToken ? (
         <div className="flex flex-col items-center justify-center py-20 px-6">
           <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center mb-4">
             <Receipt className="w-7 h-7 text-muted-foreground" />
@@ -263,7 +228,7 @@ const RunningTabPage = () => {
         </>
       )}
 
-      {sessionId && (
+      {sessionId && sessionToken && (
         <ReviewPrompt
           open={showReview}
           onClose={() => {
@@ -271,6 +236,7 @@ const RunningTabPage = () => {
             toast.success(t('server_notified'));
           }}
           sessionId={sessionId}
+          sessionToken={sessionToken}
         />
       )}
     </div>
