@@ -726,6 +726,7 @@ export type Database = {
         Row: {
           created_at: string
           display_name: string
+          has_pin: boolean | null
           id: string
           is_active: boolean
           pin_hash: string | null
@@ -736,6 +737,7 @@ export type Database = {
         Insert: {
           created_at?: string
           display_name: string
+          has_pin?: boolean | null
           id?: string
           is_active?: boolean
           pin_hash?: string | null
@@ -746,6 +748,7 @@ export type Database = {
         Update: {
           created_at?: string
           display_name?: string
+          has_pin?: boolean | null
           id?: string
           is_active?: boolean
           pin_hash?: string | null
