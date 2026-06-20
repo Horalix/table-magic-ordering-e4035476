@@ -7,9 +7,10 @@ import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Printer, Loader2, Info } from 'lucide-react';
+import { Printer, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { printKitchenTicket } from '@/lib/ticket-export';
+import PrinterSetupGuide from '@/components/admin/PrinterSetupGuide';
 
 interface PrintConfig {
   print_enabled: boolean;
@@ -129,12 +130,7 @@ const AdminPrinting = () => {
             </CardContent>
           </Card>
 
-          <div className="rounded-xl border border-border bg-muted/40 p-4 text-sm font-sans text-muted-foreground space-y-2">
-            <p className="flex items-center gap-2 font-medium text-foreground"><Info className="w-4 h-4 text-primary" /> How to connect a printer</p>
-            <p><span className="font-medium text-foreground">Any printer:</span> open the Kitchen Display on the device connected to your printer and tap the <Printer className="w-3.5 h-3.5 inline -mt-0.5" /> button to make it the printer. New orders then print automatically.</p>
-            <p><span className="font-medium text-foreground">Silent printing:</span> launch Chrome with the <code className="text-xs bg-card px-1 rounded">--kiosk-printing</code> flag so tickets print without a dialog.</p>
-            <p><span className="font-medium text-foreground">Network thermal printer:</span> a CloudPRNT-capable Star/Epson printer can pull tickets directly from the queue (endpoint ready) — ask your installer to point it at the <code className="text-xs bg-card px-1 rounded">cloudprnt</code> function.</p>
-          </div>
+          <PrinterSetupGuide onTestPrint={testPrint} />
         </>
       )}
     </div>
