@@ -130,7 +130,10 @@ const AdminPrinting = () => {
             </CardContent>
           </Card>
 
-          <PrinterSetupGuide onTestPrint={testPrint} />
+          <PrinterSetupGuide
+            settings={{ paperWidth: cfg.print_paper_width, header: cfg.print_header, footer: cfg.print_footer, showPrices: cfg.print_show_prices, copies: cfg.print_copies }}
+            onTestPrint={testPrint}
+          />
         </>
       )}
     </div>
