@@ -16,6 +16,26 @@ const ESC_POS_CHAR = 0x2af1;
 export const bluetoothSupported = () =>
   typeof navigator !== 'undefined' && !!(navigator as any).bluetooth;
 
+/** True when running inside an iframe (e.g. an editor/preview), where Web
+ * Bluetooth is blocked unless the parent frame grants `allow="bluetooth"`. */
+export const inEmbeddedFrame = (): boolean => {
+  try { return typeof window !== 'undefined' && window.self !== window.top; }
+  catch { return true; }
+};
+
+/** Map raw Web Bluetooth errors to plain, actionable guidance. */
+export const friendlyBluetoothError = (e: unknown): string => {
+  const msg = e instanceof Error ? e.message : String(e);
+  if (/globally disabled|disabled in this context|permissions policy|SecurityError|secure context|not allowed in/i.test(msg)) {
+    return inEmbeddedFrame()
+      ? 'Bluetooth is blocked inside this embedded preview. Open the published site directly in Chrome (Android, Windows or Mac) and try again.'
+      : 'Bluetooth is disabled in this browser. Use Chrome or Edge over HTTPS, and check that Bluetooth isn’t turned off by a device policy.';
+  }
+  if (/cancelled|canceled|No device selected|chooser/i.test(msg)) return 'No printer was selected.';
+  if (/adapter|radio|turned off|powered/i.test(msg)) return 'No Bluetooth radio found, or Bluetooth is turned off on this device.';
+  return msg;
+};
+
 let device: any = null;
 let characteristic: any = null;
 

@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Monitor, Wifi, Bluetooth, Copy, Check, Printer, ChevronDown, Loader2, CheckCircle2 } from 'lucide-react';
+import { Monitor, Wifi, Bluetooth, Copy, Check, Printer, ChevronDown, Loader2, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 import { buildKitchenTicketText, type KitchenPrintSettings } from '@/lib/ticket-export';
-import { bluetoothSupported, connectBluetoothPrinter, connectedPrinterName, disconnectBluetoothPrinter, printTextBluetooth } from '@/lib/printer-connect';
+import { bluetoothSupported, connectBluetoothPrinter, connectedPrinterName, disconnectBluetoothPrinter, printTextBluetooth, inEmbeddedFrame, friendlyBluetoothError } from '@/lib/printer-connect';
 
 /**
  * Self-serve printer setup. Three real, actionable paths:
@@ -82,13 +82,13 @@ const PrinterSetupGuide = ({ settings, onTestPrint }: { settings: KitchenPrintSe
   const connectBt = async () => {
     setBtBusy(true);
     try { const name = await connectBluetoothPrinter(); setBtName(name); toast.success(`Connected to ${name}`); }
-    catch (e) { toast.error(e instanceof Error ? e.message : 'Could not connect'); }
+    catch (e) { toast.error(friendlyBluetoothError(e)); }
     finally { setBtBusy(false); }
   };
   const testBt = async () => {
     setBtBusy(true);
     try { await printTextBluetooth(buildKitchenTicketText(sampleOrder, settings)); toast.success('Test ticket sent'); }
-    catch (e) { toast.error(e instanceof Error ? e.message : 'Print failed'); }
+    catch (e) { toast.error(friendlyBluetoothError(e)); }
     finally { setBtBusy(false); }
   };
   const disconnectBt = () => { disconnectBluetoothPrinter(); setBtName(null); toast.success('Disconnected'); };
@@ -146,6 +146,12 @@ const PrinterSetupGuide = ({ settings, onTestPrint }: { settings: KitchenPrintSe
         {/* BLUETOOTH */}
         {method === 'bluetooth' && btOk && (
           <div className="space-y-3 pt-1">
+            {inEmbeddedFrame() && (
+              <p className="flex items-start gap-2 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-700 dark:text-amber-400 px-3 py-2 text-xs font-sans">
+                <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
+                You’re viewing this inside an embedded preview, where browsers block Bluetooth. Open the <span className="font-medium">published site directly in Chrome</span> (<code className="bg-card px-1 rounded">{origin}/admin</code>) to pair a printer.
+              </p>
+            )}
             <div className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-sans ${btName ? 'bg-primary/10 text-primary' : 'bg-muted/50 text-muted-foreground'}`}>
               {btName ? <CheckCircle2 className="w-4 h-4" /> : <Bluetooth className="w-4 h-4" />}
               {btName ? `Connected: ${btName}` : 'No Bluetooth printer connected'}
