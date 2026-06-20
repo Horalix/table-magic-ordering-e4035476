@@ -394,7 +394,7 @@ export type Database = {
           id: string
           resolved_at: string | null
           resolved_by_name: string | null
-          status: "pending" | "approved" | "declined"
+          status: string
           table_session_id: string
         }
         Insert: {
@@ -404,7 +404,7 @@ export type Database = {
           id?: string
           resolved_at?: string | null
           resolved_by_name?: string | null
-          status?: "pending" | "approved" | "declined"
+          status?: string
           table_session_id: string
         }
         Update: {
@@ -414,7 +414,7 @@ export type Database = {
           id?: string
           resolved_at?: string | null
           resolved_by_name?: string | null
-          status?: "pending" | "approved" | "declined"
+          status?: string
           table_session_id?: string
         }
         Relationships: [

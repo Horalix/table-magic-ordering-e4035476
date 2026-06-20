@@ -16,9 +16,9 @@ interface JoinReq {
 
 /**
  * Mounted globally for guests. When this device is in an active table session,
- * it listens for other phones requesting to join and shows an Accept/Decline
- * prompt. Anyone already at the table can approve; realtime closes the prompt
- * on everyone's phone once one person acts (or the 30s auto-approve fires).
+ * it polls for other phones requesting to join and shows an Accept/Decline
+ * prompt. Anyone already at the table can approve; polling closes the prompt
+ * once one person acts (or the 30s auto-approve fires).
  */
 const TablePresence = () => {
   const sessionId = useCartStore((s) => s.sessionId);
