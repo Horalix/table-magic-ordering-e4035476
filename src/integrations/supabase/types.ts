@@ -183,6 +183,62 @@ export type Database = {
           },
         ]
       }
+      order_ticket_events: {
+        Row: {
+          attempts: number
+          created_at: string
+          destination: string | null
+          exported_at: string | null
+          format: string
+          id: string
+          last_error: string | null
+          order_id: string
+          payload: Json
+          printed_at: string | null
+          status: string
+          ticket_type: string
+          updated_at: string
+        }
+        Insert: {
+          attempts?: number
+          created_at?: string
+          destination?: string | null
+          exported_at?: string | null
+          format?: string
+          id?: string
+          last_error?: string | null
+          order_id: string
+          payload?: Json
+          printed_at?: string | null
+          status?: string
+          ticket_type?: string
+          updated_at?: string
+        }
+        Update: {
+          attempts?: number
+          created_at?: string
+          destination?: string | null
+          exported_at?: string | null
+          format?: string
+          id?: string
+          last_error?: string | null
+          order_id?: string
+          payload?: Json
+          printed_at?: string | null
+          status?: string
+          ticket_type?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "order_ticket_events_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       orders: {
         Row: {
           assigned_waiter_id: string | null
@@ -248,6 +304,59 @@ export type Database = {
             columns: ["table_session_id"]
             isOneToOne: false
             referencedRelation: "table_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      payment_transactions: {
+        Row: {
+          amount_minor: number
+          created_at: string
+          currency: string
+          id: string
+          monri_order_number: string
+          monri_payment_id: string | null
+          order_id: string
+          provider: string
+          provider_payload: Json
+          status: string
+          transaction_type: string
+          updated_at: string
+        }
+        Insert: {
+          amount_minor: number
+          created_at?: string
+          currency?: string
+          id?: string
+          monri_order_number: string
+          monri_payment_id?: string | null
+          order_id: string
+          provider?: string
+          provider_payload?: Json
+          status?: string
+          transaction_type?: string
+          updated_at?: string
+        }
+        Update: {
+          amount_minor?: number
+          created_at?: string
+          currency?: string
+          id?: string
+          monri_order_number?: string
+          monri_payment_id?: string | null
+          order_id?: string
+          provider?: string
+          provider_payload?: Json
+          status?: string
+          transaction_type?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payment_transactions_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
             referencedColumns: ["id"]
           },
         ]
@@ -655,6 +764,29 @@ export type Database = {
         Args: { _pin: string; _waiter_id: string }
         Returns: undefined
       }
+      assert_guest_session: {
+        Args: { _session_id: string; _session_token: string }
+        Returns: {
+          assigned_waiter_id: string | null
+          closed_at: string | null
+          first_order_at: string | null
+          guest_name: string | null
+          host_client_id: string | null
+          id: string
+          is_active: boolean
+          last_heartbeat_at: string
+          last_served_at: string | null
+          opened_at: string
+          table_id: string
+          token: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "table_sessions"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       enqueue_order_ticket: {
         Args: { _order_id: string; _ticket_type?: string }
         Returns: string
@@ -678,19 +810,11 @@ export type Database = {
         Returns: Json
       }
       guest_call_waiter: {
-        Args: {
-          _reason?: string
-          _session_id: string
-          _session_token: string
-        }
+        Args: { _reason?: string; _session_id: string; _session_token: string }
         Returns: Json
       }
       guest_get_join_request: {
-        Args: {
-          _client_id: string
-          _request_id: string
-          _session_id: string
-        }
+        Args: { _client_id: string; _request_id: string; _session_id: string }
         Returns: Json
       }
       guest_get_tab: {
@@ -721,7 +845,7 @@ export type Database = {
       }
       guest_place_order: {
         Args: {
-          _guest_name: string | null
+          _guest_name: string
           _items: Json
           _payment_method: string
           _session_id: string
@@ -745,7 +869,7 @@ export type Database = {
       guest_resolve_join_request: {
         Args: {
           _request_id: string
-          _resolved_by_name: string | null
+          _resolved_by_name: string
           _session_id: string
           _session_token: string
           _status: string
@@ -763,7 +887,7 @@ export type Database = {
       }
       guest_submit_server_rating: {
         Args: {
-          _comment?: string | null
+          _comment?: string
           _rating: number
           _session_id: string
           _session_token: string
@@ -772,11 +896,7 @@ export type Database = {
         Returns: Json
       }
       guest_submit_visit_rating: {
-        Args: {
-          _rating: number
-          _session_id: string
-          _session_token: string
-        }
+        Args: { _rating: number; _session_id: string; _session_token: string }
         Returns: Json
       }
       has_role: {
@@ -786,11 +906,8 @@ export type Database = {
         }
         Returns: boolean
       }
-      is_staff_member: { Args: Record<PropertyKey, never>; Returns: boolean }
-      touch_session: {
-        Args: { _id: string; _token: string }
-        Returns: boolean
-      }
+      is_staff_member: { Args: never; Returns: boolean }
+      touch_session: { Args: { _id: string; _token: string }; Returns: boolean }
       verify_waiter_pin: {
         Args: { _pin: string; _waiter_id: string }
         Returns: boolean
