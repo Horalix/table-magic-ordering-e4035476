@@ -37,7 +37,7 @@ async function whiteLogo(inner) {
 }
 
 async function render(size, file, { maskable = false } = {}) {
-  const pad = Math.round(size * (maskable ? 0.22 : 0.16)); // safe zone / breathing room
+  const pad = Math.round(size * (maskable ? 0.16 : 0.08)); // safe zone / breathing room
   const logo = await whiteLogo(size - pad * 2);
   await sharp({ create: { width: size, height: size, channels: 4, background: SAGE } })
     .composite([{ input: logo, gravity: 'center' }])
