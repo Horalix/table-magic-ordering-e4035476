@@ -126,6 +126,7 @@ const KitchenDisplay = () => {
   const [soundEnabled, setSoundEnabled] = useState(true);
   const soundEnabledRef = useRef(true);
   const initialLoadDone = useRef(false);
+  const [, setTick] = useState(0); // re-render every 30s so order aging updates live
 
   // Printing
   const [isPrinter, setIsPrinter] = useState(() => localStorage.getItem('kitchen:isPrinter') === 'true');
@@ -161,6 +162,12 @@ const KitchenDisplay = () => {
   useEffect(() => {
     soundEnabledRef.current = soundEnabled;
   }, [soundEnabled]);
+
+  // Tick so time-since + aging colours stay current without new data.
+  useEffect(() => {
+    const id = setInterval(() => setTick((t) => t + 1), 30000);
+    return () => clearInterval(id);
+  }, []);
 
   const fetchOrders = useCallback(async () => {
     const { data: ordersData, error } = await supabase
@@ -352,9 +359,12 @@ const KitchenDisplay = () => {
     return `${Math.floor(mins / 60)}h ${mins % 60}m ago`;
   };
 
-  const isUrgent = (order: OrderWithItems) => {
-    if (order.status !== 'pending') return false;
-    return Math.floor((Date.now() - new Date(order.created_at).getTime()) / 60000) >= 5;
+  // Graded aging — orders that sit too long escalate in colour.
+  const ageMinutes = (order: OrderWithItems) => Math.floor((Date.now() - new Date(order.created_at).getTime()) / 60000);
+  const agingLevel = (order: OrderWithItems): 'fresh' | 'warn' | 'late' => {
+    if (order.status === 'ready' || order.status === 'served' || order.status === 'cancelled') return 'fresh';
+    const m = ageMinutes(order);
+    return m >= 10 ? 'late' : m >= 5 ? 'warn' : 'fresh';
   };
 
   return (
@@ -363,7 +373,14 @@ const KitchenDisplay = () => {
         <div className="flex items-center justify-between px-6 py-4">
           <div>
             <h1 className="font-serif text-2xl font-bold text-foreground">Kitchen Display</h1>
-            <p className="text-sm text-muted-foreground font-sans">{orders.length} orders</p>
+            <div className="flex items-center gap-2">
+              <p className="text-sm text-muted-foreground font-sans">{orders.length} orders</p>
+              {isPrinter && (
+                <span className="inline-flex items-center gap-1 text-[11px] font-sans font-medium text-primary">
+                  <span className="w-1.5 h-1.5 rounded-full bg-primary breathe" /> <Printer className="w-3 h-3" /> Printing on this device
+                </span>
+              )}
+            </div>
           </div>
           <div className="flex gap-2 flex-wrap">
             {sections.length > 0 && (
@@ -456,7 +473,7 @@ const KitchenDisplay = () => {
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.96 }}
             transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
-            className={`rounded-xl border bg-card overflow-hidden shadow-lux ${isUrgent(order) ? 'border-destructive/50 breathe' : 'border-border'}`}
+            className={`rounded-xl border bg-card overflow-hidden shadow-lux ${agingLevel(order) === 'late' ? 'border-destructive/60 breathe' : agingLevel(order) === 'warn' ? 'border-accent/50' : 'border-border'}`}
           >
             <div className="flex items-center justify-between px-4 py-3 border-b border-border">
               <div className="flex items-center gap-2 flex-wrap">
@@ -473,7 +490,7 @@ const KitchenDisplay = () => {
                   </Badge>
                 )}
               </div>
-              <span className={`text-xs font-sans tabular-nums ${isUrgent(order) ? 'text-destructive font-semibold' : 'text-muted-foreground'}`}>{timeSince(order.created_at)}</span>
+              <span className={`text-xs font-sans tabular-nums ${agingLevel(order) === 'late' ? 'text-destructive font-semibold' : agingLevel(order) === 'warn' ? 'text-accent font-medium' : 'text-muted-foreground'}`}>{timeSince(order.created_at)}</span>
             </div>
 
             <div className="px-4 py-3 space-y-2">
@@ -507,7 +524,7 @@ const KitchenDisplay = () => {
 
             {getNextStatus(order.status) && (
               <div className="px-4 pb-4">
-                <Button onClick={() => updateOrderStatus(order.id, getNextStatus(order.status)!)} className="w-full rounded-lg bg-primary text-primary-foreground font-sans text-sm min-h-[44px]" size="sm">
+                <Button onClick={() => updateOrderStatus(order.id, getNextStatus(order.status)!)} className="w-full rounded-lg bg-primary text-primary-foreground font-sans text-sm min-h-[44px] active:scale-95 transition-transform" size="sm">
                   Mark as {getNextStatus(order.status)}
                 </Button>
               </div>
