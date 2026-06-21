@@ -13,6 +13,7 @@ import { useSessionHeartbeat } from '@/hooks/useSessionHeartbeat';
 import { staggerContainer, fadeUp, useCountUp } from '@/lib/motion';
 import { getGuestTab, requestBill as requestGuestBill } from '@/lib/guest-api';
 import SplitBillSheet from '@/components/guest/SplitBillSheet';
+import OrderStatusTimeline from '@/components/guest/OrderStatusTimeline';
 
 const RunningTabPage = () => {
   const navigate = useNavigate();
@@ -54,6 +55,11 @@ const RunningTabPage = () => {
 
   const grandTotal = orders.reduce((sum, o) => sum + Number(o.total), 0);
   const displayGrandTotal = useCountUp(grandTotal);
+
+  // Most-recent still-in-progress order, for the live status tracker.
+  const activeOrder = [...orders]
+    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+    .find((o) => o.status !== 'served' && o.status !== 'cancelled');
 
   const goBack = () => {
     const params = new URLSearchParams();
@@ -149,6 +155,15 @@ const RunningTabPage = () => {
               </div>
             </motion.div>
           </div>
+
+          {activeOrder && (
+            <div className="px-4 pt-3">
+              <motion.div variants={fadeUp} initial="hidden" animate="show" className="card-lux p-4">
+                <p className="text-[11px] font-sans font-semibold text-muted-foreground uppercase tracking-wider mb-3">{t('order_progress')}</p>
+                <OrderStatusTimeline status={activeOrder.status} />
+              </motion.div>
+            </div>
+          )}
 
           {members.length > 0 && (
             <div className="px-4 pt-3">

@@ -8,12 +8,13 @@ import { toast } from 'sonner';
 import { useT, useLanguageStore } from '@/lib/i18n';
 import { useSessionHeartbeat } from '@/hooks/useSessionHeartbeat';
 import SmartImage from '@/components/ui/SmartImage';
-import { staggerContainer, fadeUp, useCountUp } from '@/lib/motion';
+import { staggerContainer, fadeUp, useCountUp, easeOutSoft } from '@/lib/motion';
 import CheckoutSheet, { type PayMethod } from '@/components/guest/CheckoutSheet';
 import MonriCardForm from '@/components/guest/MonriCardForm';
 import UpsellRow from '@/components/guest/UpsellRow';
 import { startCardPayment, cardPaymentEnabled } from '@/lib/payments';
 import { callWaiter, placeGuestOrder, touchSession } from '@/lib/guest-api';
+import { addRecentItems } from '@/lib/recent-items';
 
 const LARGE_ORDER_THRESHOLD = 20;
 
@@ -29,14 +30,25 @@ const OrderSuccess = ({ table, cardComingSoon, cardPaid, waiterCalled, onCallWai
   return (
     <div className="min-h-screen bg-background flex items-center justify-center px-6">
       <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="text-center max-w-sm">
-        <motion.div
-          initial={{ scale: 0 }}
-          animate={{ scale: 1 }}
-          transition={{ type: 'spring', damping: 12, stiffness: 200, delay: 0.2 }}
-          className="w-20 h-20 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-6"
-        >
-          <CheckCircle className="w-10 h-10 text-primary" />
-        </motion.div>
+        <div className="relative w-20 h-20 mx-auto mb-6">
+          {[0, 1].map((r) => (
+            <motion.span
+              key={r}
+              className="absolute inset-0 rounded-full border-2 border-primary/40"
+              initial={{ scale: 0.6, opacity: 0.6 }}
+              animate={{ scale: 1.9, opacity: 0 }}
+              transition={{ duration: 0.9, ease: easeOutSoft, delay: 0.3 + r * 0.18 }}
+            />
+          ))}
+          <motion.div
+            initial={{ scale: 0 }}
+            animate={{ scale: 1 }}
+            transition={{ type: 'spring', damping: 12, stiffness: 200, delay: 0.2 }}
+            className="relative w-20 h-20 rounded-full bg-primary/10 flex items-center justify-center"
+          >
+            <CheckCircle className="w-10 h-10 text-primary" />
+          </motion.div>
+        </div>
         <h2 className="font-serif text-2xl font-bold text-foreground">{t('order_confirmed')}</h2>
         <p className="text-muted-foreground font-sans mt-2 text-sm">{t('order_in_kitchen')}</p>
         {table && <p className="text-sm text-primary font-sans mt-1 font-medium">{t('table')} {table}</p>}
@@ -149,6 +161,7 @@ const CartPage = () => {
       );
 
       setLastOrderTime();
+      addRecentItems(items.map((it) => ({ id: it.menuItemId ?? it.id, name: it.name, price: it.price, image_url: it.image_url })));
       setCardComingSoon(false);
       setWaiterCalled(false);
 
