@@ -1,16 +1,18 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Monitor, Wifi, Bluetooth, Copy, Check, Printer, ChevronDown, Loader2, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { Monitor, Wifi, Bluetooth, Copy, Check, Printer, ChevronDown, Loader2, CheckCircle2, AlertTriangle, Sparkles, HelpCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { buildKitchenTicketText, type KitchenPrintSettings } from '@/lib/ticket-export';
-import { bluetoothSupported, connectBluetoothPrinter, connectedPrinterName, disconnectBluetoothPrinter, printTextBluetooth, inEmbeddedFrame, friendlyBluetoothError } from '@/lib/printer-connect';
+import {
+  bluetoothSupported, connectBluetoothPrinter, connectedPrinterName, disconnectBluetoothPrinter,
+  printTextBluetooth, inEmbeddedFrame, friendlyBluetoothError, tryReconnectBluetoothPrinter,
+  forgetBluetoothPrinter, rememberedPrinterName,
+} from '@/lib/printer-connect';
 
 /**
- * Self-serve printer setup. Three real, actionable paths:
- *  - This device (browser) — designate + test, the universal path.
- *  - Bluetooth — pair an ESC/POS printer directly from this page (Chrome/Android).
- *  - Network — a Star/Epson CloudPRNT printer pulls tickets itself.
+ * Self-serve kitchen-ticket printer setup. Leads with the easiest method for the
+ * device, and a paired Bluetooth printer is remembered + auto-reconnects.
  */
 
 const origin = typeof window !== 'undefined' ? window.location.origin : 'https://menu.lasoul.net';
@@ -55,22 +57,53 @@ const Step = ({ n, children }: { n: number; children: React.ReactNode }) => (
   </div>
 );
 
-const MethodButton = ({ active, onClick, icon: Icon, title, sub }: { active: boolean; onClick: () => void; icon: typeof Monitor; title: string; sub: string }) => (
+const MethodButton = ({ active, onClick, icon: Icon, title, sub, recommended }: { active: boolean; onClick: () => void; icon: typeof Monitor; title: string; sub: string; recommended?: boolean }) => (
   <button type="button" onClick={onClick}
-    className={`text-left rounded-xl border p-3 transition-colors ${active ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted/40'}`}>
+    className={`relative text-left rounded-xl border p-3 transition-colors ${active ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted/40'}`}>
+    {recommended && (
+      <span className="absolute -top-2 right-2 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-primary text-primary-foreground text-[9px] font-sans font-bold uppercase tracking-wide">
+        <Sparkles className="w-2.5 h-2.5" /> Easiest
+      </span>
+    )}
     <Icon className={`w-5 h-5 mb-1.5 ${active ? 'text-primary' : 'text-muted-foreground'}`} />
     <p className="font-sans text-sm font-medium text-foreground">{title}</p>
     <p className="text-[11px] text-muted-foreground font-sans mt-0.5">{sub}</p>
   </button>
 );
 
+const Troubleshoot = ({ tips }: { tips: React.ReactNode[] }) => {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="rounded-lg border border-border bg-muted/30">
+      <button type="button" onClick={() => setOpen((o) => !o)} className="w-full flex items-center justify-between px-3 py-2 text-xs font-sans font-medium text-foreground">
+        <span className="flex items-center gap-1.5"><HelpCircle className="w-3.5 h-3.5 text-muted-foreground" /> Nothing printed?</span>
+        <ChevronDown className={`w-3.5 h-3.5 transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+      {open && (
+        <ul className="px-3 pb-3 pt-0 space-y-1.5 text-[11px] text-muted-foreground font-sans list-disc list-inside">
+          {tips.map((tip, i) => <li key={i}>{tip}</li>)}
+        </ul>
+      )}
+    </div>
+  );
+};
+
 const PrinterSetupGuide = ({ settings, onTestPrint }: { settings: KitchenPrintSettings; onTestPrint: () => void }) => {
   const btOk = bluetoothSupported();
-  const [method, setMethod] = useState<'device' | 'bluetooth' | 'network'>('device');
+  const btBlocked = inEmbeddedFrame();
+  const recommend: 'device' | 'bluetooth' = btOk && !btBlocked ? 'bluetooth' : 'device';
+
+  const [method, setMethod] = useState<'device' | 'bluetooth' | 'network'>(recommend);
   const [showSilent, setShowSilent] = useState(false);
   const [isPrinter, setIsPrinter] = useState(() => typeof localStorage !== 'undefined' && localStorage.getItem(PRINTER_KEY) === 'true');
   const [btName, setBtName] = useState<string | null>(() => connectedPrinterName());
   const [btBusy, setBtBusy] = useState(false);
+  const remembered = rememberedPrinterName();
+
+  // Silently reconnect a previously-paired printer when the page opens.
+  useEffect(() => {
+    if (btOk && !btBlocked) tryReconnectBluetoothPrinter().then((n) => { if (n) setBtName(n); });
+  }, [btOk, btBlocked]);
 
   const toggleDevice = () => {
     const next = !isPrinter;
@@ -85,29 +118,101 @@ const PrinterSetupGuide = ({ settings, onTestPrint }: { settings: KitchenPrintSe
     catch (e) { toast.error(friendlyBluetoothError(e)); }
     finally { setBtBusy(false); }
   };
+  const reconnectBt = async () => {
+    setBtBusy(true);
+    try {
+      const n = await tryReconnectBluetoothPrinter();
+      if (n) { setBtName(n); toast.success(`Reconnected to ${n}`); }
+      else toast.error('Could not reconnect — make sure the printer is on and nearby.');
+    } finally { setBtBusy(false); }
+  };
   const testBt = async () => {
     setBtBusy(true);
     try { await printTextBluetooth(buildKitchenTicketText(sampleOrder, settings)); toast.success('Test ticket sent'); }
     catch (e) { toast.error(friendlyBluetoothError(e)); }
     finally { setBtBusy(false); }
   };
-  const disconnectBt = () => { disconnectBluetoothPrinter(); setBtName(null); toast.success('Disconnected'); };
+  const forgetBt = () => { forgetBluetoothPrinter(); setBtName(null); toast.success('Printer forgotten'); };
 
   return (
     <Card>
       <CardContent className="p-5 space-y-4">
         <div>
           <h2 className="font-serif text-lg font-semibold text-foreground flex items-center gap-2">
-            <Printer className="w-5 h-5 text-primary" /> Connect your printer
+            <Printer className="w-5 h-5 text-primary" /> Connect your kitchen printer
           </h2>
-          <p className="text-xs text-muted-foreground font-sans mt-1">Connect the printer for <span className="text-foreground/80">kitchen tickets</span>, then send a test. A <span className="text-foreground/80">fiscal receipt</span> printer (e.g. Tring) is set up separately via fiscalization.</p>
+          <p className="text-xs text-muted-foreground font-sans mt-1">For the printer that prints <span className="text-foreground/80">kitchen tickets</span>. The <span className="text-foreground/80">fiscal receipt</span> printer (Tring) is set up separately via fiscalization.</p>
         </div>
 
+        {recommend === 'bluetooth' && (
+          <div className="flex items-start gap-2 rounded-xl bg-primary/5 border border-primary/20 px-3.5 py-2.5">
+            <Sparkles className="w-4 h-4 text-primary mt-0.5 shrink-0" />
+            <p className="text-xs font-sans text-foreground/80"><span className="font-semibold text-foreground">Easiest setup:</span> pair a Bluetooth printer once below — this tablet then reconnects and prints every new order automatically.</p>
+          </div>
+        )}
+
         <div className={`grid gap-2 ${btOk ? 'grid-cols-3' : 'grid-cols-2'}`}>
-          <MethodButton active={method === 'device'} onClick={() => setMethod('device')} icon={Monitor} title="This device" sub="Easiest — uses this device's printer" />
-          {btOk && <MethodButton active={method === 'bluetooth'} onClick={() => setMethod('bluetooth')} icon={Bluetooth} title="Bluetooth" sub="Pair an ESC/POS printer directly" />}
-          <MethodButton active={method === 'network'} onClick={() => setMethod('network')} icon={Wifi} title="Network" sub="Star/Epson CloudPRNT — no computer" />
+          {btOk && <MethodButton active={method === 'bluetooth'} onClick={() => setMethod('bluetooth')} icon={Bluetooth} title="Bluetooth" sub="Pair once, prints automatically" recommended={recommend === 'bluetooth'} />}
+          <MethodButton active={method === 'device'} onClick={() => setMethod('device')} icon={Monitor} title="This device" sub="USB printer on this tablet/PC" recommended={recommend === 'device'} />
+          <MethodButton active={method === 'network'} onClick={() => setMethod('network')} icon={Wifi} title="Network" sub="Wi-Fi/LAN — no computer" />
         </div>
+
+        {/* BLUETOOTH */}
+        {method === 'bluetooth' && btOk && (
+          <div className="space-y-3 pt-1">
+            {btBlocked && (
+              <p className="flex items-start gap-2 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-700 dark:text-amber-400 px-3 py-2 text-xs font-sans">
+                <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
+                You’re in an embedded preview, where browsers block Bluetooth. Open the <span className="font-medium">published site directly in Chrome</span> on the kitchen tablet (<code className="bg-card px-1 rounded">{origin}/kitchen</code>) to pair.
+              </p>
+            )}
+
+            <div className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-sans ${btName ? 'bg-primary/10 text-primary' : remembered ? 'bg-amber-500/10 text-amber-700 dark:text-amber-400' : 'bg-muted/50 text-muted-foreground'}`}>
+              {btName ? <CheckCircle2 className="w-4 h-4 shrink-0" /> : <Bluetooth className="w-4 h-4 shrink-0" />}
+              {btName
+                ? <span>Connected: <span className="font-semibold">{btName}</span> · reconnects automatically</span>
+                : remembered
+                  ? <span>Saved: <span className="font-semibold">{remembered}</span> — turn the printer on, then Reconnect</span>
+                  : 'No Bluetooth printer connected'}
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              {btName ? (
+                <>
+                  <Button variant="outline" onClick={testBt} disabled={btBusy} className="gap-1.5">
+                    {btBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Printer className="w-4 h-4" />} Send a test ticket
+                  </Button>
+                  <Button variant="ghost" onClick={forgetBt} className="text-muted-foreground">Forget</Button>
+                </>
+              ) : (
+                <>
+                  <Button onClick={connectBt} disabled={btBusy || btBlocked} className="gap-1.5">
+                    {btBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Bluetooth className="w-4 h-4" />} {remembered ? 'Pair a different printer' : 'Connect Bluetooth printer'}
+                  </Button>
+                  {remembered && (
+                    <Button variant="outline" onClick={reconnectBt} disabled={btBusy || btBlocked} className="gap-1.5">
+                      {btBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Bluetooth className="w-4 h-4" />} Reconnect
+                    </Button>
+                  )}
+                </>
+              )}
+            </div>
+
+            <div className="space-y-3 pt-1">
+              <Step n={1}>On the <span className="font-medium text-foreground">kitchen tablet</span>, turn the printer on and make sure its <span className="font-medium text-foreground">Bluetooth is on</span> (not already paired to a phone).</Step>
+              <Step n={2}>Tap <span className="font-medium text-foreground">Connect Bluetooth printer</span> and choose it from the list.</Step>
+              <Step n={3}>Tap <span className="font-medium text-foreground">Send a test ticket</span> — a sample should print. That's it.</Step>
+              <Step n={4}>Open the <span className="font-medium text-foreground">Kitchen Display</span> (<code className="text-xs bg-muted px-1 rounded">{origin}/kitchen</code>) on that tablet — it reconnects on its own and prints every new order automatically.</Step>
+            </div>
+
+            <Troubleshoot tips={[
+              <>Make sure you opened the <span className="font-medium">real site in Chrome</span> (Android/Windows/Mac), not inside an app preview — Bluetooth is blocked there.</>,
+              <>The printer must be a <span className="font-medium">Bluetooth ESC/POS</span> model and not already connected to another phone/tablet.</>,
+              <>If it stopped after a while, tap <span className="font-medium">Reconnect</span> (or just reopen the Kitchen Display) — it pairs again without the popup.</>,
+              <>iPhone/iPad don't support Bluetooth printing — use an Android/Windows tablet, or the Network option.</>,
+            ]} />
+          </div>
+        )}
 
         {/* THIS DEVICE */}
         {method === 'device' && (
@@ -123,61 +228,28 @@ const PrinterSetupGuide = ({ settings, onTestPrint }: { settings: KitchenPrintSe
               <Button variant="outline" onClick={onTestPrint} className="gap-1.5"><Printer className="w-4 h-4" /> Send a test ticket</Button>
             </div>
             <div className="space-y-3 pt-1">
-              <Step n={1}>Open this page (or the <span className="font-medium text-foreground">Kitchen Display</span>, <code className="text-xs bg-muted px-1 rounded">{origin}/kitchen</code>) on the tablet or computer connected to your printer.</Step>
-              <Step n={2}>Tap <span className="font-medium text-foreground">"Use this device as the printer"</span> above, then <span className="font-medium text-foreground">Send a test ticket</span> to confirm it prints.</Step>
-              <Step n={3}>Keep the Kitchen Display open on that device — new orders then print automatically.</Step>
+              <Step n={1}>Plug the 80 mm printer into this tablet/PC and make sure it's installed as the <span className="font-medium text-foreground">default printer</span> in the OS.</Step>
+              <Step n={2}>Tap <span className="font-medium text-foreground">"Use this device as the printer"</span>, then <span className="font-medium text-foreground">Send a test ticket</span> to confirm.</Step>
+              <Step n={3}>Keep the <span className="font-medium text-foreground">Kitchen Display</span> open on this device — new orders print automatically.</Step>
               <Step n={4}>
                 <button type="button" onClick={() => setShowSilent((s) => !s)} className="inline-flex items-center gap-1 text-primary font-medium hover:underline">
                   Print without the popup each time <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showSilent ? 'rotate-180' : ''}`} />
                 </button>
                 {showSilent && (
                   <div className="mt-2 space-y-3 rounded-lg bg-muted/40 border border-border p-3">
-                    <p className="text-xs">Launch Chrome in <span className="font-medium text-foreground">kiosk-printing</span> mode so tickets print silently. Make a desktop shortcut with this target (set your printer as the Windows default first):</p>
+                    <p className="text-xs">Launch Chrome in <span className="font-medium text-foreground">kiosk-printing</span> mode so tickets print silently. Make a desktop shortcut with this target:</p>
                     <CopyField label="Windows shortcut target" value={winShortcut} />
                     <CopyField label="Mac (Terminal)" value={macShortcut} />
-                    <p className="text-[11px] text-muted-foreground">On iPad / Android the print sheet appears each time — use Bluetooth or a Network printer for fully silent printing.</p>
+                    <p className="text-[11px] text-muted-foreground">On iPad / Android the print sheet appears each time — use Bluetooth or Network for fully silent printing.</p>
                   </div>
                 )}
               </Step>
             </div>
-          </div>
-        )}
-
-        {/* BLUETOOTH */}
-        {method === 'bluetooth' && btOk && (
-          <div className="space-y-3 pt-1">
-            {inEmbeddedFrame() && (
-              <p className="flex items-start gap-2 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-700 dark:text-amber-400 px-3 py-2 text-xs font-sans">
-                <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
-                You’re viewing this inside an embedded preview, where browsers block Bluetooth. Open the <span className="font-medium">published site directly in Chrome</span> (<code className="bg-card px-1 rounded">{origin}/admin</code>) to pair a printer.
-              </p>
-            )}
-            <div className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-sans ${btName ? 'bg-primary/10 text-primary' : 'bg-muted/50 text-muted-foreground'}`}>
-              {btName ? <CheckCircle2 className="w-4 h-4" /> : <Bluetooth className="w-4 h-4" />}
-              {btName ? `Connected: ${btName}` : 'No Bluetooth printer connected'}
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {!btName ? (
-                <Button onClick={connectBt} disabled={btBusy} className="gap-1.5">
-                  {btBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Bluetooth className="w-4 h-4" />} Connect Bluetooth printer
-                </Button>
-              ) : (
-                <>
-                  <Button variant="outline" onClick={testBt} disabled={btBusy} className="gap-1.5">
-                    {btBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Printer className="w-4 h-4" />} Send a test ticket
-                  </Button>
-                  <Button variant="ghost" onClick={disconnectBt}>Disconnect</Button>
-                </>
-              )}
-            </div>
-            <div className="space-y-3 pt-1">
-              <Step n={1}>Turn the printer on and make sure its <span className="font-medium text-foreground">Bluetooth is on</span> (and not already paired to another device).</Step>
-              <Step n={2}>Tap <span className="font-medium text-foreground">Connect Bluetooth printer</span> and pick your printer from the list.</Step>
-              <Step n={3}>Tap <span className="font-medium text-foreground">Send a test ticket</span> — a sample ticket should print.</Step>
-              <p className="text-[11px] text-muted-foreground font-sans rounded-lg bg-muted/40 border border-border p-2.5">
-                Works with most 58/80 mm Bluetooth ESC/POS printers on Chrome (Android, Windows, Mac). Not supported on iPhone/iPad — use This device or Network there.
-              </p>
-            </div>
+            <Troubleshoot tips={[
+              <>Check the printer is the <span className="font-medium">default</span> in the operating system's printer settings, with paper loaded.</>,
+              <>If a print dialog appears and nothing prints, pick the right printer in that dialog once.</>,
+              <>For fully silent printing use the kiosk-printing shortcut above, or switch to Bluetooth.</>,
+            ]} />
           </div>
         )}
 
@@ -186,12 +258,12 @@ const PrinterSetupGuide = ({ settings, onTestPrint }: { settings: KitchenPrintSe
           <div className="space-y-3 pt-1">
             <Step n={1}>Set a secret password: in <span className="font-medium text-foreground">Supabase → Edge Functions → Secrets</span>, add <code className="text-xs bg-muted px-1 rounded">CLOUDPRNT_TOKEN</code> with any strong value.</Step>
             <Step n={2}>
-              Open your Star/Epson printer's setup page and paste this as the <span className="font-medium text-foreground">Server / Poll URL</span> (replace <code className="text-xs bg-muted px-1 rounded">YOUR_TOKEN</code> with the secret from step 1):
+              Open your Wi-Fi/LAN printer's setup page and paste this as the <span className="font-medium text-foreground">Server / Poll URL</span> (replace <code className="text-xs bg-muted px-1 rounded">YOUR_TOKEN</code>):
               <CopyField value={cloudPrntUrl} />
             </Step>
             <Step n={3}>Save on the printer. It checks for new orders every few seconds and <span className="font-medium text-foreground">prints them automatically — no tablet or computer needed.</span></Step>
             <p className="text-[11px] text-muted-foreground font-sans flex items-start gap-1.5 rounded-lg bg-muted/40 border border-border p-2.5">
-              <Wifi className="w-3.5 h-3.5 mt-0.5 shrink-0" /> Uses the Star CloudPRNT standard. The endpoint is ready — confirm the exact field name on your printer model with your installer the first time.
+              <Wifi className="w-3.5 h-3.5 mt-0.5 shrink-0" /> Uses the Star CloudPRNT standard (Star/Epson network printers). Confirm the exact field name on your model with your installer the first time.
             </p>
           </div>
         )}

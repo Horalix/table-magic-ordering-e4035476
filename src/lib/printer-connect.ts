@@ -39,8 +39,22 @@ export const friendlyBluetoothError = (e: unknown): string => {
 let device: any = null;
 let characteristic: any = null;
 
+const REMEMBER_ID = 'kitchen:btPrinterId';
+const REMEMBER_NAME = 'kitchen:btPrinterName';
+
+const remember = (d: any) => {
+  try { localStorage.setItem(REMEMBER_ID, d.id); localStorage.setItem(REMEMBER_NAME, d.name || 'Bluetooth printer'); } catch { /* ignore */ }
+};
+
 export const connectedPrinterName = (): string | null =>
   device && device.gatt?.connected ? (device.name || 'Bluetooth printer') : null;
+
+export const isBluetoothConnected = (): boolean => !!(characteristic && device?.gatt?.connected);
+
+/** Name of the last paired printer (even if not currently connected). */
+export const rememberedPrinterName = (): string | null => {
+  try { return localStorage.getItem(REMEMBER_NAME); } catch { return null; }
+};
 
 async function findWritable(server: any) {
   // Preferred: the standard ESC/POS serial service.
@@ -75,7 +89,35 @@ export async function connectBluetoothPrinter(): Promise<string> {
   device.addEventListener('gattserverdisconnected', () => { characteristic = null; });
   const server = await device.gatt.connect();
   characteristic = await findWritable(server);
+  remember(device);
   return device.name || 'Bluetooth printer';
+}
+
+/**
+ * Reconnect to the previously-paired printer WITHOUT showing the chooser, using
+ * the origin's granted-devices list. Lets the kitchen tablet "connect once" and
+ * silently reconnect on every reload. Returns the name, or null if unavailable.
+ */
+export async function tryReconnectBluetoothPrinter(): Promise<string | null> {
+  if (isBluetoothConnected()) return device.name || 'Bluetooth printer';
+  if (!bluetoothSupported() || inEmbeddedFrame()) return null;
+  let wantId: string | null = null;
+  try { wantId = localStorage.getItem(REMEMBER_ID); } catch { /* ignore */ }
+  if (!wantId) return null;
+  try {
+    const bt = (navigator as any).bluetooth;
+    if (!bt.getDevices) return null; // older browsers: needs a manual reconnect
+    const devices: any[] = await bt.getDevices();
+    const found = devices.find((d) => d.id === wantId);
+    if (!found) return null;
+    device = found;
+    device.addEventListener('gattserverdisconnected', () => { characteristic = null; });
+    const server = await device.gatt.connect();
+    characteristic = await findWritable(server);
+    return device.name || 'Bluetooth printer';
+  } catch {
+    return null;
+  }
 }
 
 async function ensureConnected() {
@@ -115,4 +157,10 @@ export function disconnectBluetoothPrinter(): void {
   try { device?.gatt?.disconnect(); } catch { /* ignore */ }
   device = null;
   characteristic = null;
+}
+
+/** Disconnect AND forget the remembered printer (stops auto-reconnect). */
+export function forgetBluetoothPrinter(): void {
+  disconnectBluetoothPrinter();
+  try { localStorage.removeItem(REMEMBER_ID); localStorage.removeItem(REMEMBER_NAME); } catch { /* ignore */ }
 }

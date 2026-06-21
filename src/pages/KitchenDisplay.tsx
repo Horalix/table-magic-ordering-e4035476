@@ -7,7 +7,8 @@ import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { playOrderAlert, playWaiterCallAlert, playBillRequestAlert } from '@/lib/kitchen-sounds';
-import { downloadKitchenTicketCsv, downloadKitchenTicketJson, printKitchenTicket, type KitchenPrintSettings } from '@/lib/ticket-export';
+import { buildKitchenTicketText, downloadKitchenTicketCsv, downloadKitchenTicketJson, printKitchenTicket, type KitchenPrintSettings } from '@/lib/ticket-export';
+import { isBluetoothConnected, tryReconnectBluetoothPrinter, printTextBluetooth } from '@/lib/printer-connect';
 import type { Database } from '@/integrations/supabase/types';
 
 interface PrintConfig {
@@ -130,8 +131,12 @@ const KitchenDisplay = () => {
 
   // Printing
   const [isPrinter, setIsPrinter] = useState(() => localStorage.getItem('kitchen:isPrinter') === 'true');
+  const [btName, setBtName] = useState<string | null>(null);
   const [printConfig, setPrintConfig] = useState<PrintConfig>(DEFAULT_PRINT);
   const printedRef = useRef<Set<string>>(new Set());
+
+  // Silently reconnect a previously-paired Bluetooth printer on load.
+  useEffect(() => { tryReconnectBluetoothPrinter().then((n) => { if (n) setBtName(n); }); }, []);
 
   // Load print settings + keep them live.
   useEffect(() => {
@@ -144,19 +149,23 @@ const KitchenDisplay = () => {
     return () => { supabase.removeChannel(ch); };
   }, []);
 
-  // Auto-print newly-placed orders on the designated printer device.
+  // Auto-print newly-placed orders — via Bluetooth if connected, else browser.
   useEffect(() => {
-    if (!isPrinter || !printConfig.print_enabled || !printConfig.print_auto) return;
+    if ((!isPrinter && !isBluetoothConnected()) || !printConfig.print_enabled || !printConfig.print_auto) return;
     const now = Date.now();
     for (const o of orders) {
       if (o.status !== 'pending' || printedRef.current.has(o.id)) continue;
       printedRef.current.add(o.id);
       // Skip the backlog on first load — only print genuinely fresh orders.
       if (now - new Date(o.created_at).getTime() <= 60_000) {
-        printKitchenTicket(o, toPrintSettings(printConfig));
+        if (isBluetoothConnected()) {
+          printTextBluetooth(buildKitchenTicketText(o, toPrintSettings(printConfig))).catch(() => printKitchenTicket(o, toPrintSettings(printConfig)));
+        } else {
+          printKitchenTicket(o, toPrintSettings(printConfig));
+        }
       }
     }
-  }, [orders, isPrinter, printConfig]);
+  }, [orders, isPrinter, printConfig, btName]);
 
   // Keep ref in sync with state
   useEffect(() => {
@@ -314,7 +323,12 @@ const KitchenDisplay = () => {
 
   const exportTicket = (order: OrderWithItems, format: 'print' | 'json' | 'csv') => {
     if (format === 'print') {
-      printKitchenTicket(order, toPrintSettings(printConfig));
+      if (isBluetoothConnected()) {
+        printTextBluetooth(buildKitchenTicketText(order, toPrintSettings(printConfig)))
+          .catch(() => printKitchenTicket(order, toPrintSettings(printConfig)));
+      } else {
+        printKitchenTicket(order, toPrintSettings(printConfig));
+      }
       return;
     }
     if (format === 'json') {
@@ -375,9 +389,9 @@ const KitchenDisplay = () => {
             <h1 className="font-serif text-2xl font-bold text-foreground">Kitchen Display</h1>
             <div className="flex items-center gap-2">
               <p className="text-sm text-muted-foreground font-sans">{orders.length} orders</p>
-              {isPrinter && (
+              {(btName || isPrinter) && (
                 <span className="inline-flex items-center gap-1 text-[11px] font-sans font-medium text-primary">
-                  <span className="w-1.5 h-1.5 rounded-full bg-primary breathe" /> <Printer className="w-3 h-3" /> Printing on this device
+                  <span className="w-1.5 h-1.5 rounded-full bg-primary breathe" /> <Printer className="w-3 h-3" /> {btName ? `Printing · ${btName}` : 'Printing on this device'}
                 </span>
               )}
             </div>
