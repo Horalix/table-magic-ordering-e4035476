@@ -100,7 +100,7 @@ const PrinterSetupGuide = ({ settings, onTestPrint }: { settings: KitchenPrintSe
           <h2 className="font-serif text-lg font-semibold text-foreground flex items-center gap-2">
             <Printer className="w-5 h-5 text-primary" /> Connect your printer
           </h2>
-          <p className="text-xs text-muted-foreground font-sans mt-1">Choose how the kitchen prints, then connect and send a test ticket.</p>
+          <p className="text-xs text-muted-foreground font-sans mt-1">Connect the printer for <span className="text-foreground/80">kitchen tickets</span>, then send a test. A <span className="text-foreground/80">fiscal receipt</span> printer (e.g. Tring) is set up separately via fiscalization.</p>
         </div>
 
         <div className={`grid gap-2 ${btOk ? 'grid-cols-3' : 'grid-cols-2'}`}>
