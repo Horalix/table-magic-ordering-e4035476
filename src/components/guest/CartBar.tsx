@@ -5,6 +5,7 @@ import { useCartStore } from '@/lib/cart-store';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useT } from '@/lib/i18n';
 import { springSnappy, useCountUp } from '@/lib/motion';
+import CartSheet from '@/components/guest/CartSheet';
 
 const CartBar = () => {
   const { total, itemCount, sessionId } = useCartStore();
@@ -19,6 +20,7 @@ const CartBar = () => {
   const hasSession = !!(table && token);
 
   const [bounce, setBounce] = useState(0);
+  const [sheetOpen, setSheetOpen] = useState(false);
   useEffect(() => {
     if (count > 0) setBounce((b) => b + 1);
   }, [count]);
@@ -33,6 +35,7 @@ const CartBar = () => {
   };
 
   return (
+    <>
     <div className="fixed bottom-0 left-0 right-0 z-40 p-4 pb-safe space-y-2 pointer-events-none">
       {sessionId && (
         <motion.button
@@ -54,7 +57,7 @@ const CartBar = () => {
             animate={{ y: 0, opacity: 1, scale: 1 }}
             exit={{ y: 100, opacity: 0, scale: 0.95 }}
             transition={springSnappy}
-            onClick={() => navigate(`/cart?${buildParams()}`)}
+            onClick={() => setSheetOpen(true)}
             className="pointer-events-auto w-full flex items-center justify-between px-6 py-4 rounded-2xl text-white shadow-xl shadow-primary/30 hover:shadow-primary/40 transition-shadow min-h-[56px] tap"
             style={{ backgroundColor: 'hsl(140, 12%, 53%)' }}
           >
@@ -83,6 +86,16 @@ const CartBar = () => {
         )}
       </AnimatePresence>
     </div>
+
+    <AnimatePresence>
+      {sheetOpen && (
+        <CartSheet
+          onClose={() => setSheetOpen(false)}
+          onCheckout={() => { setSheetOpen(false); navigate(`/cart?${buildParams()}`); }}
+        />
+      )}
+    </AnimatePresence>
+    </>
   );
 };
 
