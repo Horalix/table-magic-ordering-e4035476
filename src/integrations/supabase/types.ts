@@ -82,6 +82,7 @@ export type Database = {
           description: string | null
           description_ar: string | null
           description_bs: string | null
+          dietary_tags: string[]
           id: string
           image_url: string | null
           is_available: boolean
@@ -98,6 +99,7 @@ export type Database = {
           description?: string | null
           description_ar?: string | null
           description_bs?: string | null
+          dietary_tags?: string[]
           id?: string
           image_url?: string | null
           is_available?: boolean
@@ -114,6 +116,7 @@ export type Database = {
           description?: string | null
           description_ar?: string | null
           description_bs?: string | null
+          dietary_tags?: string[]
           id?: string
           image_url?: string | null
           is_available?: boolean
