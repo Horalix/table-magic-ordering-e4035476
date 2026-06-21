@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef, useDeferredValue } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, Plus, Minus, QrCode, Search, X, Star } from 'lucide-react';
+import { ArrowLeft, Plus, Minus, QrCode, Search, X, Star, LayoutGrid, List } from 'lucide-react';
 import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
@@ -15,6 +15,7 @@ import LanguageSelector from '@/components/guest/LanguageSelector';
 import { useT, useLanguageStore, getLocalizedName, getLocalizedDescription } from '@/lib/i18n';
 import { useSessionHeartbeat } from '@/hooks/useSessionHeartbeat';
 import { staggerContainer, fadeUp, springPill, easeLux, duration } from '@/lib/motion';
+import { DIET_TAGS, DIET_BY_KEY, getItemTags } from '@/lib/dietary';
 import type { Database } from '@/integrations/supabase/types';
 
 type CategoryRow = Database['public']['Tables']['categories']['Row'];
@@ -37,6 +38,9 @@ const CategoryPage = () => {
   const [selectedItem, setSelectedItem] = useState<MenuItemRow | null>(null);
   const [search, setSearch] = useState('');
   const [swipeDir, setSwipeDir] = useState<1 | -1>(1);
+  const [view, setView] = useState<'list' | 'grid'>(() => (typeof localStorage !== 'undefined' && localStorage.getItem('lasoul-menu-view') === 'grid' ? 'grid' : 'list'));
+  const [activeDiets, setActiveDiets] = useState<string[]>([]);
+  const [showHint, setShowHint] = useState(false);
   const touchRef = useRef<{ x: number; y: number; t: number } | null>(null);
   const pillRefs = useRef<Record<string, HTMLButtonElement | null>>({});
   const deferredSearch = useDeferredValue(search);
@@ -89,6 +93,7 @@ const CategoryPage = () => {
     if (ni < 0 || ni >= subcategories.length) return;
     setSwipeDir(dir);
     setSelectedSubcategory(subcategories[ni].id);
+    if (showHint) { setShowHint(false); try { localStorage.setItem('lasoul-swipe-hint', '1'); } catch { /* ignore */ } }
     if (search) setSearch('');
     if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
       try { navigator.vibrate(6); } catch { /* gesture-gated on some browsers */ }
@@ -150,6 +155,41 @@ const CategoryPage = () => {
     el?.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
   }, [activeSubId]);
 
+  const subIds = subcategories.map((s) => s.id);
+  const searching = deferredSearch.trim().length > 0;
+
+  // Global (category-wide) search — look across ALL subcategories, not just the active one.
+  const { data: allItems = [], isLoading: allLoading } = useQuery({
+    queryKey: ['menu_items_all', category?.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('menu_items')
+        .select('*')
+        .in('subcategory_id', subIds)
+        .eq('is_available', true)
+        .order('sort_order');
+      if (error) throw error;
+      return data;
+    },
+    enabled: searching && subIds.length > 0,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const subNameById = useMemo(
+    () => new Map(subcategories.map((s) => [s.id, getLocalizedName(s as SubcategoryRow, locale)])),
+    [subcategories, locale],
+  );
+
+  useEffect(() => { try { localStorage.setItem('lasoul-menu-view', view); } catch { /* ignore */ } }, [view]);
+
+  // One-time "swipe to switch" coachmark.
+  useEffect(() => {
+    if (subcategories.length > 1 && typeof localStorage !== 'undefined' && !localStorage.getItem('lasoul-swipe-hint')) {
+      setShowHint(true);
+    }
+  }, [subcategories.length]);
+  const dismissHint = () => { setShowHint(false); try { localStorage.setItem('lasoul-swipe-hint', '1'); } catch { /* ignore */ } };
+
   // Popular / Chef's picks — top sellers (degrades to none if RPC unavailable).
   const { data: popular = [] } = useQuery({
     queryKey: ['popular-items'],
@@ -161,6 +201,10 @@ const CategoryPage = () => {
     staleTime: 10 * 60 * 1000,
   });
   const popularIds = new Set(popular.map((p) => p.menu_item_id));
+
+  const sourceItems = searching ? allItems : items;
+  const presentTags = DIET_TAGS.filter((d) => sourceItems.some((it) => getItemTags(it).includes(d.key)));
+  const toggleDiet = (key: string) => setActiveDiets((prev) => (prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]));
 
   const goBack = () => {
     const params = new URLSearchParams();
@@ -201,6 +245,13 @@ const CategoryPage = () => {
                 {t('table')} {table}
               </span>
             )}
+            <button
+              onClick={() => setView((v) => (v === 'list' ? 'grid' : 'list'))}
+              aria-label={view === 'list' ? t('grid_view') : t('list_view')}
+              className="p-2 rounded-full hover:bg-muted transition-colors min-w-[40px] min-h-[40px] flex items-center justify-center text-muted-foreground"
+            >
+              {view === 'list' ? <LayoutGrid className="w-5 h-5" /> : <List className="w-5 h-5" />}
+            </button>
             <LanguageSelector />
           </div>
         </div>
@@ -260,7 +311,40 @@ const CategoryPage = () => {
             )}
           </div>
         </div>
+
+        {presentTags.length > 0 && (
+          <div className="flex items-center gap-1.5 px-4 pb-3 overflow-x-auto scrollbar-hide">
+            {presentTags.map((d) => {
+              const on = activeDiets.includes(d.key);
+              return (
+                <button
+                  key={d.key}
+                  onClick={() => toggleDiet(d.key)}
+                  className={`shrink-0 inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-sans font-medium border transition-colors ${on ? 'bg-primary text-primary-foreground border-primary' : 'bg-card text-muted-foreground border-border hover:text-foreground'}`}
+                >
+                  <span aria-hidden>{d.emoji}</span>{t(d.labelKey)}
+                </button>
+              );
+            })}
+            {activeDiets.length > 0 && (
+              <button onClick={() => setActiveDiets([])} className="shrink-0 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-full text-xs font-sans text-muted-foreground hover:text-foreground">
+                <X className="w-3 h-3" />{t('clear_filters')}
+              </button>
+            )}
+          </div>
+        )}
       </div>
+
+      {showHint && (
+        <motion.div
+          initial={{ opacity: 0, y: -6 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mx-4 mt-3 px-3.5 py-2.5 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-between gap-3"
+        >
+          <span className="text-xs font-sans text-primary flex items-center gap-2">👈👉 {t('swipe_hint')}</span>
+          <button onClick={dismissHint} className="text-xs font-sans font-semibold text-primary px-2.5 py-1 rounded-lg hover:bg-primary/15">{t('got_it')}</button>
+        </motion.div>
+      )}
 
       {!hasSession && (
         <motion.div
@@ -282,16 +366,18 @@ const CategoryPage = () => {
        >
       {(() => {
         const q = deferredSearch.trim().toLowerCase();
-        const filtered = q
-          ? items.filter((it) => {
+        let filtered = q
+          ? sourceItems.filter((it) => {
               const fields = [it.name, it.name_bs, it.name_ar, it.description, it.description_bs, it.description_ar]
                 .filter((value): value is string => Boolean(value))
                 .map((value) => value.toLowerCase());
               return fields.some((f) => f.includes(q));
             })
-          : items;
+          : sourceItems;
+        if (activeDiets.length) filtered = filtered.filter((it) => { const tags = getItemTags(it); return activeDiets.every((d) => tags.includes(d)); });
+        const loading = searching ? allLoading : itemsLoading;
 
-        if (itemsLoading) {
+        if (loading) {
           return (
             <div className="px-4 pt-4 space-y-3">
               {[1, 2, 3, 4].map(i => (
@@ -321,6 +407,60 @@ const CategoryPage = () => {
                 <p className="text-sm text-muted-foreground font-sans mt-1.5">{t('no_results_hint')}</p>
               )}
             </div>
+          );
+        }
+
+        if (view === 'grid') {
+          return (
+            <motion.div
+              key={`${activeSubId}-${q}-grid`}
+              variants={staggerContainer(0.03)}
+              initial="hidden"
+              animate="show"
+              className="px-4 pt-4 grid grid-cols-2 gap-3"
+            >
+              {filtered.map((item: MenuItemRow, i: number) => {
+                const name = getLocalizedName(item, locale);
+                const tags = getItemTags(item);
+                return (
+                  <motion.button
+                    key={item.id}
+                    variants={fadeUp}
+                    onClick={() => setSelectedItem(item)}
+                    className="text-left tap-sm card-lux card-lux-hover overflow-hidden"
+                  >
+                    <div className="relative">
+                      <SmartImage src={item.image_url || undefined} id={item.id} layoutId={`item-img-${item.id}`} alt={name} width={220} height={165} priority={i < 6} fallbackText={name} wrapperClassName="w-full aspect-[4/3]" />
+                      {popularIds.has(item.id) && (
+                        <span className="absolute top-1.5 left-1.5 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-gold/90 text-[10px] font-sans font-semibold text-white shadow"><Star className="w-2.5 h-2.5 fill-white" /></span>
+                      )}
+                      {hasSession && (
+                        <span
+                          role="button"
+                          aria-label={`${t('add_to_order')} ${name}`}
+                          className="absolute bottom-1.5 right-1.5 w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center shadow-md active:scale-90 transition-transform"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            addItem({ id: item.id, name: item.name, price: Number(item.price), image_url: item.image_url || undefined });
+                            toast.success(t('added_to_order'), { description: name, duration: 1400 });
+                            if (typeof navigator !== 'undefined' && 'vibrate' in navigator) { try { navigator.vibrate(8); } catch { /* gesture-gated */ } }
+                          }}
+                        >
+                          <Plus className="w-4 h-4" />
+                        </span>
+                      )}
+                    </div>
+                    <div className="p-2.5">
+                      <h3 className="font-serif text-sm font-semibold text-foreground line-clamp-1">{name}</h3>
+                      {tags.length > 0 && (
+                        <span className="block text-xs mt-0.5">{tags.slice(0, 3).map((k) => DIET_BY_KEY[k]?.emoji).filter(Boolean).join(' ')}</span>
+                      )}
+                      <p className="text-sm font-sans font-bold text-primary mt-1 tabular-nums">{Number(item.price).toFixed(2)} KM</p>
+                    </div>
+                  </motion.button>
+                );
+              })}
+            </motion.div>
           );
         }
 
@@ -366,6 +506,12 @@ const CategoryPage = () => {
                             <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-gold/15 text-[10px] font-sans font-semibold text-gold">
                               <Star className="w-2.5 h-2.5 fill-gold" /> {t('popular')}
                             </span>
+                          )}
+                          {getItemTags(item).slice(0, 3).map((k) => DIET_BY_KEY[k] && (
+                            <span key={k} className="text-sm leading-none" title={t(DIET_BY_KEY[k].labelKey)} aria-label={t(DIET_BY_KEY[k].labelKey)}>{DIET_BY_KEY[k].emoji}</span>
+                          ))}
+                          {searching && subNameById.get(item.subcategory_id || '') && (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground font-sans">{subNameById.get(item.subcategory_id || '')}</span>
                           )}
                         </div>
                         {localizedDesc && (

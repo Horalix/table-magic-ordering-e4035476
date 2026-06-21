@@ -65,6 +65,25 @@ const translations: Record<string, Record<Locale, string>> = {
   'order_sent_kitchen': { en: 'Your order has been sent to the kitchen.', bs: 'Vaša narudžba je poslana u kuhinju.', ar: 'تم إرسال طلبك إلى المطبخ.' },
   'order_more': { en: 'Order More', bs: 'Naruči više', ar: 'اطلب المزيد' },
 
+  // Browse / status / dietary (added features)
+  'order_again': { en: 'Order again', bs: 'Naruči ponovo', ar: 'اطلب مرة أخرى' },
+  'swipe_hint': { en: 'Swipe to switch categories', bs: 'Prevucite za promjenu', ar: 'اسحب لتغيير الفئة' },
+  'got_it': { en: 'Got it', bs: 'U redu', ar: 'حسناً' },
+  'order_progress': { en: 'Order progress', bs: 'Status narudžbe', ar: 'حالة الطلب' },
+  'status_received': { en: 'Received', bs: 'Primljeno', ar: 'تم الاستلام' },
+  'list_view': { en: 'List view', bs: 'Prikaz liste', ar: 'عرض القائمة' },
+  'grid_view': { en: 'Grid view', bs: 'Prikaz mreže', ar: 'عرض الشبكة' },
+  'filters': { en: 'Filters', bs: 'Filteri', ar: 'الفلاتر' },
+  'clear_filters': { en: 'Clear', bs: 'Očisti', ar: 'مسح' },
+  'diet_vegetarian': { en: 'Vegetarian', bs: 'Vegetarijansko', ar: 'نباتي' },
+  'diet_vegan': { en: 'Vegan', bs: 'Vegansko', ar: 'نباتي صرف' },
+  'diet_spicy': { en: 'Spicy', bs: 'Ljuto', ar: 'حار' },
+  'diet_gluten_free': { en: 'Gluten-free', bs: 'Bez glutena', ar: 'خالٍ من الغلوتين' },
+  'diet_dairy_free': { en: 'Dairy-free', bs: 'Bez laktoze', ar: 'خالٍ من الألبان' },
+  'diet_contains_nuts': { en: 'Contains nuts', bs: 'Sadrži orašaste', ar: 'يحتوي على مكسرات' },
+  'diet_halal': { en: 'Halal', bs: 'Halal', ar: 'حلال' },
+  'sold_out': { en: 'Sold out', bs: 'Rasprodano', ar: 'نفد' },
+
   // Running Tab
   'running_total': { en: 'Running Total', bs: 'Ukupni račun', ar: 'المجموع الجاري' },
   'no_active_session': { en: 'No active session', bs: 'Nema aktivne sesije', ar: 'لا توجد جلسة نشطة' },

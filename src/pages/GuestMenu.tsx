@@ -11,6 +11,7 @@ import { useT, useLanguageStore, getLocalizedName } from '@/lib/i18n';
 import { useSessionHeartbeat } from '@/hooks/useSessionHeartbeat';
 import { staggerContainer, fadeUp } from '@/lib/motion';
 import InstallPrompt from '@/components/guest/InstallPrompt';
+import RecentOrdersRow from '@/components/guest/RecentOrdersRow';
 import type { LucideIcon } from 'lucide-react';
 import type { Database } from '@/integrations/supabase/types';
 
@@ -164,6 +165,8 @@ const GuestMenu = () => {
         animate="show"
         className="flex-1 bg-background px-5 py-6 pb-36 space-y-3 -mt-3 rounded-t-3xl relative z-10"
       >
+        {hasSession && <RecentOrdersRow />}
+
         {categories.map((cat) => {
           const Icon = iconMap[cat.name] || UtensilsCrossed;
           const path = pathMap[cat.name] || `/menu/${cat.name.toLowerCase()}`;
