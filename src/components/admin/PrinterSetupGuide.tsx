@@ -59,15 +59,17 @@ const Step = ({ n, children }: { n: number; children: React.ReactNode }) => (
 
 const MethodButton = ({ active, onClick, icon: Icon, title, sub, recommended }: { active: boolean; onClick: () => void; icon: typeof Monitor; title: string; sub: string; recommended?: boolean }) => (
   <button type="button" onClick={onClick}
-    className={`relative text-left rounded-xl border p-3 transition-colors ${active ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted/40'}`}>
-    {recommended && (
-      <span className="absolute -top-2 right-2 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-primary text-primary-foreground text-[9px] font-sans font-bold uppercase tracking-wide">
-        <Sparkles className="w-2.5 h-2.5" /> Easiest
-      </span>
-    )}
-    <Icon className={`w-5 h-5 mb-1.5 ${active ? 'text-primary' : 'text-muted-foreground'}`} />
+    className={`flex flex-col h-full text-left rounded-xl border p-3 transition-colors ${active ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted/40'}`}>
+    <div className="flex items-center justify-between gap-2 mb-1.5 min-h-[20px]">
+      <Icon className={`w-5 h-5 ${active ? 'text-primary' : 'text-muted-foreground'}`} />
+      {recommended && (
+        <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-primary text-primary-foreground text-[9px] font-sans font-bold uppercase tracking-wide">
+          <Sparkles className="w-2.5 h-2.5" /> Easiest
+        </span>
+      )}
+    </div>
     <p className="font-sans text-sm font-medium text-foreground">{title}</p>
-    <p className="text-[11px] text-muted-foreground font-sans mt-0.5">{sub}</p>
+    <p className="text-[11px] text-muted-foreground font-sans mt-0.5 leading-snug">{sub}</p>
   </button>
 );
 
@@ -151,7 +153,7 @@ const PrinterSetupGuide = ({ settings, onTestPrint }: { settings: KitchenPrintSe
           </div>
         )}
 
-        <div className={`grid gap-2 ${btOk ? 'grid-cols-3' : 'grid-cols-2'}`}>
+        <div className={`grid gap-2 ${btOk ? 'grid-cols-1 sm:grid-cols-3' : 'grid-cols-1 sm:grid-cols-2'}`}>
           {btOk && <MethodButton active={method === 'bluetooth'} onClick={() => setMethod('bluetooth')} icon={Bluetooth} title="Bluetooth" sub="Pair once, prints automatically" recommended={recommend === 'bluetooth'} />}
           <MethodButton active={method === 'device'} onClick={() => setMethod('device')} icon={Monitor} title="This device" sub="USB printer on this tablet/PC" recommended={recommend === 'device'} />
           <MethodButton active={method === 'network'} onClick={() => setMethod('network')} icon={Wifi} title="Network" sub="Wi-Fi/LAN — no computer" />

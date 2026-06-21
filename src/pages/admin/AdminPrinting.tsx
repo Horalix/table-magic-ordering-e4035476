@@ -72,7 +72,7 @@ const AdminPrinting = () => {
   );
 
   return (
-    <div className="max-w-2xl">
+    <div className="max-w-3xl mx-auto">
       <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
         <h1 className="font-serif text-3xl font-bold text-foreground flex items-center gap-2"><Printer className="w-7 h-7 text-primary" /> Kitchen Printing</h1>
         <div className="flex gap-2">
