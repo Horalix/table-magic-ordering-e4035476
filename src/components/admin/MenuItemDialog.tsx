@@ -8,6 +8,8 @@ import { Label } from '@/components/ui/label';
 import SmartImage from '@/components/ui/SmartImage';
 import { Loader2, Upload, X } from 'lucide-react';
 import { toast } from 'sonner';
+import { DIET_TAGS, getItemTags } from '@/lib/dietary';
+import { useT } from '@/lib/i18n';
 import type { Database } from '@/integrations/supabase/types';
 
 type MenuItemRow = Database['public']['Tables']['menu_items']['Row'];
@@ -47,9 +49,11 @@ const MenuItemDialog = ({ open, onOpenChange, subcategoryId, item, onSaved }: Pr
   const [desc, setDesc] = useState('');
   const [price, setPrice] = useState('');
   const [imageUrl, setImageUrl] = useState('');
+  const [diets, setDiets] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const t = useT();
 
   // Reset form whenever the dialog opens for a different item / add.
   useEffect(() => {
@@ -60,7 +64,10 @@ const MenuItemDialog = ({ open, onOpenChange, subcategoryId, item, onSaved }: Pr
     setDesc(item?.description ?? '');
     setPrice(item ? String(item.price) : '');
     setImageUrl(item?.image_url ?? '');
+    setDiets(getItemTags(item));
   }, [open, item]);
+
+  const toggleDiet = (key: string) => setDiets((prev) => (prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]));
 
   const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -97,9 +104,13 @@ const MenuItemDialog = ({ open, onOpenChange, subcategoryId, item, onSaved }: Pr
       price: priceNum,
       image_url: imageUrl.trim() || null,
     };
-    const { error } = isEdit
-      ? await supabase.from('menu_items').update(payload).eq('id', item!.id)
-      : await supabase.from('menu_items').insert({ ...payload, sort_order: 0 });
+    const withTags = { ...payload, dietary_tags: diets } as MenuItemInsert;
+    const run = (body: MenuItemInsert) => (isEdit
+      ? supabase.from('menu_items').update(body).eq('id', item!.id)
+      : supabase.from('menu_items').insert({ ...body, sort_order: 0 }));
+    // Include dietary_tags, but gracefully fall back if the column isn't there yet.
+    let { error } = await run(withTags);
+    if (error && /dietary_tags/i.test(error.message)) ({ error } = await run(payload));
     setSaving(false);
     if (error) { toast.error(error.message); return; }
     toast.success(isEdit ? 'Item updated' : 'Item added');
@@ -161,6 +172,24 @@ const MenuItemDialog = ({ open, onOpenChange, subcategoryId, item, onSaved }: Pr
           <div>
             <Label className="text-xs text-muted-foreground">Price (KM)</Label>
             <Input placeholder="0.00" type="number" inputMode="decimal" min="0" step="0.01" value={price} onChange={(e) => setPrice(e.target.value)} className="mt-1" />
+          </div>
+          <div>
+            <Label className="text-xs text-muted-foreground">Dietary / allergen tags</Label>
+            <div className="mt-1.5 flex flex-wrap gap-1.5">
+              {DIET_TAGS.map((d) => {
+                const on = diets.includes(d.key);
+                return (
+                  <button
+                    key={d.key}
+                    type="button"
+                    onClick={() => toggleDiet(d.key)}
+                    className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-full text-xs font-sans font-medium border transition-colors ${on ? 'bg-primary text-primary-foreground border-primary' : 'bg-card text-muted-foreground border-border hover:text-foreground'}`}
+                  >
+                    <span aria-hidden>{d.emoji}</span>{t(d.labelKey)}
+                  </button>
+                );
+              })}
+            </div>
           </div>
         </div>
 
