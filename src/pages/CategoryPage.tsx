@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useDeferredValue } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useDeferredValue } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, Plus, Minus, QrCode, Search, X, Star } from 'lucide-react';
@@ -14,7 +14,7 @@ import MenuItemDetail from '@/components/guest/MenuItemDetail';
 import LanguageSelector from '@/components/guest/LanguageSelector';
 import { useT, useLanguageStore, getLocalizedName, getLocalizedDescription } from '@/lib/i18n';
 import { useSessionHeartbeat } from '@/hooks/useSessionHeartbeat';
-import { staggerContainer, fadeUp, springPill } from '@/lib/motion';
+import { staggerContainer, fadeUp, springPill, easeLux, duration } from '@/lib/motion';
 import type { Database } from '@/integrations/supabase/types';
 
 type CategoryRow = Database['public']['Tables']['categories']['Row'];
@@ -36,6 +36,9 @@ const CategoryPage = () => {
   const [selectedSubcategory, setSelectedSubcategory] = useState<string | null>(null);
   const [selectedItem, setSelectedItem] = useState<MenuItemRow | null>(null);
   const [search, setSearch] = useState('');
+  const [swipeDir, setSwipeDir] = useState<1 | -1>(1);
+  const touchRef = useRef<{ x: number; y: number; t: number } | null>(null);
+  const pillRefs = useRef<Record<string, HTMLButtonElement | null>>({});
   const deferredSearch = useDeferredValue(search);
   const { addItem, removeItem, updateQuantity, items: cartItems } = useCartStore();
   const t = useT();
@@ -75,6 +78,38 @@ const CategoryPage = () => {
   });
 
   const activeSubId = selectedSubcategory || subcategories[0]?.id;
+  const rtl = locale === 'ar';
+  const activeIndex = subcategories.findIndex((s) => s.id === activeSubId);
+
+  // Move to the previous (-1) / next (+1) subcategory, remembering the direction
+  // so the panel slides in from the correct side.
+  const goToSub = (dir: 1 | -1) => {
+    if (activeIndex < 0 || !subcategories.length) return;
+    const ni = activeIndex + dir;
+    if (ni < 0 || ni >= subcategories.length) return;
+    setSwipeDir(dir);
+    setSelectedSubcategory(subcategories[ni].id);
+    if (search) setSearch('');
+    if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+      try { navigator.vibrate(6); } catch { /* gesture-gated on some browsers */ }
+    }
+  };
+
+  // Lightweight horizontal-swipe detection that never steals vertical scrolling.
+  const onSwipeStart = (e: React.TouchEvent) => {
+    if (e.touches.length !== 1) { touchRef.current = null; return; }
+    touchRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY, t: Date.now() };
+  };
+  const onSwipeEnd = (e: React.TouchEvent) => {
+    const start = touchRef.current; touchRef.current = null;
+    if (!start) return;
+    const dx = e.changedTouches[0].clientX - start.x;
+    const dy = e.changedTouches[0].clientY - start.y;
+    if (Math.abs(dx) > 56 && Math.abs(dx) > Math.abs(dy) * 1.7 && Date.now() - start.t < 700) {
+      const forward = rtl ? dx > 0 : dx < 0; // swipe toward the next pill
+      goToSub(forward ? 1 : -1);
+    }
+  };
 
   const { data: items = [], isLoading: itemsLoading } = useQuery({
     queryKey: ['menu_items', activeSubId],
@@ -108,6 +143,12 @@ const CategoryPage = () => {
         if (data) prefetchImages(data.map((d) => d.image_url));
       });
   }, [activeSubId, subcategories]);
+
+  // Keep the active subcategory pill in view (e.g. after a swipe).
+  useEffect(() => {
+    const el = activeSubId ? pillRefs.current[activeSubId] : null;
+    el?.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+  }, [activeSubId]);
 
   // Popular / Chef's picks — top sellers (degrades to none if RPC unavailable).
   const { data: popular = [] } = useQuery({
@@ -172,7 +213,12 @@ const CategoryPage = () => {
               return (
                 <button
                   key={sub.id}
-                  onClick={() => setSelectedSubcategory(sub.id)}
+                  ref={(el) => { pillRefs.current[sub.id] = el; }}
+                  onClick={() => {
+                    const ni = subcategories.findIndex((x) => x.id === sub.id);
+                    if (ni !== activeIndex) setSwipeDir(ni > activeIndex ? 1 : -1);
+                    setSelectedSubcategory(sub.id);
+                  }}
                   className={`relative px-4 py-2.5 rounded-full text-sm font-sans font-medium whitespace-nowrap min-h-[44px] tap ${
                     isActive ? 'text-primary-foreground' : 'text-muted-foreground hover:text-foreground'
                   }`}
@@ -227,6 +273,13 @@ const CategoryPage = () => {
         </motion.div>
       )}
 
+      <div onTouchStart={onSwipeStart} onTouchEnd={onSwipeEnd} className="overflow-hidden">
+       <motion.div
+         key={activeSubId ?? 'none'}
+         initial={{ x: (swipeDir === 1 ? 1 : -1) * (rtl ? -1 : 1) * 34, opacity: 0 }}
+         animate={{ x: 0, opacity: 1 }}
+         transition={{ duration: duration.base, ease: easeLux }}
+       >
       {(() => {
         const q = deferredSearch.trim().toLowerCase();
         const filtered = q
@@ -388,6 +441,8 @@ const CategoryPage = () => {
           </motion.div>
         );
       })()}
+       </motion.div>
+      </div>
 
       <AnimatePresence>
         {selectedItem && (
