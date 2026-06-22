@@ -71,7 +71,10 @@ const MenuPager = ({ index, count, onIndexChange, children }: Props) => {
       >
         {children.map((child, i) => (
           <div key={i} style={{ width: width || undefined }} className="h-full shrink-0 overflow-y-auto overscroll-y-contain">
-            {child}
+            {/* Only mount the active page + its neighbours; far pages stay empty
+                spacers (geometry preserved) so toggling view re-lays-out ~3
+                pages instead of all of them. */}
+            {Math.abs(i - index) <= 1 ? child : null}
           </div>
         ))}
       </motion.div>
