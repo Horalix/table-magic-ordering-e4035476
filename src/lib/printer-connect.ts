@@ -38,6 +38,7 @@ export const friendlyBluetoothError = (e: unknown): string => {
 
 let device: any = null;
 let characteristic: any = null;
+let bluetoothPrintQueue: Promise<void> = Promise.resolve();
 
 const REMEMBER_ID = 'kitchen:btPrinterId';
 const REMEMBER_NAME = 'kitchen:btPrinterName';
@@ -130,8 +131,8 @@ async function ensureConnected() {
   throw new Error('No printer connected.');
 }
 
-/** Send plain text to the printer as an ESC/POS receipt (init + text + cut). */
-export async function printTextBluetooth(text: string): Promise<void> {
+/** Send one or more ESC/POS copies without allowing concurrent jobs to interleave. */
+async function writeTextBluetooth(text: string, copies: number): Promise<void> {
   await ensureConnected();
   if (!characteristic) throw new Error('Not connected.');
   const enc = new TextEncoder();
@@ -139,18 +140,27 @@ export async function printTextBluetooth(text: string): Promise<void> {
   const FEED_CUT = [0x0a, 0x0a, 0x0a, 0x1d, 0x56, 0x00]; // feed + full cut
   const body = Array.from(enc.encode(text));
   const payload = Uint8Array.from([...INIT, ...body, ...FEED_CUT]);
+  const copyCount = Math.max(1, Math.min(3, Math.floor(copies)));
 
   // BLE writes are MTU-limited; chunk to be safe.
   const CHUNK = 180;
-  for (let i = 0; i < payload.length; i += CHUNK) {
-    const slice = payload.slice(i, i + CHUNK);
-    if (characteristic.properties.writeWithoutResponse) {
-      await characteristic.writeValueWithoutResponse(slice);
-    } else {
-      await characteristic.writeValue(slice);
+  for (let copy = 0; copy < copyCount; copy += 1) {
+    for (let i = 0; i < payload.length; i += CHUNK) {
+      const slice = payload.slice(i, i + CHUNK);
+      if (characteristic.properties.writeWithoutResponse) {
+        await characteristic.writeValueWithoutResponse(slice);
+      } else {
+        await characteristic.writeValue(slice);
+      }
+      await new Promise((resolve) => setTimeout(resolve, 18));
     }
-    await new Promise((r) => setTimeout(r, 18));
   }
+}
+
+export function printTextBluetooth(text: string, copies = 1): Promise<void> {
+  const printJob = bluetoothPrintQueue.then(() => writeTextBluetooth(text, copies));
+  bluetoothPrintQueue = printJob.catch(() => undefined);
+  return printJob;
 }
 
 export function disconnectBluetoothPrinter(): void {

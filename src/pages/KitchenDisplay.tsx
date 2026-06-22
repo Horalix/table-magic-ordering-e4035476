@@ -159,7 +159,8 @@ const KitchenDisplay = () => {
       // Skip the backlog on first load — only print genuinely fresh orders.
       if (now - new Date(o.created_at).getTime() <= 60_000) {
         if (isBluetoothConnected()) {
-          printTextBluetooth(buildKitchenTicketText(o, toPrintSettings(printConfig))).catch(() => printKitchenTicket(o, toPrintSettings(printConfig)));
+          printTextBluetooth(buildKitchenTicketText(o, toPrintSettings(printConfig)), printConfig.print_copies)
+            .catch(() => printKitchenTicket(o, toPrintSettings(printConfig)));
         } else {
           printKitchenTicket(o, toPrintSettings(printConfig));
         }
@@ -324,7 +325,7 @@ const KitchenDisplay = () => {
   const exportTicket = (order: OrderWithItems, format: 'print' | 'json' | 'csv') => {
     if (format === 'print') {
       if (isBluetoothConnected()) {
-        printTextBluetooth(buildKitchenTicketText(order, toPrintSettings(printConfig)))
+        printTextBluetooth(buildKitchenTicketText(order, toPrintSettings(printConfig)), printConfig.print_copies)
           .catch(() => printKitchenTicket(order, toPrintSettings(printConfig)));
       } else {
         printKitchenTicket(order, toPrintSettings(printConfig));
