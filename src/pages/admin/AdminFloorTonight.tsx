@@ -7,7 +7,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { CalendarDays, UserPlus, Check, Users2, MapPin, Plus, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
-import { setSectionWaiter, todayISO, type SectionAssignment } from '@/lib/assignments';
+import { addSectionWaiter, removeSectionAssignment, todayISO, type SectionAssignment } from '@/lib/assignments';
 
 interface Section { id: string; name: string; color: string; sort_order: number; }
 interface Waiter { id: string; display_name: string; }
@@ -57,14 +57,15 @@ const AdminFloorTonight = () => {
 
   const waiterById = useMemo(() => Object.fromEntries(waiters.map((w) => [w.id, w])), [waiters]);
 
-  const assign = async (section: Section, waiterId: string | null) => {
-    const existing = assignments.find((a) => a.section_id === section.id) ?? null;
-    setAssignments((prev) => {
-      const others = prev.filter((a) => a.section_id !== section.id);
-      return waiterId ? [...others, { id: existing?.id ?? `tmp-${section.id}`, section_id: section.id, waiter_id: waiterId, shift_date: date }] : others;
-    });
-    setPicking(null);
-    const { error } = await setSectionWaiter(section.id, waiterId, date, existing);
+  // Toggle a waiter on/off for a section (multiple allowed). Keeps the picker open.
+  const toggleWaiter = async (sectionId: string, waiterId: string) => {
+    const existing = assignments.find((a) => a.section_id === sectionId && a.waiter_id === waiterId) ?? null;
+    setAssignments((prev) => existing
+      ? prev.filter((a) => a.id !== existing.id)
+      : [...prev, { id: `tmp-${sectionId}-${waiterId}`, section_id: sectionId, waiter_id: waiterId, shift_date: date }]);
+    const { error } = existing
+      ? await removeSectionAssignment(existing.id)
+      : await addSectionWaiter(sectionId, waiterId, date);
     if (error) toast.error(error);
     void fetchAll();
   };
@@ -101,10 +102,9 @@ const AdminFloorTonight = () => {
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {sections.map((s) => {
-            const a = assignments.find((x) => x.section_id === s.id);
-            const waiter = a ? waiterById[a.waiter_id] : null;
+            const sectionWaiters = assignments.filter((x) => x.section_id === s.id).map((x) => waiterById[x.waiter_id]).filter(Boolean);
             const count = tableCount.get(s.id) || 0;
-            const needsWaiter = count > 0 && !waiter;
+            const needsWaiter = count > 0 && sectionWaiters.length === 0;
             return (
               <button
                 key={s.id}
@@ -118,12 +118,16 @@ const AdminFloorTonight = () => {
                     <h3 className="font-serif text-xl font-bold text-foreground truncate">{s.name}</h3>
                     <span className="text-xs font-sans text-muted-foreground flex items-center gap-1 shrink-0"><Users2 className="w-3.5 h-3.5" />{count}</span>
                   </div>
-                  {waiter ? (
+                  {sectionWaiters.length > 0 ? (
                     <div className="flex items-center gap-2.5">
-                      <span className="w-10 h-10 rounded-full grid place-items-center text-white font-bold text-sm shrink-0" style={{ background: s.color }}>{initials(waiter.display_name)}</span>
+                      <div className="flex -space-x-2 shrink-0">
+                        {sectionWaiters.slice(0, 4).map((w) => (
+                          <span key={w.id} className="w-10 h-10 rounded-full grid place-items-center text-white font-bold text-sm ring-2 ring-card" style={{ background: s.color }}>{initials(w.display_name)}</span>
+                        ))}
+                      </div>
                       <div className="min-w-0">
-                        <p className="font-sans font-semibold text-foreground truncate">{waiter.display_name}</p>
-                        <p className="text-xs text-muted-foreground font-sans">Covering this section</p>
+                        <p className="font-sans font-semibold text-foreground truncate">{sectionWaiters.map((w) => w.display_name.split(' ')[0]).join(', ')}</p>
+                        <p className="text-xs text-muted-foreground font-sans">{sectionWaiters.length === 1 ? 'Covering this section' : `${sectionWaiters.length} waiters covering`}</p>
                       </div>
                     </div>
                   ) : (
@@ -147,27 +151,31 @@ const AdminFloorTonight = () => {
               {picking && <span className="w-3 h-3 rounded-full" style={{ background: picking.color }} />}
               {picking?.name}
             </DialogTitle>
+            <p className="text-xs text-muted-foreground font-sans">Tap one or more waiters to cover this section.</p>
           </DialogHeader>
           {waiters.length === 0 ? (
             <p className="text-sm text-muted-foreground font-sans py-2">No active waiters. Add them under <Link to="/admin/waiters" className="text-primary underline">Waiters</Link>.</p>
           ) : (
-            <div className="space-y-2 max-h-[55vh] overflow-y-auto">
-              {picking && waiters.map((w) => {
-                const active = assignments.find((x) => x.section_id === picking.id)?.waiter_id === w.id;
-                return (
-                  <button
-                    key={w.id}
-                    type="button"
-                    onClick={() => assign(picking, active ? null : w.id)}
-                    className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl border transition-all active:scale-[0.98] min-h-[56px] ${active ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted/50'}`}
-                  >
-                    <span className="w-9 h-9 rounded-full grid place-items-center text-white font-bold text-xs shrink-0" style={{ background: picking.color }}>{initials(w.display_name)}</span>
-                    <span className="flex-1 text-left font-sans font-medium text-foreground">{w.display_name}</span>
-                    {active && <Check className="w-5 h-5 text-primary" />}
-                  </button>
-                );
-              })}
-            </div>
+            <>
+              <div className="space-y-2 max-h-[55vh] overflow-y-auto">
+                {picking && waiters.map((w) => {
+                  const active = assignments.some((x) => x.section_id === picking.id && x.waiter_id === w.id);
+                  return (
+                    <button
+                      key={w.id}
+                      type="button"
+                      onClick={() => toggleWaiter(picking.id, w.id)}
+                      className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl border transition-all active:scale-[0.98] min-h-[56px] ${active ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted/50'}`}
+                    >
+                      <span className="w-9 h-9 rounded-full grid place-items-center text-white font-bold text-xs shrink-0" style={{ background: picking.color }}>{initials(w.display_name)}</span>
+                      <span className="flex-1 text-left font-sans font-medium text-foreground">{w.display_name}</span>
+                      {active && <Check className="w-5 h-5 text-primary" />}
+                    </button>
+                  );
+                })}
+              </div>
+              <Button onClick={() => setPicking(null)} className="w-full mt-1">Done</Button>
+            </>
           )}
         </DialogContent>
       </Dialog>

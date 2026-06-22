@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { toast } from 'sonner';
 import MenuItemDialog from '@/components/admin/MenuItemDialog';
+import { DIET_BY_KEY, getItemTags } from '@/lib/dietary';
 import type { Database } from '@/integrations/supabase/types';
 
 type CategoryInsert = Database['public']['Tables']['categories']['Insert'];
@@ -308,7 +309,12 @@ const AdminMenu = () => {
                                       ? <img src={item.image_url} alt={item.name} className="w-10 h-10 rounded-lg object-cover shrink-0" />
                                       : <div className="w-10 h-10 rounded-lg bg-muted shrink-0 flex items-center justify-center text-muted-foreground/40 font-serif">{item.name[0]}</div>}
                                     <div className="min-w-0">
-                                      <p className={`text-sm font-sans font-medium truncate ${item.is_available ? 'text-foreground' : 'text-muted-foreground line-through'}`}>{item.name}</p>
+                                      <div className="flex items-center gap-1.5 min-w-0">
+                                        <p className={`text-sm font-sans font-medium truncate ${item.is_available ? 'text-foreground' : 'text-muted-foreground line-through'}`}>{item.name}</p>
+                                        {getItemTags(item).length > 0 && (
+                                          <span className="shrink-0 text-xs leading-none">{getItemTags(item).slice(0, 4).map((k) => DIET_BY_KEY[k]?.emoji).filter(Boolean).join(' ')}</span>
+                                        )}
+                                      </div>
                                       <p className="text-xs text-muted-foreground tabular-nums">{Number(item.price).toFixed(2)} KM</p>
                                     </div>
                                   </div>

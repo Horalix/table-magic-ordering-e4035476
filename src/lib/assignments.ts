@@ -36,3 +36,15 @@ export async function setSectionWaiter(
   }
   return { error };
 }
+
+/** Add one waiter to a section for a shift (multiple waiters per section allowed). */
+export async function addSectionWaiter(sectionId: string, waiterId: string, date: string): Promise<{ error: string | null }> {
+  const res = await supabase.from('section_assignments').insert({ section_id: sectionId, waiter_id: waiterId, shift_date: date });
+  return { error: res.error?.message ?? null };
+}
+
+/** Remove one specific waiter assignment by row id. */
+export async function removeSectionAssignment(id: string): Promise<{ error: string | null }> {
+  const res = await supabase.from('section_assignments').delete().eq('id', id);
+  return { error: res.error?.message ?? null };
+}

@@ -14,7 +14,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { toast } from 'sonner';
 import { Plus, Trash2, ChevronDown, MapPin, Users2, AlertTriangle, CalendarDays } from 'lucide-react';
-import { setSectionWaiter, todayISO, type SectionAssignment } from '@/lib/assignments';
+import { addSectionWaiter, removeSectionAssignment, todayISO, type SectionAssignment } from '@/lib/assignments';
 
 interface Section { id: string; name: string; color: string; sort_order: number; }
 interface Waiter { id: string; display_name: string; is_active: boolean; }
@@ -98,14 +98,15 @@ const AdminSections = () => {
     if (error) { toast.error(error.message); void fetchAll(); }
   };
 
-  // One tap: assign / reassign / clear the section's waiter.
-  const assign = async (sectionId: string, waiterId: string | null) => {
-    const existing = assignments.find((a) => a.section_id === sectionId) ?? null;
-    setAssignments((prev) => {
-      const others = prev.filter((a) => a.section_id !== sectionId);
-      return waiterId ? [...others, { id: existing?.id ?? `tmp-${sectionId}`, section_id: sectionId, waiter_id: waiterId, shift_date: date }] : others;
-    });
-    const { error } = await setSectionWaiter(sectionId, waiterId, date, existing);
+  // One tap toggles a waiter on/off for the section (multiple allowed).
+  const toggleWaiter = async (sectionId: string, waiterId: string) => {
+    const existing = assignments.find((a) => a.section_id === sectionId && a.waiter_id === waiterId) ?? null;
+    setAssignments((prev) => existing
+      ? prev.filter((a) => a.id !== existing.id)
+      : [...prev, { id: `tmp-${sectionId}-${waiterId}`, section_id: sectionId, waiter_id: waiterId, shift_date: date }]);
+    const { error } = existing
+      ? await removeSectionAssignment(existing.id)
+      : await addSectionWaiter(sectionId, waiterId, date);
     if (error) toast.error(error);
     void fetchAll();
   };
@@ -188,9 +189,9 @@ const AdminSections = () => {
       ) : (
         <div className="space-y-4">
           {sections.map((s) => {
-            const a = assignments.find((x) => x.section_id === s.id);
             const sectionTables = tablesBySection.get(s.id) || [];
-            const needsWaiter = sectionTables.length > 0 && !a;
+            const hasWaiter = assignments.some((x) => x.section_id === s.id);
+            const needsWaiter = sectionTables.length > 0 && !hasWaiter;
             return (
               <Card key={s.id} className="overflow-hidden card-lux-hover">
                 <div className="h-1.5" style={{ background: s.color }} />
@@ -223,15 +224,15 @@ const AdminSections = () => {
                     </AlertDialog>
                   </div>
 
-                  {/* Waiter chips — one tap to assign */}
+                  {/* Waiter chips — tap to add/remove (multiple allowed) */}
                   <div className="mb-4">
-                    <p className="text-[11px] uppercase tracking-wide text-muted-foreground font-sans mb-2">Waiter {isToday ? 'today' : `· ${date}`}</p>
+                    <p className="text-[11px] uppercase tracking-wide text-muted-foreground font-sans mb-2">Waiters {isToday ? 'today' : `· ${date}`} <span className="normal-case tracking-normal">— tap to add one or more</span></p>
                     {waiters.length === 0 ? (
                       <p className="text-sm text-muted-foreground font-sans">No active waiters. Add them under <span className="font-medium">Waiters</span>.</p>
                     ) : (
                       <div className="flex flex-wrap gap-2">
                         {waiters.map((w) => (
-                          <WaiterChip key={w.id} name={w.display_name} color={s.color} active={a?.waiter_id === w.id} onClick={() => assign(s.id, a?.waiter_id === w.id ? null : w.id)} />
+                          <WaiterChip key={w.id} name={w.display_name} color={s.color} active={assignments.some((x) => x.section_id === s.id && x.waiter_id === w.id)} onClick={() => toggleWaiter(s.id, w.id)} />
                         ))}
                       </div>
                     )}
