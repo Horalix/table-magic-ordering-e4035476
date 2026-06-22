@@ -130,7 +130,7 @@ const PrinterSetupGuide = ({ settings, onTestPrint }: { settings: KitchenPrintSe
   };
   const testBt = async () => {
     setBtBusy(true);
-    try { await printTextBluetooth(buildKitchenTicketText(sampleOrder, settings)); toast.success('Test ticket sent'); }
+    try { await printTextBluetooth(buildKitchenTicketText(sampleOrder, settings), settings.copies); toast.success('Test ticket sent'); }
     catch (e) { toast.error(friendlyBluetoothError(e)); }
     finally { setBtBusy(false); }
   };

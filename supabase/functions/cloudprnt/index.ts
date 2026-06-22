@@ -19,22 +19,25 @@ const cors = {
 
 const money = (n: unknown) => `${Number(n ?? 0).toFixed(2)} KM`;
 
-// deno-lint-ignore no-explicit-any
-function renderTicket(payload: any): string {
-  const items: any[] = Array.isArray(payload?.items) ? payload.items : [];
+const toRecord = (value: unknown): Record<string, unknown> =>
+  typeof value === "object" && value !== null ? Object.fromEntries(Object.entries(value)) : {};
+
+function renderTicket(payload: unknown): string {
+  const ticket = toRecord(payload);
+  const items = Array.isArray(ticket.items) ? ticket.items.map(toRecord) : [];
   const lines: (string | null)[] = [
     "LA SOUL — KITCHEN",
-    `Table: ${payload?.table_number ?? "?"}`,
-    payload?.guest_name ? `Guest: ${payload.guest_name}` : null,
-    `Time: ${new Date(payload?.created_at ?? Date.now()).toLocaleString()}`,
+    `Table: ${ticket.table_number ?? "?"}`,
+    ticket.guest_name ? `Guest: ${ticket.guest_name}` : null,
+    `Time: ${new Date(String(ticket.created_at ?? Date.now())).toLocaleString()}`,
     "--------------------------------",
     ...items.flatMap((it) => [
       `${it.quantity} x ${it.name}`,
       it.notes ? `  >> ${it.notes}` : null,
     ]),
     "--------------------------------",
-    payload?.total != null ? `TOTAL: ${money(payload.total)}` : null,
-    payload?.payment_method ? `Pay: ${String(payload.payment_method).toUpperCase()}` : null,
+    ticket.total != null ? `TOTAL: ${money(ticket.total)}` : null,
+    ticket.payment_method ? `Pay: ${String(ticket.payment_method).toUpperCase()}` : null,
   ];
   return lines.filter((l) => l != null).join("\n") + "\n\n\n";
 }
