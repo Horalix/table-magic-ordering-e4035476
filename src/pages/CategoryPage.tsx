@@ -377,7 +377,7 @@ const CategoryPage = () => {
       ) : (
         <div ref={trackRef} dir="ltr" onScroll={handleTrackScroll} className="flex-1 flex overflow-x-auto overflow-y-hidden snap-x snap-mandatory scrollbar-hide overscroll-x-contain">
           {subcategories.map((sub) => (
-            <div key={sub.id} dir={rtl ? 'rtl' : 'ltr'} className="snap-start shrink-0 w-full h-full overflow-y-auto overscroll-y-contain pb-36">
+            <div key={sub.id} dir={rtl ? 'rtl' : 'ltr'} className="snap-start snap-always shrink-0 w-full h-full overflow-y-auto overscroll-y-contain pb-36">
               {renderItems(filterDiet(allItems.filter((it) => it.subcategory_id === sub.id)), false)}
             </div>
           ))}
