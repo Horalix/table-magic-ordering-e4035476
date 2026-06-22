@@ -2,19 +2,19 @@ import React, { useState, useEffect, useMemo, useRef, useDeferredValue } from 'r
 import { motion, AnimatePresence } from 'framer-motion';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, Plus, Minus, QrCode, Search, X, Star, LayoutGrid, List } from 'lucide-react';
-import { useQuery, keepPreviousData } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useCartStore } from '@/lib/cart-store';
 import { Skeleton } from '@/components/ui/skeleton';
 import SmartImage from '@/components/ui/SmartImage';
-import { prefetchImages } from '@/lib/image-cache';
 import CartBar from '@/components/guest/CartBar';
+import SwipeView from '@/components/guest/SwipeView';
 import MenuItemDetail from '@/components/guest/MenuItemDetail';
 import LanguageSelector from '@/components/guest/LanguageSelector';
 import { useT, useLanguageStore, getLocalizedName, getLocalizedDescription } from '@/lib/i18n';
 import { useSessionHeartbeat } from '@/hooks/useSessionHeartbeat';
-import { staggerContainer, fadeUp, springPill, easeLux, duration } from '@/lib/motion';
+import { fadeUp, springPill } from '@/lib/motion';
 import { DIET_TAGS, DIET_BY_KEY, getItemTags } from '@/lib/dietary';
 import type { Database } from '@/integrations/supabase/types';
 
@@ -41,7 +41,6 @@ const CategoryPage = () => {
   const [view, setView] = useState<'list' | 'grid'>(() => (typeof localStorage !== 'undefined' && localStorage.getItem('lasoul-menu-view') === 'grid' ? 'grid' : 'list'));
   const [activeDiets, setActiveDiets] = useState<string[]>([]);
   const [showHint, setShowHint] = useState(false);
-  const touchRef = useRef<{ x: number; y: number; t: number } | null>(null);
   const pillRefs = useRef<Record<string, HTMLButtonElement | null>>({});
   const deferredSearch = useDeferredValue(search);
   const { addItem, removeItem, updateQuantity, items: cartItems } = useCartStore();
@@ -100,55 +99,6 @@ const CategoryPage = () => {
     }
   };
 
-  // Lightweight horizontal-swipe detection that never steals vertical scrolling.
-  const onSwipeStart = (e: React.TouchEvent) => {
-    if (e.touches.length !== 1) { touchRef.current = null; return; }
-    touchRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY, t: Date.now() };
-  };
-  const onSwipeEnd = (e: React.TouchEvent) => {
-    const start = touchRef.current; touchRef.current = null;
-    if (!start) return;
-    const dx = e.changedTouches[0].clientX - start.x;
-    const dy = e.changedTouches[0].clientY - start.y;
-    if (Math.abs(dx) > 56 && Math.abs(dx) > Math.abs(dy) * 1.7 && Date.now() - start.t < 700) {
-      const forward = rtl ? dx > 0 : dx < 0; // swipe toward the next pill
-      goToSub(forward ? 1 : -1);
-    }
-  };
-
-  const { data: items = [], isLoading: itemsLoading } = useQuery({
-    queryKey: ['menu_items', activeSubId],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('menu_items')
-        .select('*')
-        .eq('subcategory_id', activeSubId!)
-        .eq('is_available', true)
-        .order('sort_order');
-      if (error) throw error;
-      return data;
-    },
-    enabled: !!activeSubId,
-    placeholderData: keepPreviousData,
-  });
-
-  // Prefetch images for adjacent subcategories on idle
-  useEffect(() => {
-    if (!subcategories.length || !activeSubId) return;
-    const idx = subcategories.findIndex((s) => s.id === activeSubId);
-    const next = subcategories[idx + 1];
-    if (!next) return;
-    supabase
-      .from('menu_items')
-      .select('image_url')
-      .eq('subcategory_id', next.id)
-      .eq('is_available', true)
-      .limit(8)
-      .then(({ data }) => {
-        if (data) prefetchImages(data.map((d) => d.image_url));
-      });
-  }, [activeSubId, subcategories]);
-
   // Keep the active subcategory pill in view (e.g. after a swipe).
   useEffect(() => {
     const el = activeSubId ? pillRefs.current[activeSubId] : null;
@@ -158,7 +108,9 @@ const CategoryPage = () => {
   const subIds = subcategories.map((s) => s.id);
   const searching = deferredSearch.trim().length > 0;
 
-  // Global (category-wide) search — look across ALL subcategories, not just the active one.
+  // Load every available item in this category once, then slice per subcategory
+  // in memory — so swiping between subcategories is instant (no flicker/refetch).
+  // It also powers category-wide search across all subcategories.
   const { data: allItems = [], isLoading: allLoading } = useQuery({
     queryKey: ['menu_items_all', category?.id],
     queryFn: async () => {
@@ -171,9 +123,12 @@ const CategoryPage = () => {
       if (error) throw error;
       return data;
     },
-    enabled: searching && subIds.length > 0,
+    enabled: subIds.length > 0,
     staleTime: 5 * 60 * 1000,
   });
+
+  const items = useMemo(() => allItems.filter((i) => i.subcategory_id === activeSubId), [allItems, activeSubId]);
+  const itemsLoading = allLoading;
 
   const subNameById = useMemo(
     () => new Map(subcategories.map((s) => [s.id, getLocalizedName(s as SubcategoryRow, locale)])),
@@ -357,13 +312,14 @@ const CategoryPage = () => {
         </motion.div>
       )}
 
-      <div onTouchStart={onSwipeStart} onTouchEnd={onSwipeEnd} className="overflow-hidden">
-       <motion.div
-         key={activeSubId ?? 'none'}
-         initial={{ x: (swipeDir === 1 ? 1 : -1) * (rtl ? -1 : 1) * 34, opacity: 0 }}
-         animate={{ x: 0, opacity: 1 }}
-         transition={{ duration: duration.base, ease: easeLux }}
-       >
+      <SwipeView
+        pageKey={activeSubId ?? 'none'}
+        direction={swipeDir}
+        rtl={rtl}
+        canPrev={activeIndex > 0}
+        canNext={activeIndex < subcategories.length - 1}
+        onPaginate={goToSub}
+      >
       {(() => {
         const q = deferredSearch.trim().toLowerCase();
         let filtered = q
@@ -412,11 +368,8 @@ const CategoryPage = () => {
 
         if (view === 'grid') {
           return (
-            <motion.div
+            <div
               key={`${activeSubId}-${q}-grid`}
-              variants={staggerContainer(0.03)}
-              initial="hidden"
-              animate="show"
               className="px-4 pt-4 grid grid-cols-2 gap-3"
             >
               {filtered.map((item: MenuItemRow, i: number) => {
@@ -460,16 +413,13 @@ const CategoryPage = () => {
                   </motion.button>
                 );
               })}
-            </motion.div>
+            </div>
           );
         }
 
         return (
-          <motion.div
+          <div
             key={`${activeSubId}-${q}`}
-            variants={staggerContainer(0.04)}
-            initial="hidden"
-            animate="show"
             className="px-4 pt-4 space-y-3"
           >
             {filtered.map((item: MenuItemRow, i: number) => {
@@ -584,11 +534,10 @@ const CategoryPage = () => {
                 </motion.div>
               );
             })}
-          </motion.div>
+          </div>
         );
       })()}
-       </motion.div>
-      </div>
+      </SwipeView>
 
       <AnimatePresence>
         {selectedItem && (
