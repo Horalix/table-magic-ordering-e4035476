@@ -64,6 +64,7 @@ const MenuPager = ({ index, count, onIndexChange, children }: Props) => {
         className="flex h-full"
         style={{ x }}
         drag="x"
+        dragDirectionLock
         dragConstraints={{ left: -Math.min(index + 1, count - 1) * width, right: -Math.max(index - 1, 0) * width }}
         dragElastic={0.1}
         onDragStart={() => { dragging.current = true; }}

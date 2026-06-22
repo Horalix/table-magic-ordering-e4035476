@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef, useDeferredValue, useCallback } from 'react';
 import { motion, AnimatePresence, type Variants } from 'framer-motion';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, Plus, Minus, QrCode, Search, X, Star, LayoutGrid, List } from 'lucide-react';
+import { ArrowLeft, Plus, Minus, Search, X, Star, LayoutGrid, List } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
@@ -349,13 +349,6 @@ const CategoryPage = () => {
         <motion.div initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} className="shrink-0 mx-4 mt-3 px-3.5 py-2.5 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-between gap-3">
           <span className="text-xs font-sans text-primary flex items-center gap-2">👈👉 {t('swipe_hint')}</span>
           <button onClick={dismissHint} className="text-xs font-sans font-semibold text-primary px-2.5 py-1 rounded-lg hover:bg-primary/15">{t('got_it')}</button>
-        </motion.div>
-      )}
-
-      {!hasSession && (
-        <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} className="shrink-0 mx-4 mt-3 px-4 py-3 rounded-xl bg-accent/8 border border-accent/15 flex items-center gap-3">
-          <QrCode className="w-4 h-4 text-accent flex-shrink-0" />
-          <p className="text-xs font-sans text-accent">{t('scan_qr_order')}</p>
         </motion.div>
       )}
 

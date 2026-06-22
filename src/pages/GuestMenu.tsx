@@ -130,16 +130,6 @@ const GuestMenu = () => {
           <LanguageSelector variant="hero" />
         </motion.div>
 
-        {!hasSession && (
-          <motion.p
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.4, duration: 0.25 }}
-            className="mt-4 text-[11px] font-sans text-white/50 text-center leading-relaxed"
-          >
-            {t('scan_qr_order')}
-          </motion.p>
-        )}
 
         <motion.div
           initial={{ opacity: 0 }}
