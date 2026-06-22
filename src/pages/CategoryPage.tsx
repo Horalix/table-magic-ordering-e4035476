@@ -9,6 +9,7 @@ import { useCartStore } from '@/lib/cart-store';
 import { Skeleton } from '@/components/ui/skeleton';
 import SmartImage from '@/components/ui/SmartImage';
 import CartBar from '@/components/guest/CartBar';
+import MenuPager from '@/components/guest/MenuPager';
 import MenuItemDetail from '@/components/guest/MenuItemDetail';
 import LanguageSelector from '@/components/guest/LanguageSelector';
 import { useT, useLanguageStore, getLocalizedName, getLocalizedDescription } from '@/lib/i18n';
@@ -40,9 +41,6 @@ const CategoryPage = () => {
   const [activeDiets, setActiveDiets] = useState<string[]>([]);
   const [showHint, setShowHint] = useState(false);
   const pillRefs = useRef<Record<string, HTMLButtonElement | null>>({});
-  const trackRef = useRef<HTMLDivElement | null>(null);
-  const scrollRaf = useRef<number>();
-  const programmaticScroll = useRef(false);
   const deferredSearch = useDeferredValue(search);
   const { addItem, removeItem, updateQuantity, items: cartItems } = useCartStore();
   const t = useT();
@@ -136,45 +134,12 @@ const CategoryPage = () => {
     el?.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
   }, [activeSubId]);
 
-  // Keep the pager aligned to the active subcategory (e.g. after closing search,
-  // which remounts the track and would otherwise reset it to the first page).
-  useEffect(() => {
-    if (searching || programmaticScroll.current) return;
-    const el = trackRef.current;
-    if (!el || !el.clientWidth) return;
-    const idx = subcategories.findIndex((s) => s.id === activeSubId);
-    if (idx >= 0 && Math.round(el.scrollLeft / el.clientWidth) !== idx) {
-      el.scrollLeft = idx * el.clientWidth;
-    }
-  }, [searching, subcategories, activeSubId]);
+  const activeIndex = Math.max(0, subcategories.findIndex((s) => s.id === activeSubId));
 
-  // The pager follows the finger natively; sync the active subcategory on snap.
-  const handleTrackScroll = () => {
-    if (programmaticScroll.current) return;
-    if (scrollRaf.current) cancelAnimationFrame(scrollRaf.current);
-    scrollRaf.current = requestAnimationFrame(() => {
-      const el = trackRef.current;
-      if (!el || !el.clientWidth) return;
-      const idx = Math.round(el.scrollLeft / el.clientWidth);
-      const sub = subcategories[idx];
-      if (sub && sub.id !== activeSubId) {
-        setSelectedSubcategory(sub.id);
-        if (showHint) dismissHint();
-        if (typeof navigator !== 'undefined' && 'vibrate' in navigator) { try { navigator.vibrate(4); } catch { /* gesture-gated */ } }
-      }
-    });
-  };
-
-  const scrollToSub = (id: string) => {
-    const idx = subcategories.findIndex((s) => s.id === id);
-    const el = trackRef.current;
+  const selectSub = (id: string) => {
     setSelectedSubcategory(id);
     if (showHint) dismissHint();
-    if (el && idx >= 0) {
-      programmaticScroll.current = true;
-      el.scrollTo({ left: idx * el.clientWidth, behavior: 'smooth' });
-      window.setTimeout(() => { programmaticScroll.current = false; }, 450);
-    }
+    if (typeof navigator !== 'undefined' && 'vibrate' in navigator) { try { navigator.vibrate(4); } catch { /* gesture-gated */ } }
   };
 
   const goBack = () => {
@@ -315,7 +280,7 @@ const CategoryPage = () => {
             {subcategories.map((sub) => {
               const isActive = activeSubId === sub.id;
               return (
-                <button key={sub.id} ref={(el) => { pillRefs.current[sub.id] = el; }} onClick={() => scrollToSub(sub.id)}
+                <button key={sub.id} ref={(el) => { pillRefs.current[sub.id] = el; }} onClick={() => selectSub(sub.id)}
                   className={`relative px-4 py-2.5 rounded-full text-sm font-sans font-medium whitespace-nowrap min-h-[44px] tap ${isActive ? 'text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}`}>
                   {isActive && <motion.span layoutId="active-sub-pill" transition={springPill} className="absolute inset-0 rounded-full bg-primary shadow-sm" />}
                   <span className="relative z-10">{getLocalizedName(sub as SubcategoryRow, locale)}</span>
@@ -375,13 +340,13 @@ const CategoryPage = () => {
       ) : searching ? (
         <div className="flex-1 overflow-y-auto overscroll-y-contain pb-36">{renderItems(searchResults, true)}</div>
       ) : (
-        <div ref={trackRef} dir="ltr" onScroll={handleTrackScroll} className="flex-1 flex overflow-x-auto overflow-y-hidden snap-x snap-mandatory scrollbar-hide overscroll-x-contain">
+        <MenuPager index={activeIndex} count={subcategories.length} onIndexChange={(i) => selectSub(subcategories[i].id)}>
           {subcategories.map((sub) => (
-            <div key={sub.id} dir={rtl ? 'rtl' : 'ltr'} className="snap-start snap-always shrink-0 w-full h-full overflow-y-auto overscroll-y-contain pb-36">
+            <div key={sub.id} dir={rtl ? 'rtl' : 'ltr'} className="pb-36">
               {renderItems(filterDiet(allItems.filter((it) => it.subcategory_id === sub.id)), false)}
             </div>
           ))}
-        </div>
+        </MenuPager>
       )}
 
       <AnimatePresence>
