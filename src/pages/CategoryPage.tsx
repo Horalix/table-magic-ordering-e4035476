@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef, useDeferredValue, useCallback } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, type Variants } from 'framer-motion';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, Plus, Minus, QrCode, Search, X, Star, LayoutGrid, List } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
@@ -28,6 +28,12 @@ const categoryNameMap: Record<string, string> = {
   desserts: 'Desserts',
   dessert: 'Desserts',
 };
+
+// Staggered "grow-in" used when the layout (list/grid) mounts.
+const gridContainer: Variants = { hidden: {}, show: { transition: { staggerChildren: 0.02 } } };
+const gridItem: Variants = { hidden: { opacity: 0, scale: 0.84 }, show: { opacity: 1, scale: 1, transition: { type: 'spring', stiffness: 430, damping: 30 } } };
+const listContainer: Variants = { hidden: {}, show: { transition: { staggerChildren: 0.022 } } };
+const listItem: Variants = { hidden: { opacity: 0, y: 12, scale: 0.97 }, show: { opacity: 1, y: 0, scale: 1, transition: { duration: 0.32, ease: [0.16, 1, 0.3, 1] } } };
 
 const CategoryPage = () => {
   const { type } = useParams<{ type: string }>();
@@ -156,7 +162,7 @@ const CategoryPage = () => {
     const name = getLocalizedName(item, locale);
     const tags = getItemTags(item);
     return (
-      <button key={item.id} onClick={() => setSelectedItem(item)} className="text-left tap-sm card-lux card-lux-hover overflow-hidden">
+      <motion.button key={item.id} variants={gridItem} onClick={() => setSelectedItem(item)} className="text-left tap-sm card-lux card-lux-hover overflow-hidden">
         <div className="relative">
           <SmartImage src={item.image_url || undefined} id={item.id} alt={name} width={220} height={165} priority={i < 6} fallbackText={name} wrapperClassName="w-full aspect-[4/3]" />
           {popularIds.has(item.id) && (
@@ -179,7 +185,7 @@ const CategoryPage = () => {
           {tags.length > 0 && <span className="block text-xs mt-0.5">{tags.slice(0, 3).map((k) => DIET_BY_KEY[k]?.emoji).filter(Boolean).join(' ')}</span>}
           <p className="text-sm font-sans font-bold text-primary mt-1 tabular-nums">{Number(item.price).toFixed(2)} KM</p>
         </div>
-      </button>
+      </motion.button>
     );
   };
 
@@ -189,7 +195,7 @@ const CategoryPage = () => {
     const inCart = cartItems.find((c) => (c.menuItemId ?? c.id) === item.id && !c.notes);
     const qty = inCart?.quantity ?? 0;
     return (
-      <button key={item.id} onClick={() => setSelectedItem(item)} className="w-full text-left tap">
+      <motion.button key={item.id} variants={listItem} onClick={() => setSelectedItem(item)} className="w-full text-left tap">
         <div className="group flex gap-4 p-4 card-lux card-lux-hover">
           <SmartImage src={item.image_url || undefined} id={item.id} alt={localizedName} width={80} height={80} priority={i < 8} fallbackText={localizedName} wrapperClassName="w-20 h-20 rounded-lg flex-shrink-0" className="group-hover:scale-105 transition-transform duration-300" />
           <div className="flex-1 min-w-0">
@@ -227,11 +233,11 @@ const CategoryPage = () => {
             </div>
           )}
         </div>
-      </button>
+      </motion.button>
     );
   };
 
-  const renderItems = (list: MenuItemRow[], isSearch: boolean) => {
+  const renderItems = (list: MenuItemRow[], isSearch: boolean, animate = true) => {
     if (list.length === 0) {
       return (
         <div className="flex flex-col items-center justify-center py-20 px-6 text-center">
@@ -241,8 +247,18 @@ const CategoryPage = () => {
         </div>
       );
     }
-    if (deferredView === 'grid') return <div className="px-4 pt-4 grid grid-cols-2 gap-3">{list.map((it, i) => renderGridCard(it, i))}</div>;
-    return <div className="px-4 pt-4 space-y-3">{list.map((it, i) => renderListRow(it, i, isSearch))}</div>;
+    if (deferredView === 'grid') {
+      return (
+        <motion.div key="grid" variants={gridContainer} initial={animate ? 'hidden' : false} animate="show" className="px-4 pt-4 grid grid-cols-2 gap-3">
+          {list.map((it, i) => renderGridCard(it, i))}
+        </motion.div>
+      );
+    }
+    return (
+      <motion.div key="list" variants={listContainer} initial={animate ? 'hidden' : false} animate="show" className="px-4 pt-4 space-y-3">
+        {list.map((it, i) => renderListRow(it, i, isSearch))}
+      </motion.div>
+    );
   };
 
   // Memoize the pages so swiping between subcategories never re-renders items
@@ -353,7 +369,7 @@ const CategoryPage = () => {
           ))}
         </div>
       ) : searching ? (
-        <div className="flex-1 overflow-y-auto overscroll-y-contain pb-36">{renderItems(searchResults, true)}</div>
+        <div className="flex-1 overflow-y-auto overscroll-y-contain pb-36">{renderItems(searchResults, true, false)}</div>
       ) : (
         <MenuPager index={activeIndex} count={subcategories.length} onIndexChange={(i) => selectSub(subcategories[i].id)}>
           {pages}
