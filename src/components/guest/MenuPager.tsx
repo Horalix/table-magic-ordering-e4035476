@@ -25,6 +25,7 @@ const MenuPager = ({ index, count, onIndexChange, children }: Props) => {
   const [width, setWidth] = useState(0);
   const x = useMotionValue(0);
   const dragging = useRef(false);
+  const skipSync = useRef(false); // drag already animated x → don't re-animate
 
   useEffect(() => {
     const el = containerRef.current;
@@ -39,6 +40,7 @@ const MenuPager = ({ index, count, onIndexChange, children }: Props) => {
   // Keep the track aligned to the active page (pill taps, resize) unless the
   // user is actively dragging.
   useEffect(() => {
+    if (skipSync.current) { skipSync.current = false; return; }
     if (dragging.current || !width) { if (width) x.set(-index * width); return; }
     const controls = animate(x, -index * width, SNAP);
     return () => controls.stop();
@@ -52,8 +54,8 @@ const MenuPager = ({ index, count, onIndexChange, children }: Props) => {
     if (info.velocity.x < -FLICK_VELOCITY || info.offset.x < -width * COMMIT_RATIO) target = index + 1;
     else if (info.velocity.x > FLICK_VELOCITY || info.offset.x > width * COMMIT_RATIO) target = index - 1;
     target = Math.max(0, Math.min(count - 1, Math.max(index - 1, Math.min(index + 1, target))));
+    if (target !== index) { skipSync.current = true; onIndexChange(target); }
     animate(x, -target * width, SNAP);
-    if (target !== index) onIndexChange(target);
   }, [width, x, index, count, onIndexChange]);
 
   return (

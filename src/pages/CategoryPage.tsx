@@ -97,7 +97,9 @@ const CategoryPage = () => {
     },
     staleTime: 10 * 60 * 1000,
   });
-  const popularIds = new Set(popular.map((p) => p.menu_item_id));
+  const popularIds = useMemo(() => new Set(popular.map((p) => p.menu_item_id)), [popular]);
+  // Defer the heavy re-layout when toggling list/grid so the tap stays snappy.
+  const deferredView = useDeferredValue(view);
 
   const subNameById = useMemo(
     () => new Map(subcategories.map((s) => [s.id, getLocalizedName(s as SubcategoryRow, locale)])),
@@ -149,20 +151,6 @@ const CategoryPage = () => {
     navigate(`/menu?${params.toString()}`);
   };
 
-  if (!category) {
-    return (
-      <div className="min-h-screen bg-background">
-        <div className="px-4 py-4 flex items-center gap-3">
-          <Skeleton className="w-8 h-8 rounded-full" />
-          <Skeleton className="w-32 h-6 rounded" />
-        </div>
-        <div className="px-4 space-y-3 mt-4">
-          {[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-20 w-full rounded-xl" />)}
-        </div>
-      </div>
-    );
-  }
-
   // ---- item rendering (shared by every page + search results) ----
   const renderGridCard = (item: MenuItemRow, i: number) => {
     const name = getLocalizedName(item, locale);
@@ -170,7 +158,7 @@ const CategoryPage = () => {
     return (
       <button key={item.id} onClick={() => setSelectedItem(item)} className="text-left tap-sm card-lux card-lux-hover overflow-hidden">
         <div className="relative">
-          <SmartImage src={item.image_url || undefined} id={item.id} layoutId={`item-img-${item.id}`} alt={name} width={220} height={165} priority={i < 6} fallbackText={name} wrapperClassName="w-full aspect-[4/3]" />
+          <SmartImage src={item.image_url || undefined} id={item.id} alt={name} width={220} height={165} priority={i < 6} fallbackText={name} wrapperClassName="w-full aspect-[4/3]" />
           {popularIds.has(item.id) && (
             <span className="absolute top-1.5 left-1.5 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-gold/90 text-[10px] font-sans font-semibold text-white shadow"><Star className="w-2.5 h-2.5 fill-white" /></span>
           )}
@@ -203,7 +191,7 @@ const CategoryPage = () => {
     return (
       <button key={item.id} onClick={() => setSelectedItem(item)} className="w-full text-left tap">
         <div className="group flex gap-4 p-4 card-lux card-lux-hover">
-          <SmartImage src={item.image_url || undefined} id={item.id} layoutId={`item-img-${item.id}`} alt={localizedName} width={80} height={80} priority={i < 8} fallbackText={localizedName} wrapperClassName="w-20 h-20 rounded-lg flex-shrink-0" className="group-hover:scale-105 transition-transform duration-300" />
+          <SmartImage src={item.image_url || undefined} id={item.id} alt={localizedName} width={80} height={80} priority={i < 8} fallbackText={localizedName} wrapperClassName="w-20 h-20 rounded-lg flex-shrink-0" className="group-hover:scale-105 transition-transform duration-300" />
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
               <h3 className="font-serif text-base font-semibold text-foreground">{localizedName}</h3>
@@ -253,9 +241,36 @@ const CategoryPage = () => {
         </div>
       );
     }
-    if (view === 'grid') return <div className="px-4 pt-4 grid grid-cols-2 gap-3">{list.map((it, i) => renderGridCard(it, i))}</div>;
+    if (deferredView === 'grid') return <div className="px-4 pt-4 grid grid-cols-2 gap-3">{list.map((it, i) => renderGridCard(it, i))}</div>;
     return <div className="px-4 pt-4 space-y-3">{list.map((it, i) => renderListRow(it, i, isSearch))}</div>;
   };
+
+  // Memoize the pages so swiping between subcategories never re-renders items
+  // (only the pager transform + active pill move) — keeps the transition smooth.
+  const pages = useMemo(
+    () => subcategories.map((sub) => (
+      <div key={sub.id} dir={rtl ? 'rtl' : 'ltr'} className="pb-36">
+        {renderItems(filterDiet(allItems.filter((it) => it.subcategory_id === sub.id)), false)}
+      </div>
+    )),
+    // renderItems is recreated each render; the value deps below fully determine its output.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [subcategories, allItems, deferredView, activeDiets, locale, popularIds, cartItems, hasSession, subNameById, t, rtl],
+  );
+
+  if (!category) {
+    return (
+      <div className="min-h-screen bg-background">
+        <div className="px-4 py-4 flex items-center gap-3">
+          <Skeleton className="w-8 h-8 rounded-full" />
+          <Skeleton className="w-32 h-6 rounded" />
+        </div>
+        <div className="px-4 space-y-3 mt-4">
+          {[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-20 w-full rounded-xl" />)}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col h-[100dvh] bg-background">
@@ -341,11 +356,7 @@ const CategoryPage = () => {
         <div className="flex-1 overflow-y-auto overscroll-y-contain pb-36">{renderItems(searchResults, true)}</div>
       ) : (
         <MenuPager index={activeIndex} count={subcategories.length} onIndexChange={(i) => selectSub(subcategories[i].id)}>
-          {subcategories.map((sub) => (
-            <div key={sub.id} dir={rtl ? 'rtl' : 'ltr'} className="pb-36">
-              {renderItems(filterDiet(allItems.filter((it) => it.subcategory_id === sub.id)), false)}
-            </div>
-          ))}
+          {pages}
         </MenuPager>
       )}
 
