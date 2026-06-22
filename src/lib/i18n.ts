@@ -84,6 +84,12 @@ const translations: Record<string, Record<Locale, string>> = {
   'diet_halal': { en: 'Halal', bs: 'Halal', ar: 'حلال' },
   'sold_out': { en: 'Sold out', bs: 'Rasprodano', ar: 'نفد' },
 
+  // Single-QR table entry
+  'which_table': { en: 'Which table are you at?', bs: 'Za kojim ste stolom?', ar: 'على أي طاولة أنت؟' },
+  'which_table_sub': { en: 'Enter your table number to start ordering.', bs: 'Unesite broj stola da započnete narudžbu.', ar: 'أدخل رقم طاولتك لبدء الطلب.' },
+  'table_number_placeholder': { en: 'Table number', bs: 'Broj stola', ar: 'رقم الطاولة' },
+  'continue': { en: 'Continue', bs: 'Nastavi', ar: 'متابعة' },
+
   // Running Tab
   'running_total': { en: 'Running Total', bs: 'Ukupni račun', ar: 'المجموع الجاري' },
   'no_active_session': { en: 'No active session', bs: 'Nema aktivne sesije', ar: 'لا توجد جلسة نشطة' },

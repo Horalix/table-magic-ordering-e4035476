@@ -71,7 +71,7 @@ const MenuPager = ({ index, count, onIndexChange, children }: Props) => {
         onDragEnd={handleDragEnd}
       >
         {children.map((child, i) => (
-          <div key={i} style={{ width: width || undefined }} className="h-full shrink-0 overflow-y-auto overscroll-y-contain">
+          <div key={i} style={{ width: width || undefined, WebkitOverflowScrolling: 'touch' }} className="h-full shrink-0 overflow-y-auto overscroll-y-contain">
             {/* Only mount the active page + its neighbours; far pages stay empty
                 spacers (geometry preserved) so toggling view re-lays-out ~3
                 pages instead of all of them. */}

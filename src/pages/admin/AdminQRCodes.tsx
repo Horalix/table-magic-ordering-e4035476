@@ -3,10 +3,12 @@ import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { QRCodeSVG } from 'qrcode.react';
-import { Printer, LayoutGrid, Square } from 'lucide-react';
+import { Printer, LayoutGrid, Square, ScanLine, AlertTriangle, Copy } from 'lucide-react';
+import { toast } from 'sonner';
 import type { Database } from '@/integrations/supabase/types';
 
-type Mode = 'sheet' | 'single';
+type Mode = 'sheet' | 'single' | 'venue';
+const UNIFY_SQL = "WITH s AS (SELECT encode(gen_random_bytes(32),'hex') AS tok)\nUPDATE public.tables SET qr_token = (SELECT tok FROM s);";
 type TableRow = Database['public']['Tables']['tables']['Row'];
 
 const AdminQRCodes = () => {
@@ -23,6 +25,10 @@ const AdminQRCodes = () => {
 
   const getQRUrl = (table: TableRow) =>
     `${window.location.origin}/table/${table.table_number}?token=${table.qr_token}`;
+
+  const venueToken = tables[0]?.qr_token;
+  const venueUrl = `${window.location.origin}/start?token=${venueToken ?? ''}`;
+  const tokensUnified = tables.length > 0 && tables.every((t) => t.qr_token === venueToken);
 
   const printAll = () => window.print();
 
@@ -48,12 +54,22 @@ const AdminQRCodes = () => {
           <h1 className="font-serif text-3xl font-bold text-foreground">QR Codes</h1>
           <p className="text-sm text-muted-foreground font-sans mt-1">
             {mode === 'sheet'
-              ? 'A4 sheet — 12 stickers per page. Print, then cut along the dashed lines.'
-              : 'One large sticker per page.'}
+              ? 'A4 sheet — 12 per-table stickers. Print, then cut along the dashed lines.'
+              : mode === 'single'
+                ? 'One large per-table sticker per page.'
+                : 'One QR for the whole venue — guests pick their table after scanning.'}
           </p>
         </div>
         <div className="flex items-center gap-2">
           <div className="inline-flex rounded-md border border-border bg-card p-0.5">
+            <button
+              onClick={() => setMode('venue')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-sans transition-colors ${
+                mode === 'venue' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <ScanLine className="w-3.5 h-3.5" /> Venue QR
+            </button>
             <button
               onClick={() => setMode('sheet')}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-sans transition-colors ${
@@ -68,7 +84,7 @@ const AdminQRCodes = () => {
                 mode === 'single' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'
               }`}
             >
-              <Square className="w-3.5 h-3.5" /> Single
+              <Square className="w-3.5 h-3.5" /> Per table
             </button>
           </div>
           <Button onClick={printAll} className="font-sans" size="sm">
@@ -76,6 +92,38 @@ const AdminQRCodes = () => {
           </Button>
         </div>
       </div>
+
+      {/* ===== VENUE MODE (single QR for the whole place) ===== */}
+      {mode === 'venue' && (
+        <div className="max-w-md mx-auto">
+          {!tokensUnified && tables.length > 0 && (
+            <div className="mb-4 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3.5 text-xs font-sans text-amber-700 dark:text-amber-400 no-print">
+              <p className="font-semibold flex items-center gap-1.5"><AlertTriangle className="w-4 h-4" /> One-time step to enable the single QR</p>
+              <p className="mt-1.5 text-foreground/70">So one QR works for every table, all tables must share a token. Run this once (Supabase → SQL, or Lovable), then refresh:</p>
+              <div className="mt-2 flex items-stretch gap-2">
+                <code className="flex-1 bg-card border border-border rounded p-2 break-all text-[11px] text-foreground/80 whitespace-pre-wrap">{UNIFY_SQL}</code>
+                <Button type="button" variant="outline" size="sm" className="shrink-0" onClick={() => { navigator.clipboard.writeText(UNIFY_SQL).then(() => toast.success('Copied')); }}>
+                  <Copy className="w-3.5 h-3.5" />
+                </Button>
+              </div>
+            </div>
+          )}
+          <Card className="border-border">
+            <CardContent className="p-6 flex flex-col items-center text-center qr-card" id="qr-card-venue">
+              <p className="font-serif text-xs tracking-[0.2em] uppercase text-muted-foreground mb-3 qr-brand">La Soul</p>
+              <div className="p-4 bg-white rounded-xl">
+                <QRCodeSVG value={venueUrl} size={210} level="H" />
+              </div>
+              <p className="font-serif text-2xl font-bold text-foreground mt-4 qr-table-label">Scan to order</p>
+              <div className="w-8 h-px bg-primary/30 mx-auto my-2 qr-divider" />
+              <p className="text-[11px] text-muted-foreground font-sans qr-subtitle">Choose your table after scanning</p>
+              <Button onClick={printAll} variant="ghost" size="sm" className="mt-4 text-xs font-sans no-print">
+                <Printer className="w-3 h-3 mr-1" /> Print
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
       {/* ===== SHEET MODE (multi-up A4) ===== */}
       {mode === 'sheet' && (

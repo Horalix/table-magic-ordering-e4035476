@@ -12,6 +12,7 @@ const CategoryPage = lazy(() => import("./pages/CategoryPage"));
 const CartPage = lazy(() => import("./pages/CartPage"));
 const RunningTabPage = lazy(() => import("./pages/RunningTabPage"));
 const TableEntry = lazy(() => import("./pages/TableEntry"));
+const TableNumberEntry = lazy(() => import("./pages/TableNumberEntry"));
 const Trust = lazy(() => import("./pages/Trust"));
 const PageTransition = lazy(() => import("./components/PageTransition"));
 const TablePresence = lazy(() => import("./components/guest/TablePresence"));
@@ -72,6 +73,7 @@ const App = () => (
             <Route path="/cart" element={<PageTransition><CartPage /></PageTransition>} />
             <Route path="/tab" element={<PageTransition><RunningTabPage /></PageTransition>} />
             <Route path="/table/:tableNumber" element={<TableEntry />} />
+            <Route path="/start" element={<TableNumberEntry />} />
             <Route path="/privacy" element={<PageTransition><Trust /></PageTransition>} />
 
             {/* Admin Routes */}
