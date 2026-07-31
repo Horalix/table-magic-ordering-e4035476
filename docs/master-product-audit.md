@@ -372,6 +372,14 @@ quantity. No allergens, no portion info, no modifiers, no pairing.
 `locale: 'en'` for Arabic (`MonriCardForm.tsx:88`) and several layouts use
 `ml-auto` / `-ml-2` rather than logical properties.
 
+Also — found later, by the E2E suite — `document.documentElement.lang` was set
+only for Arabic, so a fully Bosnian page announced itself to screen readers as
+English. Fixed for every locale.
+
+The Monri locale fallback remains: whether the Components SDK supports an
+Arabic locale is a question for Monri, and guessing a locale string that the
+SDK rejects would break the card form entirely. Revisit during sandbox testing.
+
 ### P2-26 — Accessibility gaps
 
 Touch targets are mostly ≥44 px (good). But: order status is communicated by colour
@@ -470,8 +478,8 @@ specifically *La Soul*, not template. Motion is tasteful and mostly transform-on
 | P2-18 | P2 | Operations | No refund/cancellation model | **Fixed** (model + adapter; provider call gated) |
 | P2-19 | P2 | Waiter | Waiter payment clarity | **Fixed** |
 | P2-23 | P2 | Discovery | Search is category-scoped only | **Fixed** (global search added) |
-| P2-24 | P2 | Discovery | Thin product detail | Partially — allergens/pairing added |
-| P2-25 | P2 | i18n | Arabic RTL gaps | **Fixed** (locale passthrough + logical props) |
+| P2-24 | P2 | Discovery | Thin product detail | Partially — allergens, portion and prep time added; no modifiers |
+| P2-25 | P2 | i18n | Arabic RTL gaps | Partially — `lang` fixed for every locale, logical properties in rebuilt components; the Monri form still falls back to English |
 | P2-26 | P2 | A11y | Colour-only status, modal semantics | **Fixed** |
 | P2-30 | P2 | Analytics | No measurement | **Fixed** |
 | P2-32 | P2 | Motion | No reduced-motion support | **Fixed** |

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { X, Plus, Minus, QrCode, UtensilsCrossed } from 'lucide-react';
+import { X, Plus, Minus, QrCode, UtensilsCrossed, AlertTriangle } from 'lucide-react';
 import { useCartStore } from '@/lib/cart-store';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -20,6 +20,11 @@ interface Props {
     description_bs?: string;
     price: number;
     image_url?: string;
+    /** Free-text portion or size note, e.g. "330 ml" or "serves two". */
+    portion_note?: string | null;
+    /** Allergen keys. Shown verbatim — this is a safety field, not marketing. */
+    allergens?: string[] | null;
+    prep_minutes?: number | null;
   };
   onClose: () => void;
   canOrder?: boolean;
@@ -108,6 +113,28 @@ const MenuItemDetail = ({ item, onClose, canOrder = true }: Props) => {
             <p className="text-sm text-muted-foreground font-sans mt-2 leading-relaxed">{localizedDesc}</p>
           )}
           <p className="text-lg font-sans font-bold text-primary mt-3">{item.price.toFixed(2)} KM</p>
+
+          {/* Portion and prep time answer "how big is it?" and "how long?" —
+              the two questions a guest otherwise has to ask a waiter. */}
+          {(item.portion_note || item.prep_minutes) && (
+            <p className="text-xs text-muted-foreground font-sans mt-1.5">
+              {[item.portion_note, item.prep_minutes ? `~${item.prep_minutes} min` : null]
+                .filter(Boolean)
+                .join(' · ')}
+            </p>
+          )}
+
+          {/* Allergens are a safety field: always shown in full, never
+              abbreviated, never behind a tap. */}
+          {item.allergens && item.allergens.length > 0 && (
+            <div className="mt-3 rounded-xl border border-accent/25 bg-accent/5 p-3">
+              <p className="text-[11px] uppercase tracking-wide font-sans font-semibold text-accent flex items-center gap-1.5">
+                <AlertTriangle className="w-3.5 h-3.5" aria-hidden /> {t('allergens')}
+              </p>
+              <p className="text-sm font-sans text-foreground mt-1">{item.allergens.join(', ')}</p>
+              <p className="text-[11px] font-sans text-muted-foreground mt-1">{t('allergens_ask_staff')}</p>
+            </div>
+          )}
 
           {canOrder ? (
             <>

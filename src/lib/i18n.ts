@@ -299,6 +299,10 @@ const translations: Record<string, Record<Locale, string>> = {
   'increase': { en: 'One more', bs: 'Još jedan', ar: 'واحد إضافي' },
   'decrease': { en: 'One fewer', bs: 'Jedan manje', ar: 'واحد أقل' },
   'undo_remove': { en: 'Undo', bs: 'Vrati', ar: 'تراجع' },
+
+  // ---- Allergens (a safety field, never abbreviated)
+  'allergens': { en: 'Allergens', bs: 'Alergeni', ar: 'مسببات الحساسية' },
+  'allergens_ask_staff': { en: 'Please tell your waiter about any allergy before ordering.', bs: 'Molimo obavijestite konobara o alergijama prije narudžbe.', ar: 'يرجى إبلاغ النادل بأي حساسية قبل الطلب.' },
 };
 
 export function t(key: string): string {
