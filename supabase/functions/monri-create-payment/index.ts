@@ -1,9 +1,18 @@
+/**
+ * Start a Monri card payment for an existing awaiting_payment order.
+ *
+ * This function never decides that money arrived — it only opens an attempt.
+ * All state changes go through SECURITY DEFINER RPCs, which are the only
+ * things allowed to touch financial columns (see 20260731090100_payment_safety).
+ *
+ * Idempotency: monri_register_attempt returns the existing live attempt for
+ * the same order and amount, so a double-tapped Pay button, a refresh, or a
+ * retried request all reuse one Monri order number instead of creating a
+ * second chargeable payment.
+ */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+import { corsHeaders, json } from "../_shared/http.ts";
+import { authorizationHeader, monriBaseUrl, monriEnvironment } from "../_shared/monri.ts";
 
 interface Body {
   order_id?: string;
@@ -13,31 +22,11 @@ interface Body {
   transaction_type?: "purchase" | "authorize";
 }
 
-const json = (body: unknown, status = 200) =>
-  new Response(JSON.stringify(body), {
-    status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
-  });
-
-const sha512Hex = async (value: string) => {
-  const data = new TextEncoder().encode(value);
-  const hash = await crypto.subtle.digest("SHA-512", data);
-  return Array.from(new Uint8Array(hash))
-    .map((byte) => byte.toString(16).padStart(2, "0"))
-    .join("");
-};
-
-const monriBaseUrl = () => {
-  const configured = Deno.env.get("MONRI_API_BASE_URL");
-  if (configured) return configured.replace(/\/$/, "");
-  return Deno.env.get("MONRI_ENVIRONMENT") === "production"
-    ? "https://ipg.monri.com"
-    : "https://ipgtest.monri.com";
-};
+const CREATE_PATH = "/v2/payment/new";
 
 Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
-  if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
+  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders(req) });
+  if (req.method !== "POST") return json(req, { error: "Method not allowed" }, 405);
 
   try {
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
@@ -46,121 +35,122 @@ Deno.serve(async (req) => {
     const MONRI_AUTHENTICITY_TOKEN = Deno.env.get("MONRI_AUTHENTICITY_TOKEN");
 
     if (!MONRI_MERCHANT_KEY || !MONRI_AUTHENTICITY_TOKEN) {
-      return json({ error: "Monri is not configured" }, 501);
+      return json(req, { error: "card_unavailable", reason: "not_configured" }, 503);
     }
 
     const body: Body = await req.json().catch(() => ({}));
     if (!body.order_id || !body.session_id || !body.session_token) {
-      return json({ error: "order_id, session_id and session_token are required" }, 400);
+      return json(req, { error: "order_id, session_id and session_token are required" }, 400);
     }
 
     const admin = createClient(SUPABASE_URL, SERVICE_ROLE, {
       auth: { autoRefreshToken: false, persistSession: false },
     });
 
-    const { data: order, error: orderError } = await admin
-      .from("orders")
-      .select("id,total,payment_status,table_session_id,table_sessions!inner(id,token,is_active,tables(table_number))")
-      .eq("id", body.order_id)
-      .eq("table_session_id", body.session_id)
-      .maybeSingle();
+    // Session validation, order eligibility, amount calculation and attempt
+    // de-duplication all happen server-side inside this one call.
+    const { data: attempt, error: attemptError } = await admin.rpc("monri_register_attempt", {
+      _order_id: body.order_id,
+      _session_id: body.session_id,
+      _session_token: body.session_token,
+      _currency: (body.currency || Deno.env.get("MONRI_CURRENCY") || "BAM").toUpperCase(),
+      _transaction_type: body.transaction_type === "authorize" ? "authorize" : "purchase",
+    });
 
-    if (orderError) throw orderError;
-    if (!order || !order.table_sessions?.is_active || order.table_sessions.token !== body.session_token) {
-      return json({ error: "Invalid or expired table session" }, 403);
+    if (attemptError) throw attemptError;
+
+    switch (attempt?.status) {
+      case "ok":
+        break;
+      case "card_disabled":
+        return json(req, { error: "card_unavailable", reason: "disabled" }, 503);
+      case "invalid_session":
+        return json(req, { error: "invalid_session" }, 403);
+      case "order_not_found":
+        return json(req, { error: "order_not_found" }, 404);
+      case "already_paid":
+        return json(req, { error: "already_paid" }, 409);
+      case "not_payable":
+        return json(req, { error: "not_payable", order_status: attempt.order_status }, 409);
+      default:
+        return json(req, { error: "attempt_failed", detail: attempt?.status ?? "unknown" }, 500);
     }
-    if (order.payment_status === "paid") {
-      return json({ error: "Order is already paid" }, 409);
+
+    // Reusing a live attempt: hand back the client secret we already have
+    // rather than opening a second payment at the provider.
+    if (attempt.reuse && attempt.provider_payload?.client_secret) {
+      return json(req, {
+        ok: true,
+        reused: true,
+        payment_transaction_id: attempt.payment_transaction_id,
+        monri_order_number: attempt.monri_order_number,
+        client_secret: attempt.provider_payload.client_secret,
+        authenticity_token: MONRI_AUTHENTICITY_TOKEN,
+        environment: monriEnvironment(),
+        amount_minor: attempt.amount_minor,
+        currency: attempt.currency,
+      });
     }
 
-    const amountMinor = Math.round(Number(order.total) * 100);
-    if (!Number.isFinite(amountMinor) || amountMinor <= 0) {
-      return json({ error: "Invalid order total" }, 400);
-    }
-
-    const currency = (body.currency || Deno.env.get("MONRI_CURRENCY") || "BAM").toUpperCase();
-    const transactionType = body.transaction_type || "purchase";
-    const monriOrderNumber = `LS-${order.id.slice(0, 8)}-${Date.now().toString(36)}`;
-
-    const { data: paymentAttempt, error: txError } = await admin
-      .from("payment_transactions")
-      .insert({
-        order_id: order.id,
-        monri_order_number: monriOrderNumber,
-        amount_minor: amountMinor,
-        currency,
-        transaction_type: transactionType,
-        status: "created",
-      })
-      .select("id")
-      .single();
-
-    if (txError) throw txError;
-
-    const fullPath = "/v2/payment/new";
-    const callbackUrl = Deno.env.get("MONRI_CALLBACK_URL");
     const payload: Record<string, unknown> = {
-      amount: amountMinor,
-      order_number: monriOrderNumber,
-      currency,
-      transaction_type: transactionType,
-      order_info: `La Soul order ${order.id}`,
+      amount: attempt.amount_minor,
+      order_number: attempt.monri_order_number,
+      currency: attempt.currency,
+      transaction_type: body.transaction_type === "authorize" ? "authorize" : "purchase",
+      order_info: `La Soul order ${attempt.monri_order_number}`,
     };
+    const callbackUrl = Deno.env.get("MONRI_CALLBACK_URL");
     if (callbackUrl) payload.callback_url_override = callbackUrl;
 
     const requestBody = JSON.stringify(payload);
-    const timestamp = Math.floor(Date.now() / 1000).toString();
-    const digest = await sha512Hex(
-      MONRI_MERCHANT_KEY + timestamp + MONRI_AUTHENTICITY_TOKEN + fullPath + requestBody,
+    const authorization = await authorizationHeader(
+      MONRI_MERCHANT_KEY,
+      MONRI_AUTHENTICITY_TOKEN,
+      CREATE_PATH,
+      requestBody,
     );
 
-    const monriResponse = await fetch(`${monriBaseUrl()}${fullPath}`, {
+    const monriResponse = await fetch(`${monriBaseUrl()}${CREATE_PATH}`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "application/json",
-        Authorization: `WP3-v2.1 ${MONRI_AUTHENTICITY_TOKEN} ${timestamp} ${digest}`,
-      },
+      headers: { "Content-Type": "application/json", Accept: "application/json", Authorization: authorization },
       body: requestBody,
     });
 
     const responseBody = await monriResponse.json().catch(() => ({}));
+    const ok = monriResponse.ok && responseBody?.status !== "error" && !!responseBody?.client_secret;
 
-    if (!monriResponse.ok || responseBody.status === "error") {
-      await admin
-        .from("payment_transactions")
-        .update({ status: "error", provider_payload: responseBody, updated_at: new Date().toISOString() })
-        .eq("id", paymentAttempt.id);
-      return json({ error: "Monri payment creation failed", details: responseBody }, 502);
+    await admin.rpc("monri_record_attempt_response", {
+      _payment_transaction_id: attempt.payment_transaction_id,
+      _ok: ok,
+      _monri_payment_id: typeof responseBody?.id === "string" ? responseBody.id : null,
+      _payload: responseBody ?? {},
+    });
+
+    if (!ok) {
+      // Deliberately do not forward the provider body to the browser; it can
+      // contain merchant-side detail the guest has no business seeing.
+      console.error("monri create-payment failed", {
+        http: monriResponse.status,
+        status: responseBody?.status,
+        order_number: attempt.monri_order_number,
+      });
+      return json(req, { error: "payment_start_failed" }, 502);
     }
 
-    await admin
-      .from("payment_transactions")
-      .update({
-        monri_payment_id: responseBody.id ?? null,
-        status: "pending",
-        provider_payload: responseBody,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", paymentAttempt.id);
-
-    await admin
-      .from("orders")
-      .update({ payment_method: "card", payment_status: "pending" })
-      .eq("id", order.id);
-
-    return json({
+    return json(req, {
       ok: true,
-      payment_transaction_id: paymentAttempt.id,
-      monri_payment_id: responseBody.id,
-      monri_order_number: monriOrderNumber,
+      reused: false,
+      payment_transaction_id: attempt.payment_transaction_id,
+      monri_payment_id: responseBody.id ?? null,
+      monri_order_number: attempt.monri_order_number,
       client_secret: responseBody.client_secret,
       authenticity_token: MONRI_AUTHENTICITY_TOKEN,
-      environment: Deno.env.get("MONRI_ENVIRONMENT") === "production" ? "production" : "test",
+      environment: monriEnvironment(),
+      amount_minor: attempt.amount_minor,
+      currency: attempt.currency,
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Server error";
-    return json({ error: message }, 500);
+    console.error("monri-create-payment error", error);
+    return json(req, { error: "server_error" }, 500);
   }
 });
-
