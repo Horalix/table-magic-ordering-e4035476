@@ -88,7 +88,6 @@ const translations: Record<string, Record<Locale, string>> = {
   'which_table': { en: 'Which table are you at?', bs: 'Za kojim ste stolom?', ar: 'على أي طاولة أنت؟' },
   'which_table_sub': { en: 'Enter your table number to start ordering.', bs: 'Unesite broj stola da započnete narudžbu.', ar: 'أدخل رقم طاولتك لبدء الطلب.' },
   'table_number_placeholder': { en: 'Table number', bs: 'Broj stola', ar: 'رقم الطاولة' },
-  'continue': { en: 'Continue', bs: 'Nastavi', ar: 'متابعة' },
 
   // Running Tab
   'running_total': { en: 'Running Total', bs: 'Ukupni račun', ar: 'المجموع الجاري' },

@@ -8,11 +8,16 @@
     "build": "vite build",
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
+    "typecheck": "tsc -p tsconfig.app.json --noEmit",
     "preview": "vite preview",
     "images": "node scripts/fetch-images.mjs",
     "icons": "node scripts/gen-icons.mjs",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "scan:secrets": "node scripts/scan-secrets.mjs",
+    "verify": "npm run typecheck && npm run lint && npm run test && npm run scan:secrets && npm run build"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
