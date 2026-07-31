@@ -4,6 +4,7 @@ import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, Plus, Minus, Search, X, Star, LayoutGrid, List } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { toast } from 'sonner';
+import { track } from '@/lib/analytics';
 import { supabase } from '@/integrations/supabase/client';
 import { useCartStore } from '@/lib/cart-store';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -49,12 +50,16 @@ const CategoryPage = () => {
   const pillRefs = useRef<Record<string, HTMLButtonElement | null>>({});
   const deferredSearch = useDeferredValue(search);
   const { addItem, removeItem, updateQuantity, items: cartItems } = useCartStore();
+  const storeSessionId = useCartStore((s) => s.sessionId);
+  const storeSessionToken = useCartStore((s) => s.sessionToken);
+  const storeTableNumber = useCartStore((s) => s.tableNumber);
   const t = useT();
   const locale = useLanguageStore((s) => s.locale);
 
-  const table = searchParams.get('table');
+  // The session lives in the store, not the URL — see the note in GuestMenu.
+  const table = searchParams.get('table') ?? (storeTableNumber ? String(storeTableNumber) : null);
   const token = searchParams.get('token');
-  const hasSession = !!(table && token);
+  const hasSession = !!(storeSessionId && storeSessionToken);
   const rtl = locale === 'ar';
 
   const categoryName = categoryNameMap[type || ''] || type;
@@ -174,6 +179,7 @@ const CategoryPage = () => {
               onClick={(e) => {
                 e.stopPropagation();
                 addItem({ id: item.id, name: item.name, price: Number(item.price), image_url: item.image_url || undefined });
+                track('item_added', { item_id: item.id, source: 'grid' });
                 toast.success(t('added_to_order'), { description: name, duration: 1400 });
                 if (typeof navigator !== 'undefined' && 'vibrate' in navigator) { try { navigator.vibrate(8); } catch { /* gesture-gated */ } }
               }}
@@ -226,6 +232,7 @@ const CategoryPage = () => {
                 <button type="button" aria-label={`${t('add_to_order')} ${localizedName}`} onClick={(e) => {
                   e.stopPropagation();
                   addItem({ id: item.id, name: item.name, price: Number(item.price), image_url: item.image_url || undefined });
+                  track('item_added', { item_id: item.id, source: 'list' });
                   toast.success(t('added_to_order'), { description: localizedName, duration: 1600 });
                   if (typeof navigator !== 'undefined' && 'vibrate' in navigator) { try { navigator.vibrate(8); } catch { /* gesture-gated */ } }
                 }} className="w-10 h-10 rounded-full bg-primary/10 text-primary flex items-center justify-center hover:bg-primary hover:text-primary-foreground active:scale-90 transition-all duration-150 min-w-[44px] min-h-[44px] tap-sm"><Plus className="w-4 h-4" /></button>

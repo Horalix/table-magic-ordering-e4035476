@@ -9,15 +9,18 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
-import { Trash2, Check } from 'lucide-react';
+import { Ban, Check, Banknote, Smartphone } from 'lucide-react';
 import PaymentBadge from '@/components/PaymentBadge';
 import { toast } from 'sonner';
+import { cancelOrder, recordTablePayment, setFiscalization, updateOrderStatus } from '@/lib/staff-api';
 import type { Database } from '@/integrations/supabase/types';
 
 type OrderStatus = Database['public']['Enums']['order_status'];
 type OrderFilter = OrderStatus | 'all';
 type AdminOrder = Database['public']['Tables']['orders']['Row'] & {
   fiscalized?: boolean | null;
+  fiscalization_status?: string | null;
+  order_code?: string | null;
   table_sessions?: { tables?: { table_number?: number | null } | null } | null;
   order_items?: (Database['public']['Tables']['order_items']['Row'] & { menu_items?: { name?: string | null } | null })[] | null;
 };
@@ -52,37 +55,61 @@ const AdminOrders = () => {
     return () => { supabase.removeChannel(channel); };
   }, [fetchOrders]);
 
-  const updateStatus = async (orderId: string, status: OrderStatus) => {
-    await supabase.from('orders').update({ status }).eq('id', orderId);
-    await fetchOrders();
+  const run = async (action: () => Promise<unknown>, success: string) => {
+    try {
+      await action();
+      toast.success(success);
+      await fetchOrders();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Action failed');
+      await fetchOrders();
+    }
   };
 
-  // Mark an order as rung into the certified fiscal POS (reconciliation).
-  const toggleFiscalized = async (order: AdminOrder) => {
-    const next = !order.fiscalized;
-    setOrders((prev) => prev.map((o) => o.id === order.id ? { ...o, fiscalized: next } : o)); // optimistic
-    const { error } = await supabase.from('orders')
-      .update({ fiscalized: next, fiscalized_at: next ? new Date().toISOString() : null } as never)
-      .eq('id', order.id);
-    if (error) { toast.error(error.message); void fetchOrders(); }
+  const updateStatus = (orderId: string, status: OrderStatus) =>
+    run(() => updateOrderStatus(orderId, status), `Marked ${status}`);
+
+  /** Record that the guest settled in the room — cash and POS stay distinct. */
+  const markPaid = (order: AdminOrder, method: 'cash' | 'pos_terminal') =>
+    run(() => recordTablePayment(order.id, method),
+      method === 'cash' ? 'Recorded as paid in cash' : 'Recorded as paid on the terminal');
+
+  /** Rung into the certified fiscal POS. Not a fiscalisation itself — see docs/fiscalization-workflow.md. */
+  const toggleFiscalized = (order: AdminOrder) => {
+    const fiscalized = (order.fiscalization_status ?? (order.fiscalized ? 'fiscalized' : 'not_fiscalized')) === 'fiscalized';
+    return run(
+      () => setFiscalization(order.id, fiscalized ? 'not_fiscalized' : 'fiscalized'),
+      fiscalized ? 'Fiscalization cleared' : 'Marked fiscalized',
+    );
   };
 
-  const deleteOrder = async (orderId: string) => {
-    const { error: e1 } = await supabase.from('order_items').delete().eq('order_id', orderId);
-    if (e1) { toast.error(e1.message); return; }
-    const { error: e2 } = await supabase.from('orders').delete().eq('id', orderId);
-    if (e2) { toast.error(e2.message); return; }
-    toast.success('Order deleted');
-    await fetchOrders();
-  };
+  /**
+   * Orders are never deleted. A cancelled order with a reason keeps the
+   * financial record intact for reconciliation and for the audit log.
+   */
+  const voidOrder = (orderId: string, reason: string) =>
+    run(() => cancelOrder(orderId, reason), 'Order cancelled');
 
   const statusColors: Record<OrderStatus, string> = {
+    awaiting_payment: 'bg-accent/10 text-accent',
+    payment_failed: 'bg-destructive/10 text-destructive',
     pending: 'bg-destructive/10 text-destructive',
     confirmed: 'bg-accent/10 text-accent',
     preparing: 'bg-gold/10 text-gold',
     ready: 'bg-primary/10 text-primary',
     served: 'bg-muted text-muted-foreground',
     cancelled: 'bg-muted text-muted-foreground line-through',
+  };
+
+  const statusLabels: Record<OrderStatus, string> = {
+    awaiting_payment: 'Awaiting payment',
+    payment_failed: 'Payment failed',
+    pending: 'New',
+    confirmed: 'Confirmed',
+    preparing: 'Preparing',
+    ready: 'Ready',
+    served: 'Served',
+    cancelled: 'Cancelled',
   };
 
   return (
@@ -93,7 +120,9 @@ const AdminOrders = () => {
           <SelectTrigger className="w-[150px] font-sans"><SelectValue /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Orders</SelectItem>
-            <SelectItem value="pending">Pending</SelectItem>
+            <SelectItem value="awaiting_payment">Awaiting payment</SelectItem>
+            <SelectItem value="payment_failed">Payment failed</SelectItem>
+            <SelectItem value="pending">New</SelectItem>
             <SelectItem value="confirmed">Confirmed</SelectItem>
             <SelectItem value="preparing">Preparing</SelectItem>
             <SelectItem value="ready">Ready</SelectItem>
@@ -118,15 +147,20 @@ const AdminOrders = () => {
                     <span className="font-serif font-bold text-foreground">
                       Table {order.table_sessions?.tables?.table_number}
                     </span>
+                    {order.order_code && (
+                      <span className="text-xs font-sans font-semibold tabular-nums tracking-wider px-2 py-0.5 rounded-full bg-muted text-foreground">
+                        #{order.order_code}
+                      </span>
+                    )}
                     {order.guest_name && (
                       <span className="text-sm font-sans text-muted-foreground">- {order.guest_name}</span>
                     )}
-                    <Badge className={`text-xs ${statusColors[order.status]}`}>{order.status}</Badge>
+                    <Badge className={`text-xs ${statusColors[order.status]}`}>{statusLabels[order.status]}</Badge>
                     <PaymentBadge method={order.payment_method} status={order.payment_status} />
                     {order.status !== 'cancelled' && (
                       <button
                         onClick={() => toggleFiscalized(order)}
-                        title="Mark as rung into the fiscal POS"
+                        title="Mark as rung into the certified fiscal POS"
                         className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-sans font-medium transition-colors ${order.fiscalized ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground hover:bg-muted/70 border border-dashed border-border'}`}
                       >
                         {order.fiscalized ? <><Check className="w-3 h-3" /> Fiscalized</> : 'Mark fiscalized'}
@@ -146,25 +180,33 @@ const AdminOrders = () => {
                 </div>
                 <div className="flex items-start gap-2">
                   <p className="font-serif font-bold text-foreground">{Number(order.total).toFixed(2)} KM</p>
-                  <AlertDialog>
-                    <AlertDialogTrigger asChild>
-                      <Button variant="ghost" size="icon" className="h-7 w-7" aria-label={`Delete order ${order.id}`}>
-                        <Trash2 className="w-4 h-4 text-destructive" />
-                      </Button>
-                    </AlertDialogTrigger>
-                    <AlertDialogContent>
-                      <AlertDialogHeader>
-                        <AlertDialogTitle>Delete this order?</AlertDialogTitle>
-                        <AlertDialogDescription>
-                          Permanently removes the order and its items. This cannot be undone.
-                        </AlertDialogDescription>
-                      </AlertDialogHeader>
-                      <AlertDialogFooter>
-                        <AlertDialogCancel>Cancel</AlertDialogCancel>
-                        <AlertDialogAction onClick={() => deleteOrder(order.id)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Delete</AlertDialogAction>
-                      </AlertDialogFooter>
-                    </AlertDialogContent>
-                  </AlertDialog>
+                  {order.status !== 'cancelled' && (
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button variant="ghost" size="icon" className="h-7 w-7" aria-label={`Cancel order ${order.order_code ?? order.id}`}>
+                          <Ban className="w-4 h-4 text-destructive" />
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>Cancel this order?</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            The order stays in the records as cancelled so the day still reconciles.
+                            {order.payment_status === 'paid' && ' This order is paid — you will need to refund it separately.'}
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Keep order</AlertDialogCancel>
+                          <AlertDialogAction
+                            onClick={() => voidOrder(order.id, 'Cancelled by manager from Orders')}
+                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                          >
+                            Cancel order
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
+                  )}
                 </div>
               </div>
 
@@ -177,13 +219,22 @@ const AdminOrders = () => {
                 ))}
               </div>
 
-              {order.status !== 'served' && order.status !== 'cancelled' && (
-                <div className="flex gap-2 mt-3">
+              {order.status === 'awaiting_payment' && (
+                <p className="mt-3 text-xs font-sans text-accent">
+                  Held for online payment — not sent to the kitchen. It is released automatically when the
+                  payment is confirmed, or when a waiter records payment at the table.
+                </p>
+              )}
+              {order.status === 'payment_failed' && (
+                <p className="mt-3 text-xs font-sans text-destructive">
+                  The card was not charged and the kitchen has not seen this order.
+                </p>
+              )}
+
+              {!['served', 'cancelled', 'awaiting_payment', 'payment_failed'].includes(order.status) && (
+                <div className="flex gap-2 mt-3 flex-wrap">
                   {order.status === 'pending' && (
-                    <>
-                      <Button size="sm" className="font-sans text-xs" onClick={() => updateStatus(order.id, 'confirmed')}>Confirm</Button>
-                      <Button size="sm" variant="destructive" className="font-sans text-xs" onClick={() => updateStatus(order.id, 'cancelled')}>Cancel</Button>
-                    </>
+                    <Button size="sm" className="font-sans text-xs" onClick={() => updateStatus(order.id, 'confirmed')}>Confirm</Button>
                   )}
                   {order.status === 'confirmed' && (
                     <Button size="sm" className="font-sans text-xs" onClick={() => updateStatus(order.id, 'preparing')}>Start Preparing</Button>
@@ -194,6 +245,19 @@ const AdminOrders = () => {
                   {order.status === 'ready' && (
                     <Button size="sm" className="font-sans text-xs" onClick={() => updateStatus(order.id, 'served')}>Mark Served</Button>
                   )}
+                </div>
+              )}
+
+              {/* Settling in the room. Two distinct buttons, because the cash
+                  drawer and the POS terminal reconcile against different things. */}
+              {order.payment_status !== 'paid' && !['cancelled', 'awaiting_payment'].includes(order.status) && (
+                <div className="flex gap-2 mt-2 flex-wrap">
+                  <Button size="sm" variant="outline" className="font-sans text-xs gap-1.5" onClick={() => markPaid(order, 'cash')}>
+                    <Banknote className="w-3.5 h-3.5" /> Paid cash
+                  </Button>
+                  <Button size="sm" variant="outline" className="font-sans text-xs gap-1.5" onClick={() => markPaid(order, 'pos_terminal')}>
+                    <Smartphone className="w-3.5 h-3.5" /> Paid on terminal
+                  </Button>
                 </div>
               )}
             </CardContent>

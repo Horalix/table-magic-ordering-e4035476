@@ -76,8 +76,57 @@ export type Database = {
         }
         Relationships: []
       }
+      menu_item_recommendations: {
+        Row: {
+          created_at: string
+          enabled: boolean
+          end_time: string | null
+          id: string
+          language: string | null
+          priority: number
+          recommendation_type: string
+          recommended_item_id: string
+          source_item_id: string | null
+          source_subcategory_id: string | null
+          start_time: string | null
+        }
+        Insert: {
+          created_at?: string
+          enabled?: boolean
+          end_time?: string | null
+          id?: string
+          language?: string | null
+          priority?: number
+          recommendation_type?: string
+          recommended_item_id: string
+          source_item_id?: string | null
+          source_subcategory_id?: string | null
+          start_time?: string | null
+        }
+        Update: {
+          created_at?: string
+          enabled?: boolean
+          end_time?: string | null
+          id?: string
+          language?: string | null
+          priority?: number
+          recommendation_type?: string
+          recommended_item_id?: string
+          source_item_id?: string | null
+          source_subcategory_id?: string | null
+          start_time?: string | null
+        }
+        Relationships: []
+      }
       menu_items: {
         Row: {
+          allergens: string[]
+          available_from: string | null
+          available_to: string | null
+          margin_score: number
+          merchandising_tags: string[]
+          portion_note: string | null
+          prep_minutes: number | null
           created_at: string
           description: string | null
           description_ar: string | null
@@ -247,6 +296,20 @@ export type Database = {
           assigned_waiter_id: string | null
           confirmed_at: string | null
           created_at: string
+          cancel_reason: string | null
+          cancelled_at: string | null
+          cancelled_by: string | null
+          fiscal_provider_reference: string | null
+          fiscal_receipt_number: string | null
+          fiscalization_error: string | null
+          fiscalization_status: string
+          fiscalized_by: string | null
+          order_code: string | null
+          paid_at: string | null
+          paid_by: string | null
+          payment_note: string | null
+          refunded_amount: number
+          released_to_kitchen_at: string | null
           fiscalized: boolean
           fiscalized_at: string | null
           guest_name: string | null
@@ -267,6 +330,20 @@ export type Database = {
           assigned_waiter_id?: string | null
           confirmed_at?: string | null
           created_at?: string
+          cancel_reason?: string | null
+          cancelled_at?: string | null
+          cancelled_by?: string | null
+          fiscal_provider_reference?: string | null
+          fiscal_receipt_number?: string | null
+          fiscalization_error?: string | null
+          fiscalization_status?: string
+          fiscalized_by?: string | null
+          order_code?: string | null
+          paid_at?: string | null
+          paid_by?: string | null
+          payment_note?: string | null
+          refunded_amount?: number
+          released_to_kitchen_at?: string | null
           fiscalized?: boolean
           fiscalized_at?: string | null
           guest_name?: string | null
@@ -287,6 +364,20 @@ export type Database = {
           assigned_waiter_id?: string | null
           confirmed_at?: string | null
           created_at?: string
+          cancel_reason?: string | null
+          cancelled_at?: string | null
+          cancelled_by?: string | null
+          fiscal_provider_reference?: string | null
+          fiscal_receipt_number?: string | null
+          fiscalization_error?: string | null
+          fiscalization_status?: string
+          fiscalized_by?: string | null
+          order_code?: string | null
+          paid_at?: string | null
+          paid_by?: string | null
+          payment_note?: string | null
+          refunded_amount?: number
+          released_to_kitchen_at?: string | null
           fiscalized?: boolean
           fiscalized_at?: string | null
           guest_name?: string | null
@@ -404,6 +495,13 @@ export type Database = {
       }
       restaurant_settings: {
         Row: {
+          kitchen_delay_minutes: number
+          last_order_time: string | null
+          online_card_enabled: boolean
+          ordering_enabled: boolean
+          ordering_paused_message: string | null
+          pay_at_table_enabled: boolean
+          recommendations_enabled: boolean
           id: number
           print_auto: boolean
           print_copies: number
@@ -415,6 +513,13 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          kitchen_delay_minutes?: number
+          last_order_time?: string | null
+          online_card_enabled?: boolean
+          ordering_enabled?: boolean
+          ordering_paused_message?: string | null
+          pay_at_table_enabled?: boolean
+          recommendations_enabled?: boolean
           id?: number
           print_auto?: boolean
           print_copies?: number
@@ -426,6 +531,13 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          kitchen_delay_minutes?: number
+          last_order_time?: string | null
+          online_card_enabled?: boolean
+          ordering_enabled?: boolean
+          ordering_paused_message?: string | null
+          pay_at_table_enabled?: boolean
+          recommendations_enabled?: boolean
           id?: number
           print_auto?: boolean
           print_copies?: number
@@ -905,6 +1017,122 @@ export type Database = {
         }
         Returns: Json
       }
+      guest_get_order_payment: {
+        Args: { _order_id: string; _session_id: string; _session_token: string }
+        Returns: Json
+      }
+      guest_get_recommendations: {
+        Args: {
+          _cart_item_ids?: string[]
+          _language?: string
+          _limit?: number
+          _placement?: string
+        }
+        Returns: {
+          dietary_tags: string[]
+          id: string
+          image_url: string | null
+          name: string
+          name_ar: string | null
+          name_bs: string | null
+          price: number
+          reason: string
+          recommendation_type: string
+        }[]
+      }
+      guest_get_service_status: {
+        Args: Record<string, never>
+        Returns: Json
+      }
+      guest_search_menu: {
+        Args: { _limit?: number; _query: string }
+        Returns: {
+          category_name: string
+          description: string | null
+          description_ar: string | null
+          description_bs: string | null
+          dietary_tags: string[]
+          id: string
+          image_url: string | null
+          is_available: boolean
+          merchandising_tags: string[]
+          name: string
+          name_ar: string | null
+          name_bs: string | null
+          price: number
+          subcategory_id: string
+        }[]
+      }
+      guest_switch_to_pay_at_table: {
+        Args: {
+          _method?: string
+          _order_id: string
+          _session_id: string
+          _session_token: string
+        }
+        Returns: Json
+      }
+      record_analytics_events: {
+        Args: { _events: Json; _visit_id: string }
+        Returns: number
+      }
+      record_table_payment: {
+        Args: { _method: string; _note?: string; _order_id: string }
+        Returns: Json
+      }
+      record_order_refund: {
+        Args: {
+          _amount: number
+          _mark_completed?: boolean
+          _method: string
+          _order_id: string
+          _provider_reference?: string
+          _reason: string
+        }
+        Returns: Json
+      }
+      cancel_order: {
+        Args: { _order_id: string; _reason: string }
+        Returns: Json
+      }
+      claim_ticket_print: {
+        Args: { _device_id: string; _order_id: string; _ticket_type?: string }
+        Returns: boolean
+      }
+      report_ticket_print: {
+        Args: {
+          _error?: string
+          _ok: boolean
+          _order_id: string
+          _ticket_type?: string
+        }
+        Returns: undefined
+      }
+      requeue_ticket_print: {
+        Args: { _order_id: string; _ticket_type?: string }
+        Returns: boolean
+      }
+      set_order_fiscalization: {
+        Args: {
+          _error?: string
+          _order_id: string
+          _provider_reference?: string
+          _receipt_number?: string
+          _status: string
+        }
+        Returns: Json
+      }
+      staff_update_order_status: {
+        Args: {
+          _order_id: string
+          _status: Database["public"]["Enums"]["order_status"]
+        }
+        Returns: Json
+      }
+      day_reconciliation: {
+        Args: { _day?: string }
+        Returns: Json
+      }
       guest_request_bill: {
         Args: { _session_id: string; _session_token: string }
         Returns: Json
@@ -969,6 +1197,8 @@ export type Database = {
       app_role: "admin" | "staff"
       order_item_status: "pending" | "preparing" | "ready" | "served"
       order_status:
+        | "awaiting_payment"
+        | "payment_failed"
         | "pending"
         | "confirmed"
         | "preparing"
@@ -1106,6 +1336,8 @@ export const Constants = {
       app_role: ["admin", "staff"],
       order_item_status: ["pending", "preparing", "ready", "served"],
       order_status: [
+        "awaiting_payment",
+        "payment_failed",
         "pending",
         "confirmed",
         "preparing",

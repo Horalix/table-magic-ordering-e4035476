@@ -5,6 +5,7 @@ import { useCartStore } from '@/lib/cart-store';
 import { toast } from 'sonner';
 import { useT } from '@/lib/i18n';
 import { callWaiter } from '@/lib/guest-api';
+import { track } from '@/lib/analytics';
 
 interface Props {
   variant?: 'default' | 'hero';
@@ -26,6 +27,7 @@ const CallWaiterButton = ({ variant = 'default' }: Props) => {
 
     try {
       await callWaiter(sessionId, sessionToken, 'assist');
+      track('waiter_called', { reason: 'assist' });
 
       setCalled(true);
       toast.success(t('waiter_notified'));

@@ -15,6 +15,21 @@ export interface CartItem {
   image_url?: string;
 }
 
+/**
+ * An order that exists on the server but whose payment has not resolved.
+ *
+ * Persisted so that closing the tab, reloading during 3-D Secure, or losing
+ * the network mid-payment recovers into the payment screen instead of an empty
+ * cart — and, critically, so the guest cannot accidentally place the same
+ * order twice while the first one is still in flight.
+ */
+export interface PendingPayment {
+  orderId: string;
+  orderCode: string;
+  total: number;
+  createdAt: number;
+}
+
 interface CartStore {
   items: CartItem[];
   tableNumber: number | null;
@@ -23,6 +38,7 @@ interface CartStore {
   sessionId: string | null;
   guestName: string | null;
   lastOrderTime: number | null;
+  pendingPayment: PendingPayment | null;
   /** Stable per-device id — identifies this phone across reloads (join flow). */
   clientId: string;
   addItem: (item: Omit<CartItem, 'quantity'>) => void;
@@ -35,6 +51,7 @@ interface CartStore {
   setSession: (id: string, token: string) => void;
   setGuestName: (name: string) => void;
   setLastOrderTime: () => void;
+  setPendingPayment: (pending: PendingPayment | null) => void;
   total: () => number;
   itemCount: () => number;
   startHeartbeat: () => void;
@@ -70,6 +87,7 @@ export const useCartStore = create<CartStore>()(persist((set, get) => ({
   sessionId: null,
   guestName: null,
   lastOrderTime: null,
+  pendingPayment: null,
   clientId: genId(),
 
   addItem: (item) => {
@@ -122,6 +140,8 @@ export const useCartStore = create<CartStore>()(persist((set, get) => ({
 
   setLastOrderTime: () => set({ lastOrderTime: Date.now() }),
 
+  setPendingPayment: (pendingPayment) => set({ pendingPayment }),
+
   total: () => get().items.reduce((sum, i) => sum + i.price * i.quantity, 0),
 
   itemCount: () => get().items.reduce((sum, i) => sum + i.quantity, 0),
@@ -137,7 +157,7 @@ export const useCartStore = create<CartStore>()(persist((set, get) => ({
 
       if (!isActive) {
         get().clearCart();
-        set({ sessionId: null, sessionToken: null, tableNumber: null, qrToken: null, guestName: null });
+        set({ sessionId: null, sessionToken: null, tableNumber: null, qrToken: null, guestName: null, pendingPayment: null });
         toast.error('Your session has expired. Please scan the QR code again.');
         if (heartbeatInterval) {
           clearInterval(heartbeatInterval);
@@ -167,6 +187,7 @@ export const useCartStore = create<CartStore>()(persist((set, get) => ({
     sessionId: s.sessionId,
     guestName: s.guestName,
     lastOrderTime: s.lastOrderTime,
+    pendingPayment: s.pendingPayment,
     clientId: s.clientId,
   }),
 }));

@@ -18,12 +18,15 @@ export const useLanguageStore = create<LanguageStore>((set) => ({
   },
 }));
 
-// Initialize dir on load
+// Initialise direction AND language on load.
+//
+// `lang` matters for every locale, not just Arabic: screen readers pick the
+// pronunciation from it, and Bosnian read aloud in an English voice is close
+// to unintelligible. Previously it was only set for 'ar', so a Bosnian guest
+// got `lang="en"` on a fully Bosnian page.
 const savedLocale = (localStorage.getItem('lasoul-lang') as Locale) || 'en';
-if (savedLocale === 'ar') {
-  document.documentElement.dir = 'rtl';
-  document.documentElement.lang = 'ar';
-}
+document.documentElement.lang = savedLocale;
+document.documentElement.dir = savedLocale === 'ar' ? 'rtl' : 'ltr';
 
 const translations: Record<string, Record<Locale, string>> = {
   // Navigation & General
@@ -88,7 +91,6 @@ const translations: Record<string, Record<Locale, string>> = {
   'which_table': { en: 'Which table are you at?', bs: 'Za kojim ste stolom?', ar: 'على أي طاولة أنت؟' },
   'which_table_sub': { en: 'Enter your table number to start ordering.', bs: 'Unesite broj stola da započnete narudžbu.', ar: 'أدخل رقم طاولتك لبدء الطلب.' },
   'table_number_placeholder': { en: 'Table number', bs: 'Broj stola', ar: 'رقم الطاولة' },
-  'continue': { en: 'Continue', bs: 'Nastavi', ar: 'متابعة' },
 
   // Running Tab
   'running_total': { en: 'Running Total', bs: 'Ukupni račun', ar: 'المجموع الجاري' },
@@ -245,6 +247,62 @@ const translations: Record<string, Record<Locale, string>> = {
   'you_might_like': { en: 'You might also like', bs: 'Moglo bi vam se svidjeti', ar: 'قد يعجبك أيضاً' },
   'add_a_drink': { en: 'Add a drink or dessert?', bs: 'Dodati piće ili desert?', ar: 'إضافة مشروب أو حلوى؟' },
   'install_app': { en: 'Install app', bs: 'Instaliraj aplikaciju', ar: 'تثبيت التطبيق' },
+
+  // ---- Payment: honest states. Never say "paid" before the server says so.
+  'pay_at_table': { en: 'Pay at the table', bs: 'Plati za stolom', ar: 'الدفع على الطاولة' },
+  'pay_cash': { en: 'Cash', bs: 'Gotovina', ar: 'نقداً' },
+  'pay_cash_sub': { en: 'Your waiter will bring the bill.', bs: 'Konobar će donijeti račun.', ar: 'سيحضر النادل الفاتورة.' },
+  'pay_pos': { en: 'Card at the table', bs: 'Kartica za stolom', ar: 'بطاقة على الطاولة' },
+  'pay_pos_sub': { en: 'Your waiter will bring the card terminal.', bs: 'Konobar će donijeti POS terminal.', ar: 'سيحضر النادل جهاز البطاقات.' },
+  'pay_online_sub': { en: 'Secure card payment, before your order is sent.', bs: 'Sigurno plaćanje karticom, prije slanja narudžbe.', ar: 'دفع آمن بالبطاقة قبل إرسال طلبك.' },
+  'order_number': { en: 'Order', bs: 'Narudžba', ar: 'الطلب' },
+  'payment_confirming_title': { en: 'Confirming your payment', bs: 'Potvrđujemo vaše plaćanje', ar: 'جارٍ تأكيد الدفع' },
+  'payment_confirming_body': { en: 'This usually takes a few seconds. Please keep this screen open.', bs: 'Ovo obično traje nekoliko sekundi. Ostanite na ovom ekranu.', ar: 'يستغرق هذا عادةً بضع ثوانٍ. يرجى إبقاء هذه الشاشة مفتوحة.' },
+  'payment_delayed_title': { en: 'Still confirming', bs: 'Još potvrđujemo', ar: 'ما زلنا نؤكد' },
+  'payment_delayed_body': { en: 'Your payment is still being confirmed. Please do not pay again. Show this order number to our staff if you need help.', bs: 'Vaše plaćanje se još potvrđuje. Molimo ne plaćajte ponovo. Pokažite ovaj broj narudžbe osoblju ako trebate pomoć.', ar: 'ما زال يتم تأكيد دفعتك. يرجى عدم الدفع مرة أخرى. أظهر رقم الطلب لموظفينا إذا احتجت المساعدة.' },
+  'payment_received_title': { en: 'Payment received', bs: 'Plaćanje primljeno', ar: 'تم استلام الدفعة' },
+  'payment_declined_title': { en: 'Payment was not completed', bs: 'Plaćanje nije završeno', ar: 'لم يكتمل الدفع' },
+  'payment_declined_body': { en: 'Your card was not charged. You can try again or pay at the table.', bs: 'Vaša kartica nije terećena. Pokušajte ponovo ili platite za stolom.', ar: 'لم يتم خصم أي مبلغ من بطاقتك. يمكنك المحاولة مرة أخرى أو الدفع على الطاولة.' },
+  'try_card_again': { en: 'Try card again', bs: 'Pokušaj karticom ponovo', ar: 'حاول بالبطاقة مرة أخرى' },
+  'switch_to_pay_at_table': { en: 'Pay at the table instead', bs: 'Radije plati za stolom', ar: 'الدفع على الطاولة بدلاً من ذلك' },
+  'order_not_sent_yet': { en: 'Not sent to the kitchen yet', bs: 'Još nije poslano u kuhinju', ar: 'لم يُرسل إلى المطبخ بعد' },
+  'order_in_kitchen_now': { en: 'Your order is with the kitchen.', bs: 'Vaša narudžba je u kuhinji.', ar: 'طلبك في المطبخ الآن.' },
+  'ordering_paused_title': { en: 'Ordering is paused', bs: 'Naručivanje je pauzirano', ar: 'الطلب متوقف مؤقتاً' },
+  'ordering_paused_body': { en: 'Please ask your waiter — they will take your order.', bs: 'Molimo pitajte konobara — on će primiti vašu narudžbu.', ar: 'يرجى سؤال النادل — سيأخذ طلبك.' },
+  'card_unavailable_now': { en: 'Card payment in the app is not available right now.', bs: 'Plaćanje karticom u aplikaciji trenutno nije dostupno.', ar: 'الدفع بالبطاقة في التطبيق غير متاح حالياً.' },
+  'kitchen_busy_notice': { en: 'The kitchen is busy — dishes may take a little longer.', bs: 'Kuhinja je zauzeta — jela mogu potrajati malo duže.', ar: 'المطبخ مزدحم — قد تستغرق الأطباق وقتاً أطول قليلاً.' },
+  'terms_accept': { en: 'By ordering you accept our', bs: 'Narudžbom prihvatate naše', ar: 'بتقديم الطلب فإنك تقبل' },
+  'terms_link': { en: 'terms and privacy notice', bs: 'uslove i obavijest o privatnosti', ar: 'الشروط وإشعار الخصوصية' },
+  'track_order': { en: 'Track your order', bs: 'Prati narudžbu', ar: 'تتبع طلبك' },
+  'connection_lost': { en: 'No connection', bs: 'Nema veze', ar: 'لا يوجد اتصال' },
+  'connection_lost_body': { en: 'Your order was not sent. Nothing was charged. Please try again when you are back online.', bs: 'Vaša narudžba nije poslana. Ništa nije naplaćeno. Pokušajte ponovo kada se vratite online.', ar: 'لم يتم إرسال طلبك ولم يتم خصم أي مبلغ. يرجى المحاولة عند عودة الاتصال.' },
+
+  // ---- Discovery
+  'search': { en: 'Search', bs: 'Pretraga', ar: 'بحث' },
+  'search_no_results': { en: 'Nothing matched', bs: 'Nema rezultata', ar: 'لا توجد نتائج' },
+  'search_no_results_sub': { en: 'Try a shorter word, or browse the categories.', bs: 'Pokušajte kraću riječ ili pregledajte kategorije.', ar: 'جرب كلمة أقصر أو تصفح الفئات.' },
+  'badge_popular': { en: 'Popular', bs: 'Popularno', ar: 'الأكثر طلباً' },
+  'badge_signature': { en: 'Signature', bs: 'Naše posebno', ar: 'طبقنا المميز' },
+  'badge_new': { en: 'New', bs: 'Novo', ar: 'جديد' },
+  'badge_staff_favourite': { en: 'Staff favourite', bs: 'Izbor osoblja', ar: 'اختيار الطاقم' },
+  'badge_fast': { en: 'Ready quickly', bs: 'Brzo gotovo', ar: 'جاهز بسرعة' },
+
+  // ---- Recommendations (one at a time, always skippable)
+  'goes_well_with': { en: 'Goes well with', bs: 'Odlično uz', ar: 'يتناسب مع' },
+  'complete_your_order': { en: 'Complete your order', bs: 'Upotpunite narudžbu', ar: 'أكمل طلبك' },
+  'anything_else': { en: 'Anything else?', bs: 'Još nešto?', ar: 'أي شيء آخر؟' },
+  'no_thanks': { en: 'No thanks', bs: 'Ne, hvala', ar: 'لا، شكراً' },
+  'add': { en: 'Add', bs: 'Dodaj', ar: 'أضف' },
+
+  // ---- Cart controls (screen-reader labels)
+  'remove': { en: 'Remove', bs: 'Ukloni', ar: 'إزالة' },
+  'increase': { en: 'One more', bs: 'Još jedan', ar: 'واحد إضافي' },
+  'decrease': { en: 'One fewer', bs: 'Jedan manje', ar: 'واحد أقل' },
+  'undo_remove': { en: 'Undo', bs: 'Vrati', ar: 'تراجع' },
+
+  // ---- Allergens (a safety field, never abbreviated)
+  'allergens': { en: 'Allergens', bs: 'Alergeni', ar: 'مسببات الحساسية' },
+  'allergens_ask_staff': { en: 'Please tell your waiter about any allergy before ordering.', bs: 'Molimo obavijestite konobara o alergijama prije narudžbe.', ar: 'يرجى إبلاغ النادل بأي حساسية قبل الطلب.' },
 };
 
 export function t(key: string): string {

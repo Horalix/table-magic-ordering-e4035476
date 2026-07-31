@@ -12,6 +12,19 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Transition, Variants } from 'framer-motion';
 
+/* ---- Reduced motion ---------------------------------------------------- */
+/**
+ * True when the guest has asked their device for less motion.
+ *
+ * CSS-driven motion is already neutralised globally in index.css; use this for
+ * framer-motion entrances that would otherwise still play, and never gate
+ * information behind an animation that this disables.
+ */
+export function prefersReducedMotion(): boolean {
+  if (typeof window === 'undefined' || !window.matchMedia) return false;
+  return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+}
+
 /* ---- Easings ---------------------------------------------------------- */
 // The signature ease already used ad-hoc across the app (decelerate-out).
 export const easeLux = [0.16, 1, 0.3, 1] as const;

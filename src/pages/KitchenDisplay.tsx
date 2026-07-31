@@ -9,6 +9,8 @@ import { Badge } from '@/components/ui/badge';
 import { playOrderAlert, playWaiterCallAlert, playBillRequestAlert } from '@/lib/kitchen-sounds';
 import { buildKitchenTicketText, downloadKitchenTicketCsv, downloadKitchenTicketJson, printKitchenTicket, type KitchenPrintSettings } from '@/lib/ticket-export';
 import { isBluetoothConnected, tryReconnectBluetoothPrinter, printTextBluetooth } from '@/lib/printer-connect';
+import PaymentBadge from '@/components/PaymentBadge';
+import { claimTicketPrint, deviceId, reportTicketPrint, requeueTicketPrint, updateOrderStatus as rpcUpdateOrderStatus } from '@/lib/staff-api';
 import type { Database } from '@/integrations/supabase/types';
 
 interface PrintConfig {
@@ -56,10 +58,12 @@ type BillRequestQueryRow = BillRequestRow & {
 
 interface OrderWithItems {
   id: string;
+  order_code: string | null;
   status: OrderStatus;
   total: number;
   tip_amount: number | null;
   payment_method: string | null;
+  payment_status: string | null;
   notes: string | null;
   created_at: string;
   table_number: number;
@@ -133,7 +137,14 @@ const KitchenDisplay = () => {
   const [isPrinter, setIsPrinter] = useState(() => localStorage.getItem('kitchen:isPrinter') === 'true');
   const [btName, setBtName] = useState<string | null>(null);
   const [printConfig, setPrintConfig] = useState<PrintConfig>(DEFAULT_PRINT);
+  /** Cheap local gate; the authoritative claim lives in the database. */
   const printedRef = useRef<Set<string>>(new Set());
+  const [failedPrints, setFailedPrints] = useState<string[]>([]);
+
+  // Live-data health. A kitchen screen that silently stops updating is the
+  // worst failure mode there is, so the connection state is always visible and
+  // a polling fallback takes over whenever the socket is not subscribed.
+  const [connection, setConnection] = useState<'connecting' | 'live' | 'reconnecting'>('connecting');
 
   // Silently reconnect a previously-paired Bluetooth printer on load.
   useEffect(() => { tryReconnectBluetoothPrinter().then((n) => { if (n) setBtName(n); }); }, []);
@@ -149,29 +160,81 @@ const KitchenDisplay = () => {
     return () => { supabase.removeChannel(ch); };
   }, []);
 
-  // Auto-print newly-placed orders — via Bluetooth if connected, else browser.
+  /**
+   * Auto-print newly-released orders.
+   *
+   * The database owns the claim: claim_ticket_print() flips the ticket from
+   * queued to printed atomically and tells us whether THIS device won. Two
+   * kitchen screens, or one screen reloaded inside the old 60-second window,
+   * can no longer both print the same order. A failed print is reported back
+   * so the ticket returns to the queue with a visible Reprint.
+   */
   useEffect(() => {
     if ((!isPrinter && !isBluetoothConnected()) || !printConfig.print_enabled || !printConfig.print_auto) return;
     const now = Date.now();
-    for (const o of orders) {
-      if (o.status !== 'pending' || printedRef.current.has(o.id)) continue;
-      printedRef.current.add(o.id);
+    const device = deviceId();
+
+    for (const order of orders) {
+      if (order.status !== 'pending' || printedRef.current.has(order.id)) continue;
       // Skip the backlog on first load — only print genuinely fresh orders.
-      if (now - new Date(o.created_at).getTime() <= 60_000) {
-        if (isBluetoothConnected()) {
-          printTextBluetooth(buildKitchenTicketText(o, toPrintSettings(printConfig)), printConfig.print_copies)
-            .catch(() => printKitchenTicket(o, toPrintSettings(printConfig)));
-        } else {
-          printKitchenTicket(o, toPrintSettings(printConfig));
-        }
+      if (now - new Date(order.created_at).getTime() > 60_000) {
+        printedRef.current.add(order.id);
+        continue;
       }
+      printedRef.current.add(order.id);
+
+      void (async () => {
+        let won = false;
+        try {
+          won = await claimTicketPrint(order.id, device);
+        } catch {
+          // Without a confirmed claim we do not print: a duplicate ticket is
+          // worse than a missing one, and the missing one is visible.
+          return;
+        }
+        if (!won) return;
+
+        try {
+          if (isBluetoothConnected()) {
+            await printTextBluetooth(buildKitchenTicketText(order, toPrintSettings(printConfig)), printConfig.print_copies);
+          } else {
+            printKitchenTicket(order, toPrintSettings(printConfig));
+          }
+        } catch (error) {
+          await reportTicketPrint(order.id, false, error instanceof Error ? error.message : 'print failed').catch(() => {});
+          setFailedPrints((prev) => (prev.includes(order.id) ? prev : [...prev, order.id]));
+          toast.error(`Ticket for table ${order.table_number} did not print`);
+        }
+      })();
     }
   }, [orders, isPrinter, printConfig, btName]);
 
-  // Keep ref in sync with state
+  /** Put a ticket back in the queue and let this device try again. */
+  const reprint = async (order: OrderWithItems) => {
+    try {
+      await requeueTicketPrint(order.id);
+      printedRef.current.delete(order.id);
+      setFailedPrints((prev) => prev.filter((id) => id !== order.id));
+      const won = await claimTicketPrint(order.id, deviceId());
+      if (!won) { toast.info('Another device is printing this ticket'); return; }
+      if (isBluetoothConnected()) {
+        await printTextBluetooth(buildKitchenTicketText(order, toPrintSettings(printConfig)), printConfig.print_copies);
+      } else {
+        printKitchenTicket(order, toPrintSettings(printConfig));
+      }
+      toast.success('Ticket reprinted');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Reprint failed');
+    }
+  };
+
+  // Keep refs in sync with state (read from long-lived intervals/callbacks).
   useEffect(() => {
     soundEnabledRef.current = soundEnabled;
   }, [soundEnabled]);
+
+  const connectionRef = useRef(connection);
+  useEffect(() => { connectionRef.current = connection; }, [connection]);
 
   // Tick so time-since + aging colours stay current without new data.
   useEffect(() => {
@@ -203,10 +266,12 @@ const KitchenDisplay = () => {
 
     const mapped: OrderWithItems[] = ((ordersData || []) as KitchenOrderRow[]).map((o) => ({
       id: o.id,
+      order_code: (o as { order_code?: string | null }).order_code ?? null,
       status: o.status,
       total: o.total,
       tip_amount: (o as { tip_amount?: number | null }).tip_amount ?? null,
       payment_method: o.payment_method ?? null,
+      payment_status: o.payment_status ?? null,
       notes: o.notes,
       created_at: o.created_at,
       table_number: o.table_sessions?.tables?.table_number || 0,
@@ -307,19 +372,38 @@ const KitchenDisplay = () => {
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'bill_requests' }, () => {
         fetchBillRequests();
       })
-      .subscribe();
+      .subscribe((status) => {
+        // SUBSCRIBED is the only state in which this screen is trustworthy.
+        setConnection(status === 'SUBSCRIBED' ? 'live' : status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED' ? 'reconnecting' : 'connecting');
+      });
+
+    // Polling fallback. Cheap, and it means a dropped socket degrades to
+    // "slightly stale" instead of "silently frozen".
+    const poll = setInterval(() => {
+      if (connectionRef.current !== 'live') {
+        void fetchOrders();
+        void fetchWaiterCalls();
+        void fetchBillRequests();
+      }
+    }, 15_000);
 
     if ('Notification' in window && Notification.permission === 'default') {
       Notification.requestPermission();
     }
 
-    return () => { supabase.removeChannel(channel); };
+    return () => { clearInterval(poll); supabase.removeChannel(channel); };
   }, [filter, fetchOrders]);
 
   const updateOrderStatus = async (orderId: string, newStatus: OrderStatus) => {
-    const { error } = await supabase.from('orders').update({ status: newStatus }).eq('id', orderId);
-    if (error) toast.error('Failed to update order status');
-    else { toast.success(`Order marked as ${newStatus}`); fetchOrders(); }
+    try {
+      // Goes through the state machine: an illegal move is rejected by the
+      // database rather than silently corrupting the board.
+      await rpcUpdateOrderStatus(orderId, newStatus);
+      toast.success(`Order marked as ${newStatus}`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to update order status');
+    }
+    void fetchOrders();
   };
 
   const exportTicket = (order: OrderWithItems, format: 'print' | 'json' | 'csv') => {
@@ -388,11 +472,33 @@ const KitchenDisplay = () => {
         <div className="flex items-center justify-between px-6 py-4">
           <div>
             <h1 className="font-serif text-2xl font-bold text-foreground">Kitchen Display</h1>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <p className="text-sm text-muted-foreground font-sans">{orders.length} orders</p>
+
+              {/* Never let this screen look healthy while it is stale. */}
+              <span
+                role="status"
+                className={`inline-flex items-center gap-1 text-[11px] font-sans font-medium px-2 py-0.5 rounded-full ${
+                  connection === 'live'
+                    ? 'bg-primary/10 text-primary'
+                    : connection === 'connecting'
+                      ? 'bg-muted text-muted-foreground'
+                      : 'bg-destructive/10 text-destructive'
+                }`}
+              >
+                <span className={`w-1.5 h-1.5 rounded-full ${connection === 'live' ? 'bg-primary breathe' : connection === 'connecting' ? 'bg-muted-foreground' : 'bg-destructive animate-pulse'}`} />
+                {connection === 'live' ? 'Live' : connection === 'connecting' ? 'Connecting…' : 'Reconnecting — refreshing every 15s'}
+              </span>
+
               {(btName || isPrinter) && (
                 <span className="inline-flex items-center gap-1 text-[11px] font-sans font-medium text-primary">
                   <span className="w-1.5 h-1.5 rounded-full bg-primary breathe" /> <Printer className="w-3 h-3" /> {btName ? `Printing · ${btName}` : 'Printing on this device'}
+                </span>
+              )}
+
+              {failedPrints.length > 0 && (
+                <span className="inline-flex items-center gap-1 text-[11px] font-sans font-medium px-2 py-0.5 rounded-full bg-destructive/10 text-destructive">
+                  <Printer className="w-3 h-3" /> {failedPrints.length} ticket{failedPrints.length === 1 ? '' : 's'} failed to print
                 </span>
               )}
             </div>
@@ -498,14 +604,27 @@ const KitchenDisplay = () => {
                   </span>
                 )}
                 <span className="font-serif text-lg font-bold text-foreground">Table {order.table_number}</span>
+                {order.order_code && (
+                  <span className="text-xs font-sans font-semibold tabular-nums tracking-wider px-1.5 py-0.5 rounded bg-muted text-foreground">
+                    #{order.order_code}
+                  </span>
+                )}
                 {order.guest_name && <span className="text-xs text-muted-foreground font-sans">({order.guest_name})</span>}
                 {showStatus && (
                   <Badge className={`text-[11px] font-sans ${statusColors[order.status]}`}>
                     <span className="flex items-center gap-1">{statusIcons[order.status]}{order.status}</span>
                   </Badge>
                 )}
+                <PaymentBadge method={order.payment_method} status={order.payment_status} />
               </div>
-              <span className={`text-xs font-sans tabular-nums ${agingLevel(order) === 'late' ? 'text-destructive font-semibold' : agingLevel(order) === 'warn' ? 'text-accent font-medium' : 'text-muted-foreground'}`}>{timeSince(order.created_at)}</span>
+              {/* Urgency is spelled out, not just coloured — colour alone fails
+                  for colour-blind staff and for anyone glancing across a room. */}
+              <span className={`text-xs font-sans tabular-nums flex items-center gap-1 ${agingLevel(order) === 'late' ? 'text-destructive font-semibold' : agingLevel(order) === 'warn' ? 'text-accent font-medium' : 'text-muted-foreground'}`}>
+                {agingLevel(order) === 'late' && <span aria-hidden>!!</span>}
+                {agingLevel(order) === 'warn' && <span aria-hidden>!</span>}
+                {timeSince(order.created_at)}
+                {agingLevel(order) === 'late' && <span className="sr-only"> — late</span>}
+              </span>
             </div>
 
             <div className="px-4 py-3 space-y-2">
@@ -525,9 +644,15 @@ const KitchenDisplay = () => {
               </div>
             )}
 
+            {failedPrints.includes(order.id) && (
+              <div className="mx-4 mb-2 px-3 py-2 rounded-lg bg-destructive/10 border border-destructive/25">
+                <p className="text-xs font-sans text-destructive">This ticket did not print. Use Reprint below.</p>
+              </div>
+            )}
+
             <div className="px-4 pb-3 flex flex-wrap gap-2">
-              <Button variant="outline" size="sm" className="h-9 rounded-lg gap-1.5 text-xs" onClick={() => exportTicket(order, 'print')}>
-                <Printer className="w-3.5 h-3.5" /> Print
+              <Button variant="outline" size="sm" className="h-9 rounded-lg gap-1.5 text-xs" onClick={() => reprint(order)}>
+                <Printer className="w-3.5 h-3.5" /> {failedPrints.includes(order.id) ? 'Reprint' : 'Print'}
               </Button>
               <Button variant="outline" size="sm" className="h-9 rounded-lg gap-1.5 text-xs" onClick={() => exportTicket(order, 'json')}>
                 <FileJson className="w-3.5 h-3.5" /> JSON

@@ -19,6 +19,7 @@ import {
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import {
+  Banknote,
   Bell,
   Check,
   CheckCircle2,
@@ -26,6 +27,7 @@ import {
   Clock,
   CreditCard,
   Flame,
+  Smartphone,
   Hand,
   LogOut,
   Monitor,
@@ -38,6 +40,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { formatDuration, useElapsed, waitBg } from '@/lib/timing';
+import { recordTablePayment, updateOrderStatus as rpcUpdateOrderStatus, type TablePaymentMethod } from '@/lib/staff-api';
 import type { Database } from '@/integrations/supabase/types';
 
 type OrderStatus = Database['public']['Enums']['order_status'];
@@ -202,12 +205,27 @@ const WaiterDashboard = () => {
   }, [fetchAll, navigate]);
 
   const updateOrderStatus = async (id: string, status: OrderStatus) => {
-    const { error } = await supabase.from('orders').update({ status }).eq('id', id);
-    if (error) {
-      toast.error(error.message);
-      return;
+    try {
+      // Validated server-side; an illegal move is refused rather than applied.
+      await rpcUpdateOrderStatus(id, status);
+      toast.success('Updated');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Could not update the order');
     }
-    toast.success('Updated');
+  };
+
+  /**
+   * The guest paid in the room. Cash and the physical POS terminal are
+   * recorded separately — they reconcile against the drawer and the terminal
+   * batch respectively, and collapsing them makes the day impossible to close.
+   */
+  const markPaid = async (id: string, method: TablePaymentMethod) => {
+    try {
+      await recordTablePayment(id, method);
+      toast.success(method === 'cash' ? 'Recorded as paid in cash' : 'Recorded as paid on the terminal');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Could not record the payment');
+    }
   };
 
   const resolveCall = async (id: string) => {
@@ -423,7 +441,7 @@ const WaiterDashboard = () => {
                     exit={{ opacity: 0, scale: 0.96 }}
                     transition={{ delay: index * 0.03, duration: 0.2 }}
                   >
-                    <OrderCard order={order} onUpdate={updateOrderStatus} />
+                    <OrderCard order={order} onUpdate={updateOrderStatus} onMarkPaid={markPaid} />
                   </motion.div>
                 ))}
               </AnimatePresence>
@@ -578,11 +596,16 @@ const NEXT_META: Partial<Record<OrderStatus, { status: OrderStatus; label: strin
   ready: { status: 'served', label: 'Mark served', icon: <Utensils className="w-4 h-4 mr-1.5" /> },
 };
 
-const OrderCard = ({ order, onUpdate }: { order: WaiterOrder; onUpdate: (id: string, status: OrderStatus) => void }) => {
+const OrderCard = ({ order, onUpdate, onMarkPaid }: {
+  order: WaiterOrder;
+  onUpdate: (id: string, status: OrderStatus) => void;
+  onMarkPaid: (id: string, method: TablePaymentMethod) => void;
+}) => {
   const ms = useElapsed(order.created_at);
   const next = NEXT_META[order.status];
   const meta = STATUS_META[order.status] ?? STATUS_META.pending;
   const tableNumber = order.table_sessions?.tables?.table_number ?? '?';
+  const owes = order.payment_status !== 'paid' && order.payment_status !== 'refunded';
 
   return (
     <Card className="card-lux-hover">
@@ -610,6 +633,17 @@ const OrderCard = ({ order, onUpdate }: { order: WaiterOrder; onUpdate: (id: str
           <Button size="sm" className="w-full tap" onClick={() => onUpdate(order.id, next.status)}>
             {next.icon}{next.label}
           </Button>
+        )}
+
+        {owes && (
+          <div className="flex gap-2 mt-2">
+            <Button size="sm" variant="outline" className="flex-1 tap text-xs gap-1.5" onClick={() => onMarkPaid(order.id, 'cash')}>
+              <Banknote className="w-3.5 h-3.5" /> Paid cash
+            </Button>
+            <Button size="sm" variant="outline" className="flex-1 tap text-xs gap-1.5" onClick={() => onMarkPaid(order.id, 'pos_terminal')}>
+              <Smartphone className="w-3.5 h-3.5" /> Paid terminal
+            </Button>
+          </div>
         )}
       </CardContent>
     </Card>

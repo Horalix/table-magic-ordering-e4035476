@@ -4,8 +4,9 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Download, Printer, CalendarDays, DollarSign, ShoppingBag, CreditCard, Banknote, Coins, TrendingUp, AlertTriangle, Check } from 'lucide-react';
+import { Download, Printer, CalendarDays, DollarSign, ShoppingBag, CreditCard, Banknote, Smartphone, Coins, TrendingUp, AlertTriangle, Check, Clock } from 'lucide-react';
 import { useCountUp } from '@/lib/motion';
+import { dayReconciliation, type DayReconciliation } from '@/lib/staff-api';
 
 interface DayOrder {
   id: string;
@@ -16,7 +17,11 @@ interface DayOrder {
   status: string;
   created_at: string;
   fiscalized: boolean | null;
+  fiscalization_status: string | null;
 }
+
+/** Orders that never became a sale must never be counted as one. */
+const NON_SALE_STATUSES = ['awaiting_payment', 'payment_failed', 'cancelled'];
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
 const km = (n: number) => `${n.toFixed(2)} KM`;
@@ -39,6 +44,7 @@ const Stat = ({ icon: Icon, label, value, sub, color = 'text-primary' }: { icon:
 const AdminReports = () => {
   const [date, setDate] = useState(todayISO());
   const [orders, setOrders] = useState<DayOrder[]>([]);
+  const [recon, setRecon] = useState<DayReconciliation | null>(null);
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
@@ -47,10 +53,13 @@ const AdminReports = () => {
     const end = `${date}T23:59:59.999`;
     const { data } = await supabase
       .from('orders')
-      .select('id, total, tip_amount, payment_method, payment_status, status, created_at, fiscalized')
+      .select('id, total, tip_amount, payment_method, payment_status, status, created_at, fiscalized, fiscalization_status')
       .gte('created_at', start).lte('created_at', end)
       .order('created_at', { ascending: true });
-    setOrders(((data ?? []) as DayOrder[]).filter((o) => o.status !== 'cancelled'));
+    // The hourly chart uses real sales only; the money figures come from the
+    // server so the dashboard and the reconciliation cannot disagree.
+    setOrders(((data ?? []) as DayOrder[]).filter((o) => !NON_SALE_STATUSES.includes(o.status)));
+    setRecon(await dayReconciliation(date).catch(() => null));
     setLoading(false);
   }, [date]);
   useEffect(() => { void load(); }, [load]);
@@ -58,8 +67,9 @@ const AdminReports = () => {
   const s = useMemo(() => {
     const gross = orders.reduce((a, o) => a + Number(o.total), 0);
     const tips = orders.reduce((a, o) => a + Number(o.tip_amount ?? 0), 0);
-    const card = orders.filter((o) => o.payment_method === 'card');
+    const card = orders.filter((o) => o.payment_method === 'card_online' || o.payment_method === 'card');
     const cash = orders.filter((o) => o.payment_method === 'cash' || !o.payment_method);
+    const pos = orders.filter((o) => o.payment_method === 'pos_terminal');
     const cardPaid = card.filter((o) => o.payment_status === 'paid');
     const byHour = new Array(24).fill(0) as number[];
     orders.forEach((o) => { byHour[new Date(o.created_at).getHours()] += Number(o.total); });
@@ -70,8 +80,9 @@ const AdminReports = () => {
       cardSum: card.reduce((a, o) => a + Number(o.total), 0), cardCount: card.length,
       cardPaidSum: cardPaid.reduce((a, o) => a + Number(o.total), 0),
       cashSum: cash.reduce((a, o) => a + Number(o.total), 0), cashCount: cash.length,
+      posSum: pos.reduce((a, o) => a + Number(o.total), 0), posCount: pos.length,
       peakHour: peak.h, peakSum: peak.v, byHour,
-      unfiscalized: orders.filter((o) => !o.fiscalized).length,
+      unfiscalized: orders.filter((o) => (o.fiscalization_status ?? (o.fiscalized ? 'fiscalized' : 'not_fiscalized')) !== 'fiscalized').length,
     };
   }, [orders]);
 
@@ -86,11 +97,19 @@ const AdminReports = () => {
       ['Gross sales (KM)', s.gross.toFixed(2)],
       ['Tips (KM)', s.tips.toFixed(2)],
       ['Average order (KM)', s.avg.toFixed(2)],
-      ['Card orders', String(s.cardCount)],
-      ['Card total (KM)', s.cardSum.toFixed(2)],
-      ['Card paid online (KM)', s.cardPaidSum.toFixed(2)],
+      ['Card online orders', String(s.cardCount)],
+      ['Card online total (KM)', s.cardSum.toFixed(2)],
+      ['Card online confirmed paid (KM)', s.cardPaidSum.toFixed(2)],
       ['Cash orders', String(s.cashCount)],
       ['Cash total (KM)', s.cashSum.toFixed(2)],
+      ['POS terminal orders', String(s.posCount)],
+      ['POS terminal total (KM)', s.posSum.toFixed(2)],
+      ['Still owed (KM)', (recon?.outstanding ?? 0).toFixed(2)],
+      ['Refunded (KM)', (recon?.refunded ?? 0).toFixed(2)],
+      ['Cancelled orders', String(recon?.cancelled_orders ?? 0)],
+      ['Payments started but unresolved', String(recon?.stuck_payments ?? 0)],
+      ['Provider callback problems', String(recon?.callback_problems ?? 0)],
+      ['Not fiscalized (KM)', (recon?.unfiscalized ?? 0).toFixed(2)],
       [],
       ['Order id', 'Time', 'Payment', 'Status', 'Tip (KM)', 'Total (KM)'],
       ...orders.map((o) => [
@@ -145,18 +164,57 @@ const AdminReports = () => {
             <Stat icon={ShoppingBag} label="Orders" value={String(s.count)} sub={s.peakHour >= 0 ? `Busiest: ${s.peakHour}:00` : undefined} />
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+          {/* Three settlement channels, never merged: they reconcile against
+              the online gateway, the cash drawer and the POS terminal batch. */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
             <Card className="border-border"><CardContent className="p-5">
-              <div className="flex items-center gap-2 mb-1"><CreditCard className="w-4 h-4 text-primary" /><p className="font-sans font-semibold text-foreground">Card</p></div>
-              <p className="text-2xl font-serif font-bold tabular-nums">{km(s.cardSum)}</p>
-              <p className="text-xs text-muted-foreground font-sans mt-1">{s.cardCount} orders · {km(s.cardPaidSum)} paid online</p>
+              <div className="flex items-center gap-2 mb-1"><CreditCard className="w-4 h-4 text-primary" /><p className="font-sans font-semibold text-foreground">Card online</p></div>
+              <p className="text-2xl font-serif font-bold tabular-nums">{km(recon?.paid_online ?? s.cardPaidSum)}</p>
+              <p className="text-xs text-muted-foreground font-sans mt-1">confirmed paid · {s.cardCount} chose card</p>
             </CardContent></Card>
             <Card className="border-border"><CardContent className="p-5">
-              <div className="flex items-center gap-2 mb-1"><Banknote className="w-4 h-4 text-muted-foreground" /><p className="font-sans font-semibold text-foreground">Cash / at table</p></div>
-              <p className="text-2xl font-serif font-bold tabular-nums">{km(s.cashSum)}</p>
-              <p className="text-xs text-muted-foreground font-sans mt-1">{s.cashCount} orders</p>
+              <div className="flex items-center gap-2 mb-1"><Banknote className="w-4 h-4 text-muted-foreground" /><p className="font-sans font-semibold text-foreground">Cash</p></div>
+              <p className="text-2xl font-serif font-bold tabular-nums">{km(recon?.paid_cash ?? 0)}</p>
+              <p className="text-xs text-muted-foreground font-sans mt-1">recorded by staff · match the drawer</p>
+            </CardContent></Card>
+            <Card className="border-border"><CardContent className="p-5">
+              <div className="flex items-center gap-2 mb-1"><Smartphone className="w-4 h-4 text-muted-foreground" /><p className="font-sans font-semibold text-foreground">POS terminal</p></div>
+              <p className="text-2xl font-serif font-bold tabular-nums">{km(recon?.paid_pos_terminal ?? 0)}</p>
+              <p className="text-xs text-muted-foreground font-sans mt-1">match the terminal batch</p>
             </CardContent></Card>
           </div>
+
+          {recon && (recon.outstanding > 0 || recon.stuck_payments > 0 || recon.callback_problems > 0 || recon.refunded > 0) && (
+            <Card className="border-border mb-6">
+              <CardHeader><CardTitle className="font-serif text-lg">Needs attention before close</CardTitle></CardHeader>
+              <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm font-sans">
+                {recon.outstanding > 0 && (
+                  <div className="flex items-start gap-2">
+                    <Clock className="w-4 h-4 text-accent mt-0.5 shrink-0" />
+                    <span><strong className="tabular-nums">{km(recon.outstanding)}</strong> still owed across {recon.outstanding_orders} order{recon.outstanding_orders === 1 ? '' : 's'} — collect or write off.</span>
+                  </div>
+                )}
+                {recon.stuck_payments > 0 && (
+                  <div className="flex items-start gap-2">
+                    <AlertTriangle className="w-4 h-4 text-destructive mt-0.5 shrink-0" />
+                    <span><strong>{recon.stuck_payments}</strong> card payment{recon.stuck_payments === 1 ? '' : 's'} started and never resolved ({km(recon.stuck_amount)}). Those orders never reached the kitchen.</span>
+                  </div>
+                )}
+                {recon.callback_problems > 0 && (
+                  <div className="flex items-start gap-2">
+                    <AlertTriangle className="w-4 h-4 text-destructive mt-0.5 shrink-0" />
+                    <span><strong>{recon.callback_problems}</strong> provider callback{recon.callback_problems === 1 ? '' : 's'} rejected for a wrong amount, wrong currency, or unknown order. Raise with Monri.</span>
+                  </div>
+                )}
+                {recon.refunded > 0 && (
+                  <div className="flex items-start gap-2">
+                    <Coins className="w-4 h-4 text-muted-foreground mt-0.5 shrink-0" />
+                    <span><strong className="tabular-nums">{km(recon.refunded)}</strong> refunded today.</span>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
 
           <Card className="border-border">
             <CardHeader><CardTitle className="font-serif text-lg">Sales by hour</CardTitle></CardHeader>

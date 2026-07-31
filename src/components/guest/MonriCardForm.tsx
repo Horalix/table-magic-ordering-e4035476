@@ -58,17 +58,29 @@ export interface MonriCardFormProps {
   authenticityToken: string;
   environment: 'test' | 'production';
   amountLabel: string;
-  onSuccess: () => void;
-  /** Give up on card payment (close) — caller should offer the call-waiter fallback. */
-  onCancel: () => void;
+  /** Shown so the guest can quote it to staff if anything goes wrong. */
+  orderCode?: string | null;
+  /**
+   * The card form is done — approved, declined, or errored. The caller must
+   * now ask the SERVER what happened; this component deliberately does not
+   * report success, because the SDK's opinion is not proof of payment.
+   */
+  onFinished: () => void;
+  /** The guest closed the form without submitting a card. */
+  onGiveUp: () => void;
 }
 
 /**
- * Renders Monri's hosted card field and confirms the payment. The order is
- * already created (payment pending); the webhook is the source of truth that
- * flips it to 'paid'. On approval we optimistically show success.
+ * Monri's hosted card field.
+ *
+ * Card data is entered in Monri-hosted iframes and never touches our code or
+ * our backend. When `confirmPayment` resolves we hand control back to the
+ * caller regardless of what the SDK said: the verified webhook is the only
+ * thing allowed to decide that money arrived. A visible decline is surfaced
+ * inline so the guest can correct the card without leaving the sheet, but even
+ * an "approved" result only ends the form.
  */
-const MonriCardForm = ({ open, clientSecret, authenticityToken, environment, amountLabel, onSuccess, onCancel }: MonriCardFormProps) => {
+const MonriCardForm = ({ open, clientSecret, authenticityToken, environment, amountLabel, orderCode, onFinished, onGiveUp }: MonriCardFormProps) => {
   const t = useT();
   const locale = useLanguageStore((s) => s.locale);
   const [phase, setPhase] = useState<'loading' | 'ready' | 'submitting'>('loading');
@@ -123,21 +135,28 @@ const MonriCardForm = ({ open, clientSecret, authenticityToken, environment, amo
     try {
       const res = await monriRef.current.confirmPayment(cardRef.current, {});
       const status = (res.result?.status || res.status || '').toLowerCase();
+
+      // A hard client-side error (bad card number, 3-D Secure abandoned) is
+      // safe to show inline and retry without a server round-trip.
       if (res.error) {
         setError(res.error.message || t('payment_failed'));
         setPhase('ready');
         return;
       }
-      if (status === 'approved') {
-        onSuccess();
+      if (status && status !== 'approved') {
+        setError(res.result?.['response-message'] || t('payment_declined'));
+        setPhase('ready');
         return;
       }
-      // declined / authentication failed / anything else
-      setError(res.result?.['response-message'] || t('payment_declined'));
-      setPhase('ready');
+
+      // Anything else — including "approved" — is only a signal that the form
+      // is finished. The caller now waits for our own server.
+      onFinished();
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('payment_failed'));
-      setPhase('ready');
+      // We do not know whether the charge went through. Never treat this as a
+      // decline: hand off so the server can tell us.
+      console.warn('Monri confirmPayment threw; deferring to server', e);
+      onFinished();
     }
   };
 
@@ -145,14 +164,28 @@ const MonriCardForm = ({ open, clientSecret, authenticityToken, environment, amo
     <AnimatePresence>
       {open && (
         <motion.div variants={fade} initial="hidden" animate="show" exit="exit" className="fixed inset-0 z-[55] flex items-end sm:items-center justify-center">
-          <div className="absolute inset-0 bg-foreground/40 backdrop-blur-sm" onClick={phase === 'submitting' ? undefined : onCancel} />
-          <motion.div variants={sheetUp} initial="hidden" animate="show" exit="exit" className="relative w-full max-w-lg bg-card rounded-t-3xl sm:rounded-3xl p-6 pb-safe sm:pb-6 shadow-lux-lg">
+          <div className="absolute inset-0 bg-foreground/40 backdrop-blur-sm" onClick={phase === 'submitting' ? undefined : onGiveUp} />
+          <motion.div
+            role="dialog"
+            aria-modal="true"
+            aria-label={t('pay_by_card')}
+            variants={sheetUp}
+            initial="hidden"
+            animate="show"
+            exit="exit"
+            className="relative w-full max-w-lg bg-card rounded-t-3xl sm:rounded-3xl p-6 pb-safe sm:pb-6 shadow-lux-lg"
+          >
             <div className="w-10 h-1.5 rounded-full bg-foreground/15 mx-auto mb-4 sm:hidden" />
             <div className="flex items-center justify-center gap-2 text-foreground">
-              <CreditCard className="w-5 h-5 text-primary" />
+              <CreditCard className="w-5 h-5 text-primary" aria-hidden />
               <h2 className="font-serif text-xl font-bold">{t('pay_by_card')}</h2>
             </div>
             <p className="text-center text-2xl font-serif font-bold text-primary mt-2 tabular-nums">{amountLabel}</p>
+            {orderCode && (
+              <p className="text-center text-xs font-sans text-muted-foreground mt-1">
+                {t('order_number')} <span className="font-semibold tabular-nums tracking-wider">{orderCode}</span>
+              </p>
+            )}
 
             <div className="mt-5 rounded-xl border border-border bg-background p-3 min-h-[52px] relative">
               {phase === 'loading' && (
@@ -164,10 +197,12 @@ const MonriCardForm = ({ open, clientSecret, authenticityToken, environment, amo
               <div id={CARD_ELEMENT_ID} />
             </div>
 
-            {error && <p className="text-sm text-destructive font-sans mt-3 text-center">{error}</p>}
+            {error && (
+              <p className="text-sm text-destructive font-sans mt-3 text-center" role="alert">{error}</p>
+            )}
 
             <p className="flex items-center justify-center gap-1.5 text-[11px] text-muted-foreground font-sans mt-4">
-              <ShieldCheck className="w-3.5 h-3.5" /> {t('secure_payment_monri')}
+              <ShieldCheck className="w-3.5 h-3.5" aria-hidden /> {t('secure_payment_monri')}
             </p>
 
             <Button
@@ -176,11 +211,11 @@ const MonriCardForm = ({ open, clientSecret, authenticityToken, environment, amo
               className="mt-4 w-full h-12 rounded-2xl bg-primary text-primary-foreground hover:bg-sage-dark font-sans font-semibold tap"
             >
               {phase === 'submitting'
-                ? <span className="flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin" /> {t('paying')}</span>
+                ? <span className="flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin" aria-hidden /> {t('paying')}</span>
                 : `${t('pay_now_card')} · ${amountLabel}`}
             </Button>
-            <Button onClick={onCancel} variant="ghost" disabled={phase === 'submitting'} className="mt-2 w-full rounded-2xl font-sans text-muted-foreground gap-2">
-              <Hand className="w-4 h-4" /> {t('call_waiter_to_pay')}
+            <Button onClick={onGiveUp} variant="ghost" disabled={phase === 'submitting'} className="mt-2 w-full rounded-2xl font-sans text-muted-foreground gap-2">
+              <Hand className="w-4 h-4" aria-hidden /> {t('switch_to_pay_at_table')}
             </Button>
           </motion.div>
         </motion.div>
