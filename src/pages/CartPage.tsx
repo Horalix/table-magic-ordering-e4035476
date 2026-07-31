@@ -37,6 +37,14 @@ const CartPage = () => {
   const [submitting, setSubmitting] = useState<PaymentMethod | null>(null);
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [phase, setPhase] = useState<PaymentPhase | null>(null);
+  /**
+   * The order the status screen is talking about.
+   *
+   * Kept separately from `pendingPayment` because that is cleared the moment
+   * the money resolves — reading the amount from it (or from the now-empty
+   * cart) is how a confirmation ends up proudly displaying "0.00 KM".
+   */
+  const [resolvedOrder, setResolvedOrder] = useState<{ code: string; total: number } | null>(null);
   const [recovering, setRecovering] = useState(false);
   const [cardSession, setCardSession] = useState<{ clientSecret: string; authenticityToken: string; environment: 'test' | 'production' } | null>(null);
   const [lastRemoved, setLastRemoved] = useState<CartItem | null>(null);
@@ -85,6 +93,8 @@ const CartPage = () => {
         { timeoutMs: 12_000 },
       );
       if (cancelled) return;
+
+      setResolvedOrder({ code: pendingPayment.orderCode, total: pendingPayment.total });
 
       if (result.outcome === 'received') {
         clearCart();
@@ -179,6 +189,7 @@ const CartPage = () => {
       setLastOrderTime();
       addRecentItems(items.map((it) => ({ id: it.menuItemId ?? it.id, name: it.name, price: it.price, image_url: it.image_url })));
       setCheckoutOpen(false);
+      setResolvedOrder({ code: order.order_code, total: Number(order.total) });
 
       if (order.awaiting_payment) {
         // The order exists but is NOT in the kitchen. Remember it so a reload
@@ -196,14 +207,8 @@ const CartPage = () => {
 
       // Pay at the table: the order is with the kitchen, so the cart is done.
       clearCart();
-      setPendingPayment({
-        orderId: order.order_id,
-        orderCode: order.order_code,
-        total: Number(order.total),
-        createdAt: Date.now(),
-      });
-      setPhase('received');
       setPendingPayment(null);
+      setPhase('received');
       track('order_placed', { method, order_code: order.order_code, total: Number(order.total) });
       await pingWaiter('pay');
       toast.success(t('order_confirmed'));
@@ -276,7 +281,7 @@ const CartPage = () => {
   };
 
   const isLargeOrder = itemCount() > LARGE_ORDER_THRESHOLD;
-  const amountLabel = `${(pendingPayment?.total ?? total()).toFixed(2)} KM`;
+  const amountLabel = `${(resolvedOrder?.total ?? pendingPayment?.total ?? total()).toFixed(2)} KM`;
 
   // ---------------------------------------------------------------------
 
@@ -284,7 +289,7 @@ const CartPage = () => {
     return (
       <PaymentStatus
         phase={phase}
-        orderCode={pendingPayment?.orderCode ?? null}
+        orderCode={resolvedOrder?.code ?? pendingPayment?.orderCode ?? null}
         amountLabel={amountLabel}
         released={phase === 'received'}
         busy={recovering}
@@ -293,7 +298,7 @@ const CartPage = () => {
           : undefined}
         onPayAtTable={phase === 'failed' && pendingPayment ? payAtTableInstead : undefined}
         onTrackOrder={() => navigate('/tab')}
-        onContinue={phase === 'received' ? () => { setPhase(null); navigate(buildMenuUrl()); } : undefined}
+        onContinue={phase === 'received' ? () => { setPhase(null); setResolvedOrder(null); navigate(buildMenuUrl()); } : undefined}
       />
     );
   }
@@ -333,6 +338,19 @@ const CartPage = () => {
       {!orderingPaused && (service?.kitchen_delay_minutes ?? 0) > 0 && (
         <div className="mx-4 mt-4 p-3 rounded-xl border border-border bg-muted/40" role="status">
           <p className="text-xs font-sans text-muted-foreground">{t('kitchen_busy_notice')}</p>
+        </div>
+      )}
+
+      {/* Undo sits outside the empty/non-empty branch on purpose: removing the
+          last line is exactly when a guest most needs to be able to undo it. */}
+      {lastRemoved && (
+        <div className="px-4 pt-4">
+          <button
+            onClick={undoRemove}
+            className="w-full flex items-center justify-center gap-2 p-3 rounded-xl border border-dashed border-border text-sm font-sans text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors min-h-[44px]"
+          >
+            <Undo2 className="w-4 h-4" aria-hidden /> {t('undo_remove')} — {lastRemoved.name}
+          </button>
         </div>
       )}
 
@@ -398,17 +416,6 @@ const CartPage = () => {
               </motion.div>
             ))}
           </motion.div>
-
-          {lastRemoved && (
-            <div className="px-4 mt-3">
-              <button
-                onClick={undoRemove}
-                className="w-full flex items-center justify-center gap-2 p-3 rounded-xl border border-dashed border-border text-sm font-sans text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors"
-              >
-                <Undo2 className="w-4 h-4" aria-hidden /> {t('undo_remove')} — {lastRemoved.name}
-              </button>
-            </div>
-          )}
 
           <div className="px-4 mt-6 space-y-3">
             {isLargeOrder && (

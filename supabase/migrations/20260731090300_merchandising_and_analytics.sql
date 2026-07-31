@@ -114,54 +114,57 @@ RETURNS TABLE(
   recommendation_type text,
   reason text
 )
-LANGUAGE plpgsql
+-- Written in plain SQL rather than PL/pgSQL on purpose: the RETURNS TABLE
+-- column names (id, name, price…) would otherwise shadow the menu_items
+-- columns of the same name inside the query body.
+LANGUAGE sql
 STABLE
 SECURITY DEFINER
 SET search_path = public
 AS $$
-DECLARE
-  v_limit int := LEAST(GREATEST(COALESCE(_limit, 4), 1), 8);
-  v_cart uuid[] := COALESCE(_cart_item_ids, '{}');
-  v_placement text := CASE WHEN _placement IN ('cart', 'after_meal', 'item') THEN _placement ELSE 'cart' END;
-  v_lang text := CASE WHEN _language IN ('en', 'bs', 'ar') THEN _language ELSE 'en' END;
-  v_now time := LOCALTIME;
-BEGIN
-  IF NOT COALESCE((SELECT recommendations_enabled FROM public.restaurant_settings WHERE id = 1), true) THEN
-    RETURN;
-  END IF;
-
-  RETURN QUERY
-  WITH cart_subcategories AS (
+  WITH settings AS (
+    SELECT COALESCE((SELECT recommendations_enabled FROM public.restaurant_settings WHERE id = 1), true) AS enabled
+  ),
+  params AS (
+    SELECT
+      LEAST(GREATEST(COALESCE(_limit, 4), 1), 8) AS lim,
+      COALESCE(_cart_item_ids, '{}'::uuid[]) AS cart,
+      CASE WHEN _placement IN ('cart', 'after_meal', 'item') THEN _placement ELSE 'cart' END AS placement,
+      CASE WHEN _language IN ('en', 'bs', 'ar') THEN _language ELSE 'en' END AS lang,
+      LOCALTIME AS now_time
+  ),
+  cart_subcategories AS (
     SELECT DISTINCT mi.subcategory_id
-      FROM public.menu_items mi
-     WHERE mi.id = ANY(v_cart)
+      FROM public.menu_items mi, params p
+     WHERE mi.id = ANY(p.cart)
   ),
   -- Explicit, admin-curated relationships.
   explicit AS (
     SELECT r.recommended_item_id AS item_id,
-           r.recommendation_type,
+           r.recommendation_type AS rtype,
            r.priority + 40 AS score
-      FROM public.menu_item_recommendations r
-      LEFT JOIN public.menu_items src ON src.id = r.source_item_id
+      FROM public.menu_item_recommendations r, params p
      WHERE r.enabled
-       AND (r.language IS NULL OR r.language = v_lang)
-       AND (r.start_time IS NULL OR v_now >= r.start_time)
-       AND (r.end_time IS NULL OR v_now <= r.end_time)
+       AND (r.language IS NULL OR r.language = p.lang)
+       AND (r.start_time IS NULL OR p.now_time >= r.start_time)
+       AND (r.end_time IS NULL OR p.now_time <= r.end_time)
        AND (
-         (v_placement = 'after_meal' AND r.recommendation_type = 'after_meal')
-         OR (v_placement <> 'after_meal' AND r.recommendation_type <> 'after_meal'
-             AND (r.source_item_id = ANY(v_cart)
-                  OR r.source_subcategory_id IN (SELECT subcategory_id FROM cart_subcategories)))
+         (p.placement = 'after_meal' AND r.recommendation_type = 'after_meal')
+         OR (p.placement <> 'after_meal' AND r.recommendation_type <> 'after_meal'
+             AND (r.source_item_id = ANY(p.cart)
+                  OR r.source_subcategory_id IN (SELECT cs.subcategory_id FROM cart_subcategories cs)))
        )
   ),
   -- Fallback: popular items, so a fresh install still suggests something
-  -- sensible before anyone has curated pairings.
+  -- sensible before anyone has curated a single pairing. Suppressed for the
+  -- after-meal placement, where a generic "popular" pick is just noise.
   popular AS (
-    SELECT p.menu_item_id AS item_id,
-           'frequently_bought_together'::text AS recommendation_type,
+    SELECT pop.menu_item_id AS item_id,
+           'frequently_bought_together'::text AS rtype,
            10 AS score
-      FROM public.get_popular_items(12, 45) p
-     WHERE NOT EXISTS (SELECT 1 FROM explicit e WHERE e.item_id = p.menu_item_id)
+      FROM public.get_popular_items(12, 45) pop, params p
+     WHERE p.placement <> 'after_meal'
+       AND NOT EXISTS (SELECT 1 FROM explicit e WHERE e.item_id = pop.menu_item_id)
   ),
   candidates AS (
     SELECT * FROM explicit
@@ -175,20 +178,22 @@ BEGIN
          mi.price,
          mi.image_url,
          mi.dietary_tags,
-         c.recommendation_type,
-         c.recommendation_type AS reason
+         c.rtype,
+         c.rtype
     FROM candidates c
     JOIN public.menu_items mi ON mi.id = c.item_id
-   WHERE public.menu_item_orderable(mi, v_now)
-     AND NOT (mi.id = ANY(v_cart))
+    CROSS JOIN params p
+   WHERE (SELECT s.enabled FROM settings s)
+     AND public.menu_item_orderable(mi, p.now_time)
+     AND NOT (mi.id = ANY(p.cart))
      -- Do not offer more of what the guest already chose from the same shelf,
      -- unless an admin explicitly said "upgrade_to" or "add_on".
-     AND (c.recommendation_type IN ('upgrade_to', 'add_on', 'after_meal')
-          OR mi.subcategory_id NOT IN (SELECT subcategory_id FROM cart_subcategories))
-   GROUP BY mi.id, mi.name, mi.name_bs, mi.name_ar, mi.price, mi.image_url, mi.dietary_tags, c.recommendation_type
-   ORDER BY max(c.score) DESC, max(mi.margin_score) DESC, mi.price ASC
-   LIMIT v_limit;
-END;
+     AND (c.rtype IN ('upgrade_to', 'add_on', 'after_meal')
+          OR mi.subcategory_id NOT IN (SELECT cs.subcategory_id FROM cart_subcategories cs))
+   GROUP BY mi.id, mi.name, mi.name_bs, mi.name_ar, mi.price, mi.image_url,
+            mi.dietary_tags, mi.margin_score, c.rtype, p.lim
+   ORDER BY max(c.score) DESC, mi.margin_score DESC, mi.price ASC
+   LIMIT (SELECT p.lim FROM params p);
 $$;
 
 REVOKE ALL ON FUNCTION public.guest_get_recommendations(uuid[], text, text, int) FROM PUBLIC;

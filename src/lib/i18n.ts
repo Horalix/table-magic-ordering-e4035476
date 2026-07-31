@@ -18,12 +18,15 @@ export const useLanguageStore = create<LanguageStore>((set) => ({
   },
 }));
 
-// Initialize dir on load
+// Initialise direction AND language on load.
+//
+// `lang` matters for every locale, not just Arabic: screen readers pick the
+// pronunciation from it, and Bosnian read aloud in an English voice is close
+// to unintelligible. Previously it was only set for 'ar', so a Bosnian guest
+// got `lang="en"` on a fully Bosnian page.
 const savedLocale = (localStorage.getItem('lasoul-lang') as Locale) || 'en';
-if (savedLocale === 'ar') {
-  document.documentElement.dir = 'rtl';
-  document.documentElement.lang = 'ar';
-}
+document.documentElement.lang = savedLocale;
+document.documentElement.dir = savedLocale === 'ar' ? 'rtl' : 'ltr';
 
 const translations: Record<string, Record<Locale, string>> = {
   // Navigation & General

@@ -31,7 +31,10 @@ const TablePresence = () => {
   const load = useCallback(async () => {
     if (!sessionId || !sessionToken) { setPending([]); return; }
     const data = await listPendingJoinRequests(sessionId, sessionToken, clientId).catch(() => []);
-    setPending(data as JoinReq[]);
+    // This component is mounted globally for every guest, so a non-array
+    // response (an RPC returning NULL, an offline stub) must not be able to
+    // take the whole app down with it.
+    setPending(Array.isArray(data) ? (data as JoinReq[]) : []);
   }, [sessionId, sessionToken, clientId]);
 
   useEffect(() => {

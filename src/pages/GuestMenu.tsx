@@ -5,6 +5,7 @@ import { UtensilsCrossed, Wine, Cake, Phone, MapPin, ChevronRight } from 'lucide
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import CallWaiterButton from '@/components/guest/CallWaiterButton';
+import { useCartStore } from '@/lib/cart-store';
 import CartBar from '@/components/guest/CartBar';
 import LanguageSelector from '@/components/guest/LanguageSelector';
 import { useT, useLanguageStore, getLocalizedName } from '@/lib/i18n';
@@ -43,9 +44,19 @@ const GuestMenu = () => {
   const [searchParams] = useSearchParams();
   const t = useT();
   const locale = useLanguageStore((s) => s.locale);
-  const table = searchParams.get('table');
+  // A live session is the store's, not the URL's.
+  //
+  // The PWA start_url is /menu with no query string, and any reload or shared
+  // link drops the params — so deriving "can this guest order?" from the URL
+  // alone silently demoted installed-app users to browse-only. The URL is only
+  // a convenience for showing the table number.
+  const storeSessionId = useCartStore((s) => s.sessionId);
+  const storeSessionToken = useCartStore((s) => s.sessionToken);
+  const storeTableNumber = useCartStore((s) => s.tableNumber);
+
+  const table = searchParams.get('table') ?? (storeTableNumber ? String(storeTableNumber) : null);
   const token = searchParams.get('token');
-  const hasSession = !!(table && token);
+  const hasSession = !!(storeSessionId && storeSessionToken);
 
   const { data: categories = [] } = useQuery({
     queryKey: ['categories'],

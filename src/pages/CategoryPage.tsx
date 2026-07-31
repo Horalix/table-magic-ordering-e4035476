@@ -50,12 +50,16 @@ const CategoryPage = () => {
   const pillRefs = useRef<Record<string, HTMLButtonElement | null>>({});
   const deferredSearch = useDeferredValue(search);
   const { addItem, removeItem, updateQuantity, items: cartItems } = useCartStore();
+  const storeSessionId = useCartStore((s) => s.sessionId);
+  const storeSessionToken = useCartStore((s) => s.sessionToken);
+  const storeTableNumber = useCartStore((s) => s.tableNumber);
   const t = useT();
   const locale = useLanguageStore((s) => s.locale);
 
-  const table = searchParams.get('table');
+  // The session lives in the store, not the URL — see the note in GuestMenu.
+  const table = searchParams.get('table') ?? (storeTableNumber ? String(storeTableNumber) : null);
   const token = searchParams.get('token');
-  const hasSession = !!(table && token);
+  const hasSession = !!(storeSessionId && storeSessionToken);
   const rtl = locale === 'ar';
 
   const categoryName = categoryNameMap[type || ''] || type;
