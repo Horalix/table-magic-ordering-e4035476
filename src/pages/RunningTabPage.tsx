@@ -14,6 +14,8 @@ import { staggerContainer, fadeUp, useCountUp } from '@/lib/motion';
 import { getGuestTab, requestBill as requestGuestBill } from '@/lib/guest-api';
 import SplitBillSheet from '@/components/guest/SplitBillSheet';
 import OrderStatusTimeline from '@/components/guest/OrderStatusTimeline';
+import CartSuggestion from '@/components/guest/CartSuggestion';
+import { track } from '@/lib/analytics';
 
 const RunningTabPage = () => {
   const navigate = useNavigate();
@@ -97,6 +99,10 @@ const RunningTabPage = () => {
   };
 
   const billRequested = !!existingBillRequest;
+  /** At least one order has actually reached the table. */
+  const hasServedFood = orders.some((o) => o.status === 'served' || o.status === 'ready');
+
+  React.useEffect(() => { track('tab_viewed', { orders: orders.length }); }, [orders.length]);
 
   return (
     <div className="min-h-screen bg-background pb-32">
@@ -178,8 +184,16 @@ const RunningTabPage = () => {
             </div>
           )}
 
-          <div className="px-4 pt-3">
-            <Button onClick={() => setSplitOpen(true)} variant="outline" className="w-full rounded-xl min-h-[48px] font-sans text-sm gap-2">
+          {/* Post-meal suggestion. Only once food has actually been served and
+              only while the guest has not asked for the bill — offering coffee
+              to someone who is trying to leave is the definition of pushy. */}
+          {hasServedFood && !billRequested && <CartSuggestion placement="after_meal" />}
+
+          <div className="px-4 pt-3 grid grid-cols-2 gap-2">
+            <Button onClick={goBack} variant="outline" className="rounded-xl min-h-[48px] font-sans text-sm gap-2">
+              <Utensils className="w-4 h-4" /> {t('order_more')}
+            </Button>
+            <Button onClick={() => setSplitOpen(true)} variant="outline" className="rounded-xl min-h-[48px] font-sans text-sm gap-2">
               <Users className="w-4 h-4" /> {t('split_bill')}
             </Button>
           </div>

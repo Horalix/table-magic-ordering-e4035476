@@ -7,6 +7,7 @@ import { Textarea } from '@/components/ui/textarea';
 import SmartImage from '@/components/ui/SmartImage';
 import { useT, useLanguageStore, getLocalizedName, getLocalizedDescription } from '@/lib/i18n';
 import { sheetUp, fade } from '@/lib/motion';
+import { track } from '@/lib/analytics';
 
 interface Props {
   item: {
@@ -45,6 +46,8 @@ const MenuItemDetail = ({ item, onClose, canOrder = true }: Props) => {
         notes: notes.trim() || undefined,
       });
     }
+    // Only ids and counts — the note itself is never sent to analytics.
+    track('item_added', { item_id: item.id, quantity, source: 'detail', has_note: notes.trim().length > 0 });
     onClose();
   };
 

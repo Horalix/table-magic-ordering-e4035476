@@ -12,6 +12,8 @@ import { useSessionHeartbeat } from '@/hooks/useSessionHeartbeat';
 import { staggerContainer, fadeUp } from '@/lib/motion';
 import InstallPrompt from '@/components/guest/InstallPrompt';
 import RecentOrdersRow from '@/components/guest/RecentOrdersRow';
+import MenuSearch from '@/components/guest/MenuSearch';
+import { track } from '@/lib/analytics';
 import type { LucideIcon } from 'lucide-react';
 import type { Database } from '@/integrations/supabase/types';
 
@@ -57,7 +59,10 @@ const GuestMenu = () => {
     },
   });
 
-  const handleCategoryClick = (path: string) => {
+  React.useEffect(() => { track('menu_viewed', { has_session: hasSession }); }, [hasSession]);
+
+  const handleCategoryClick = (path: string, categoryName: string) => {
+    track('category_viewed', { category: categoryName });
     const params = new URLSearchParams();
     if (table) params.set('table', table);
     if (token) params.set('token', token);
@@ -155,6 +160,10 @@ const GuestMenu = () => {
         animate="show"
         className="flex-1 bg-background px-5 py-6 pb-36 space-y-3 -mt-3 rounded-t-3xl relative z-10"
       >
+        {/* Find-by-name across every category, before the category cards —
+            it is the first thing a guest looking for one specific thing wants. */}
+        <MenuSearch canOrder={hasSession} />
+
         {hasSession && <RecentOrdersRow />}
 
         {categories.map((cat) => {
@@ -166,7 +175,7 @@ const GuestMenu = () => {
               key={cat.id}
               variants={fadeUp}
               whileTap={{ scale: 0.97 }}
-              onClick={() => handleCategoryClick(path)}
+              onClick={() => handleCategoryClick(path, cat.name)}
               className="w-full group tap"
             >
               <div className="card-lux card-lux-hover relative overflow-hidden p-5">

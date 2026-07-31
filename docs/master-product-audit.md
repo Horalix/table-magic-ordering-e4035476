@@ -353,11 +353,13 @@ kept as-is. But the checkout sheet is the first place the guest sees the grand
 total, and the "no refund" microcopy (`no_refund_short`) sits directly under the
 price where it reads as a warning at the worst moment.
 
-### P2-23 — Search is absent
+### P2-23 — Search exists but only inside one category
 
-There is no search anywhere in the guest app. On a menu of this size (6 drink
-subcategories + 5 food + desserts) search is the single highest-value discovery
-feature.
+`CategoryPage` has a good in-category search (`CategoryPage.tsx:122-129`, matching
+name and description across all three languages). What is missing is **global**
+search: a guest who wants "water" or "baklava" must first guess whether it lives
+under Drinks, Food or Desserts. The landing page — the screen everyone starts on
+— has no way to find anything by name.
 
 ### P2-24 — Product detail is thin
 
@@ -467,7 +469,7 @@ specifically *La Soul*, not template. Motion is tasteful and mostly transform-on
 | P2-14 | P2 | Maintainability | Duplicate migrations | Documented, not rewritten |
 | P2-18 | P2 | Operations | No refund/cancellation model | **Fixed** (model + adapter; provider call gated) |
 | P2-19 | P2 | Waiter | Waiter payment clarity | **Fixed** |
-| P2-23 | P2 | Discovery | No search | **Fixed** |
+| P2-23 | P2 | Discovery | Search is category-scoped only | **Fixed** (global search added) |
 | P2-24 | P2 | Discovery | Thin product detail | Partially — allergens/pairing added |
 | P2-25 | P2 | i18n | Arabic RTL gaps | **Fixed** (locale passthrough + logical props) |
 | P2-26 | P2 | A11y | Colour-only status, modal semantics | **Fixed** |

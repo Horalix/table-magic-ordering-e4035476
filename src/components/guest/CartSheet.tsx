@@ -4,7 +4,7 @@ import { X, Minus, Plus, CreditCard, ShoppingBag } from 'lucide-react';
 import { useCartStore } from '@/lib/cart-store';
 import { Button } from '@/components/ui/button';
 import SmartImage from '@/components/ui/SmartImage';
-import UpsellRow from '@/components/guest/UpsellRow';
+import CartSuggestion from '@/components/guest/CartSuggestion';
 import { useT } from '@/lib/i18n';
 import { sheetUp, fade, useCountUp } from '@/lib/motion';
 
@@ -70,7 +70,7 @@ const CartSheet = ({ onClose, onCheckout }: Props) => {
               </div>
             </div>
           ))}
-          {items.length > 0 && sessionId && sessionToken && <UpsellRow />}
+          {items.length > 0 && sessionId && sessionToken && <CartSuggestion placement="cart" />}
         </div>
 
         {items.length > 0 && (

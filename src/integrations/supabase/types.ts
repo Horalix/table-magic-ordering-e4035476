@@ -78,6 +78,13 @@ export type Database = {
       }
       menu_items: {
         Row: {
+          allergens: string[]
+          available_from: string | null
+          available_to: string | null
+          margin_score: number
+          merchandising_tags: string[]
+          portion_note: string | null
+          prep_minutes: number | null
           created_at: string
           description: string | null
           description_ar: string | null
@@ -247,6 +254,20 @@ export type Database = {
           assigned_waiter_id: string | null
           confirmed_at: string | null
           created_at: string
+          cancel_reason: string | null
+          cancelled_at: string | null
+          cancelled_by: string | null
+          fiscal_provider_reference: string | null
+          fiscal_receipt_number: string | null
+          fiscalization_error: string | null
+          fiscalization_status: string
+          fiscalized_by: string | null
+          order_code: string | null
+          paid_at: string | null
+          paid_by: string | null
+          payment_note: string | null
+          refunded_amount: number
+          released_to_kitchen_at: string | null
           fiscalized: boolean
           fiscalized_at: string | null
           guest_name: string | null
@@ -267,6 +288,20 @@ export type Database = {
           assigned_waiter_id?: string | null
           confirmed_at?: string | null
           created_at?: string
+          cancel_reason?: string | null
+          cancelled_at?: string | null
+          cancelled_by?: string | null
+          fiscal_provider_reference?: string | null
+          fiscal_receipt_number?: string | null
+          fiscalization_error?: string | null
+          fiscalization_status?: string
+          fiscalized_by?: string | null
+          order_code?: string | null
+          paid_at?: string | null
+          paid_by?: string | null
+          payment_note?: string | null
+          refunded_amount?: number
+          released_to_kitchen_at?: string | null
           fiscalized?: boolean
           fiscalized_at?: string | null
           guest_name?: string | null
@@ -287,6 +322,20 @@ export type Database = {
           assigned_waiter_id?: string | null
           confirmed_at?: string | null
           created_at?: string
+          cancel_reason?: string | null
+          cancelled_at?: string | null
+          cancelled_by?: string | null
+          fiscal_provider_reference?: string | null
+          fiscal_receipt_number?: string | null
+          fiscalization_error?: string | null
+          fiscalization_status?: string
+          fiscalized_by?: string | null
+          order_code?: string | null
+          paid_at?: string | null
+          paid_by?: string | null
+          payment_note?: string | null
+          refunded_amount?: number
+          released_to_kitchen_at?: string | null
           fiscalized?: boolean
           fiscalized_at?: string | null
           guest_name?: string | null
