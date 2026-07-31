@@ -76,6 +76,48 @@ export type Database = {
         }
         Relationships: []
       }
+      menu_item_recommendations: {
+        Row: {
+          created_at: string
+          enabled: boolean
+          end_time: string | null
+          id: string
+          language: string | null
+          priority: number
+          recommendation_type: string
+          recommended_item_id: string
+          source_item_id: string | null
+          source_subcategory_id: string | null
+          start_time: string | null
+        }
+        Insert: {
+          created_at?: string
+          enabled?: boolean
+          end_time?: string | null
+          id?: string
+          language?: string | null
+          priority?: number
+          recommendation_type?: string
+          recommended_item_id: string
+          source_item_id?: string | null
+          source_subcategory_id?: string | null
+          start_time?: string | null
+        }
+        Update: {
+          created_at?: string
+          enabled?: boolean
+          end_time?: string | null
+          id?: string
+          language?: string | null
+          priority?: number
+          recommendation_type?: string
+          recommended_item_id?: string
+          source_item_id?: string | null
+          source_subcategory_id?: string | null
+          start_time?: string | null
+        }
+        Relationships: []
+      }
       menu_items: {
         Row: {
           allergens: string[]
@@ -453,6 +495,13 @@ export type Database = {
       }
       restaurant_settings: {
         Row: {
+          kitchen_delay_minutes: number
+          last_order_time: string | null
+          online_card_enabled: boolean
+          ordering_enabled: boolean
+          ordering_paused_message: string | null
+          pay_at_table_enabled: boolean
+          recommendations_enabled: boolean
           id: number
           print_auto: boolean
           print_copies: number
@@ -464,6 +513,13 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          kitchen_delay_minutes?: number
+          last_order_time?: string | null
+          online_card_enabled?: boolean
+          ordering_enabled?: boolean
+          ordering_paused_message?: string | null
+          pay_at_table_enabled?: boolean
+          recommendations_enabled?: boolean
           id?: number
           print_auto?: boolean
           print_copies?: number
@@ -475,6 +531,13 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          kitchen_delay_minutes?: number
+          last_order_time?: string | null
+          online_card_enabled?: boolean
+          ordering_enabled?: boolean
+          ordering_paused_message?: string | null
+          pay_at_table_enabled?: boolean
+          recommendations_enabled?: boolean
           id?: number
           print_auto?: boolean
           print_copies?: number
