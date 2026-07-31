@@ -35,13 +35,48 @@ export interface GuestOrderItemInput {
   notes?: string | null;
 }
 
+/**
+ * How the guest intends to settle. These are distinct on purpose:
+ * `cash` and `pos_terminal` both mean "pay at the table" to the guest, but
+ * they reconcile against different things at close of day, and `pos_terminal`
+ * tells the waiter to bring the card machine.
+ */
+export type PaymentMethod = 'card_online' | 'cash' | 'pos_terminal';
+
 export interface GuestPlaceOrderResult {
   order_id: string;
+  /** Short, speakable reference the guest can quote to a waiter. */
+  order_code: string;
+  status: string;
   total: number;
   tip_amount?: number;
-  payment_method: 'cash' | 'card';
+  payment_method: PaymentMethod;
   payment_status: string;
+  /** True when the order is held pending card payment (not in the kitchen). */
+  awaiting_payment: boolean;
   ticket_id?: string;
+}
+
+export interface GuestOrderPayment {
+  status: 'ok' | 'not_found';
+  order_id?: string;
+  order_code?: string;
+  order_status?: string;
+  payment_status?: string;
+  payment_method?: PaymentMethod;
+  total?: number;
+  /** True once the order has actually been handed to the kitchen. */
+  released?: boolean;
+}
+
+export interface ServiceStatus {
+  ordering_enabled: boolean;
+  online_card_enabled: boolean;
+  pay_at_table_enabled: boolean;
+  paused_message: string | null;
+  last_order_time: string | null;
+  kitchen_delay_minutes: number;
+  recommendations_enabled: boolean;
 }
 
 export interface GuestTabOrderItem {
@@ -168,7 +203,7 @@ export const placeGuestOrder = (
   sessionId: string,
   sessionToken: string,
   guestName: string | null,
-  paymentMethod: 'cash' | 'card',
+  paymentMethod: PaymentMethod,
   items: GuestOrderItemInput[],
   tip = 0,
 ) =>
@@ -180,6 +215,32 @@ export const placeGuestOrder = (
     _items: items as unknown as Json,
     _tip: tip,
   });
+
+/**
+ * Server truth for one order's payment. The browser's opinion of whether a
+ * card went through is never used — this is.
+ */
+export const getOrderPayment = (sessionId: string, sessionToken: string, orderId: string) =>
+  rpcJson<GuestOrderPayment>('guest_get_order_payment', {
+    _session_id: sessionId,
+    _session_token: sessionToken,
+    _order_id: orderId,
+  });
+
+/** Abandon an unpaid card order and send it to the kitchen as pay-at-table. */
+export const switchToPayAtTable = (
+  sessionId: string,
+  sessionToken: string,
+  orderId: string,
+  method: 'cash' | 'pos_terminal' = 'cash',
+) =>
+  rpcJson<{ status: 'released' | 'not_switchable' | 'payment_in_flight'; order_code?: string }>(
+    'guest_switch_to_pay_at_table',
+    { _session_id: sessionId, _session_token: sessionToken, _order_id: orderId, _method: method },
+  );
+
+/** Whether the restaurant is accepting orders, and how it can be paid. */
+export const getServiceStatus = () => rpcJson<ServiceStatus>('guest_get_service_status', {});
 
 export const callWaiter = (sessionId: string, sessionToken: string, reason: 'assist' | 'pay' = 'assist') =>
   rpcJson<{ call_id: string; status: string }>('guest_call_waiter', {

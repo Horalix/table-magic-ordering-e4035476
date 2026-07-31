@@ -905,6 +905,122 @@ export type Database = {
         }
         Returns: Json
       }
+      guest_get_order_payment: {
+        Args: { _order_id: string; _session_id: string; _session_token: string }
+        Returns: Json
+      }
+      guest_get_recommendations: {
+        Args: {
+          _cart_item_ids?: string[]
+          _language?: string
+          _limit?: number
+          _placement?: string
+        }
+        Returns: {
+          dietary_tags: string[]
+          id: string
+          image_url: string | null
+          name: string
+          name_ar: string | null
+          name_bs: string | null
+          price: number
+          reason: string
+          recommendation_type: string
+        }[]
+      }
+      guest_get_service_status: {
+        Args: Record<string, never>
+        Returns: Json
+      }
+      guest_search_menu: {
+        Args: { _limit?: number; _query: string }
+        Returns: {
+          category_name: string
+          description: string | null
+          description_ar: string | null
+          description_bs: string | null
+          dietary_tags: string[]
+          id: string
+          image_url: string | null
+          is_available: boolean
+          merchandising_tags: string[]
+          name: string
+          name_ar: string | null
+          name_bs: string | null
+          price: number
+          subcategory_id: string
+        }[]
+      }
+      guest_switch_to_pay_at_table: {
+        Args: {
+          _method?: string
+          _order_id: string
+          _session_id: string
+          _session_token: string
+        }
+        Returns: Json
+      }
+      record_analytics_events: {
+        Args: { _events: Json; _visit_id: string }
+        Returns: number
+      }
+      record_table_payment: {
+        Args: { _method: string; _note?: string; _order_id: string }
+        Returns: Json
+      }
+      record_order_refund: {
+        Args: {
+          _amount: number
+          _mark_completed?: boolean
+          _method: string
+          _order_id: string
+          _provider_reference?: string
+          _reason: string
+        }
+        Returns: Json
+      }
+      cancel_order: {
+        Args: { _order_id: string; _reason: string }
+        Returns: Json
+      }
+      claim_ticket_print: {
+        Args: { _device_id: string; _order_id: string; _ticket_type?: string }
+        Returns: boolean
+      }
+      report_ticket_print: {
+        Args: {
+          _error?: string
+          _ok: boolean
+          _order_id: string
+          _ticket_type?: string
+        }
+        Returns: undefined
+      }
+      requeue_ticket_print: {
+        Args: { _order_id: string; _ticket_type?: string }
+        Returns: boolean
+      }
+      set_order_fiscalization: {
+        Args: {
+          _error?: string
+          _order_id: string
+          _provider_reference?: string
+          _receipt_number?: string
+          _status: string
+        }
+        Returns: Json
+      }
+      staff_update_order_status: {
+        Args: {
+          _order_id: string
+          _status: Database["public"]["Enums"]["order_status"]
+        }
+        Returns: Json
+      }
+      day_reconciliation: {
+        Args: { _day?: string }
+        Returns: Json
+      }
       guest_request_bill: {
         Args: { _session_id: string; _session_token: string }
         Returns: Json
@@ -969,6 +1085,8 @@ export type Database = {
       app_role: "admin" | "staff"
       order_item_status: "pending" | "preparing" | "ready" | "served"
       order_status:
+        | "awaiting_payment"
+        | "payment_failed"
         | "pending"
         | "confirmed"
         | "preparing"
@@ -1106,6 +1224,8 @@ export const Constants = {
       app_role: ["admin", "staff"],
       order_item_status: ["pending", "preparing", "ready", "served"],
       order_status: [
+        "awaiting_payment",
+        "payment_failed",
         "pending",
         "confirmed",
         "preparing",

@@ -1,47 +1,114 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { CreditCard, Hand, Loader2, ChevronRight } from 'lucide-react';
+import { CreditCard, Banknote, Loader2, ChevronRight, ShieldCheck, Smartphone } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { useT } from '@/lib/i18n';
 import { fade, sheetUp } from '@/lib/motion';
 import { Input } from '@/components/ui/input';
 import { TIP_PRESETS, computeTip } from '@/lib/tip';
-
-export type PayMethod = 'card' | 'cash';
+import type { PaymentMethod } from '@/lib/guest-api';
 
 interface Props {
   open: boolean;
   total: number;
-  submitting: PayMethod | null;
-  onChoose: (method: PayMethod, tip: number) => void;
+  submitting: PaymentMethod | null;
+  /** Server-side truth about what the restaurant can accept right now. */
+  onlineCardEnabled: boolean;
+  payAtTableEnabled: boolean;
+  onChoose: (method: PaymentMethod, tip: number) => void;
   onClose: () => void;
 }
 
-/** Checkout choice — optional tip, then Pay now (card) or Call a waiter. */
-const CheckoutSheet = ({ open, total, submitting, onChoose, onClose }: Props) => {
+interface OptionProps {
+  icon: React.ReactNode;
+  title: string;
+  subtitle: string;
+  primary?: boolean;
+  busy: boolean;
+  disabled: boolean;
+  onClick: () => void;
+}
+
+const PayOption = ({ icon, title, subtitle, primary, busy, disabled, onClick }: OptionProps) => (
+  <button
+    onClick={onClick}
+    disabled={disabled}
+    className={`w-full flex items-center gap-3 px-5 py-4 rounded-2xl text-start min-h-[64px] transition-colors disabled:opacity-60 tap ${
+      primary
+        ? 'bg-primary text-primary-foreground hover:bg-sage-dark'
+        : 'border border-border bg-card text-foreground hover:bg-muted/60'
+    }`}
+  >
+    <span className={`w-10 h-10 rounded-full grid place-items-center shrink-0 ${primary ? 'bg-white/15' : 'bg-accent/10'}`}>
+      {icon}
+    </span>
+    <span className="flex-1 min-w-0">
+      <span className="block font-sans font-semibold">{title}</span>
+      <span className={`block text-xs ${primary ? 'text-primary-foreground/75' : 'text-muted-foreground'}`}>{subtitle}</span>
+    </span>
+    {busy
+      ? <Loader2 className="w-5 h-5 animate-spin" aria-hidden />
+      : <ChevronRight className={`w-5 h-5 rtl:rotate-180 ${primary ? 'opacity-70' : 'text-muted-foreground'}`} aria-hidden />}
+  </button>
+);
+
+/**
+ * Checkout: choose a tip, then choose how to pay.
+ *
+ * The three options are deliberately distinct. "Card at the table" is not the
+ * same as "card online" — it tells the waiter to bring the terminal, and it
+ * reconciles against the POS batch rather than the online gateway.
+ *
+ * No tip is preselected.
+ */
+const CheckoutSheet = ({ open, total, submitting, onlineCardEnabled, payAtTableEnabled, onChoose, onClose }: Props) => {
   const t = useT();
   const [preset, setPreset] = useState<number | 'custom'>(0);
   const [custom, setCustom] = useState('');
+  const panelRef = useRef<HTMLDivElement>(null);
 
   const tip = computeTip(total, preset, parseFloat(custom) || 0);
   const grand = total + tip;
+  const busy = submitting !== null;
+
+  // Close on Escape and move focus into the sheet when it opens.
+  useEffect(() => {
+    if (!open) return;
+    panelRef.current?.focus();
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && !busy) onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [open, busy, onClose]);
 
   return (
     <AnimatePresence>
       {open && (
         <motion.div variants={fade} initial="hidden" animate="show" exit="exit" className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
-          <div className="absolute inset-0 bg-foreground/40 backdrop-blur-sm" onClick={submitting ? undefined : onClose} />
-          <motion.div variants={sheetUp} initial="hidden" animate="show" exit="exit" className="relative w-full max-w-lg bg-card rounded-t-3xl sm:rounded-3xl p-6 pb-safe sm:pb-6 shadow-lux-lg">
+          <div className="absolute inset-0 bg-foreground/40 backdrop-blur-sm" onClick={busy ? undefined : onClose} />
+          <motion.div
+            ref={panelRef}
+            role="dialog"
+            aria-modal="true"
+            aria-label={t('choose_how_to_pay')}
+            tabIndex={-1}
+            variants={sheetUp}
+            initial="hidden"
+            animate="show"
+            exit="exit"
+            className="relative w-full max-w-lg bg-card rounded-t-3xl sm:rounded-3xl p-6 pb-safe sm:pb-6 shadow-lux-lg outline-none max-h-[92vh] overflow-y-auto"
+          >
             <div className="w-10 h-1.5 rounded-full bg-foreground/15 mx-auto mb-4 sm:hidden" />
             <h2 className="font-serif text-xl font-bold text-foreground text-center">{t('choose_how_to_pay')}</h2>
 
-            {/* Tip */}
+            {/* Tip — nothing preselected, skipping is one tap. */}
             <div className="mt-4">
-              <p className="text-xs uppercase tracking-wide text-muted-foreground font-sans mb-2 text-center">{t('add_a_tip')}</p>
-              <div className="flex flex-wrap gap-2 justify-center">
+              <p id="tip-label" className="text-xs uppercase tracking-wide text-muted-foreground font-sans mb-2 text-center">{t('add_a_tip')}</p>
+              <div className="flex flex-wrap gap-2 justify-center" role="group" aria-labelledby="tip-label">
                 {TIP_PRESETS.map((p) => (
                   <button
                     key={p}
                     onClick={() => setPreset(p)}
+                    aria-pressed={preset === p}
                     className={`px-3.5 py-2 rounded-full text-sm font-sans font-medium transition-all tap-sm ${preset === p ? 'bg-primary text-primary-foreground' : 'bg-muted text-foreground hover:bg-muted/70'}`}
                   >
                     {p === 0 ? t('no_tip') : `${p}%`}
@@ -49,6 +116,7 @@ const CheckoutSheet = ({ open, total, submitting, onChoose, onClose }: Props) =>
                 ))}
                 <button
                   onClick={() => setPreset('custom')}
+                  aria-pressed={preset === 'custom'}
                   className={`px-3.5 py-2 rounded-full text-sm font-sans font-medium transition-all tap-sm ${preset === 'custom' ? 'bg-primary text-primary-foreground' : 'bg-muted text-foreground hover:bg-muted/70'}`}
                 >
                   {t('custom')}
@@ -56,52 +124,84 @@ const CheckoutSheet = ({ open, total, submitting, onChoose, onClose }: Props) =>
               </div>
               {preset === 'custom' && (
                 <div className="mt-2 flex items-center justify-center gap-2">
-                  <Input type="number" inputMode="decimal" min="0" step="0.5" value={custom} onChange={(e) => setCustom(e.target.value)} placeholder="0.00" className="h-9 w-28 text-center" />
+                  <Input
+                    type="number"
+                    inputMode="decimal"
+                    min="0"
+                    step="0.5"
+                    value={custom}
+                    onChange={(e) => setCustom(e.target.value)}
+                    placeholder="0.00"
+                    aria-label={t('custom')}
+                    className="h-9 w-28 text-center"
+                  />
                   <span className="text-sm text-muted-foreground font-sans">KM</span>
                 </div>
               )}
             </div>
 
-            {/* Totals */}
-            <div className="mt-4 text-center">
+            {/* Totals — itemised so nothing is a surprise. */}
+            <div className="mt-4 rounded-2xl bg-muted/50 p-3.5 space-y-1.5" aria-live="polite">
+              <div className="flex justify-between text-sm font-sans text-muted-foreground tabular-nums">
+                <span>{t('total')}</span><span>{total.toFixed(2)} KM</span>
+              </div>
               {tip > 0 && (
-                <p className="text-xs text-muted-foreground font-sans tabular-nums">
-                  {total.toFixed(2)} + {tip.toFixed(2)} {t('tip').toLowerCase()}
-                </p>
+                <div className="flex justify-between text-sm font-sans text-muted-foreground tabular-nums">
+                  <span>{t('tip')}</span><span>{tip.toFixed(2)} KM</span>
+                </div>
               )}
-              <p className="text-3xl font-serif font-bold text-primary mt-0.5 tabular-nums">{grand.toFixed(2)} KM</p>
-              <p className="text-[11px] text-muted-foreground font-sans mt-1.5">{t('no_refund_short')}</p>
+              <div className="flex justify-between items-baseline pt-1.5 border-t border-border/60">
+                <span className="font-sans font-semibold text-foreground">{t('total')}</span>
+                <span className="text-2xl font-serif font-bold text-primary tabular-nums">{grand.toFixed(2)} KM</span>
+              </div>
             </div>
 
             <div className="mt-5 space-y-3">
-              <button
-                onClick={() => onChoose('card', tip)}
-                disabled={!!submitting}
-                className="w-full flex items-center gap-3 px-5 py-4 rounded-2xl bg-primary text-primary-foreground text-left min-h-[64px] hover:bg-sage-dark transition-colors disabled:opacity-60 tap"
-              >
-                <CreditCard className="w-6 h-6 shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <p className="font-sans font-semibold">{t('pay_now_card')}</p>
-                  <p className="text-xs text-primary-foreground/70">{t('pay_now_card_sub')}</p>
-                </div>
-                {submitting === 'card' ? <Loader2 className="w-5 h-5 animate-spin" /> : <ChevronRight className="w-5 h-5 opacity-70" />}
-              </button>
+              {onlineCardEnabled && (
+                <PayOption
+                  primary
+                  icon={<CreditCard className="w-5 h-5" />}
+                  title={t('pay_now_card')}
+                  subtitle={t('pay_online_sub')}
+                  busy={submitting === 'card_online'}
+                  disabled={busy}
+                  onClick={() => onChoose('card_online', tip)}
+                />
+              )}
 
-              <button
-                onClick={() => onChoose('cash', tip)}
-                disabled={!!submitting}
-                className="w-full flex items-center gap-3 px-5 py-4 rounded-2xl border border-border bg-card text-foreground text-left min-h-[64px] hover:bg-muted/60 transition-colors disabled:opacity-60 tap"
-              >
-                <span className="w-10 h-10 rounded-full bg-accent/10 grid place-items-center shrink-0">
-                  <Hand className="w-5 h-5 text-accent" />
-                </span>
-                <div className="flex-1 min-w-0">
-                  <p className="font-sans font-semibold">{t('call_waiter_to_pay')}</p>
-                  <p className="text-xs text-muted-foreground">{t('call_waiter_to_pay_sub')}</p>
-                </div>
-                {submitting === 'cash' ? <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /> : <ChevronRight className="w-5 h-5 text-muted-foreground" />}
-              </button>
+              {payAtTableEnabled && (
+                <>
+                  <PayOption
+                    primary={!onlineCardEnabled}
+                    icon={<Banknote className={`w-5 h-5 ${onlineCardEnabled ? 'text-accent' : ''}`} />}
+                    title={t('pay_cash')}
+                    subtitle={t('pay_cash_sub')}
+                    busy={submitting === 'cash'}
+                    disabled={busy}
+                    onClick={() => onChoose('cash', tip)}
+                  />
+                  <PayOption
+                    icon={<Smartphone className="w-5 h-5 text-accent" />}
+                    title={t('pay_pos')}
+                    subtitle={t('pay_pos_sub')}
+                    busy={submitting === 'pos_terminal'}
+                    disabled={busy}
+                    onClick={() => onChoose('pos_terminal', tip)}
+                  />
+                </>
+              )}
             </div>
+
+            {onlineCardEnabled && (
+              <p className="flex items-center justify-center gap-1.5 text-[11px] text-muted-foreground font-sans mt-4">
+                <ShieldCheck className="w-3.5 h-3.5" aria-hidden /> {t('secure_payment_monri')}
+              </p>
+            )}
+
+            <p className="text-[11px] text-muted-foreground/80 font-sans mt-3 text-center leading-relaxed">
+              {t('terms_accept')}{' '}
+              <Link to="/privacy" className="underline hover:text-primary">{t('terms_link')}</Link>.
+            </p>
           </motion.div>
         </motion.div>
       )}
