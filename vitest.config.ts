@@ -8,7 +8,11 @@ export default defineConfig({
     environment: "jsdom",
     globals: true,
     setupFiles: ["./src/test/setup.ts"],
-    include: ["src/**/*.{test,spec}.{ts,tsx}"],
+    // supabase/tests holds the SQL integration suite; those files opt into the
+    // node environment with a `@vitest-environment node` docblock.
+    include: ["src/**/*.{test,spec}.{ts,tsx}", "supabase/tests/**/*.test.ts"],
+    testTimeout: 60_000,
+    hookTimeout: 120_000,
   },
   resolve: {
     alias: { "@": path.resolve(__dirname, "./src") },
