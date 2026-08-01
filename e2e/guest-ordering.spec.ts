@@ -30,6 +30,20 @@ test.describe('menu and discovery', () => {
     await expect(page.getByText(/Nothing matched|Nema rezultata/)).toBeVisible();
   });
 
+  test('the product sheet shows allergens, portion and prep time', async ({ page }) => {
+    // These three columns existed and a finished allergen block was rendered
+    // for nobody, because the call site passed a stripped object. Allergens are
+    // the one field on this sheet that can matter medically.
+    await page.goto('/menu/food');
+    await page.getByText('La Soul Burger').first().click();
+
+    await expect(page.getByText(/Allergens|Alergeni/i)).toBeVisible();
+    await expect(page.getByText('gluten, dairy')).toBeVisible();
+    await expect(page.getByText(/220 g/)).toBeVisible();
+    await expect(page.getByText(/~12 min/)).toBeVisible();
+    await expect(page.getByText(/tell your waiter|obavijestite konobara/i)).toBeVisible();
+  });
+
   test('the page never scrolls sideways on a phone', async ({ page }) => {
     await page.goto('/menu');
     const overflow = await page.evaluate(

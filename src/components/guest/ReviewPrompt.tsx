@@ -3,6 +3,8 @@ import { Star, ExternalLink } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { useT } from '@/lib/i18n';
+import { track } from '@/lib/analytics';
+import { toast } from 'sonner';
 import { motion } from 'framer-motion';
 import ServerRatingStep from './ServerRatingStep';
 import { getWaiterForReview, submitServerRating, submitVisitRating } from '@/lib/guest-api';
@@ -39,8 +41,13 @@ const ReviewPrompt = ({ open, onClose, sessionId, sessionToken }: ReviewPromptPr
     setRating(selectedRating);
     try {
       await submitVisitRating(sessionId, sessionToken, selectedRating);
+      track('feedback_submitted', { kind: 'visit', rating: selectedRating });
     } catch (error) {
+      // Thanking a guest for feedback that was never stored is worse than
+      // admitting it failed — they think they have been heard, and the
+      // restaurant never learns what went wrong.
       console.warn('Failed to submit visit rating', error);
+      toast.error(t('feedback_failed'));
     }
     setStep(waiter ? 'server' : 'final');
   };
@@ -49,9 +56,11 @@ const ReviewPrompt = ({ open, onClose, sessionId, sessionToken }: ReviewPromptPr
     try {
       if (waiter?.id) {
         await submitServerRating(sessionId, sessionToken, waiter.id, serverRating, comment);
+        track('feedback_submitted', { kind: 'server', rating: serverRating, has_comment: comment.trim().length > 0 });
       }
     } catch (error) {
       console.warn('Failed to submit server rating', error);
+      toast.error(t('feedback_failed'));
     }
     setStep('final');
   };

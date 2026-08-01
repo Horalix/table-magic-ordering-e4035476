@@ -5,6 +5,7 @@ import { ArrowLeft, Plus, Minus, Search, X, Star, LayoutGrid, List } from 'lucid
 import { useQuery } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { track } from '@/lib/analytics';
+import { useItemImpression } from '@/lib/impressions';
 import { supabase } from '@/integrations/supabase/client';
 import { useCartStore } from '@/lib/cart-store';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -35,6 +36,20 @@ const gridContainer: Variants = { hidden: {}, show: { transition: { staggerChild
 const gridItem: Variants = { hidden: { opacity: 0, scale: 0.84 }, show: { opacity: 1, scale: 1, transition: { type: 'spring', stiffness: 430, damping: 30 } } };
 const listContainer: Variants = { hidden: {}, show: { transition: { staggerChildren: 0.022 } } };
 const listItem: Variants = { hidden: { opacity: 0, y: 12, scale: 0.97 }, show: { opacity: 1, y: 0, scale: 1, transition: { duration: 0.32, ease: [0.16, 1, 0.3, 1] } } };
+
+/**
+ * A menu card that reports being looked at.
+ *
+ * Wrapping rather than calling the hook inline because the hook owns an
+ * IntersectionObserver per card, and hooks cannot live inside the render
+ * helpers below (they run in loops).
+ */
+const ImpressionCard = ({
+  itemId, children, ...props
+}: { itemId: string } & React.ComponentProps<typeof motion.button>) => {
+  const ref = useItemImpression(itemId);
+  return <motion.button ref={ref} {...props}>{children}</motion.button>;
+};
 
 const CategoryPage = () => {
   const { type } = useParams<{ type: string }>();
@@ -167,7 +182,7 @@ const CategoryPage = () => {
     const name = getLocalizedName(item, locale);
     const tags = getItemTags(item);
     return (
-      <motion.button key={item.id} variants={gridItem} onClick={() => setSelectedItem(item)} className="text-left tap-sm card-lux card-lux-hover overflow-hidden">
+      <ImpressionCard key={item.id} itemId={item.id} variants={gridItem} onClick={() => setSelectedItem(item)} className="text-left tap-sm card-lux card-lux-hover overflow-hidden">
         <div className="relative">
           <SmartImage src={item.image_url || undefined} id={item.id} alt={name} width={220} height={165} priority={i < 6} fallbackText={name} wrapperClassName="w-full aspect-[4/3]" />
           {popularIds.has(item.id) && (
@@ -191,7 +206,7 @@ const CategoryPage = () => {
           {tags.length > 0 && <span className="block text-xs mt-0.5">{tags.slice(0, 3).map((k) => DIET_BY_KEY[k]?.emoji).filter(Boolean).join(' ')}</span>}
           <p className="text-sm font-sans font-bold text-primary mt-1 tabular-nums">{Number(item.price).toFixed(2)} KM</p>
         </div>
-      </motion.button>
+      </ImpressionCard>
     );
   };
 
@@ -201,7 +216,7 @@ const CategoryPage = () => {
     const inCart = cartItems.find((c) => (c.menuItemId ?? c.id) === item.id && !c.notes);
     const qty = inCart?.quantity ?? 0;
     return (
-      <motion.button key={item.id} variants={listItem} onClick={() => setSelectedItem(item)} className="w-full text-left tap">
+      <ImpressionCard key={item.id} itemId={item.id} variants={listItem} onClick={() => setSelectedItem(item)} className="w-full text-left tap">
         <div className="group flex gap-4 p-4 card-lux card-lux-hover">
           <SmartImage src={item.image_url || undefined} id={item.id} alt={localizedName} width={80} height={80} priority={i < 8} fallbackText={localizedName} wrapperClassName="w-20 h-20 rounded-lg flex-shrink-0" className="group-hover:scale-105 transition-transform duration-300" />
           <div className="flex-1 min-w-0">
@@ -240,7 +255,7 @@ const CategoryPage = () => {
             </div>
           )}
         </div>
-      </motion.button>
+      </ImpressionCard>
     );
   };
 
@@ -389,6 +404,12 @@ const CategoryPage = () => {
               description_bs: selectedItem.description_bs || undefined,
               price: Number(selectedItem.price),
               image_url: selectedItem.image_url || undefined,
+              // These three were omitted, so a finished allergen safety block
+              // in MenuItemDetail rendered for nobody. Allergens are the one
+              // field on this sheet that can matter medically.
+              allergens: selectedItem.allergens ?? null,
+              portion_note: selectedItem.portion_note ?? null,
+              prep_minutes: selectedItem.prep_minutes ?? null,
             }}
             onClose={() => setSelectedItem(null)}
             canOrder={hasSession}

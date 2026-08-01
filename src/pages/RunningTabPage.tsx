@@ -88,6 +88,7 @@ const RunningTabPage = () => {
     setRequestingBill(true);
     try {
       await requestGuestBill(sessionId, sessionToken);
+      track('bill_requested', { orders: orders.length });
       await refetch();
       setShowReview(true);
     } catch {

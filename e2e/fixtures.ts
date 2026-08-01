@@ -55,6 +55,9 @@ const MENU_ITEM = {
   image_url: null,
   dietary_tags: [],
   merchandising_tags: ['popular'],
+  allergens: ['gluten', 'dairy'],
+  portion_note: '220 g',
+  prep_minutes: 12,
   is_available: true,
   subcategory_id: 'sub-burgers',
   sort_order: 1,
@@ -158,7 +161,19 @@ export async function installSupabaseStubs(page: Page, state: StubState) {
     }
   });
 
-  await page.route('**/rest/v1/categories**', (route) => jsonRoute(route, state.categories));
+  await page.route('**/rest/v1/categories**', (route) => {
+    // PostgREST returns a bare object (not an array) when the client used
+    // .single(); CategoryPage does, so honour the Accept header or the whole
+    // page never resolves.
+    const accept = route.request().headers()['accept'] ?? '';
+    const wantsOne = accept.includes('vnd.pgrst.object');
+    const url = new URL(route.request().url());
+    const nameFilter = url.searchParams.get('name');
+    const rows = nameFilter
+      ? state.categories.filter((c) => `eq.${(c as { name: string }).name}` === nameFilter)
+      : state.categories;
+    return jsonRoute(route, wantsOne ? (rows[0] ?? null) : rows);
+  });
   await page.route('**/rest/v1/subcategories**', (route) =>
     jsonRoute(route, [{ id: 'sub-burgers', category_id: 'cat-food', name: 'Burgers', name_bs: 'Burgeri', sort_order: 1 }]));
   await page.route('**/rest/v1/menu_items**', (route) => jsonRoute(route, [MENU_ITEM]));

@@ -69,6 +69,16 @@ const CartPage = () => {
   const payAtTableEnabled = service?.pay_at_table_enabled !== false;
   const orderingPaused = service?.ordering_enabled === false;
 
+  // Completes the funnel: menu_viewed → item_viewed → item_added → cart_viewed
+  // → checkout_opened → order_placed. Without this step the drop-off between
+  // adding and checking out is unattributable.
+  const cartSize = itemCount();
+  useEffect(() => {
+    if (cartSize > 0) track('cart_viewed', { item_count: cartSize });
+    // Once per visit to the cart, not per quantity change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const buildMenuUrl = useCallback(() => {
     const params = new URLSearchParams();
     if (table) params.set('table', table);

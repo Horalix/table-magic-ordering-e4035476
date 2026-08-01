@@ -299,6 +299,8 @@ const translations: Record<string, Record<Locale, string>> = {
   'increase': { en: 'One more', bs: 'Još jedan', ar: 'واحد إضافي' },
   'decrease': { en: 'One fewer', bs: 'Jedan manje', ar: 'واحد أقل' },
   'undo_remove': { en: 'Undo', bs: 'Vrati', ar: 'تراجع' },
+  'dismiss': { en: 'Dismiss', bs: 'Zatvori', ar: 'إغلاق' },
+  'feedback_failed': { en: 'We could not save your feedback. Please tell a member of staff.', bs: 'Nismo mogli sačuvati vašu ocjenu. Molimo recite osoblju.', ar: 'تعذّر حفظ ملاحظاتك. يرجى إبلاغ أحد الموظفين.' },
 
   // ---- Table entry (one venue QR, table typed each visit)
   'table_number_range': { en: 'Please enter a table number between 1 and {max}.', bs: 'Unesite broj stola između 1 i {max}.', ar: 'يرجى إدخال رقم طاولة بين 1 و {max}.' },
