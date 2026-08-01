@@ -610,7 +610,6 @@ export type Database = {
       }
       orders: {
         Row: {
-          reco_holdout: boolean | null
           assigned_waiter_id: string | null
           cancel_reason: string | null
           cancelled_at: string | null
@@ -635,6 +634,7 @@ export type Database = {
           payment_status: string
           preparing_at: string | null
           ready_at: string | null
+          reco_holdout: boolean | null
           refunded_amount: number
           released_to_kitchen_at: string | null
           served_at: string | null
@@ -645,7 +645,6 @@ export type Database = {
           updated_at: string
         }
         Insert: {
-          reco_holdout?: boolean | null
           assigned_waiter_id?: string | null
           cancel_reason?: string | null
           cancelled_at?: string | null
@@ -670,6 +669,7 @@ export type Database = {
           payment_status?: string
           preparing_at?: string | null
           ready_at?: string | null
+          reco_holdout?: boolean | null
           refunded_amount?: number
           released_to_kitchen_at?: string | null
           served_at?: string | null
@@ -680,7 +680,6 @@ export type Database = {
           updated_at?: string
         }
         Update: {
-          reco_holdout?: boolean | null
           assigned_waiter_id?: string | null
           cancel_reason?: string | null
           cancelled_at?: string | null
@@ -705,6 +704,7 @@ export type Database = {
           payment_status?: string
           preparing_at?: string | null
           ready_at?: string | null
+          reco_holdout?: boolean | null
           refunded_amount?: number
           released_to_kitchen_at?: string | null
           served_at?: string | null
@@ -2194,6 +2194,7 @@ export type Database = {
         }
         Returns: Json
       }
+      suggestion_impact: { Args: { _days?: number }; Returns: Json }
       suggestion_impact_by_placement: {
         Args: { _days?: number }
         Returns: {
@@ -2205,7 +2206,6 @@ export type Database = {
           shown: number
         }[]
       }
-      suggestion_impact: { Args: { _days?: number }; Returns: Json }
       suggestion_performance: {
         Args: { _limit?: number }
         Returns: {
@@ -2228,6 +2228,17 @@ export type Database = {
       verify_waiter_pin: {
         Args: { _pin: string; _waiter_id: string }
         Returns: boolean
+      }
+      welch_interval: {
+        Args: {
+          _mean_a: number
+          _mean_b: number
+          _n_a: number
+          _n_b: number
+          _var_a: number
+          _var_b: number
+        }
+        Returns: Json
       }
       write_audit: {
         Args: {

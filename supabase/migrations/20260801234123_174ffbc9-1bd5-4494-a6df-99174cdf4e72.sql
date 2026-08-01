@@ -1,39 +1,6 @@
 -- =====================================================================
--- Making the uplift number trustworthy
---
--- The engine already measures itself. The measurement had four faults, and
--- every one of them makes the answer confidently wrong rather than visibly
--- missing — which is the worst way for a business number to fail.
---
---   1. THE EXPERIMENT RE-BUCKETED ITSELF. reco_holdout_comparison() called
---      guest_in_reco_holdout(session_id) at READ time against the CURRENT
---      reco_holdout_pct. Moving the dial from 10% to 20% silently reassigned
---      every historical order — orders that demonstrably saw suggestions were
---      counted as the control group. The comparison became fiction with no
---      error, no warning, and no way to notice.
---
---   2. "RELIABLE" WAS NOT A TEST. It was `count >= 100` per side. Restaurant
---      order values have very high variance; 100 orders a side will routinely
---      show a two or three KM "difference" that is pure noise. A manager reads
---      "+2.40 per order", multiplies by a year of orders, and budgets against
---      a number that does not exist.
---
---   3. MIXED DENOMINATORS. suggestion_impact(_days) windowed revenue to _days
---      but summed shown/accepted across ALL of suggestion_stats, which is
---      rebuilt over its own 90-day window. Two different periods, presented
---      side by side as if they described the same thing.
---
---   4. NO PER-COVER VIEW. Party size is the obvious confound under any
---      average-order comparison, and covers now exist.
---
--- The principle throughout: report the uncertainty, and when projecting money
--- forward use the CONSERVATIVE end of it. A dashboard that overstates once
--- never gets believed again.
+-- Making the uplift number trustworthy (file: 20260803090000_trustworthy_uplift.sql)
 -- =====================================================================
-
--- ---------------------------------------------------------------------
--- 1. Assignment is recorded, not recomputed
--- ---------------------------------------------------------------------
 
 ALTER TABLE public.orders
   ADD COLUMN IF NOT EXISTS reco_holdout boolean;
@@ -43,13 +10,6 @@ COMMENT ON COLUMN public.orders.reco_holdout IS
   'creation. Immutable — the experiment must not re-bucket itself when the '
   'holdout percentage changes. NULL means the order predates the experiment.';
 
-/**
- * Stamp the group at insert.
- *
- * A trigger rather than an edit to guest_place_order: the order-placement
- * function is long, is already rewritten by a later migration, and a third
- * textual fork of it is how the release path drifts.
- */
 CREATE OR REPLACE FUNCTION public.stamp_reco_holdout()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -68,13 +28,8 @@ CREATE TRIGGER trg_stamp_reco_holdout
   BEFORE INSERT ON public.orders
   FOR EACH ROW EXECUTE FUNCTION public.stamp_reco_holdout();
 
-/**
- * And it cannot be changed afterwards.
- *
- * Separate from enforce_order_integrity on purpose — that function is already
- * defined across two migrations, and forking its body again to add one check
- * is worse than a second, single-purpose trigger that says exactly what it is.
- */
+UPDATE public.orders SET reco_holdout = false WHERE reco_holdout IS NULL;
+
 CREATE OR REPLACE FUNCTION public.freeze_reco_holdout()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -94,29 +49,9 @@ CREATE TRIGGER trg_freeze_reco_holdout
   BEFORE UPDATE ON public.orders
   FOR EACH ROW EXECUTE FUNCTION public.freeze_reco_holdout();
 
--- Existing orders are backfilled to `false` — they were all placed while the
--- holdout was off, so they genuinely were shown suggestions. Leaving them NULL
--- would be more honest still, but they would then be silently dropped from
--- every comparison; `false` is both true and usable.
-UPDATE public.orders SET reco_holdout = false WHERE reco_holdout IS NULL;
-
 CREATE INDEX IF NOT EXISTS idx_orders_holdout
   ON public.orders(reco_holdout, created_at DESC);
 
--- ---------------------------------------------------------------------
--- 2. Statistics
--- ---------------------------------------------------------------------
-
-/**
- * Welch's t-test, normal approximation, as a reusable shape.
- *
- * Welch rather than Student because the two groups have neither equal variance
- * nor equal size — the holdout is by design the smaller one.
- *
- * The 1.96 is a normal approximation to the t distribution. Valid past roughly
- * 30 samples a side, which is well below the point at which anyone should be
- * reading the result anyway; `reliable` enforces that separately.
- */
 CREATE OR REPLACE FUNCTION public.welch_interval(
   _mean_a numeric, _var_a numeric, _n_a bigint,
   _mean_b numeric, _var_b numeric, _n_b bigint
@@ -146,34 +81,13 @@ BEGIN
     'ci_low',  round(v_diff - 1.96 * v_se, 2),
     'ci_high', round(v_diff + 1.96 * v_se, 2),
     'std_error', round(v_se, 3),
-    -- The interval excludes zero, so the direction of the effect is real.
     'significant', (v_diff - 1.96 * v_se) > 0 OR (v_diff + 1.96 * v_se) < 0
   );
 END;
 $$;
 
--- ---------------------------------------------------------------------
--- 3. The comparison, done properly
--- ---------------------------------------------------------------------
-
 DROP FUNCTION IF EXISTS public.reco_holdout_comparison(int);
 
-/**
- * What the suggestion engine is actually worth.
- *
- * Reads the RECORDED group, so changing the holdout percentage tomorrow
- * affects tomorrow's orders and leaves the history alone.
- *
- * Three numbers a manager can act on, in increasing order of caution:
- *
- *   difference       the observed gap in average order value
- *   ci_low/ci_high   where the true gap plausibly sits
- *   projection       money per month, computed from CI_LOW, never the point
- *                    estimate — an engine that turns out to be worth half what
- *                    the dashboard claimed is an engine nobody trusts again
- *
- * `status` is the headline, and it is allowed to say "we do not know yet".
- */
 CREATE OR REPLACE FUNCTION public.reco_holdout_comparison(_days int DEFAULT 30)
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -214,7 +128,6 @@ BEGIN
     COALESCE(v_treated_mean, 0), COALESCE(v_treated_var, 0), COALESCE(v_treated_n, 0),
     COALESCE(v_held_mean, 0),    COALESCE(v_held_var, 0),    COALESCE(v_held_n, 0));
 
-  -- What the manager is actually told.
   v_status := CASE
     WHEN v_pct = 0 AND COALESCE(v_held_n, 0) = 0 THEN 'not_running'
     WHEN COALESCE(v_held_n, 0) < 30 OR COALESCE(v_treated_n, 0) < 30 THEN 'too_early'
@@ -223,8 +136,6 @@ BEGIN
     ELSE 'negative'
   END;
 
-  -- Conservative money projection: the low end of the interval, over the
-  -- observed order rate. Only offered once the effect is real.
   v_orders_per_day := CASE WHEN _days > 0
     THEN (COALESCE(v_treated_n, 0) + COALESCE(v_held_n, 0))::numeric / _days ELSE 0 END;
   v_projection := CASE
@@ -247,8 +158,6 @@ BEGIN
     'ci_high', v_stats -> 'ci_high',
     'significant', v_stats -> 'significant',
     'conservative_monthly_value', v_projection,
-    -- Kept for compatibility with the existing panel, but now it means
-    -- "significant", not "we counted to a hundred".
     'reliable', (v_stats ->> 'significant')::boolean
   );
 END;
@@ -257,24 +166,8 @@ $$;
 REVOKE ALL ON FUNCTION public.reco_holdout_comparison(int) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.reco_holdout_comparison(int) TO authenticated;
 
--- ---------------------------------------------------------------------
--- 4. One window, one denominator
--- ---------------------------------------------------------------------
-
 DROP FUNCTION IF EXISTS public.suggestion_impact(int);
 
-/**
- * Attribution, over exactly the window asked for.
- *
- * Impressions and acceptances are now counted from analytics_events inside
- * `_days`, not summed out of suggestion_stats — which is rebuilt over its own
- * 90-day window and therefore described a different period than the revenue
- * sitting next to it.
- *
- * Everything here remains an UPPER bound on causal impact: some guests would
- * have ordered the coffee anyway. reco_holdout_comparison() is the honest
- * causal number, and the UI leads with it.
- */
 CREATE OR REPLACE FUNCTION public.suggestion_impact(_days int DEFAULT 30)
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -308,7 +201,6 @@ BEGIN
     JOIN public.completed_orders co ON co.id = sc.order_id
    WHERE sc.created_at > v_since;
 
-  -- Same window as the revenue above. This is the fix.
   SELECT count(*) FILTER (WHERE event = 'suggestion_shown'),
          count(*) FILTER (WHERE event = 'suggestion_accepted')
     INTO v_shown, v_accepted
@@ -316,14 +208,6 @@ BEGIN
    WHERE occurred_at > v_since
      AND event IN ('suggestion_shown', 'suggestion_accepted');
 
-  /*
-   * Revenue per cover.
-   *
-   * Party size is the confound sitting under every average-order comparison —
-   * a table of six spends more than a table of two whatever the app does. Only
-   * sittings where somebody actually counted are included, and the caller is
-   * told how many that was so it can say so.
-   */
   SELECT count(*),
          avg(co.total / s.covers) FILTER (WHERE NOT o.reco_holdout),
          avg(co.total / s.covers) FILTER (WHERE o.reco_holdout)
@@ -368,19 +252,6 @@ $$;
 REVOKE ALL ON FUNCTION public.suggestion_impact(int) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.suggestion_impact(int) TO authenticated;
 
--- ---------------------------------------------------------------------
--- 5. Which surface earns
--- ---------------------------------------------------------------------
-
-/**
- * Attribution split by where the suggestion appeared.
- *
- * The cart, the product sheet and the after-meal prompt are three different
- * products with three different jobs, and rolling them into one "the engine
- * earned X" hides which one to invest in. An after-meal dessert prompt that
- * converts at 12% is worth building on; a cart add-on at 1% is worth removing,
- * and removing it is a real option that the combined number never surfaces.
- */
 CREATE OR REPLACE FUNCTION public.suggestion_impact_by_placement(_days int DEFAULT 30)
 RETURNS TABLE(
   placement text,
@@ -429,7 +300,6 @@ BEGIN
          CASE WHEN COALESCE(c.n_shown, 0) > 0
               THEN round(100.0 * c.n_accepted / c.n_shown, 1) ELSE 0 END,
          COALESCE(round(m.revenue, 2), 0),
-         -- The number that decides whether a surface earns its space.
          CASE WHEN COALESCE(c.n_shown, 0) > 0
               THEN round(COALESCE(m.revenue, 0) / c.n_shown, 3) ELSE 0 END
     FROM counted c
