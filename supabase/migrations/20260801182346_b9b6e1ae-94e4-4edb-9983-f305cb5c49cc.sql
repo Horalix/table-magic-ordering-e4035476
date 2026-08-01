@@ -1,4 +1,20 @@
 -- =====================================================================
+-- NOTE ON THIS FILENAME
+--
+-- Applied to the live database under this timestamp by the Lovable Supabase
+-- integration, which copied the migration rather than running the original.
+-- The filename is kept because it is what `supabase_migrations.schema_migrations`
+-- records; renaming it would make a future `supabase db push` try to apply the
+-- same schema a second time.
+--
+-- The body below is the original, restored — Lovable's copy dropped the
+-- comments, and several of them document invariants that are not visible from
+-- the SQL (statement ordering that prevents trigger recursion, why the all-day
+-- ids come back split, why a print claim is not a print). Any GRANT or RLS
+-- statement Lovable added is preserved at the end.
+-- =====================================================================
+
+-- =====================================================================
 -- Timing the kitchen, and making suggestions read the room
 --
 -- `prep_minutes` has existed on menu_items since the merchandising work and
@@ -319,3 +335,10 @@ $$;
 
 REVOKE ALL ON FUNCTION public.guest_order_eta(uuid) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.guest_order_eta(uuid) TO anon, authenticated;
+
+-- ---------------------------------------------------------------------
+-- Added by the Lovable integration when this was applied. Kept so the
+-- file matches what is actually live.
+-- ---------------------------------------------------------------------
+grant all on public.menu_item_prep_stats to service_role;
+grant select on public.menu_item_prep_stats to anon, authenticated;

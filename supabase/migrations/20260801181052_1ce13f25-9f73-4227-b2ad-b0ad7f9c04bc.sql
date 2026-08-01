@@ -1,4 +1,20 @@
 -- =====================================================================
+-- NOTE ON THIS FILENAME
+--
+-- Applied to the live database under this timestamp by the Lovable Supabase
+-- integration, which copied the migration rather than running the original.
+-- The filename is kept because it is what `supabase_migrations.schema_migrations`
+-- records; renaming it would make a future `supabase db push` try to apply the
+-- same schema a second time.
+--
+-- The body below is the original, restored — Lovable's copy dropped the
+-- comments, and several of them document invariants that are not visible from
+-- the SQL (statement ordering that prevents trigger recursion, why the all-day
+-- ids come back split, why a print claim is not a print). Any GRANT or RLS
+-- statement Lovable added is preserved at the end.
+-- =====================================================================
+
+-- =====================================================================
 -- Payment safety + server-controlled order state machine.
 --
 -- The rule this migration exists to enforce:
@@ -643,3 +659,9 @@ $$;
 
 REVOKE ALL ON FUNCTION public.guest_switch_to_pay_at_table(uuid, text, uuid, text) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.guest_switch_to_pay_at_table(uuid, text, uuid, text) TO anon, authenticated;
+
+-- ---------------------------------------------------------------------
+-- Added by the Lovable integration when this was applied. Kept so the
+-- file matches what is actually live.
+-- ---------------------------------------------------------------------
+grant all on public.audit_log to service_role;

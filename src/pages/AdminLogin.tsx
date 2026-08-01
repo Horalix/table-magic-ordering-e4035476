@@ -37,10 +37,20 @@ const AdminLogin = () => {
         navigate('/kitchen');
       }
     } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : 'Login failed');
+      const raw = err instanceof Error ? err.message : 'Login failed';
+      // "Failed to fetch" means the request never reached the server — offline,
+      // VPN, or a blocker. Saying "login failed" here sends people hunting for
+      // a password problem that doesn't exist.
+      const isNetwork = /failed to fetch|networkerror|load failed/i.test(raw);
+      toast.error(
+        isNetwork
+          ? 'Cannot reach the server. Check your internet connection (or disable VPN/ad blocker) and try again.'
+          : raw,
+      );
     } finally {
       setLoading(false);
     }
+
   };
 
   return (
