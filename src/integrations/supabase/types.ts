@@ -969,6 +969,8 @@ export type Database = {
       app_role: "admin" | "staff"
       order_item_status: "pending" | "preparing" | "ready" | "served"
       order_status:
+        | "awaiting_payment"
+        | "payment_failed"
         | "pending"
         | "confirmed"
         | "preparing"
@@ -1106,6 +1108,8 @@ export const Constants = {
       app_role: ["admin", "staff"],
       order_item_status: ["pending", "preparing", "ready", "served"],
       order_status: [
+        "awaiting_payment",
+        "payment_failed",
         "pending",
         "confirmed",
         "preparing",
