@@ -14,6 +14,48 @@ export type Database = {
   }
   public: {
     Tables: {
+      audit_log: {
+        Row: {
+          action: string
+          actor_label: string | null
+          actor_user_id: string | null
+          after_state: Json | null
+          before_state: Json | null
+          correlation_id: string | null
+          created_at: string
+          entity_id: string | null
+          entity_type: string
+          id: string
+          reason: string | null
+        }
+        Insert: {
+          action: string
+          actor_label?: string | null
+          actor_user_id?: string | null
+          after_state?: Json | null
+          before_state?: Json | null
+          correlation_id?: string | null
+          created_at?: string
+          entity_id?: string | null
+          entity_type: string
+          id?: string
+          reason?: string | null
+        }
+        Update: {
+          action?: string
+          actor_label?: string | null
+          actor_user_id?: string | null
+          after_state?: Json | null
+          before_state?: Json | null
+          correlation_id?: string | null
+          created_at?: string
+          entity_id?: string | null
+          entity_type?: string
+          id?: string
+          reason?: string | null
+        }
+        Relationships: []
+      }
       bill_requests: {
         Row: {
           created_at: string
@@ -138,6 +180,21 @@ export type Database = {
           },
         ]
       }
+      order_code_counters: {
+        Row: {
+          day: string
+          last_value: number
+        }
+        Insert: {
+          day: string
+          last_value?: number
+        }
+        Update: {
+          day?: string
+          last_value?: number
+        }
+        Relationships: []
+      }
       order_items: {
         Row: {
           created_at: string
@@ -245,17 +302,31 @@ export type Database = {
       orders: {
         Row: {
           assigned_waiter_id: string | null
+          cancel_reason: string | null
+          cancelled_at: string | null
+          cancelled_by: string | null
           confirmed_at: string | null
           created_at: string
+          fiscal_provider_reference: string | null
+          fiscal_receipt_number: string | null
+          fiscalization_error: string | null
+          fiscalization_status: string
           fiscalized: boolean
           fiscalized_at: string | null
+          fiscalized_by: string | null
           guest_name: string | null
           id: string
           notes: string | null
+          order_code: string | null
+          paid_at: string | null
+          paid_by: string | null
           payment_method: string | null
+          payment_note: string | null
           payment_status: string
           preparing_at: string | null
           ready_at: string | null
+          refunded_amount: number
+          released_to_kitchen_at: string | null
           served_at: string | null
           status: Database["public"]["Enums"]["order_status"]
           table_session_id: string
@@ -265,17 +336,31 @@ export type Database = {
         }
         Insert: {
           assigned_waiter_id?: string | null
+          cancel_reason?: string | null
+          cancelled_at?: string | null
+          cancelled_by?: string | null
           confirmed_at?: string | null
           created_at?: string
+          fiscal_provider_reference?: string | null
+          fiscal_receipt_number?: string | null
+          fiscalization_error?: string | null
+          fiscalization_status?: string
           fiscalized?: boolean
           fiscalized_at?: string | null
+          fiscalized_by?: string | null
           guest_name?: string | null
           id?: string
           notes?: string | null
+          order_code?: string | null
+          paid_at?: string | null
+          paid_by?: string | null
           payment_method?: string | null
+          payment_note?: string | null
           payment_status?: string
           preparing_at?: string | null
           ready_at?: string | null
+          refunded_amount?: number
+          released_to_kitchen_at?: string | null
           served_at?: string | null
           status?: Database["public"]["Enums"]["order_status"]
           table_session_id: string
@@ -285,17 +370,31 @@ export type Database = {
         }
         Update: {
           assigned_waiter_id?: string | null
+          cancel_reason?: string | null
+          cancelled_at?: string | null
+          cancelled_by?: string | null
           confirmed_at?: string | null
           created_at?: string
+          fiscal_provider_reference?: string | null
+          fiscal_receipt_number?: string | null
+          fiscalization_error?: string | null
+          fiscalization_status?: string
           fiscalized?: boolean
           fiscalized_at?: string | null
+          fiscalized_by?: string | null
           guest_name?: string | null
           id?: string
           notes?: string | null
+          order_code?: string | null
+          paid_at?: string | null
+          paid_by?: string | null
           payment_method?: string | null
+          payment_note?: string | null
           payment_status?: string
           preparing_at?: string | null
           ready_at?: string | null
+          refunded_amount?: number
+          released_to_kitchen_at?: string | null
           served_at?: string | null
           status?: Database["public"]["Enums"]["order_status"]
           table_session_id?: string
@@ -405,6 +504,12 @@ export type Database = {
       restaurant_settings: {
         Row: {
           id: number
+          kitchen_delay_minutes: number
+          last_order_time: string | null
+          online_card_enabled: boolean
+          ordering_enabled: boolean
+          ordering_paused_message: string | null
+          pay_at_table_enabled: boolean
           print_auto: boolean
           print_copies: number
           print_enabled: boolean
@@ -412,10 +517,17 @@ export type Database = {
           print_header: string
           print_paper_width: number
           print_show_prices: boolean
+          recommendations_enabled: boolean
           updated_at: string
         }
         Insert: {
           id?: number
+          kitchen_delay_minutes?: number
+          last_order_time?: string | null
+          online_card_enabled?: boolean
+          ordering_enabled?: boolean
+          ordering_paused_message?: string | null
+          pay_at_table_enabled?: boolean
           print_auto?: boolean
           print_copies?: number
           print_enabled?: boolean
@@ -423,10 +535,17 @@ export type Database = {
           print_header?: string
           print_paper_width?: number
           print_show_prices?: boolean
+          recommendations_enabled?: boolean
           updated_at?: string
         }
         Update: {
           id?: number
+          kitchen_delay_minutes?: number
+          last_order_time?: string | null
+          online_card_enabled?: boolean
+          ordering_enabled?: boolean
+          ordering_paused_message?: string | null
+          pay_at_table_enabled?: boolean
           print_auto?: boolean
           print_copies?: number
           print_enabled?: boolean
@@ -434,6 +553,7 @@ export type Database = {
           print_header?: string
           print_paper_width?: number
           print_show_prices?: boolean
+          recommendations_enabled?: boolean
           updated_at?: string
         }
         Relationships: []
@@ -868,6 +988,11 @@ export type Database = {
         Args: { _client_id: string; _request_id: string; _session_id: string }
         Returns: Json
       }
+      guest_get_order_payment: {
+        Args: { _order_id: string; _session_id: string; _session_token: string }
+        Returns: Json
+      }
+      guest_get_service_status: { Args: never; Returns: Json }
       guest_get_tab: {
         Args: { _session_id: string; _session_token: string }
         Returns: Json
@@ -951,6 +1076,15 @@ export type Database = {
         Args: { _rating: number; _session_id: string; _session_token: string }
         Returns: Json
       }
+      guest_switch_to_pay_at_table: {
+        Args: {
+          _method?: string
+          _order_id: string
+          _session_id: string
+          _session_token: string
+        }
+        Returns: Json
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -959,10 +1093,36 @@ export type Database = {
         Returns: boolean
       }
       is_staff_member: { Args: never; Returns: boolean }
+      next_order_code: { Args: never; Returns: string }
+      online_card_payments_enabled: { Args: never; Returns: boolean }
+      order_transition_allowed: {
+        Args: {
+          _from: Database["public"]["Enums"]["order_status"]
+          _to: Database["public"]["Enums"]["order_status"]
+        }
+        Returns: boolean
+      }
+      release_order_to_kitchen: {
+        Args: { _order_id: string }
+        Returns: boolean
+      }
       touch_session: { Args: { _id: string; _token: string }; Returns: boolean }
       verify_waiter_pin: {
         Args: { _pin: string; _waiter_id: string }
         Returns: boolean
+      }
+      write_audit: {
+        Args: {
+          _action: string
+          _actor_label?: string
+          _after?: Json
+          _before?: Json
+          _correlation_id?: string
+          _entity_id: string
+          _entity_type: string
+          _reason?: string
+        }
+        Returns: string
       }
     }
     Enums: {
