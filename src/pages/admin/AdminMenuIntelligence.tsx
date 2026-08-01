@@ -12,11 +12,11 @@ import {
 import { toast } from 'sonner';
 import {
   getEngineHealth, getHoldoutComparison, getItemPerformance, getPairings,
-  getSoldOutImpact, getSuggestionImpact, getSuggestionPerformance,
+  getSoldOutImpact, getSuggestionImpact, getSuggestionPerformance, getPlacementImpact,
   refreshIntelligence, curatePairing,
   findDeadWeight, findLeaks, findStars,
   type EngineHealth, type HoldoutComparison, type ItemPerformance, type Pairing,
-  type SoldOutRow, type SuggestionImpact, type SuggestionRow, type SuggestionStatus,
+  type PlacementImpact, type SoldOutRow, type SuggestionImpact, type SuggestionRow, type SuggestionStatus,
 } from '@/lib/menu-intelligence';
 
 const km = (n: number | null | undefined) => `${Number(n ?? 0).toFixed(2)} KM`;
@@ -70,18 +70,19 @@ const AdminMenuIntelligence = () => {
   const [impact, setImpact] = useState<SuggestionImpact | null>(null);
   const [health, setHealth] = useState<EngineHealth | null>(null);
   const [holdout, setHoldout] = useState<HoldoutComparison | null>(null);
+  const [placements, setPlacements] = useState<PlacementImpact[]>([]);
   const [soldOut, setSoldOut] = useState<SoldOutRow[]>([]);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [i, p, s, im, h, ho, so] = await Promise.all([
+      const [i, p, s, im, h, ho, so, pl] = await Promise.all([
         getItemPerformance(days), getPairings(30), getSuggestionPerformance(50),
         getSuggestionImpact(days), getEngineHealth(), getHoldoutComparison(days),
-        getSoldOutImpact(days),
+        getSoldOutImpact(days), getPlacementImpact(days),
       ]);
       setItems(i); setPairs(p); setSuggestions(s);
-      setImpact(im); setHealth(h); setHoldout(ho); setSoldOut(so);
+      setImpact(im); setHealth(h); setHoldout(ho); setSoldOut(so); setPlacements(pl);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Could not load menu intelligence');
     } finally {
@@ -204,22 +205,90 @@ const AdminMenuIntelligence = () => {
 
       <PrepAccuracyPanel />
 
-      {/* Attribution is an upper bound. Say so, and offer the honest number. */}
-      <Card className="border-border">
+      {/*
+        The headline.
+
+        Deliberately leads with the CAUSAL number and its uncertainty, not with
+        attributed revenue — attribution counts the whole line every time a
+        guest takes a suggestion, including the coffee they were always going
+        to order. It is an upper bound wearing the costume of a measurement.
+      */}
+      <Card className={
+        holdout?.status === 'positive' ? 'border-primary/40 bg-primary/5'
+          : holdout?.status === 'negative' ? 'border-destructive/40 bg-destructive/5'
+            : 'border-border'
+      }>
         <CardHeader className="pb-3">
           <CardTitle className="font-serif text-lg flex items-center gap-2">
-            <Brain className="w-5 h-5 text-primary" /> How much of that is really the suggestions?
+            <Brain className="w-5 h-5 text-primary" /> What are the suggestions actually worth?
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <p className="text-sm font-sans text-muted-foreground leading-relaxed">
-            <strong className="text-foreground">{km(impact?.attributed_revenue)}</strong> came from lines a guest
-            added after seeing a suggestion. Read that as an upper bound: some of those guests
-            would have ordered the coffee anyway. The only way to know the real number is to show
-            nothing to a small share of tables and compare.
-          </p>
+          {holdout?.status === 'positive' && (
+            <div>
+              <p className="font-serif text-3xl font-bold text-foreground tabular-nums">
+                {km(holdout.conservative_monthly_value)} <span className="text-base font-sans font-normal text-muted-foreground">a month</span>
+              </p>
+              <p className="text-sm font-sans text-muted-foreground mt-1">
+                Tables shown suggestions spend{' '}
+                <strong className="text-foreground">{km(holdout.difference)}</strong> more per order.
+                {/* The projection uses the bottom of the interval on purpose. A
+                    dashboard that overstates once is never believed again. */}
+                {' '}The figure above is deliberately cautious — it uses the low end of the range
+                ({km(holdout.ci_low)} to {km(holdout.ci_high)} per order), so the real number is
+                very likely higher.
+              </p>
+            </div>
+          )}
 
-          {holdout && holdout.holdout_pct > 0 ? (
+          {holdout?.status === 'negative' && (
+            <div>
+              <p className="font-serif text-2xl font-bold text-destructive">
+                Suggestions are costing you money
+              </p>
+              <p className="text-sm font-sans text-muted-foreground mt-1">
+                Tables shown suggestions spend <strong className="text-foreground">{km(Math.abs(Number(holdout.difference ?? 0)))}</strong>{' '}
+                <em>less</em> per order, and the gap is larger than chance would explain. Check the
+                retirement settings and the worst-performing pairs below before leaving this on.
+              </p>
+            </div>
+          )}
+
+          {holdout?.status === 'no_measurable_effect' && (
+            <div>
+              <p className="font-serif text-2xl font-bold text-foreground">No measurable effect yet</p>
+              <p className="text-sm font-sans text-muted-foreground mt-1">
+                There is enough data, and the difference between the two groups is within the range
+                you would expect from chance alone ({km(holdout.ci_low)} to {km(holdout.ci_high)} per
+                order — it includes zero). That is a real finding, not a missing one: right now the
+                suggestions are neither helping nor hurting the average order.
+              </p>
+            </div>
+          )}
+
+          {holdout?.status === 'too_early' && (
+            <div>
+              <p className="font-serif text-2xl font-bold text-foreground">Not enough data yet</p>
+              <p className="text-sm font-sans text-muted-foreground mt-1">
+                {holdout.with_suggestions.orders} orders with suggestions and{' '}
+                {holdout.holdout.orders} without. Any difference at these numbers is noise, so no
+                figure is shown. Leave the holdout running.
+              </p>
+            </div>
+          )}
+
+          {(!holdout || holdout.status === 'not_running') && (
+            <div className="rounded-xl border border-dashed border-border p-4 text-sm font-sans">
+              <p className="text-foreground font-semibold">No holdout running — this number cannot be measured.</p>
+              <p className="text-muted-foreground mt-1">
+                Set a 10% holdout in <strong>Service &amp; suggestions</strong>. One table in ten
+                sees no suggestions, and the difference in what the two groups spend is the only
+                honest way to know whether any of this earns its place.
+              </p>
+            </div>
+          )}
+
+          {holdout && holdout.status !== 'not_running' && (
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div className="rounded-xl border border-border p-4">
                 <p className="text-xs font-sans text-muted-foreground">With suggestions</p>
@@ -231,30 +300,69 @@ const AdminMenuIntelligence = () => {
                 <p className="text-xl font-serif font-bold tabular-nums mt-1">{km(holdout.holdout.avg_order)}</p>
                 <p className="text-xs font-sans text-muted-foreground">{holdout.holdout.orders} orders</p>
               </div>
-              <div className={`rounded-xl border p-4 ${holdout.reliable ? 'border-primary/30 bg-primary/5' : 'border-border'}`}>
+              <div className="rounded-xl border border-border p-4">
                 <p className="text-xs font-sans text-muted-foreground">Difference per order</p>
                 <p className="text-xl font-serif font-bold tabular-nums mt-1">
-                  {holdout.difference >= 0 ? '+' : ''}{km(holdout.difference)}
+                  {Number(holdout.difference ?? 0) >= 0 ? '+' : ''}{km(holdout.difference)}
                 </p>
-                <p className={`text-xs font-sans mt-0.5 ${holdout.reliable ? 'text-primary' : 'text-muted-foreground'}`}>
-                  {holdout.reliable
-                    ? 'Enough data to act on'
-                    : 'Not yet reliable — needs 100+ orders on each side'}
+                <p className="text-xs font-sans text-muted-foreground mt-0.5">
+                  {holdout.ci_low != null
+                    ? <>95% range {km(holdout.ci_low)} to {km(holdout.ci_high)}</>
+                    : 'range not yet computable'}
                 </p>
               </div>
             </div>
-          ) : (
-            <div className="rounded-xl border border-dashed border-border p-4 text-sm font-sans">
-              <p className="text-foreground font-semibold">No holdout running.</p>
-              <p className="text-muted-foreground mt-1">
-                Set a 10% holdout in <strong>Service &amp; suggestions</strong> for a couple of weeks
-                when you want a number you can defend. One table in ten sees no suggestions, and the
-                difference in average order value is the real effect.
-              </p>
-            </div>
           )}
+
+          {/* Per head, which takes party size out of the comparison. */}
+          {impact && impact.per_cover.orders_counted > 0 && (
+            <p className="text-sm font-sans text-muted-foreground">
+              Per guest: <strong className="text-foreground">{km(impact.per_cover.with_suggestions)}</strong> with
+              suggestions vs <strong className="text-foreground">{km(impact.per_cover.holdout)}</strong> without —
+              based on the {impact.per_cover.orders_counted} order
+              {impact.per_cover.orders_counted === 1 ? '' : 's'} where staff recorded a head count.
+            </p>
+          )}
+
+          <p className="text-xs font-sans text-muted-foreground border-t border-border pt-3">
+            Separately, <strong className="text-foreground">{km(impact?.attributed_revenue)}</strong> of revenue
+            came from lines added straight after a suggestion. That is an upper bound — it counts
+            the whole line even when the guest would have ordered it anyway — which is exactly why
+            the holdout above is the number to trust.
+          </p>
         </CardContent>
       </Card>
+
+      {/* ---- Which surface earns its space ---- */}
+      {placements.length > 0 && (
+        <Card className="border-border">
+          <CardHeader className="pb-3">
+            <CardTitle className="font-serif text-lg">Which suggestion spot earns its place</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm font-sans text-muted-foreground mb-3">
+              The cart, the dish page and the after-meal prompt are three different products doing
+              three different jobs. One combined number hides which to invest in — and which to
+              switch off.
+            </p>
+            <div className="space-y-1.5">
+              {placements.map((row) => (
+                <div key={row.placement} className="flex items-center justify-between gap-3 py-2 px-3 rounded-lg bg-muted/40">
+                  <span className="text-sm font-sans font-medium">
+                    {row.placement === 'cart' ? 'In the cart'
+                      : row.placement === 'after_meal' ? 'After the meal'
+                        : row.placement === 'item' ? 'On the dish page' : row.placement}
+                  </span>
+                  <span className="text-sm font-sans tabular-nums text-muted-foreground">
+                    {row.shown} shown · <span className="text-foreground font-semibold">{row.acceptance_pct}%</span> taken ·{' '}
+                    <span className="text-foreground font-semibold">{km(row.attributed_revenue)}</span>
+                  </span>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* ---- What the engine is doing ---- */}
       {health && (

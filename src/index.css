@@ -1,6 +1,12 @@
-/* Two italic Lora weights were downloaded on every first visit and used
-   nowhere in the app. */
-@import url('https://fonts.googleapis.com/css2?family=Lora:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap');
+/*
+ * Fonts are loaded from a <link> in index.html, not with @import.
+ *
+ * An @import inside the stylesheet cannot be discovered by the browser's
+ * preload scanner: it has to download and parse index.css first, THEN start
+ * the font request, THEN fetch the font files. That is three serial round
+ * trips before any text renders in the right typeface. The <link> starts the
+ * font request in parallel with the CSS.
+ */
 
 @tailwind base;
 @tailwind components;

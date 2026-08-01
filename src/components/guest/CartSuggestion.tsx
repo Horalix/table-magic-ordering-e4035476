@@ -12,6 +12,15 @@ interface Props {
   placement: Placement;
   /** Suppress the suggestion entirely (e.g. the restaurant turned it off). */
   disabled?: boolean;
+  /**
+   * Pair against these items instead of the cart.
+   *
+   * Used by the dish page, where the question is "what goes with THIS?" — the
+   * guest is looking at one thing and has not decided to buy anything yet, so
+   * pairing against a cart they may not have started would suggest against the
+   * wrong context entirely.
+   */
+  forItemIds?: string[];
 }
 
 /**
@@ -27,7 +36,7 @@ interface Props {
  * dismissed, so the guest is never presented with a decision they did not ask
  * for while they are trying to check out.
  */
-const CartSuggestion = ({ placement, disabled }: Props) => {
+const CartSuggestion = ({ placement, disabled, forItemIds }: Props) => {
   const t = useT();
   const locale = useLanguageStore((s) => s.locale);
   const { items, addItem } = useCartStore();
@@ -37,8 +46,8 @@ const CartSuggestion = ({ placement, disabled }: Props) => {
   const avoid = useMemo(() => allergensToAvoid(activeDiets), [activeDiets]);
 
   const cartIds = useMemo(
-    () => items.map((i) => i.menuItemId ?? i.id).sort(),
-    [items],
+    () => forItemIds ?? items.map((i) => i.menuItemId ?? i.id).sort(),
+    [forItemIds, items],
   );
 
   const { data = [] } = useQuery({

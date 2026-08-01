@@ -1478,6 +1478,17 @@ export type Database = {
         Args: { _days?: number }
         Returns: number
       }
+      suggestion_impact_by_placement: {
+        Args: { _days?: number }
+        Returns: {
+          acceptance_pct: number
+          accepted: number
+          attributed_revenue: number
+          placement: string
+          revenue_per_impression: number
+          shown: number
+        }[]
+      }
       covers_summary: {
         Args: { _day?: string }
         Returns: Json
