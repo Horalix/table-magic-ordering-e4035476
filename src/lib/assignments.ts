@@ -1,4 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
+import { localDayISO } from '@/lib/reporting';
 
 export interface SectionAssignment {
   id: string;
@@ -7,13 +8,28 @@ export interface SectionAssignment {
   shift_date: string;
 }
 
-export const todayISO = () => new Date().toISOString().slice(0, 10);
+/**
+ * Today, in the restaurant's timezone.
+ *
+ * This used to be `toISOString().slice(0,10)` — the UTC date. In Bosnia
+ * (UTC+1/+2) that means between local midnight and 01:00 or 02:00 it returned
+ * *yesterday*, so a manager opening the floor plan at 00:30 during a late
+ * service saw the previous night's assignments, and the "Back to today" button
+ * navigated them further from reality. The database trigger uses CURRENT_DATE
+ * in server time, so the client and server also disagreed about which shift a
+ * new session belonged to.
+ */
+export const todayISO = () => localDayISO();
 
 /**
- * Assign (or clear) the waiter covering a section for a given shift date.
- * One waiter per section per day — this matches the auto-assign DB trigger
- * that routes new table sessions to the section's waiter for today.
- * Pass the existing assignment row (if any) so we update instead of duplicate.
+ * Assign (or clear) the single waiter covering a section for a shift date.
+ *
+ * NOTE: superseded. Migration `20260622203436_*` replaced the
+ * `UNIQUE(section_id, shift_date)` constraint with
+ * `UNIQUE(section_id, waiter_id, shift_date)` and rewrote the auto-assign
+ * trigger to load-balance across *multiple* waiters per section. Use
+ * `addSectionWaiter` / `removeSectionAssignment`. Kept only so an older caller
+ * does not break; it has no callers in this repository.
  */
 export async function setSectionWaiter(
   sectionId: string,
@@ -45,6 +61,9 @@ export async function addSectionWaiter(sectionId: string, waiterId: string, date
 
 /** Remove one specific waiter assignment by row id. */
 export async function removeSectionAssignment(id: string): Promise<{ error: string | null }> {
+  // Optimistic UI hands us a temporary id before the insert has landed; deleting
+  // it would match nothing and look like success. Say so instead.
+  if (id.startsWith('tmp-')) return { error: 'still-saving' };
   const res = await supabase.from('section_assignments').delete().eq('id', id);
   return { error: res.error?.message ?? null };
 }

@@ -20,7 +20,30 @@ export interface StubState {
   sessionResume: Record<string, unknown>;
   /** What guest_check_venue_token reports for the scanned code. */
   venueToken: Record<string, unknown>;
+  /** The menu. Mutable so a spec can 86 something. */
+  menuItems: Record<string, unknown>[];
 }
+
+const MENU_ITEM = {
+  id: 'item-burger',
+  name: 'La Soul Burger',
+  name_bs: 'La Soul Burger',
+  name_ar: 'برغر لا سول',
+  description: 'Premium beef, aged cheddar, truffle mayo',
+  description_bs: null,
+  description_ar: null,
+  price: 18,
+  image_url: null,
+  dietary_tags: [],
+  merchandising_tags: ['popular'],
+  allergens: ['gluten', 'dairy'],
+  portion_note: '220 g',
+  prep_minutes: 12,
+  is_available: true,
+  subcategory_id: 'sub-burgers',
+  sort_order: 1,
+  category_name: 'Food',
+};
 
 export const defaultState = (): StubState => ({
   serviceStatus: {
@@ -41,25 +64,9 @@ export const defaultState = (): StubState => ({
   cardStartFails: false,
   sessionResume: { status: 'active', session_id: 'session-1', table_number: 7, guest_name: 'Amina' },
   venueToken: { valid: true, ordering_enabled: true, paused_message: null, max_table_number: 12 },
+  menuItems: [MENU_ITEM],
 });
 
-const MENU_ITEM = {
-  id: 'item-burger',
-  name: 'La Soul Burger',
-  name_bs: 'La Soul Burger',
-  name_ar: 'برغر لا سول',
-  description: 'Premium beef, aged cheddar, truffle mayo',
-  description_bs: null,
-  description_ar: null,
-  price: 18,
-  image_url: null,
-  dietary_tags: [],
-  merchandising_tags: ['popular'],
-  is_available: true,
-  subcategory_id: 'sub-burgers',
-  sort_order: 1,
-  category_name: 'Food',
-};
 
 function jsonRoute(route: Route, body: unknown, status = 200) {
   return route.fulfill({
@@ -158,10 +165,22 @@ export async function installSupabaseStubs(page: Page, state: StubState) {
     }
   });
 
-  await page.route('**/rest/v1/categories**', (route) => jsonRoute(route, state.categories));
+  await page.route('**/rest/v1/categories**', (route) => {
+    // PostgREST returns a bare object (not an array) when the client used
+    // .single(); CategoryPage does, so honour the Accept header or the whole
+    // page never resolves.
+    const accept = route.request().headers()['accept'] ?? '';
+    const wantsOne = accept.includes('vnd.pgrst.object');
+    const url = new URL(route.request().url());
+    const nameFilter = url.searchParams.get('name');
+    const rows = nameFilter
+      ? state.categories.filter((c) => `eq.${(c as { name: string }).name}` === nameFilter)
+      : state.categories;
+    return jsonRoute(route, wantsOne ? (rows[0] ?? null) : rows);
+  });
   await page.route('**/rest/v1/subcategories**', (route) =>
     jsonRoute(route, [{ id: 'sub-burgers', category_id: 'cat-food', name: 'Burgers', name_bs: 'Burgeri', sort_order: 1 }]));
-  await page.route('**/rest/v1/menu_items**', (route) => jsonRoute(route, [MENU_ITEM]));
+  await page.route('**/rest/v1/menu_items**', (route) => jsonRoute(route, state.menuItems));
   await page.route('**/rest/v1/restaurant_settings**', (route) => jsonRoute(route, null));
 
   // The card-start Edge Function. Never reaches Monri.

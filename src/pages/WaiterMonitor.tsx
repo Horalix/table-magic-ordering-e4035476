@@ -3,7 +3,12 @@ import { Link } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { formatDuration, formatMinutes, useElapsed } from '@/lib/timing';
+import { formatDuration, formatMinutes, useElapsed, useElapsedMinutes } from '@/lib/timing';
+import { useNow, useNowBucketed } from '@/lib/clock';
+import { useStaffRealtime, useStaffRealtimeEvent } from '@/lib/realtime';
+import ConnectionPill from '@/components/staff/ConnectionPill';
+import TableActionSheet, { type SheetTable } from '@/components/monitor/TableActionSheet';
+import { localDayISO } from '@/lib/reporting';
 import { ArrowLeft, Bell, CheckCircle2, ChefHat, Clock, Grid3x3, Lock, LogIn, Receipt, Users, Volume2, VolumeX } from 'lucide-react';
 import PinPad from '@/components/monitor/PinPad';
 import { toast } from 'sonner';
@@ -17,14 +22,21 @@ type TableRow = Pick<Database['public']['Tables']['tables']['Row'], 'id' | 'tabl
 };
 type Session = Pick<
   Database['public']['Tables']['table_sessions']['Row'],
-  'id' | 'table_id' | 'is_active' | 'opened_at' | 'guest_name' | 'assigned_waiter_id'
+  'id' | 'table_id' | 'is_active' | 'opened_at' | 'guest_name' | 'assigned_waiter_id' | 'covers'
 >;
 type Order = Pick<
   Database['public']['Tables']['orders']['Row'],
   'id' | 'table_session_id' | 'status' | 'created_at' | 'assigned_waiter_id'
+  | 'order_code' | 'total' | 'payment_status' | 'payment_method' | 'notes'
 >;
-type Call = Pick<Database['public']['Tables']['waiter_calls']['Row'], 'id' | 'table_session_id' | 'status' | 'created_at'>;
-type BillReq = Pick<Database['public']['Tables']['bill_requests']['Row'], 'id' | 'table_session_id' | 'status' | 'created_at'>;
+type Call = Pick<
+  Database['public']['Tables']['waiter_calls']['Row'],
+  'id' | 'table_session_id' | 'status' | 'created_at' | 'acknowledged_by'
+>;
+type BillReq = Pick<
+  Database['public']['Tables']['bill_requests']['Row'],
+  'id' | 'table_session_id' | 'status' | 'created_at' | 'acknowledged_by'
+>;
 type Assignment = Pick<Database['public']['Tables']['section_assignments']['Row'], 'section_id' | 'waiter_id' | 'shift_date'>;
 type WaiterStats = { total: number; occupied: number; calls: number; bills: number; ready: number };
 type TableState = 'free' | 'occupied' | 'ready' | 'call' | 'bill';
@@ -41,8 +53,20 @@ const WaiterMonitor = () => {
   const [waiters, setWaiters] = useState<Waiter[]>([]);
   const [assignments, setAssignments] = useState<Assignment[]>([]);
 
-  const [now, setNow] = useState(new Date());
+  /**
+   * Two clocks, on purpose.
+   *
+   * `now` drives the header time. `sortNow` drives card ORDER, and is bucketed
+   * to the minute — the grid used to re-sort on every one-second tick, so a
+   * card could slide out from under a finger already reaching for it. Ordering
+   * that changes at most once a minute is still fresh enough to be useful and
+   * stable enough to touch.
+   */
+  const now = useNow();
+  const sortNow = useNowBucketed(60_000);
   const [mode, setMode] = useState<'rail' | 'mine' | 'all'>('rail');
+  const [openTableId, setOpenTableId] = useState<string | null>(null);
+  const [meId, setMeId] = useState<string | null>(null);
   const [activeWaiterId, setActiveWaiterId] = useState<string | null>(null);
 
   const [pinTarget, setPinTarget] = useState<Waiter | null>(null);
@@ -60,8 +84,7 @@ const WaiterMonitor = () => {
   const prevReadyIds = useRef<Set<string>>(new Set());
 
   useEffect(() => {
-    const id = setInterval(() => setNow(new Date()), 1000);
-    return () => clearInterval(id);
+    void supabase.auth.getUser().then(({ data }) => setMeId(data.user?.id ?? null));
   }, []);
 
   // Unlock audio on the first tap so event-driven alerts can play.
@@ -72,13 +95,22 @@ const WaiterMonitor = () => {
   }, []);
 
   const fetchAll = useCallback(async () => {
-    const today = new Date().toISOString().slice(0, 10);
+    // Local date. The UTC one rolled the whole floor plan back to yesterday
+    // every night after midnight Sarajevo time.
+    const today = localDayISO();
     const [t, s, o, c, b, w, a] = await Promise.all([
       supabase.from('tables').select('id, table_number, section_id, sections(id, name, color)').order('table_number'),
-      supabase.from('table_sessions').select('id, table_id, is_active, opened_at, guest_name, assigned_waiter_id').eq('is_active', true),
-      supabase.from('orders').select('id, table_session_id, status, created_at, assigned_waiter_id').not('status', 'in', '("served","cancelled")'),
-      supabase.from('waiter_calls').select('id, table_session_id, status, created_at').eq('status', 'pending'),
-      supabase.from('bill_requests').select('id, table_session_id, status, created_at').eq('status', 'pending'),
+      supabase.from('table_sessions').select('id, table_id, is_active, opened_at, guest_name, assigned_waiter_id, covers').eq('is_active', true),
+      supabase.from('orders')
+        .select('id, table_session_id, status, created_at, assigned_waiter_id, order_code, total, payment_status, payment_method, notes')
+        .not('status', 'in', '("cancelled")')
+        .gte('created_at', new Date(Date.now() - 18 * 60 * 60 * 1000).toISOString()),
+      // Open, not merely pending: a claimed call is still someone's problem
+      // until it is resolved, and hiding it makes the claim look like a fix.
+      supabase.from('waiter_calls').select('id, table_session_id, status, created_at, acknowledged_by')
+        .neq('status', 'resolved').order('created_at', { ascending: true }),
+      supabase.from('bill_requests').select('id, table_session_id, status, created_at, acknowledged_by')
+        .neq('status', 'resolved').order('created_at', { ascending: true }),
       supabase.from('waiters').select('id, display_name, is_active, has_pin').eq('is_active', true).order('display_name'),
       supabase.from('section_assignments').select('section_id, waiter_id, shift_date').eq('shift_date', today),
     ]);
@@ -112,21 +144,18 @@ const WaiterMonitor = () => {
     setAssignments((a.data ?? []) as Assignment[]);
   }, []);
 
-  useEffect(() => {
-    void fetchAll();
-    const ch = supabase
-      .channel('monitor')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'tables' }, () => { void fetchAll(); })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'table_sessions' }, () => { void fetchAll(); })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => { void fetchAll(); })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'waiter_calls' }, () => { void fetchAll(); })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'bill_requests' }, () => { void fetchAll(); })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'section_assignments' }, () => { void fetchAll(); })
-      .subscribe();
-    return () => {
-      supabase.removeChannel(ch);
-    };
-  }, [fetchAll]);
+  useEffect(() => { void fetchAll(); }, [fetchAll]);
+
+  /**
+   * One refetch per burst, not one per event per table.
+   *
+   * This screen used to subscribe to six tables and run all seven of its
+   * queries on every single event, so a six-item order cost 49 queries on this
+   * device alone — and the cost scaled with floor activity times the number of
+   * screens open. The shared module coalesces the burst into one call.
+   */
+  const connection = useStaffRealtime();
+  useStaffRealtimeEvent(useCallback(() => { void fetchAll(); }, [fetchAll]));
 
   const sectionWaiter = useMemo(() => {
     const m = new Map<string, string>();
@@ -153,10 +182,10 @@ const WaiterMonitor = () => {
     if (calls.some((call) => call.table_session_id === sess.id)) return 80;
     const tOrders = orders.filter((order) => order.table_session_id === sess.id);
     if (tOrders.some((order) => order.status === 'ready')) return 60;
-    const oldestMs = tOrders.reduce((acc, order) => Math.max(acc, now.getTime() - new Date(order.created_at).getTime()), 0);
+    const oldestMs = tOrders.reduce((acc, order) => Math.max(acc, sortNow - new Date(order.created_at).getTime()), 0);
     if (oldestMs > 15 * 60_000) return 40 + oldestMs / 60_000;
     return 20 + oldestMs / 60_000;
-  }, [bills, calls, now, orders, sessions]);
+  }, [bills, calls, sortNow, orders, sessions]);
 
   const sortByUrgency = useCallback((arr: TableRow[]) =>
     [...arr].sort((a, b) => tableUrgency(b) - tableUrgency(a)), [tableUrgency]);
@@ -176,7 +205,15 @@ const WaiterMonitor = () => {
 
   const occupied = sessions.length;
   const pendingAlerts = calls.length + bills.length;
-  const oldestOrderMs = orders.reduce((acc, order) => Math.max(acc, now.getTime() - new Date(order.created_at).getTime()), 0);
+  const openOrders = useMemo(
+    () => orders.filter((o) => o.status !== 'served'),
+    [orders],
+  );
+  const oldestOrderMs = openOrders.reduce(
+    (acc, order) => Math.max(acc, now - new Date(order.created_at).getTime()), 0);
+  /** The longest-waiting guest, not the newest — the list is oldest-first. */
+  const oldestAlertMs = [...calls, ...bills].reduce(
+    (acc, alert) => Math.max(acc, now - new Date(alert.created_at).getTime()), 0);
 
   const openWaiter = (waiter: Waiter) => {
     if (!waiter.has_pin) {
@@ -246,6 +283,52 @@ const WaiterMonitor = () => {
     };
   }, [mode, resetIdle]);
 
+  /**
+   * Everything the action sheet needs about one table, assembled here so the
+   * sheet itself does no querying and cannot show a different picture from the
+   * card that was tapped.
+   */
+  const openTable = useMemo<SheetTable | null>(() => {
+    if (!openTableId) return null;
+    const table = tables.find((t) => t.id === openTableId);
+    if (!table) return null;
+    const session = sessions.find((sess) => sess.table_id === table.id);
+    const call = session ? calls.find((c) => c.table_session_id === session.id) : undefined;
+    const bill = session ? bills.find((b) => b.table_session_id === session.id) : undefined;
+    const waiterId = tableWaiter(table);
+    const nameOf = (id: string | null | undefined) => (id ? waiterById[id]?.display_name ?? null : null);
+
+    return {
+      tableNumber: table.table_number,
+      sectionName: table.sections?.name ?? null,
+      sessionId: session?.id ?? null,
+      guestName: session?.guest_name ?? null,
+      openedAt: session?.opened_at ?? null,
+      covers: session?.covers ?? null,
+      waiterName: nameOf(waiterId),
+      callId: call?.id ?? null,
+      callHeldBy: call?.acknowledged_by ?? null,
+      callHeldByName: nameOf(call?.acknowledged_by),
+      billId: bill?.id ?? null,
+      billHeldBy: bill?.acknowledged_by ?? null,
+      billHeldByName: nameOf(bill?.acknowledged_by),
+      orders: session
+        ? orders
+            .filter((o) => o.table_session_id === session.id)
+            .map((o) => ({
+              id: o.id,
+              order_code: o.order_code ?? null,
+              status: o.status,
+              total: Number(o.total ?? 0),
+              payment_status: o.payment_status ?? null,
+              payment_method: o.payment_method ?? null,
+              notes: o.notes ?? null,
+              created_at: o.created_at,
+            }))
+        : [],
+    };
+  }, [bills, calls, openTableId, orders, sessions, tableWaiter, tables, waiterById]);
+
   const activeWaiter = activeWaiterId ? waiterById[activeWaiterId] : null;
   const myTables = activeWaiterId
     ? sortByUrgency(tables.filter((table) => tableWaiter(table) === activeWaiterId))
@@ -267,14 +350,23 @@ const WaiterMonitor = () => {
                 {mode === 'mine' && activeWaiter ? `${activeWaiter.display_name}'s Floor` : mode === 'all' ? 'All Tables' : 'La Soul - Floor'}
               </h1>
               <p className="text-[11px] uppercase tracking-widest text-muted-foreground font-sans">
-                {now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} | {now.toLocaleDateString()}
+                {new Date(now).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} | {new Date(now).toLocaleDateString()}
               </p>
             </div>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
+            <ConnectionPill state={connection} />
             <StatPill icon={<Users className="w-3.5 h-3.5" />} label="Occupied" value={`${occupied}/${tables.length}`} tone="active" />
-            <StatPill icon={<ChefHat className="w-3.5 h-3.5" />} label="Orders" value={orders.length} tone={orders.length ? 'active' : 'idle'} />
-            <StatPill icon={<Bell className="w-3.5 h-3.5" />} label="Alerts" value={pendingAlerts} tone={pendingAlerts ? 'urgent' : 'idle'} />
+            <StatPill icon={<ChefHat className="w-3.5 h-3.5" />} label="Orders" value={openOrders.length} tone={openOrders.length ? 'active' : 'idle'} />
+            <StatPill
+              icon={<Bell className="w-3.5 h-3.5" />}
+              label="Alerts"
+              /* The age of the longest wait, not just the count — five calls
+                 one minute old is a different night from one call ten minutes
+                 old, and the count alone cannot tell them apart. */
+              value={pendingAlerts ? `${pendingAlerts} · ${formatMinutes(oldestAlertMs)}` : 0}
+              tone={oldestAlertMs > 5 * 60_000 ? 'urgent' : pendingAlerts ? 'warn' : 'idle'}
+            />
             <StatPill
               icon={<Clock className="w-3.5 h-3.5" />}
               label="Oldest"
@@ -315,8 +407,9 @@ const WaiterMonitor = () => {
             bills={bills}
             waiterById={waiterById}
             tableWaiter={tableWaiter}
-            now={now}
+            now={sortNow}
             large={false}
+            onOpen={setOpenTableId}
           />
         )}
 
@@ -330,8 +423,9 @@ const WaiterMonitor = () => {
               bills={bills}
               waiterById={waiterById}
               tableWaiter={tableWaiter}
-              now={now}
+              now={sortNow}
               large
+              onOpen={setOpenTableId}
             />
             {myTables.length === 0 && (
               <p className="text-center text-muted-foreground font-sans py-20">
@@ -341,6 +435,13 @@ const WaiterMonitor = () => {
           </>
         )}
       </main>
+
+      <TableActionSheet
+        table={openTable}
+        meId={meId}
+        onClose={() => setOpenTableId(null)}
+        onChanged={() => { void fetchAll(); }}
+      />
 
       <PinPad
         open={!!pinTarget}
@@ -394,7 +495,7 @@ const RailView = ({
             onClick={() => onSelectWaiter(waiter)}
             className={`min-h-[120px] rounded-2xl border-2 p-5 text-left active:scale-[0.98] transition-all ${
               urgent > 0
-                ? 'border-destructive/60 bg-destructive/5 hover:bg-destructive/10 breathe'
+                ? 'border-destructive/60 bg-destructive/5 hover:bg-destructive/10 breathe breathe-urgent'
                 : stats.ready > 0
                   ? 'border-accent/60 bg-accent/5 hover:bg-accent/10'
                   : 'border-border bg-card hover:bg-accent/10'
@@ -457,6 +558,7 @@ const TablesGrid = ({
   tableWaiter,
   now,
   large,
+  onOpen,
 }: {
   tables: TableRow[];
   sessions: Session[];
@@ -465,8 +567,9 @@ const TablesGrid = ({
   bills: BillReq[];
   waiterById: Record<string, Waiter>;
   tableWaiter: (table: TableRow) => string | null;
-  now: Date;
+  now: number;
   large: boolean;
+  onOpen: (tableId: string) => void;
 }) => {
   if (tables.length === 0) {
     return <p className="text-center text-muted-foreground font-sans py-20">No tables.</p>;
@@ -480,11 +583,13 @@ const TablesGrid = ({
     <div className={`grid ${cols} gap-3`}>
       {tables.map((table) => {
         const sess = sessions.find((session) => session.table_id === table.id);
-        const tOrders = sess ? orders.filter((order) => order.table_session_id === sess.id) : [];
+        const tOrders = sess
+          ? orders.filter((order) => order.table_session_id === sess.id && order.status !== 'served')
+          : [];
         const hasCall = sess ? calls.some((call) => call.table_session_id === sess.id) : false;
         const hasBill = sess ? bills.some((bill) => bill.table_session_id === sess.id) : false;
         const readyOrders = tOrders.filter((order) => order.status === 'ready').length;
-        const oldestMs = tOrders.reduce((acc, order) => Math.max(acc, now.getTime() - new Date(order.created_at).getTime()), 0);
+        const oldestMs = tOrders.reduce((acc, order) => Math.max(acc, now - new Date(order.created_at).getTime()), 0);
         const waiterId = tableWaiter(table);
         const waiterName = waiterId ? waiterById[waiterId]?.display_name : null;
         return (
@@ -498,6 +603,7 @@ const TablesGrid = ({
             hasCall={hasCall}
             hasBill={hasBill}
             waiterName={waiterName}
+            onOpen={() => onOpen(table.id)}
           />
         );
       })}
@@ -540,6 +646,7 @@ const TableCard = ({
   hasCall,
   hasBill,
   waiterName,
+  onOpen,
 }: {
   table: TableRow;
   session?: Session;
@@ -549,6 +656,7 @@ const TableCard = ({
   hasCall: boolean;
   hasBill: boolean;
   waiterName: string | null;
+  onOpen: () => void;
 }) => {
   const elapsed = useElapsed(session?.opened_at);
   const occupied = !!session;
@@ -564,12 +672,19 @@ const TableCard = ({
     occupied: { ring: 'border-primary/30', bg: 'bg-primary/5', chip: 'bg-primary/15 text-primary', label: 'Seated' },
     ready: { ring: 'border-accent/40', bg: 'bg-accent/5', chip: 'bg-accent/20 text-accent', label: 'Ready' },
     call: { ring: 'border-accent/60 animate-pulse', bg: 'bg-accent/10', chip: 'bg-accent text-accent-foreground', label: 'Calling' },
-    bill: { ring: 'border-destructive/60 breathe', bg: 'bg-destructive/10', chip: 'bg-destructive text-destructive-foreground', label: 'Bill' },
+    bill: { ring: 'border-destructive/60 breathe breathe-urgent', bg: 'bg-destructive/10', chip: 'bg-destructive text-destructive-foreground', label: 'Bill' },
   };
   const selectedPalette = palette[state];
 
   return (
-    <Card className={`border-2 ${selectedPalette.ring} ${selectedPalette.bg} transition-colors`}>
+    <Card
+      role="button"
+      tabIndex={0}
+      onClick={onOpen}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(); } }}
+      aria-label={`Table ${table.table_number} — ${selectedPalette.label}`}
+      className={`border-2 cursor-pointer text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring active:scale-[0.99] ${selectedPalette.ring} ${selectedPalette.bg} transition-all`}
+    >
       <CardContent className="p-3">
         <div className="flex items-start justify-between gap-2 mb-2">
           <div className="min-w-0">

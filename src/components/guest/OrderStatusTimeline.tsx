@@ -29,7 +29,16 @@ const OrderStatusTimeline = ({ status }: { status: string }) => {
 
   return (
     <div>
-      <div className="flex items-center">
+      {/* A row of icons meant nothing to a screen reader. It is a progress
+          indicator, so it says so, and it says where the order has got to. */}
+      <div
+        className="flex items-center"
+        role="progressbar"
+        aria-valuemin={1}
+        aria-valuemax={STAGES.length}
+        aria-valuenow={current + 1}
+        aria-valuetext={`${STAGES[current]?.key ?? 'pending'} — step ${current + 1} of ${STAGES.length}`}
+      >
         {STAGES.map((s, i) => {
           const reached = i <= current;
           const Icon = s.icon;

@@ -16,6 +16,9 @@ export type Database = {
     Tables: {
       bill_requests: {
         Row: {
+          acknowledged_at: string | null
+          acknowledged_by: string | null
+          resolved_by: string | null
           created_at: string
           id: string
           resolved_at: string | null
@@ -23,6 +26,9 @@ export type Database = {
           table_session_id: string
         }
         Insert: {
+          acknowledged_at?: string | null
+          acknowledged_by?: string | null
+          resolved_by?: string | null
           created_at?: string
           id?: string
           resolved_at?: string | null
@@ -30,6 +36,9 @@ export type Database = {
           table_session_id: string
         }
         Update: {
+          acknowledged_at?: string | null
+          acknowledged_by?: string | null
+          resolved_by?: string | null
           created_at?: string
           id?: string
           resolved_at?: string | null
@@ -127,6 +136,7 @@ export type Database = {
           merchandising_tags: string[]
           portion_note: string | null
           prep_minutes: number | null
+          station: string
           created_at: string
           description: string | null
           description_ar: string | null
@@ -144,6 +154,14 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          allergens?: string[]
+          available_from?: string | null
+          available_to?: string | null
+          margin_score?: number
+          merchandising_tags?: string[]
+          portion_note?: string | null
+          prep_minutes?: number | null
+          station?: string
           created_at?: string
           description?: string | null
           description_ar?: string | null
@@ -161,6 +179,14 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          allergens?: string[]
+          available_from?: string | null
+          available_to?: string | null
+          margin_score?: number
+          merchandising_tags?: string[]
+          portion_note?: string | null
+          prep_minutes?: number | null
+          station?: string
           created_at?: string
           description?: string | null
           description_ar?: string | null
@@ -187,34 +213,123 @@ export type Database = {
           },
         ]
       }
+      audit_log: {
+        Row: {
+          action: string
+          actor_label: string | null
+          actor_user_id: string | null
+          after_state: Json | null
+          before_state: Json | null
+          correlation_id: string | null
+          created_at: string
+          entity_id: string | null
+          entity_type: string
+          id: string
+          reason: string | null
+        }
+        Insert: {
+          action: string
+          actor_label?: string | null
+          actor_user_id?: string | null
+          after_state?: Json | null
+          before_state?: Json | null
+          correlation_id?: string | null
+          created_at?: string
+          entity_id?: string | null
+          entity_type: string
+          id?: string
+          reason?: string | null
+        }
+        Update: {
+          action?: string
+          actor_label?: string | null
+          actor_user_id?: string | null
+          after_state?: Json | null
+          before_state?: Json | null
+          correlation_id?: string | null
+          created_at?: string
+          entity_id?: string | null
+          entity_type?: string
+          id?: string
+          reason?: string | null
+        }
+        Relationships: []
+      }
+      menu_item_prep_stats: {
+        Row: {
+          computed_at: string
+          median_minutes: number | null
+          menu_item_id: string
+          p80_minutes: number | null
+          samples: number
+        }
+        Insert: {
+          computed_at?: string
+          median_minutes?: number | null
+          menu_item_id: string
+          p80_minutes?: number | null
+          samples?: number
+        }
+        Update: {
+          computed_at?: string
+          median_minutes?: number | null
+          menu_item_id?: string
+          p80_minutes?: number | null
+          samples?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "menu_item_prep_stats_menu_item_id_fkey"
+            columns: ["menu_item_id"]
+            isOneToOne: true
+            referencedRelation: "menu_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       order_items: {
         Row: {
+          bumped_by: string | null
           created_at: string
           id: string
           menu_item_id: string
           notes: string | null
           order_id: string
           quantity: number
+          ready_at: string | null
+          served_at: string | null
+          started_at: string | null
+          station: string
           status: Database["public"]["Enums"]["order_item_status"]
           unit_price: number
         }
         Insert: {
+          bumped_by?: string | null
           created_at?: string
           id?: string
           menu_item_id: string
           notes?: string | null
           order_id: string
           quantity?: number
+          ready_at?: string | null
+          served_at?: string | null
+          started_at?: string | null
+          station?: string
           status?: Database["public"]["Enums"]["order_item_status"]
           unit_price: number
         }
         Update: {
+          bumped_by?: string | null
           created_at?: string
           id?: string
           menu_item_id?: string
           notes?: string | null
           order_id?: string
           quantity?: number
+          ready_at?: string | null
+          served_at?: string | null
+          started_at?: string | null
+          station?: string
           status?: Database["public"]["Enums"]["order_item_status"]
           unit_price?: number
         }
@@ -769,6 +884,7 @@ export type Database = {
       }
       table_sessions: {
         Row: {
+          covers: number | null
           assigned_waiter_id: string | null
           closed_at: string | null
           first_order_at: string | null
@@ -882,6 +998,9 @@ export type Database = {
       }
       waiter_calls: {
         Row: {
+          acknowledged_at: string | null
+          acknowledged_by: string | null
+          resolved_by: string | null
           created_at: string
           id: string
           reason: string | null
@@ -890,6 +1009,9 @@ export type Database = {
           table_session_id: string
         }
         Insert: {
+          acknowledged_at?: string | null
+          acknowledged_by?: string | null
+          resolved_by?: string | null
           created_at?: string
           id?: string
           reason?: string | null
@@ -898,6 +1020,9 @@ export type Database = {
           table_session_id: string
         }
         Update: {
+          acknowledged_at?: string | null
+          acknowledged_by?: string | null
+          resolved_by?: string | null
           created_at?: string
           id?: string
           reason?: string | null
@@ -1171,6 +1296,7 @@ export type Database = {
       guest_get_recommendations: {
         Args: {
           _cart_item_ids?: string[]
+          _exclude_allergens?: string[]
           _language?: string
           _limit?: number
           _placement?: string
@@ -1254,12 +1380,17 @@ export type Database = {
           _ok: boolean
           _order_id: string
           _ticket_type?: string
+          _verified?: boolean
         }
         Returns: undefined
       }
       requeue_ticket_print: {
         Args: { _order_id: string; _ticket_type?: string }
-        Returns: boolean
+        Returns: Json
+      }
+      requeue_stale_ticket_prints: {
+        Args: { _older_than_seconds?: number }
+        Returns: number
       }
       set_order_fiscalization: {
         Args: {
@@ -1277,6 +1408,115 @@ export type Database = {
           _status: Database["public"]["Enums"]["order_status"]
         }
         Returns: Json
+      }
+      sales_analytics: {
+        Args: { _from?: string; _to?: string }
+        Returns: Json
+      }
+      staff_ack_waiter_call: {
+        Args: { _call_id: string }
+        Returns: Json
+      }
+      staff_resolve_waiter_call: {
+        Args: { _call_id: string }
+        Returns: Json
+      }
+      staff_ack_bill_request: {
+        Args: { _request_id: string }
+        Returns: Json
+      }
+      staff_resolve_bill_request: {
+        Args: { _close_session?: boolean; _request_id: string }
+        Returns: Json
+      }
+      staff_set_covers: {
+        Args: { _covers: number; _session_id: string }
+        Returns: Json
+      }
+      close_shift: {
+        Args: {
+          _acknowledge_issues?: boolean
+          _counted_cash?: number
+          _counted_terminal?: number
+          _day?: string
+          _notes?: string
+          _terminal_batch_reference?: string
+        }
+        Returns: Json
+      }
+      shift_close_for: {
+        Args: { _day?: string }
+        Returns: Json
+      }
+      guest_order_eta: {
+        Args: { _order_id: string }
+        Returns: Json
+      }
+      guest_get_substitutes: {
+        Args: { _item_id: string; _limit?: number }
+        Returns: {
+          dietary_tags: string[]
+          id: string
+          image_url: string
+          match_reason: string
+          name: string
+          name_ar: string
+          name_bs: string
+          price: number
+        }[]
+      }
+      kitchen_load: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          backlog_minutes: number
+          load_factor: number
+          open_items: number
+          station: string
+        }[]
+      }
+      refresh_prep_stats: {
+        Args: { _days?: number }
+        Returns: number
+      }
+      covers_summary: {
+        Args: { _day?: string }
+        Returns: Json
+      }
+      staff_bump_order_item: {
+        Args: {
+          _item_id: string
+          _status: Database["public"]["Enums"]["order_item_status"]
+        }
+        Returns: Json
+      }
+      staff_bump_order_items: {
+        Args: {
+          _item_ids: string[]
+          _status: Database["public"]["Enums"]["order_item_status"]
+        }
+        Returns: Json
+      }
+      staff_revert_order_status: {
+        Args: {
+          _order_id: string
+          _reason?: string
+          _to: Database["public"]["Enums"]["order_status"]
+        }
+        Returns: Json
+      }
+      kds_all_day: {
+        Args: { _station?: string }
+        Returns: {
+          menu_item_id: string
+          name: string
+          oldest_at: string
+          open_ids: string[]
+          pending_ids: string[]
+          qty_pending: number
+          qty_preparing: number
+          qty_ready: number
+          station: string
+        }[]
       }
       day_reconciliation: {
         Args: { _day?: string }

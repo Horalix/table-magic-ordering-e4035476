@@ -128,9 +128,18 @@ const PrinterSetupGuide = ({ settings, onTestPrint }: { settings: KitchenPrintSe
       else toast.error('Could not reconnect — make sure the printer is on and nearby.');
     } finally { setBtBusy(false); }
   };
+  /**
+   * The whole point of a test print is to find out. Reporting "sent" for a
+   * printer with its cover open is the failure this button exists to catch.
+   */
   const testBt = async () => {
     setBtBusy(true);
-    try { await printTextBluetooth(buildKitchenTicketText(sampleOrder, settings), settings.copies); toast.success('Test ticket sent'); }
+    try {
+      const outcome = await printTextBluetooth(buildKitchenTicketText(sampleOrder, settings), settings.copies);
+      if (!outcome.ok) toast.error(outcome.reason);
+      else if (outcome.verified) toast.success('Test ticket printed — the printer confirmed it');
+      else toast.success('Test ticket sent. This printer cannot confirm — check the paper came out.');
+    }
     catch (e) { toast.error(friendlyBluetoothError(e)); }
     finally { setBtBusy(false); }
   };

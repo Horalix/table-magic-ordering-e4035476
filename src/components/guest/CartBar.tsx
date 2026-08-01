@@ -9,20 +9,28 @@ import CartSheet from '@/components/guest/CartSheet';
 
 const CartBar = () => {
   const { total, itemCount, sessionId } = useCartStore();
+  const sessionToken = useCartStore((s) => s.sessionToken);
+  const storeTable = useCartStore((s) => s.tableNumber);
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const count = itemCount();
   const t = useT();
   const displayTotal = useCountUp(total());
 
-  const table = searchParams.get('table');
+  // The session lives in the store, not the URL. The PWA start_url is /menu
+  // with no query string, so deriving it from search params made the cart bar
+  // vanish for every installed-app guest while the add buttons stayed visible.
+  const table = searchParams.get('table') ?? (storeTable ? String(storeTable) : null);
   const token = searchParams.get('token');
-  const hasSession = !!(table && token);
+  const hasSession = !!(sessionId && sessionToken);
 
   const [bounce, setBounce] = useState(0);
   const [sheetOpen, setSheetOpen] = useState(false);
+  const prevCount = React.useRef(count);
   useEffect(() => {
-    if (count > 0) setBounce((b) => b + 1);
+    // Only celebrate additions. Removing an item used to play the same pop.
+    if (count > prevCount.current) setBounce((b) => b + 1);
+    prevCount.current = count;
   }, [count]);
 
   if (!hasSession) return null;

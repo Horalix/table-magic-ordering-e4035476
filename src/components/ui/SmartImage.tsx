@@ -117,7 +117,16 @@ const SmartImage = ({
     srcSet = `${url1x} 1x, ${buildUrl(src!, width, height, 2)} 2x`;
   }
 
-  const resolvedSizes = sizes ?? (local ? `${width}px` : undefined);
+  /**
+   * `sizes` describes the RENDERED width, which for most cards is a fraction
+   * of the viewport rather than the intrinsic `width` prop. Passing a fixed
+   * `${width}px` made the browser pick a variant sized for the smallest
+   * possible slot, so a full-width card image rendered visibly soft on a
+   * phone. The default now says "as wide as the card can get", and call sites
+   * that genuinely are fixed-size pass their own.
+   */
+  const resolvedSizes = sizes
+    ?? (local ? `(max-width: 640px) 50vw, ${width}px` : undefined);
   const fetchPriorityAttributes: FetchPriorityAttributes = {
     fetchpriority: priority ? 'high' : 'auto',
   };

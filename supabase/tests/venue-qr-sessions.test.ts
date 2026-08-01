@@ -43,9 +43,15 @@ async function seed() {
 
     UPDATE public.restaurant_settings
        SET ordering_enabled = true, online_card_enabled = false,
-           venue_qr_token = 'venue-token-current',
            session_idle_timeout_minutes = 180
      WHERE id = 1;
+
+    -- Pinning a known token needs the same privileged context that
+    -- rotate_venue_qr_token() uses; the integrity trigger blocks any other
+    -- write to this column on purpose.
+    SELECT set_config('lasoul.qr_ctx', 'on', true);
+    UPDATE public.restaurant_settings SET venue_qr_token = 'venue-token-current' WHERE id = 1;
+    SELECT set_config('lasoul.qr_ctx', '', true);
 
     INSERT INTO auth.users(id, email) VALUES
       ('${ADMIN}', 'admin@lasoul.test'), ('${STAFF}', 'staff@lasoul.test');
@@ -166,6 +172,18 @@ describe('rotating the code', () => {
       `SELECT action FROM public.audit_log ORDER BY created_at DESC LIMIT 1`);
     await actAs(db, null);
     expect(rows[0].action).toBe('qr.venue_rotated');
+  });
+
+  it('cannot be changed by a wide settings write', async () => {
+    // Admin → Printing used to load the whole settings row and spread it back
+    // on save, reverting the token and killing every code printed since.
+    await expect(
+      db.query(`UPDATE public.restaurant_settings SET venue_qr_token = 'stale-from-a-form' WHERE id = 1`),
+    ).rejects.toThrow(/only be changed by rotating/i);
+
+    // A narrow write to an unrelated setting is unaffected.
+    await db.query(`UPDATE public.restaurant_settings SET print_copies = 3 WHERE id = 1`);
+    expect((await start(7, 'venue-token-current')).status).toBe('created');
   });
 
   it('rotates a single table sticker without touching the others', async () => {

@@ -5,6 +5,7 @@ import { ArrowLeft, Plus, Minus, Search, X, Star, LayoutGrid, List } from 'lucid
 import { useQuery } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { track } from '@/lib/analytics';
+import { useItemImpression } from '@/lib/impressions';
 import { supabase } from '@/integrations/supabase/client';
 import { useCartStore } from '@/lib/cart-store';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -16,7 +17,8 @@ import LanguageSelector from '@/components/guest/LanguageSelector';
 import { useT, useLanguageStore, getLocalizedName, getLocalizedDescription } from '@/lib/i18n';
 import { useSessionHeartbeat } from '@/hooks/useSessionHeartbeat';
 import { springPill } from '@/lib/motion';
-import { DIET_TAGS, DIET_BY_KEY, getItemTags } from '@/lib/dietary';
+import { DIET_TAGS, DIET_BY_KEY, getItemTags, useDietFilterStore } from '@/lib/dietary';
+import { merchBadges, unorderableReason, windowLabel } from '@/lib/availability';
 import type { Database } from '@/integrations/supabase/types';
 
 type CategoryRow = Database['public']['Tables']['categories']['Row'];
@@ -36,6 +38,20 @@ const gridItem: Variants = { hidden: { opacity: 0, scale: 0.84 }, show: { opacit
 const listContainer: Variants = { hidden: {}, show: { transition: { staggerChildren: 0.022 } } };
 const listItem: Variants = { hidden: { opacity: 0, y: 12, scale: 0.97 }, show: { opacity: 1, y: 0, scale: 1, transition: { duration: 0.32, ease: [0.16, 1, 0.3, 1] } } };
 
+/**
+ * A menu card that reports being looked at.
+ *
+ * Wrapping rather than calling the hook inline because the hook owns an
+ * IntersectionObserver per card, and hooks cannot live inside the render
+ * helpers below (they run in loops).
+ */
+const ImpressionCard = ({
+  itemId, children, ...props
+}: { itemId: string } & React.ComponentProps<typeof motion.button>) => {
+  const ref = useItemImpression(itemId);
+  return <motion.button ref={ref} {...props}>{children}</motion.button>;
+};
+
 const CategoryPage = () => {
   const { type } = useParams<{ type: string }>();
   const navigate = useNavigate();
@@ -45,7 +61,9 @@ const CategoryPage = () => {
   const [selectedItem, setSelectedItem] = useState<MenuItemRow | null>(null);
   const [search, setSearch] = useState('');
   const [view, setView] = useState<'list' | 'grid'>(() => (typeof localStorage !== 'undefined' && localStorage.getItem('lasoul-menu-view') === 'grid' ? 'grid' : 'list'));
-  const [activeDiets, setActiveDiets] = useState<string[]>([]);
+  // Shared, so the cart can avoid suggesting around a filter set here.
+  const activeDiets = useDietFilterStore((st) => st.activeDiets);
+  const setActiveDiets = useDietFilterStore((st) => st.setActiveDiets);
   const [showHint, setShowHint] = useState(false);
   const pillRefs = useRef<Record<string, HTMLButtonElement | null>>({});
   const deferredSearch = useDeferredValue(search);
@@ -91,7 +109,13 @@ const CategoryPage = () => {
   const { data: allItems = [], isLoading: allLoading } = useQuery({
     queryKey: ['menu_items_all', category?.id],
     queryFn: async () => {
-      const { data, error } = await supabase.from('menu_items').select('*').in('subcategory_id', subIds).eq('is_available', true).order('sort_order');
+      // Everything, including what is currently off.
+      //
+      // The hard `is_available = true` filter made 86'd items VANISH, while
+      // MenuSearch deliberately showed them — so the two surfaces disagreed,
+      // and a guest who came for one dish concluded the restaurant had stopped
+      // making it. Showing it greyed out answers the question instead.
+      const { data, error } = await supabase.from('menu_items').select('*').in('subcategory_id', subIds).order('sort_order');
       if (error) throw error;
       return data;
     },
@@ -166,16 +190,27 @@ const CategoryPage = () => {
   const renderGridCard = (item: MenuItemRow, i: number) => {
     const name = getLocalizedName(item, locale);
     const tags = getItemTags(item);
+    const blocked = unorderableReason(item);
+    const badges = merchBadges(item);
     return (
-      <motion.button key={item.id} variants={gridItem} onClick={() => setSelectedItem(item)} className="text-left tap-sm card-lux card-lux-hover overflow-hidden">
+      <ImpressionCard key={item.id} itemId={item.id} variants={gridItem} onClick={() => setSelectedItem(item)} className="text-left tap-sm card-lux card-lux-hover overflow-hidden">
         <div className="relative">
-          <SmartImage src={item.image_url || undefined} id={item.id} alt={name} width={220} height={165} priority={i < 6} fallbackText={name} wrapperClassName="w-full aspect-[4/3]" />
-          {popularIds.has(item.id) && (
+          <SmartImage src={item.image_url || undefined} id={item.id} alt={name} width={220} height={165} priority={i < 6} fallbackText={name} wrapperClassName={`w-full aspect-[4/3] ${blocked ? 'opacity-45 saturate-50' : ''}`} />
+          {popularIds.has(item.id) && !blocked && (
             <span className="absolute top-1.5 left-1.5 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-gold/90 text-[10px] font-sans font-semibold text-white shadow"><Star className="w-2.5 h-2.5 fill-white" /></span>
           )}
-          {hasSession && (
-            <span role="button" aria-label={`${t('add_to_order')} ${name}`}
-              className="absolute bottom-1.5 right-1.5 w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center shadow-md active:scale-90 transition-transform"
+          {/* Why it cannot be ordered, in words. A greyed card with no reason
+              reads as a bug. */}
+          {blocked && (
+            <span className="absolute top-1.5 left-1.5 px-2 py-0.5 rounded-full bg-foreground/85 text-[10px] font-sans font-semibold text-background">
+              {blocked === 'sold_out' ? t('sold_out') : windowLabel(item)}
+            </span>
+          )}
+          {hasSession && !blocked && (
+            <button
+              type="button"
+              aria-label={`${t('add_to_order')} ${name}`}
+              className="absolute bottom-1.5 right-1.5 w-9 h-9 rounded-full bg-primary text-primary-foreground flex items-center justify-center shadow-md active:scale-90 transition-transform focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
               onClick={(e) => {
                 e.stopPropagation();
                 addItem({ id: item.id, name: item.name, price: Number(item.price), image_url: item.image_url || undefined });
@@ -183,15 +218,18 @@ const CategoryPage = () => {
                 toast.success(t('added_to_order'), { description: name, duration: 1400 });
                 if (typeof navigator !== 'undefined' && 'vibrate' in navigator) { try { navigator.vibrate(8); } catch { /* gesture-gated */ } }
               }}
-            ><Plus className="w-4 h-4" /></span>
+            ><Plus className="w-4 h-4" /></button>
           )}
         </div>
         <div className="p-2.5">
-          <h3 className="font-serif text-sm font-semibold text-foreground line-clamp-1">{name}</h3>
+          <h3 className={`font-serif text-sm font-semibold line-clamp-1 ${blocked ? 'text-muted-foreground' : 'text-foreground'}`}>{name}</h3>
+          {badges.length > 0 && !blocked && (
+            <span className="block text-[10px] font-sans font-semibold uppercase tracking-wide text-primary mt-0.5">{badges[0]}</span>
+          )}
           {tags.length > 0 && <span className="block text-xs mt-0.5">{tags.slice(0, 3).map((k) => DIET_BY_KEY[k]?.emoji).filter(Boolean).join(' ')}</span>}
-          <p className="text-sm font-sans font-bold text-primary mt-1 tabular-nums">{Number(item.price).toFixed(2)} KM</p>
+          <p className={`text-sm font-sans font-bold mt-1 tabular-nums ${blocked ? 'text-muted-foreground' : 'text-primary'}`}>{Number(item.price).toFixed(2)} KM</p>
         </div>
-      </motion.button>
+      </ImpressionCard>
     );
   };
 
@@ -200,14 +238,26 @@ const CategoryPage = () => {
     const localizedDesc = getLocalizedDescription(item, locale);
     const inCart = cartItems.find((c) => (c.menuItemId ?? c.id) === item.id && !c.notes);
     const qty = inCart?.quantity ?? 0;
+    const blocked = unorderableReason(item);
+    const badges = merchBadges(item);
     return (
-      <motion.button key={item.id} variants={listItem} onClick={() => setSelectedItem(item)} className="w-full text-left tap">
+      <ImpressionCard key={item.id} itemId={item.id} variants={listItem} onClick={() => setSelectedItem(item)} className="w-full text-left tap">
         <div className="group flex gap-4 p-4 card-lux card-lux-hover">
-          <SmartImage src={item.image_url || undefined} id={item.id} alt={localizedName} width={80} height={80} priority={i < 8} fallbackText={localizedName} wrapperClassName="w-20 h-20 rounded-lg flex-shrink-0" className="group-hover:scale-105 transition-transform duration-300" />
+          <SmartImage src={item.image_url || undefined} id={item.id} alt={localizedName} width={80} height={80} priority={i < 8} fallbackText={localizedName} wrapperClassName={`w-20 h-20 rounded-lg flex-shrink-0 ${blocked ? 'opacity-45 saturate-50' : ''}`} className="group-hover:scale-105 transition-transform duration-300" />
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
-              <h3 className="font-serif text-base font-semibold text-foreground">{localizedName}</h3>
-              {popularIds.has(item.id) && (
+              <h3 className={`font-serif text-base font-semibold ${blocked ? 'text-muted-foreground' : 'text-foreground'}`}>{localizedName}</h3>
+              {blocked && (
+                <span className="px-1.5 py-0.5 rounded-full bg-muted text-[10px] font-sans font-semibold text-muted-foreground uppercase tracking-wide">
+                  {blocked === 'sold_out' ? t('sold_out') : windowLabel(item)}
+                </span>
+              )}
+              {badges.length > 0 && !blocked && (
+                <span className="px-1.5 py-0.5 rounded-full bg-primary/10 text-[10px] font-sans font-semibold text-primary uppercase tracking-wide">
+                  {badges[0]}
+                </span>
+              )}
+              {popularIds.has(item.id) && !blocked && (
                 <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-gold/15 text-[10px] font-sans font-semibold text-gold"><Star className="w-2.5 h-2.5 fill-gold" /> {t('popular')}</span>
               )}
               {getItemTags(item).slice(0, 3).map((k) => DIET_BY_KEY[k] && (
@@ -218,9 +268,17 @@ const CategoryPage = () => {
               )}
             </div>
             {localizedDesc && <p className="text-sm text-muted-foreground font-sans mt-0.5 line-clamp-2">{localizedDesc}</p>}
-            <p className="text-sm font-sans font-bold text-primary mt-2 tabular-nums">{Number(item.price).toFixed(2)} KM</p>
+            <div className="flex items-baseline gap-2 mt-2 flex-wrap">
+              <p className={`text-sm font-sans font-bold tabular-nums ${blocked ? 'text-muted-foreground' : 'text-primary'}`}>{Number(item.price).toFixed(2)} KM</p>
+              {/* Prep time on the card, not just in the sheet. It is the
+                  question a hungry table asks before it asks the price. */}
+              {item.prep_minutes != null && !blocked && (
+                <span className="text-xs font-sans text-muted-foreground">~{item.prep_minutes} min</span>
+              )}
+              {item.portion_note && <span className="text-xs font-sans text-muted-foreground">{item.portion_note}</span>}
+            </div>
           </div>
-          {hasSession && (
+          {hasSession && !blocked && (
             <div className="flex items-center" onClick={(e) => e.stopPropagation()}>
               {qty > 0 ? (
                 <div role="group" aria-label={`${localizedName} quantity`} className="flex items-center gap-1 bg-primary/10 rounded-full p-1">
@@ -240,7 +298,7 @@ const CategoryPage = () => {
             </div>
           )}
         </div>
-      </motion.button>
+      </ImpressionCard>
     );
   };
 
@@ -389,6 +447,12 @@ const CategoryPage = () => {
               description_bs: selectedItem.description_bs || undefined,
               price: Number(selectedItem.price),
               image_url: selectedItem.image_url || undefined,
+              // These three were omitted, so a finished allergen safety block
+              // in MenuItemDetail rendered for nobody. Allergens are the one
+              // field on this sheet that can matter medically.
+              allergens: selectedItem.allergens ?? null,
+              portion_note: selectedItem.portion_note ?? null,
+              prep_minutes: selectedItem.prep_minutes ?? null,
             }}
             onClose={() => setSelectedItem(null)}
             canOrder={hasSession}

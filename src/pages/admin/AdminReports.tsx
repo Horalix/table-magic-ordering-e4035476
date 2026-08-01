@@ -7,6 +7,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Download, Printer, CalendarDays, DollarSign, ShoppingBag, CreditCard, Banknote, Smartphone, Coins, TrendingUp, AlertTriangle, Check, Clock } from 'lucide-react';
 import { useCountUp } from '@/lib/motion';
 import { dayReconciliation, type DayReconciliation } from '@/lib/staff-api';
+import ShiftClosePanel from '@/components/admin/ShiftClosePanel';
 
 interface DayOrder {
   id: string;
@@ -215,6 +216,8 @@ const AdminReports = () => {
               </CardContent>
             </Card>
           )}
+
+          <ShiftClosePanel day={date} recon={recon} />
 
           <Card className="border-border">
             <CardHeader><CardTitle className="font-serif text-lg">Sales by hour</CardTitle></CardHeader>

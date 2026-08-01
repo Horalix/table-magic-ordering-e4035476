@@ -27,14 +27,41 @@ const DEFAULTS: PrintConfig = {
   print_header: 'La Soul', print_footer: 'Hvala / Thank you', print_show_prices: true, print_copies: 1,
 };
 
+/**
+ * The only columns this page owns.
+ *
+ * `restaurant_settings` is a singleton row shared with ordering switches, the
+ * recommendation weights and the venue QR token. Loading `select('*')` into
+ * state and spreading it back on save meant this page silently rewrote all of
+ * them with whatever was true when it was opened — un-pausing ordering, and
+ * reverting the venue QR token, which kills every code printed since.
+ * Read narrow, write narrow.
+ */
+const PRINT_FIELDS = Object.keys(DEFAULTS) as (keyof PrintConfig)[];
+
+const pickPrintFields = (row: Record<string, unknown>): PrintConfig => {
+  const picked = { ...DEFAULTS };
+  for (const key of PRINT_FIELDS) {
+    const value = row[key];
+    if (value !== undefined && value !== null) {
+      (picked as Record<string, unknown>)[key] = value;
+    }
+  }
+  return picked;
+};
+
 const AdminPrinting = () => {
   const [cfg, setCfg] = useState<PrintConfig>(DEFAULTS);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
   const load = useCallback(async () => {
-    const { data } = await supabase.from('restaurant_settings').select('*').eq('id', 1).maybeSingle();
-    if (data) setCfg({ ...DEFAULTS, ...(data as Partial<PrintConfig>) });
+    const { data } = await supabase
+      .from('restaurant_settings')
+      .select(PRINT_FIELDS.join(','))
+      .eq('id', 1)
+      .maybeSingle();
+    if (data) setCfg(pickPrintFields(data as unknown as Record<string, unknown>));
     setLoading(false);
   }, []);
   useEffect(() => { void load(); }, [load]);
@@ -42,15 +69,15 @@ const AdminPrinting = () => {
   const save = async () => {
     setSaving(true);
     const { error } = await supabase.from('restaurant_settings')
-      .update({ ...cfg, updated_at: new Date().toISOString() })
+      .update({ ...pickPrintFields(cfg as unknown as Record<string, unknown>), updated_at: new Date().toISOString() })
       .eq('id', 1);
     setSaving(false);
     if (error) { toast.error(error.message); return; }
     toast.success('Printing settings saved');
   };
 
-  const testPrint = () => {
-    printKitchenTicket({
+  const testPrint = async () => {
+    const outcome = await printKitchenTicket({
       id: 'test-0000-0000', status: 'pending', total: 27.5, tip_amount: 2.5, payment_method: 'card',
       notes: 'Allergy: nuts', created_at: new Date().toISOString(), table_number: 5, guest_name: 'Test',
       section_name: 'Terrace',
@@ -59,6 +86,10 @@ const AdminPrinting = () => {
         { quantity: 2, notes: null, menu_item_name: 'Espresso', unit_price: 3.5 },
       ],
     }, { paperWidth: cfg.print_paper_width, header: cfg.print_header, footer: cfg.print_footer, showPrices: cfg.print_show_prices, copies: cfg.print_copies });
+    // A browser print dialog can only ever tell us it closed, never that paper
+    // came out — so this says what it actually knows.
+    if (!outcome.ok) toast.error(outcome.reason);
+    else toast.success('Sent to the browser print dialog — check the paper came out.');
   };
 
   const Row = ({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) => (

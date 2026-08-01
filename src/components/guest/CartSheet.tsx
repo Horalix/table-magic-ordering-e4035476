@@ -2,6 +2,7 @@ import React from 'react';
 import { motion, useDragControls } from 'framer-motion';
 import { X, Minus, Plus, CreditCard, ShoppingBag } from 'lucide-react';
 import { useCartStore } from '@/lib/cart-store';
+import { useDialog } from '@/lib/use-dialog';
 import { Button } from '@/components/ui/button';
 import SmartImage from '@/components/ui/SmartImage';
 import CartSuggestion from '@/components/guest/CartSuggestion';
@@ -16,6 +17,7 @@ interface Props {
 /** Quick-view cart — slides up from the cart bar so guests can review and
  * tweak quantities without leaving the menu. Checkout routes to the full flow. */
 const CartSheet = ({ onClose, onCheckout }: Props) => {
+  const { dialogProps } = useDialog({ onClose, labelledBy: 'cart-sheet-title' });
   const { items, updateQuantity, total, itemCount, sessionId, sessionToken } = useCartStore();
   const t = useT();
   const displayTotal = useCountUp(total());
@@ -37,14 +39,15 @@ const CartSheet = ({ onClose, onCheckout }: Props) => {
         dragConstraints={{ top: 0, bottom: 0 }}
         dragElastic={0.2}
         onDragEnd={(_, info) => { if (info.offset.y > 120 || info.velocity.y > 600) onClose(); }}
-        className="relative w-full max-w-lg bg-card rounded-t-3xl max-h-[85vh] flex flex-col overflow-hidden"
+        className="relative w-full max-w-lg bg-card rounded-t-3xl max-h-[85vh] flex flex-col overflow-hidden focus:outline-none"
+        {...dialogProps}
       >
         {/* Drag-to-dismiss only from the handle/header so list scrolling is unaffected. */}
         <div onPointerDown={(e) => dragControls.start(e)} className="shrink-0 touch-none cursor-grab active:cursor-grabbing">
         <div className="absolute top-2.5 left-1/2 -translate-x-1/2 z-10 h-1.5 w-10 rounded-full bg-muted-foreground/30" />
 
         <div className="flex items-center justify-between px-5 pt-6 pb-3 border-b border-border/60">
-          <h2 className="font-serif text-lg font-bold text-foreground flex items-center gap-2">
+          <h2 id="cart-sheet-title" className="font-serif text-lg font-bold text-foreground flex items-center gap-2">
             <ShoppingBag className="w-5 h-5 text-primary" /> {t('your_order')}
             <span className="text-sm font-sans font-medium text-muted-foreground">· {count}</span>
           </h2>

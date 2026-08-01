@@ -2,9 +2,11 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { MotionConfig } from "framer-motion";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { lazy, Suspense } from "react";
 import StaffGate from "./components/auth/StaffGate";
+import { ClockProvider } from "./lib/clock";
 
 // Code-split route bundles so guests, staff, and admin screens load only when needed.
 const GuestMenu = lazy(() => import("./pages/GuestMenu"));
@@ -32,6 +34,7 @@ const AdminMenuIntelligence = lazy(() => import("./pages/admin/AdminMenuIntellig
 const AdminReports = lazy(() => import("./pages/admin/AdminReports"));
 const AdminWaiters = lazy(() => import("./pages/admin/AdminWaiters"));
 const AdminPerformance = lazy(() => import("./pages/admin/AdminPerformance"));
+const AdminAudit = lazy(() => import("./pages/admin/AdminAudit"));
 const KitchenDisplay = lazy(() => import("./pages/KitchenDisplay"));
 const WaiterDashboard = lazy(() => import("./pages/WaiterDashboard"));
 const WaiterLogin = lazy(() => import("./pages/WaiterLogin"));
@@ -57,6 +60,16 @@ const RouteFallback = () => (
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
+    {/*
+      Honour the OS "reduce motion" setting everywhere at once.
+
+      The CSS `prefers-reduced-motion` block only neutralises CSS animation and
+      transitions. Every framer-motion animation in the app — the pager drag,
+      the grid scale-in, sheet slides, the cart bar — ignored it entirely and
+      played at full amplitude, which for a vestibular-sensitive guest is the
+      difference between usable and nauseating. One line covers all of them.
+    */}
+    <MotionConfig reducedMotion="user">
     <TooltipProvider>
       <Toaster />
       <Sonner />
@@ -80,7 +93,7 @@ const App = () => (
 
             {/* Admin Routes */}
             <Route path="/admin/login" element={<AdminLogin />} />
-            <Route path="/admin" element={<AdminLayout />}>
+            <Route path="/admin" element={<ClockProvider><AdminLayout /></ClockProvider>}>
               <Route index element={<AdminDashboard />} />
               <Route path="menu" element={<AdminMenu />} />
               <Route path="tables" element={<AdminTables />} />
@@ -95,19 +108,23 @@ const App = () => (
               <Route path="reports" element={<AdminReports />} />
               <Route path="waiters" element={<AdminWaiters />} />
               <Route path="performance" element={<AdminPerformance />} />
+              <Route path="audit" element={<AdminAudit />} />
             </Route>
 
-            {/* Kitchen & Waiter */}
-            <Route path="/kitchen" element={<StaffGate><KitchenDisplay /></StaffGate>} />
+            {/* Kitchen & Waiter. Wrapped in ClockProvider so every elapsed-time
+                card on these screens shares one interval instead of owning its
+                own — forty table cards used to mean forty timers. */}
+            <Route path="/kitchen" element={<StaffGate><ClockProvider><KitchenDisplay /></ClockProvider></StaffGate>} />
             <Route path="/waiter/login" element={<WaiterLogin />} />
-            <Route path="/waiter/monitor" element={<StaffGate redirectTo="/waiter/login"><WaiterMonitor /></StaffGate>} />
-            <Route path="/waiter" element={<StaffGate redirectTo="/waiter/login"><WaiterDashboard /></StaffGate>} />
+            <Route path="/waiter/monitor" element={<StaffGate redirectTo="/waiter/login"><ClockProvider><WaiterMonitor /></ClockProvider></StaffGate>} />
+            <Route path="/waiter" element={<StaffGate redirectTo="/waiter/login"><ClockProvider><WaiterDashboard /></ClockProvider></StaffGate>} />
 
             <Route path="*" element={<NotFound />} />
           </Routes>
         </Suspense>
       </BrowserRouter>
     </TooltipProvider>
+    </MotionConfig>
   </QueryClientProvider>
 );
 

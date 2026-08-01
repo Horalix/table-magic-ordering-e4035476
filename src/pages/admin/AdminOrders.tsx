@@ -11,8 +11,10 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Ban, Check, Banknote, Smartphone } from 'lucide-react';
 import PaymentBadge from '@/components/PaymentBadge';
+import RefundDialog from '@/components/admin/RefundDialog';
 import { toast } from 'sonner';
 import { cancelOrder, recordTablePayment, setFiscalization, updateOrderStatus } from '@/lib/staff-api';
+import { Undo2 } from 'lucide-react';
 import type { Database } from '@/integrations/supabase/types';
 
 type OrderStatus = Database['public']['Enums']['order_status'];
@@ -30,6 +32,7 @@ const AdminOrders = () => {
   const [orders, setOrders] = useState<AdminOrder[]>([]);
   const [filter, setFilter] = useState<OrderFilter>('all');
   const [loading, setLoading] = useState(true);
+  const [refunding, setRefunding] = useState<AdminOrder | null>(null);
 
   const fetchOrders = useCallback(async () => {
     let query = supabase
@@ -283,6 +286,22 @@ const AdminOrders = () => {
                   </Button>
                 </div>
               )}
+
+              {/* Money that has been taken can now be given back IN THE BOOKS.
+                  It used to leave the building with no record: the page said
+                  "you will need to refund it separately" and stopped there. */}
+              {order.payment_status === 'paid' && Number(order.refunded_amount ?? 0) < Number(order.total) && (
+                <div className="flex gap-2 mt-2 flex-wrap">
+                  <Button size="sm" variant="outline" className="font-sans text-xs gap-1.5" onClick={() => setRefunding(order)}>
+                    <Undo2 className="w-3.5 h-3.5" /> Refund
+                  </Button>
+                  {Number(order.refunded_amount ?? 0) > 0 && (
+                    <span className="text-xs font-sans text-muted-foreground self-center tabular-nums">
+                      {Number(order.refunded_amount).toFixed(2)} KM already refunded
+                    </span>
+                  )}
+                </div>
+              )}
             </CardContent>
           </Card>
         ))}
@@ -294,6 +313,13 @@ const AdminOrders = () => {
         )}
       </div>
       )}
+
+      <RefundDialog
+        open={refunding !== null}
+        onOpenChange={(open) => { if (!open) setRefunding(null); }}
+        order={refunding}
+        onDone={() => { setRefunding(null); void fetchOrders(); }}
+      />
     </div>
   );
 };

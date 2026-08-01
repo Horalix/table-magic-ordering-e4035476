@@ -26,8 +26,8 @@ npm run dev                 # http://localhost:8080
 | `npm run build` | Production build |
 | `npm run typecheck` | `tsc --noEmit` |
 | `npm run lint` | ESLint |
-| `npm test` | Unit + SQL integration tests (167) |
-| `npm run test:e2e` | Playwright, 3 browser projects (55) |
+| `npm test` | Unit + SQL integration tests (313) |
+| `npm run test:e2e` | Playwright, 3 browser projects (97 across 3 browsers) |
 | `npm run scan:secrets` | Fails on committed credentials |
 | **`npm run verify`** | **typecheck → lint → tests → secret scan → build** |
 
@@ -279,9 +279,9 @@ Full lifecycle contract: [docs/order-state-machine.md](docs/order-state-machine.
 ## Testing
 
 ```bash
-npm test                                              # 167 unit + integration
+npm test                                              # 313 unit + integration
 npx vitest run supabase/tests/payment-safety.test.ts  # 41 money tests
-npm run test:e2e                                      # 55 specs, 3 browsers
+npm run test:e2e                                      # 97 runs across 3 browsers
 npm run verify                                        # every gate
 ```
 
@@ -341,6 +341,8 @@ ALLOWED_ORIGINS               # https://order.lasoul.net,http://localhost:8080
 | [fiscalization-workflow.md](docs/fiscalization-workflow.md) | Fiscal receipts and reconciliation |
 | [product-metrics.md](docs/product-metrics.md) | Deciding whether a change worked |
 | [growth-and-merchandising.md](docs/growth-and-merchandising.md) | Raising order value without becoming pushy |
+| [kitchen-and-printing.md](docs/kitchen-and-printing.md) | You are touching the kitchen board, stations, or the printer |
+| [suggestions-and-timing.md](docs/suggestions-and-timing.md) | How suggestions get chosen, and how a wait is estimated |
 | [operations-runbook.md](docs/operations-runbook.md) | Something is broken during service |
 | [restaurant-staff-training.md](docs/restaurant-staff-training.md) | Print it for the floor |
 | [testing-guide.md](docs/testing-guide.md) | Adding tests |

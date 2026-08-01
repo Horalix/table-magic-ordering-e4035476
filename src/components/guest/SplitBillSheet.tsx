@@ -1,8 +1,9 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Minus, Plus, Users, Loader2, ReceiptText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useT } from '@/lib/i18n';
+import { useDialog } from '@/lib/use-dialog';
 import { fade, sheetUp } from '@/lib/motion';
 
 interface Props {
@@ -20,9 +21,26 @@ interface Props {
 const km = (n: number) => `${n.toFixed(2)} KM`;
 
 const SplitBillSheet = ({ open, total, orders, members, myName, billRequested, requesting, onSettle, onClose }: Props) => {
+  const { dialogProps } = useDialog({ open, onClose, labelledBy: 'split-bill-title' });
   const t = useT();
   const [mode, setMode] = useState<'even' | 'person'>('even');
-  const [n, setN] = useState(Math.max(1, members.length || 1));
+  /**
+   * How many ways to split.
+   *
+   * The parent mounts this sheet unconditionally and toggles `open`, so the
+   * initializer ran on the very first render while `members` was still empty —
+   * pinning `n` at 1 for the life of the page and making "each pays" equal the
+   * entire bill. Seeded once the real member list arrives, and never again, so
+   * a guest's manual adjustment is not overwritten underneath them.
+   */
+  const [n, setN] = useState(() => Math.max(1, members.length || 1));
+  const seeded = useRef(members.length > 0);
+  useEffect(() => {
+    if (!seeded.current && members.length > 0) {
+      seeded.current = true;
+      setN(members.length);
+    }
+  }, [members.length]);
 
   // Per-person subtotals from who placed each order.
   const perPerson = useMemo(() => {
@@ -42,9 +60,16 @@ const SplitBillSheet = ({ open, total, orders, members, myName, billRequested, r
       {open && (
         <motion.div variants={fade} initial="hidden" animate="show" exit="exit" className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
           <div className="absolute inset-0 bg-foreground/40 backdrop-blur-sm" onClick={onClose} />
-          <motion.div variants={sheetUp} initial="hidden" animate="show" exit="exit" className="relative w-full max-w-lg bg-card rounded-t-3xl sm:rounded-3xl p-6 pb-safe sm:pb-6 shadow-lux-lg max-h-[88vh] overflow-y-auto">
+          <motion.div
+            variants={sheetUp}
+            initial="hidden"
+            animate="show"
+            exit="exit"
+            className="relative w-full max-w-lg bg-card rounded-t-3xl sm:rounded-3xl p-6 pb-safe sm:pb-6 shadow-lux-lg max-h-[88vh] overflow-y-auto focus:outline-none"
+            {...dialogProps}
+          >
             <div className="w-10 h-1.5 rounded-full bg-foreground/15 mx-auto mb-4 sm:hidden" />
-            <h2 className="font-serif text-xl font-bold text-foreground text-center flex items-center justify-center gap-2">
+            <h2 id="split-bill-title" className="font-serif text-xl font-bold text-foreground text-center flex items-center justify-center gap-2">
               <ReceiptText className="w-5 h-5 text-primary" /> {t('split_bill')}
             </h2>
             <p className="text-center text-2xl font-serif font-bold text-primary mt-1 tabular-nums">{km(total)}</p>

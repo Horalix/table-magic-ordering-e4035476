@@ -14,6 +14,7 @@ import { staggerContainer, fadeUp, useCountUp } from '@/lib/motion';
 import { getGuestTab, requestBill as requestGuestBill } from '@/lib/guest-api';
 import SplitBillSheet from '@/components/guest/SplitBillSheet';
 import OrderStatusTimeline from '@/components/guest/OrderStatusTimeline';
+import OrderEta from '@/components/guest/OrderEta';
 import CartSuggestion from '@/components/guest/CartSuggestion';
 import { track } from '@/lib/analytics';
 
@@ -88,6 +89,7 @@ const RunningTabPage = () => {
     setRequestingBill(true);
     try {
       await requestGuestBill(sessionId, sessionToken);
+      track('bill_requested', { orders: orders.length });
       await refetch();
       setShowReview(true);
     } catch {
@@ -165,7 +167,12 @@ const RunningTabPage = () => {
           {activeOrder && (
             <div className="px-4 pt-3">
               <motion.div variants={fadeUp} initial="hidden" animate="show" className="card-lux p-4">
-                <p className="text-[11px] font-sans font-semibold text-muted-foreground uppercase tracking-wider mb-3">{t('order_progress')}</p>
+                <div className="flex items-baseline justify-between gap-3 mb-3 flex-wrap">
+                  <p className="text-[11px] font-sans font-semibold text-muted-foreground uppercase tracking-wider">{t('order_progress')}</p>
+                  {/* Renders nothing at all when the kitchen has no basis for
+                      an estimate — silence beats a number nobody can stand behind. */}
+                  <OrderEta orderId={activeOrder.id} active={activeOrder.status !== 'served'} />
+                </div>
                 <OrderStatusTimeline status={activeOrder.status} />
               </motion.div>
             </div>

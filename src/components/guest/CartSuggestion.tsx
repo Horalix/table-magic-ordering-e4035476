@@ -5,6 +5,7 @@ import { useCartStore } from '@/lib/cart-store';
 import { useT, useLanguageStore, getLocalizedName } from '@/lib/i18n';
 import SmartImage from '@/components/ui/SmartImage';
 import { fetchRecommendations, headlineKeyFor, type Placement } from '@/lib/recommendations';
+import { allergensToAvoid, useDietFilterStore } from '@/lib/dietary';
 import { track } from '@/lib/analytics';
 
 interface Props {
@@ -32,6 +33,8 @@ const CartSuggestion = ({ placement, disabled }: Props) => {
   const { items, addItem } = useCartStore();
   const sessionId = useCartStore((st) => st.sessionId);
   const [dismissed, setDismissed] = useState<string[]>([]);
+  const activeDiets = useDietFilterStore((st) => st.activeDiets);
+  const avoid = useMemo(() => allergensToAvoid(activeDiets), [activeDiets]);
 
   const cartIds = useMemo(
     () => items.map((i) => i.menuItemId ?? i.id).sort(),
@@ -39,8 +42,8 @@ const CartSuggestion = ({ placement, disabled }: Props) => {
   );
 
   const { data = [] } = useQuery({
-    queryKey: ['recommendations', placement, locale, cartIds.join(','), sessionId],
-    queryFn: () => fetchRecommendations(cartIds, placement, locale, 4, sessionId),
+    queryKey: ['recommendations', placement, locale, cartIds.join(','), sessionId, avoid.join(',')],
+    queryFn: () => fetchRecommendations(cartIds, placement, locale, 4, sessionId, avoid),
     staleTime: 5 * 60 * 1000,
     enabled: !disabled,
   });

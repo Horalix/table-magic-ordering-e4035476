@@ -1,4 +1,6 @@
-@import url('https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=Inter:wght@300;400;500;600;700&display=swap');
+/* Two italic Lora weights were downloaded on every first visit and used
+   nowhere in the app. */
+@import url('https://fonts.googleapis.com/css2?family=Lora:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -15,16 +17,36 @@
     --popover: 0 0% 100%;
     --popover-foreground: 150 10% 15%;
 
-    --primary: 140 12% 53%;
+    /*
+     * Sage, darkened from `140 12% 53%` to reach AA.
+     *
+     * The original was 3.2:1 on white — failing for text AND for the white
+     * text sitting on top of it as a fill, which covers most prices, most
+     * buttons, and the whole running-tab screen. This is 4.73:1 both ways.
+     *
+     * The brand tokens below (--sage, --hero-sage) keep the original lighter
+     * value, so large decorative fills are unchanged; only things that have to
+     * be READ moved.
+     */
+    --primary: 140 14% 42%;
     --primary-foreground: 0 0% 100%;
 
     --secondary: 40 25% 92%;
     --secondary-foreground: 150 10% 20%;
 
     --muted: 40 15% 94%;
-    --muted-foreground: 150 5% 45%;
+    /* 4.37:1 on cream at 10-11px was below AA. Now 5.5:1. */
+    --muted-foreground: 150 6% 38%;
 
-    --accent: 38 60% 55%;
+    /*
+     * Gold, darkened from `38 60% 55%` (3.19:1) to 5.2:1.
+     *
+     * Accent is the colour of every warning and every allergen note — the text
+     * that most has to be readable across a room in bad light was the least
+     * readable thing on the screen. --gold below keeps the brighter original
+     * for decorative fills.
+     */
+    --accent: 38 70% 40%;
     --accent-foreground: 0 0% 100%;
 
     --destructive: 0 72% 51%;
@@ -209,13 +231,23 @@
   }
 
   /* [UX] Calm breathing ring — replaces harsh pulse for urgent items.
-     A slow, low-amplitude glow that draws the eye without flashing. */
+     A slow, low-amplitude glow that draws the eye without flashing.
+
+     The colour is a variable, not baked in. This class was hard-coded to
+     --destructive and then reused on the GUEST order timeline, so an order
+     that was merely being cooked throbbed red at the person waiting for it.
+     Anything urgent sets --breathe-color to destructive itself; the default
+     is the neutral primary. */
   .breathe {
+    --breathe-color: var(--primary);
     animation: breathe 2.4s ease-in-out infinite;
   }
+  .breathe-urgent {
+    --breathe-color: var(--destructive);
+  }
   @keyframes breathe {
-    0%, 100% { box-shadow: 0 0 0 0 hsl(var(--destructive) / 0.0), 0 0 0 1px hsl(var(--destructive) / 0.25); }
-    50% { box-shadow: 0 0 16px -2px hsl(var(--destructive) / 0.35), 0 0 0 1px hsl(var(--destructive) / 0.45); }
+    0%, 100% { box-shadow: 0 0 0 0 hsl(var(--breathe-color) / 0.0), 0 0 0 1px hsl(var(--breathe-color) / 0.25); }
+    50% { box-shadow: 0 0 16px -2px hsl(var(--breathe-color) / 0.35), 0 0 0 1px hsl(var(--breathe-color) / 0.45); }
   }
 }
 

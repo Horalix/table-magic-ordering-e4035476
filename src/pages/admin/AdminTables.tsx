@@ -29,13 +29,28 @@ const AdminTables = () => {
   const [count, setCount] = useState('');
   const [showQR, setShowQR] = useState<string | null>(null);
 
+  const [loadError, setLoadError] = useState(false);
+
   const fetchTables = useCallback(async () => {
-    const [{ data: t }, { data: s }] = await Promise.all([
-      supabase.from('tables').select(`*, sections(name, color), table_sessions(id, is_active, opened_at, guest_name)`).order('table_number'),
+    const [{ data: t, error: tErr }, { data: s, error: sErr }] = await Promise.all([
+      supabase
+        .from('tables')
+        .select('*, sections(name, color), table_sessions(id, is_active, opened_at, guest_name)')
+        // Only the newest session per table. Without these two the embed pulled
+        // every session a table has EVER had — tens of thousands of rows after
+        // a few months — and re-pulled them every time any guest sat down or
+        // left, because the realtime handler refetches on table_sessions.
+        .order('opened_at', { referencedTable: 'table_sessions', ascending: false })
+        .limit(1, { referencedTable: 'table_sessions' })
+        .order('table_number'),
       supabase.from('sections').select('id, name, color').order('sort_order'),
     ]);
-    setTables(t || []);
-    setSections(s || []);
+
+    // A failed load used to fall through to the "No tables yet" empty state,
+    // which invites a manager to recreate tables that already exist.
+    setLoadError(Boolean(tErr || sErr));
+    if (t) setTables(t);
+    if (s) setSections(s);
     setLoading(false);
   }, []);
 
@@ -107,6 +122,16 @@ const AdminTables = () => {
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
           {Array.from({ length: 10 }).map((_, i) => <Skeleton key={i} className="h-40 rounded-xl" />)}
         </div>
+      ) : loadError ? (
+        <Card className="border-destructive/30">
+          <CardContent className="py-14 text-center">
+            <LayoutGrid className="w-10 h-10 mx-auto text-destructive/40 mb-3" />
+            <p className="font-serif text-lg font-semibold text-foreground">Could not load your tables</p>
+            <p className="text-sm font-sans text-muted-foreground mt-1">
+              This is a loading problem, not an empty restaurant — do not recreate them. Check the connection and refresh.
+            </p>
+          </CardContent>
+        </Card>
       ) : tables.length === 0 ? (
         <Card className="border-dashed">
           <CardContent className="py-14 text-center">

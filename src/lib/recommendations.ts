@@ -37,6 +37,7 @@ export async function fetchRecommendations(
   locale: Locale,
   limit = 4,
   sessionId?: string | null,
+  excludeAllergens: string[] = [],
 ): Promise<Recommendation[]> {
   const { data, error } = await supabase.rpc('guest_get_recommendations' as never, {
     _cart_item_ids: cartItemIds,
@@ -45,6 +46,8 @@ export async function fetchRecommendations(
     _limit: limit,
     // Keeps the suggestion stable for this table, and decides holdout membership.
     _session_id: sessionId ?? null,
+    // Never suggest around a filter the guest has already set.
+    _exclude_allergens: excludeAllergens,
   } as never);
 
   if (error) return [];

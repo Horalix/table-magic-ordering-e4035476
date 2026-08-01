@@ -1,12 +1,12 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
-  ChevronDown, ChevronRight, ChevronUp, Image as ImageIcon, Languages,
-  Loader2, Pencil, Plus, RefreshCw, Trash2, UtensilsCrossed,
+  ChevronDown, ChevronRight, ChevronUp, EyeOff, Image as ImageIcon, Languages,
+  Loader2, Pencil, Plus, RefreshCw, Search, Trash2, UtensilsCrossed, X,
 } from 'lucide-react';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -74,6 +74,7 @@ const AdminMenu = () => {
   const [expandedSubcategory, setExpandedSubcategory] = useState<string | null>(null);
 
   const [addingCategory, setAddingCategory] = useState(false);
+  const [search, setSearch] = useState('');
   const [addingSubFor, setAddingSubFor] = useState<string | null>(null);
   const [editing, setEditing] = useState<{ kind: 'category' | 'subcategory'; id: string } | null>(null);
 
@@ -130,11 +131,18 @@ const AdminMenu = () => {
 
   // ---- Reorder (renormalizes sort_order) ----
   const persistOrder = async (table: 'categories' | 'menu_items', arr: { id: string }[]) => {
-    await Promise.all(arr.map((x, i) =>
+    const results = await Promise.all(arr.map((x, i) =>
       table === 'categories'
         ? supabase.from('categories').update({ sort_order: i }).eq('id', x.id)
         : supabase.from('menu_items').update({ sort_order: i }).eq('id', x.id),
     ));
+    // Reordering is N writes and any one of them can fail, leaving the menu
+    // half-renumbered. The refetch below would then quietly show the mixed
+    // result as if it were what was asked for.
+    const failed = results.filter((r) => r.error);
+    if (failed.length > 0) {
+      toast.error(`Could not save the new order (${failed.length} of ${arr.length} failed) — reloading`);
+    }
     await fetchMenu();
   };
   const move = <T extends { id: string }>(table: 'categories' | 'menu_items', list: T[], id: string, dir: 'up' | 'down') => {
@@ -148,8 +156,12 @@ const AdminMenu = () => {
 
   // ---- Toggle / delete ----
   const toggleAvailability = async (item: MenuItemRow) => {
-    const { error } = await supabase.from('menu_items').update({ is_available: !item.is_available }).eq('id', item.id);
+    const next = !item.is_available;
+    const { error } = await supabase.from('menu_items').update({ is_available: next }).eq('id', item.id);
     if (error) { toast.error('Failed to update item'); return; }
+    // Taking something off mid-service is a decision worth confirming out
+    // loud — it is the single most common live menu action.
+    toast.success(next ? `${item.name} is back on` : `86'd — ${item.name} is off the menu`);
     await fetchMenu();
   };
   const remove = async (table: 'categories' | 'subcategories' | 'menu_items', id: string) => {
@@ -161,6 +173,42 @@ const AdminMenu = () => {
     if (error) { toast.error('Failed to delete'); return; }
     toast.success('Deleted'); await fetchMenu();
   };
+
+  /**
+   * What is currently off.
+   *
+   * A manager who 86'd four things at 19:00 has no way to remember them at
+   * 22:00, and an item left off overnight is invisible revenue: it does not
+   * appear anywhere, because "not on the menu" looks exactly like "we do not
+   * sell that".
+   */
+  const offMenu = useMemo(() => {
+    const out: MenuItemRow[] = [];
+    for (const cat of categories) {
+      for (const sub of cat.subcategories ?? []) {
+        for (const item of sub.menu_items ?? []) {
+          if (!item.is_available) out.push(item);
+        }
+      }
+    }
+    return out.sort((a, b) => a.name.localeCompare(b.name));
+  }, [categories]);
+
+  /** Flat search across the whole menu, because the tree is three levels deep. */
+  const searchHits = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (q.length < 2) return null;
+    const out: { item: MenuItemRow; path: string }[] = [];
+    for (const cat of categories) {
+      for (const sub of cat.subcategories ?? []) {
+        for (const item of sub.menu_items ?? []) {
+          const haystack = `${item.name} ${item.name_bs ?? ''} ${item.name_ar ?? ''} ${item.description ?? ''}`.toLowerCase();
+          if (haystack.includes(q)) out.push({ item, path: `${cat.name} › ${sub.name}` });
+        }
+      }
+    }
+    return out;
+  }, [categories, search]);
 
   // ---- Tools ----
   const translateMenu = async (force = false) => {
@@ -212,6 +260,92 @@ const AdminMenu = () => {
       </div>
 
       {migrateResult && <div className="mb-4 px-3 py-2 rounded-md bg-muted text-xs font-sans text-muted-foreground">{migrateResult}</div>}
+
+      {/* Find anything, without walking a three-level tree. */}
+      <div className="relative mb-4">
+        <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+        <Input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search the whole menu…"
+          className="pl-9 pr-10 h-11"
+          aria-label="Search menu items"
+        />
+        {search && (
+          <button
+            type="button"
+            onClick={() => setSearch('')}
+            aria-label="Clear search"
+            className="absolute right-1 top-1/2 -translate-y-1/2 w-9 h-9 flex items-center justify-center text-muted-foreground hover:text-foreground"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        )}
+      </div>
+
+      {/*
+        The 86 list.
+        An item taken off at 19:00 is invisible by 22:00 — "not on the menu"
+        looks exactly like "we do not sell that", so it never gets put back
+        and the loss never shows up anywhere.
+      */}
+      {offMenu.length > 0 && !searchHits && (
+        <Card className="mb-4 border-accent/40 bg-accent/5">
+          <CardContent className="p-3">
+            <p className="text-xs font-sans font-semibold text-accent uppercase tracking-wide flex items-center gap-1.5 mb-2">
+              <EyeOff className="w-3.5 h-3.5" /> Off the menu right now ({offMenu.length})
+            </p>
+            <div className="flex flex-wrap gap-1.5">
+              {offMenu.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => toggleAvailability(item)}
+                  className="inline-flex items-center gap-1.5 px-2.5 min-h-[36px] rounded-full border border-accent/40 bg-card text-xs font-sans hover:bg-accent/10 transition-colors"
+                  title={`Put ${item.name} back on the menu`}
+                >
+                  {item.name}
+                  <span className="text-muted-foreground">· put back</span>
+                </button>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {searchHits && (
+        <Card className="mb-4">
+          <CardContent className="p-3">
+            <p className="text-xs font-sans text-muted-foreground mb-2" aria-live="polite">
+              {searchHits.length} {searchHits.length === 1 ? 'match' : 'matches'} for “{search.trim()}”
+            </p>
+            <div className="space-y-1">
+              {searchHits.map(({ item, path }) => (
+                <div key={item.id} className="flex items-center justify-between gap-2 py-2 px-2 rounded-lg hover:bg-muted/30">
+                  <div className="min-w-0">
+                    <p className={`text-sm font-sans font-medium truncate ${item.is_available ? 'text-foreground' : 'text-muted-foreground line-through'}`}>
+                      {item.name}
+                    </p>
+                    <p className="text-xs text-muted-foreground truncate">{path} · {Number(item.price).toFixed(2)} KM</p>
+                  </div>
+                  <div className="flex items-center gap-0.5 shrink-0">
+                    <Button variant="ghost" size="sm" className="h-8 px-2 text-xs" onClick={() => toggleAvailability(item)}>
+                      {item.is_available ? 'On' : 'Off'}
+                    </Button>
+                    <Button variant="ghost" size="icon" className="h-8 w-8" aria-label={`Edit ${item.name}`} onClick={() => setItemDialog({ item })}>
+                      <Pencil className="w-3.5 h-3.5" />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+              {searchHits.length === 0 && (
+                <p className="text-sm text-muted-foreground font-sans py-3 text-center">Nothing matches that.</p>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
 
       {addingCategory && (
         <Card className="mb-4 border-primary/20">
