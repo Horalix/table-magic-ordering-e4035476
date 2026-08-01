@@ -80,6 +80,11 @@ export interface SuggestionImpact {
   shown: number;
   accepted: number;
   overall_acceptance_pct: number;
+  /**
+   * Revenue per head, which removes party size from the comparison.
+   * `orders_counted` is the honesty: only sittings where someone counted.
+   */
+  per_cover: { orders_counted: number; with_suggestions: number; holdout: number };
 }
 
 export interface EngineHealth {
@@ -103,13 +108,47 @@ export interface EngineHealth {
   orders_analysed: number;
 }
 
+/**
+ * The causal number: what suggestions are actually worth.
+ *
+ * `status` is the headline and is allowed to say "we do not know yet" — which
+ * is the correct answer far more often than a dashboard usually admits.
+ */
+export type HoldoutStatus =
+  /** No holdout configured, so there is nothing to compare against. */
+  | 'not_running'
+  /** Fewer than 30 orders on a side. Any difference is noise. */
+  | 'too_early'
+  /** Enough data, and the interval spans zero. */
+  | 'no_measurable_effect'
+  | 'positive'
+  | 'negative';
+
 export interface HoldoutComparison {
+  days: number;
   holdout_pct: number;
+  status: HoldoutStatus;
   with_suggestions: { orders: number; avg_order: number };
   holdout: { orders: number; avg_order: number };
-  difference: number;
-  /** False below ~100 orders a side — the difference is noise until then. */
+  difference: number | null;
+  /** 95% interval on the difference. An effect is only claimed when it excludes zero. */
+  ci_low: number | null;
+  ci_high: number | null;
+  significant: boolean;
+  /** Money per month, projected from CI_LOW. Null unless the effect is real. */
+  conservative_monthly_value: number | null;
   reliable: boolean;
+}
+
+/** Attribution split by the surface the suggestion appeared on. */
+export interface PlacementImpact {
+  placement: string;
+  shown: number;
+  accepted: number;
+  acceptance_pct: number;
+  attributed_revenue: number;
+  /** The number that decides whether a surface earns its space. */
+  revenue_per_impression: number;
 }
 
 export interface SoldOutRow {
@@ -131,6 +170,9 @@ export const getSuggestionPerformance = (limit = 50) =>
 
 export const getSuggestionImpact = (days = 30) =>
   rpc<SuggestionImpact>('suggestion_impact', { _days: days });
+
+export const getPlacementImpact = (days = 30) =>
+  rpc<PlacementImpact[]>('suggestion_impact_by_placement', { _days: days });
 
 export const getEngineHealth = () =>
   rpc<EngineHealth>('recommendation_engine_health');

@@ -6,6 +6,7 @@ import { useDialog } from '@/lib/use-dialog';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import SmartImage from '@/components/ui/SmartImage';
+import CartSuggestion from '@/components/guest/CartSuggestion';
 import { useT, useLanguageStore, getLocalizedName, getLocalizedDescription } from '@/lib/i18n';
 import { sheetUp, fade } from '@/lib/motion';
 import { track } from '@/lib/analytics';
@@ -179,6 +180,22 @@ const MenuItemDetail = ({ item, onClose, canOrder = true }: Props) => {
                 >
                   {t('add_to_order')} · {(item.price * quantity).toFixed(2)} KM
                 </Button>
+              </div>
+
+              {/*
+                "Goes well with this."
+
+                The `item` placement has existed in the recommendation engine
+                since it was written and no screen ever used it — the whole
+                surface was dead. It is the best moment to suggest a side or a
+                drink: the guest is already interested in one dish and has not
+                yet committed to a total, so an add-on reads as help rather
+                than as an upsell at the till.
+
+                Paired against THIS dish, not the cart.
+              */}
+              <div className="mt-5">
+                <CartSuggestion placement="item" forItemIds={[item.id]} />
               </div>
             </>
           ) : (

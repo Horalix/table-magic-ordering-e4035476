@@ -74,7 +74,16 @@ export default defineConfig(({ mode }) => ({
           if (!id.includes("node_modules")) return;
           const normalized = id.replace(/\\/g, "/");
           if (normalized.includes("/node_modules/@supabase/")) return "supabase-vendor";
-          if (normalized.includes("/node_modules/@radix-ui/")) return "radix-vendor";
+          /*
+           * Radix is deliberately NOT manually chunked.
+           *
+           * One "radix-vendor" blob made a guest browsing the menu download
+           * every primitive the ADMIN uses. Splitting it per package went too
+           * far the other way — forty sub-kilobyte chunks that compress badly
+           * and cost round trips. Rollup's own splitting is usage-aware in a
+           * way a path regex cannot be: it puts each primitive with the routes
+           * that import it and hoists genuinely shared ones.
+           */
           if (normalized.includes("/node_modules/framer-motion/")) return "motion-vendor";
           if (normalized.includes("/node_modules/recharts/") || normalized.includes("/node_modules/d3-")) return "charts-vendor";
           if (
