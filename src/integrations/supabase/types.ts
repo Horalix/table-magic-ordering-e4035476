@@ -276,6 +276,7 @@ export type Database = {
           prep_minutes: number | null
           price: number
           sort_order: number
+          station: string
           subcategory_id: string
           updated_at: string
         }
@@ -300,6 +301,7 @@ export type Database = {
           prep_minutes?: number | null
           price: number
           sort_order?: number
+          station?: string
           subcategory_id: string
           updated_at?: string
         }
@@ -324,6 +326,7 @@ export type Database = {
           prep_minutes?: number | null
           price?: number
           sort_order?: number
+          station?: string
           subcategory_id?: string
           updated_at?: string
         }
@@ -354,32 +357,47 @@ export type Database = {
       }
       order_items: {
         Row: {
+          bumped_by: string | null
           created_at: string
           id: string
           menu_item_id: string
           notes: string | null
           order_id: string
           quantity: number
+          ready_at: string | null
+          served_at: string | null
+          started_at: string | null
+          station: string
           status: Database["public"]["Enums"]["order_item_status"]
           unit_price: number
         }
         Insert: {
+          bumped_by?: string | null
           created_at?: string
           id?: string
           menu_item_id: string
           notes?: string | null
           order_id: string
           quantity?: number
+          ready_at?: string | null
+          served_at?: string | null
+          started_at?: string | null
+          station?: string
           status?: Database["public"]["Enums"]["order_item_status"]
           unit_price: number
         }
         Update: {
+          bumped_by?: string | null
           created_at?: string
           id?: string
           menu_item_id?: string
           notes?: string | null
           order_id?: string
           quantity?: number
+          ready_at?: string | null
+          served_at?: string | null
+          started_at?: string | null
+          station?: string
           status?: Database["public"]["Enums"]["order_item_status"]
           unit_price?: number
         }
@@ -838,6 +856,7 @@ export type Database = {
         Row: {
           id: number
           kitchen_delay_minutes: number
+          kitchen_undo_seconds: number
           last_order_time: string | null
           online_card_enabled: boolean
           ordering_enabled: boolean
@@ -867,6 +886,7 @@ export type Database = {
         Insert: {
           id?: number
           kitchen_delay_minutes?: number
+          kitchen_undo_seconds?: number
           last_order_time?: string | null
           online_card_enabled?: boolean
           ordering_enabled?: boolean
@@ -896,6 +916,7 @@ export type Database = {
         Update: {
           id?: number
           kitchen_delay_minutes?: number
+          kitchen_undo_seconds?: number
           last_order_time?: string | null
           online_card_enabled?: boolean
           ordering_enabled?: boolean
@@ -1752,6 +1773,20 @@ export type Database = {
         Returns: boolean
       }
       is_staff_member: { Args: never; Returns: boolean }
+      kds_all_day: {
+        Args: { _station?: string }
+        Returns: {
+          menu_item_id: string
+          name: string
+          oldest_at: string
+          open_ids: string[]
+          pending_ids: string[]
+          qty_pending: number
+          qty_preparing: number
+          qty_ready: number
+          station: string
+        }[]
+      }
       menu_item_orderable: {
         Args: {
           _at?: string
@@ -1826,6 +1861,21 @@ export type Database = {
       }
       next_order_code: { Args: never; Returns: string }
       online_card_payments_enabled: { Args: never; Returns: boolean }
+      order_item_status_rank: {
+        Args: { _s: Database["public"]["Enums"]["order_item_status"] }
+        Returns: number
+      }
+      order_revert_allowed: {
+        Args: {
+          _from: Database["public"]["Enums"]["order_status"]
+          _to: Database["public"]["Enums"]["order_status"]
+        }
+        Returns: boolean
+      }
+      order_status_rank: {
+        Args: { _s: Database["public"]["Enums"]["order_status"] }
+        Returns: number
+      }
       order_transition_allowed: {
         Args: {
           _from: Database["public"]["Enums"]["order_status"]
@@ -1922,6 +1972,28 @@ export type Database = {
           name: string
           views: number
         }[]
+      }
+      staff_bump_order_item: {
+        Args: {
+          _item_id: string
+          _status: Database["public"]["Enums"]["order_item_status"]
+        }
+        Returns: Json
+      }
+      staff_bump_order_items: {
+        Args: {
+          _item_ids: string[]
+          _status: Database["public"]["Enums"]["order_item_status"]
+        }
+        Returns: Json
+      }
+      staff_revert_order_status: {
+        Args: {
+          _order_id: string
+          _reason?: string
+          _to: Database["public"]["Enums"]["order_status"]
+        }
+        Returns: Json
       }
       staff_update_order_status: {
         Args: {
