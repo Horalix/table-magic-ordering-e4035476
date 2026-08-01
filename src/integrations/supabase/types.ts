@@ -1759,6 +1759,40 @@ export type Database = {
         }
         Returns: boolean
       }
+      menu_item_performance: {
+        Args: { _days?: number }
+        Returns: {
+          abandon_rate: number
+          add_rate: number
+          adds: number
+          category_name: string
+          is_available: boolean
+          item_id: string
+          margin_score: number
+          name: string
+          order_rate: number
+          orders: number
+          price: number
+          removes: number
+          revenue: number
+          subcategory_name: string
+          units: number
+          views: number
+        }[]
+      }
+      menu_pairings: {
+        Args: { _limit?: number }
+        Returns: {
+          already_curated: boolean
+          confidence: number
+          item_a: string
+          item_b: string
+          lift: number
+          name_a: string
+          name_b: string
+          pair_orders: number
+        }[]
+      }
       monri_apply_callback: {
         Args: {
           _amount_minor: number
@@ -1800,6 +1834,8 @@ export type Database = {
         Returns: boolean
       }
       payment_status_rank: { Args: { _status: string }; Returns: number }
+      reco_holdout_comparison: { Args: { _days?: number }; Returns: Json }
+      recommendation_engine_health: { Args: never; Returns: Json }
       record_analytics_events: {
         Args: { _events: Json; _visit_id: string }
         Returns: number
@@ -1876,12 +1912,41 @@ export type Database = {
         Args: { _accepted: number; _shown: number }
         Returns: number
       }
+      sold_out_impact: {
+        Args: { _days?: number }
+        Returns: {
+          avg_daily_revenue_when_available: number
+          estimated_lost_revenue: number
+          item_id: string
+          name: string
+          views: number
+        }[]
+      }
       staff_update_order_status: {
         Args: {
           _order_id: string
           _status: Database["public"]["Enums"]["order_status"]
         }
         Returns: Json
+      }
+      suggestion_impact: { Args: { _days?: number }; Returns: Json }
+      suggestion_performance: {
+        Args: { _limit?: number }
+        Returns: {
+          acceptance_rate: number
+          accepted: number
+          attributed_revenue: number
+          dismissed: number
+          placement: string
+          recommended_item_id: string
+          recommended_name: string
+          revenue_per_impression: number
+          shown: number
+          smoothed_rate: number
+          source_item_id: string
+          source_name: string
+          status: string
+        }[]
       }
       touch_session: { Args: { _id: string; _token: string }; Returns: boolean }
       verify_waiter_pin: {
