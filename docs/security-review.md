@@ -35,6 +35,14 @@ network peer whose signature we verify and whose numbers we re-check.
 | Orders could be hard-deleted from the admin UI | Replaced with `cancel_order(reason)`; the financial record survives |
 | No record of who did what | Append-only `audit_log`; `INSERT`/`UPDATE`/`DELETE` revoked from `anon` and `authenticated` |
 
+### Session lifetime
+
+| Issue | Fix |
+|---|---|
+| A table session never expired, so a returning phone could resume a stranger's table | Configurable idle timeout enforced in `assert_guest_session` and `touch_session`; a dead session cannot revive itself with a heartbeat |
+| Starting a session could sit alongside a forgotten one on the same table | Starting closes anything stale on that table first |
+| The venue QR required unifying every table's token | First-class rotatable venue token; `resolve_table_for_token()` fails closed |
+
 ### Application and transport
 
 | Issue | Fix |
@@ -79,7 +87,8 @@ These were done well and were deliberately not disturbed:
 
 | Risk | Severity | Why it remains | Mitigation |
 |---|---|---|---|
-| **QR token rotation is manual** | Medium | Tokens are 32 random bytes and per-table, which is strong, but a photographed QR stays valid until an admin rotates it | Rotate from Admin → QR Codes after any incident; consider scheduled rotation |
+| **A venue QR means the table number is guest-declared** | Medium | Accepted product decision: La Soul prints one code for the room. Someone can claim table 4 while sitting at table 9. No worse than a paper menu — a waiter still carries food to a real table — and the token still stops anyone outside the restaurant ordering at all | Rotate the code from Admin → QR Codes after any incident; per-table stickers remain supported if the trade ever stops being worth it |
+| **A photographed QR is valid until rotated** | Medium | Inherent to any printed code | Rotation is now one click and audit-logged; rotate after any incident and once after go-live |
 | **A shared table session is shared by design** | Medium | Anyone who joins a table can see the whole tab and order onto it — that is the product | Join requests need approval (or a 30 s auto-approve); sessions close at bill time |
 | **`lasoul.financial_ctx` is transaction-scoped, not call-scoped** | Low | A future `SECURITY DEFINER` function that sets it and then calls untrusted SQL in the same transaction would extend the elevation | Only set it immediately before the guarded write; reviewed in every RPC here |
 | **No rate limiting on guest RPCs beyond per-session caps** | Low–Medium | Supabase does not rate-limit RPC by default; current caps are 10 orders/session, 40 lines/order, 500 analytics events/visit/hour | Add a Supabase/Cloudflare rate limit in front of `/rest/v1/rpc/` before high-traffic launch |

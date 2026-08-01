@@ -10,6 +10,7 @@ import CartBar from '@/components/guest/CartBar';
 import LanguageSelector from '@/components/guest/LanguageSelector';
 import { useT, useLanguageStore, getLocalizedName } from '@/lib/i18n';
 import { useSessionHeartbeat } from '@/hooks/useSessionHeartbeat';
+import { useSessionGuard } from '@/hooks/useSessionGuard';
 import { staggerContainer, fadeUp } from '@/lib/motion';
 import InstallPrompt from '@/components/guest/InstallPrompt';
 import RecentOrdersRow from '@/components/guest/RecentOrdersRow';
@@ -41,6 +42,9 @@ const descKeyMap: Record<string, string> = {
 const GuestMenu = () => {
   const navigate = useNavigate();
   useSessionHeartbeat();
+  // Confirms with the server, once per app launch, that a remembered table is
+  // still this visit's table. See useSessionGuard for why that matters here.
+  const guard = useSessionGuard();
   const [searchParams] = useSearchParams();
   const t = useT();
   const locale = useLanguageStore((s) => s.locale);
@@ -56,7 +60,7 @@ const GuestMenu = () => {
 
   const table = searchParams.get('table') ?? (storeTableNumber ? String(storeTableNumber) : null);
   const token = searchParams.get('token');
-  const hasSession = !!(storeSessionId && storeSessionToken);
+  const hasSession = guard === 'active' && !!(storeSessionId && storeSessionToken);
 
   const { data: categories = [] } = useQuery({
     queryKey: ['categories'],
@@ -137,10 +141,14 @@ const GuestMenu = () => {
           transition={{ delay: 0.35, duration: 0.25 }}
           className="mt-6 flex items-center gap-3"
         >
-          {table && (
-            <span className="px-4 py-1.5 rounded-full border border-white/20 bg-white/10 text-xs font-sans font-medium text-white tracking-wider">
-              {t('table')} {table}
-            </span>
+          {table && hasSession && (
+            <button
+              onClick={() => navigate(token ? `/start?token=${encodeURIComponent(token)}` : '/start')}
+              className="px-4 py-1.5 rounded-full border border-white/20 bg-white/10 text-xs font-sans font-medium text-white tracking-wider hover:bg-white/20 transition-colors"
+              title={t('not_your_table')}
+            >
+              {t('table')} {table} · <span className="underline underline-offset-2">{t('change_table')}</span>
+            </button>
           )}
           <CallWaiterButton variant="hero" />
           <LanguageSelector variant="hero" />

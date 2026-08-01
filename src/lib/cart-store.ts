@@ -3,6 +3,12 @@ import { persist } from 'zustand/middleware';
 import { toast } from 'sonner';
 import { touchSession } from '@/lib/guest-api';
 
+/** Where a cart line came from, when it came from a suggestion. */
+export interface SuggestionOrigin {
+  sourceItemId: string | null;
+  placement: string;
+}
+
 export interface CartItem {
   /** Cart-line id. For plain items this is the menu item id; special requests get a distinct line id. */
   id: string;
@@ -13,6 +19,11 @@ export interface CartItem {
   quantity: number;
   notes?: string;
   image_url?: string;
+  /**
+   * Set when the guest added this from a suggestion. Sent at checkout so the
+   * server can attribute the revenue. It never affects the price.
+   */
+  fromSuggestion?: SuggestionOrigin;
 }
 
 /**
@@ -52,6 +63,8 @@ interface CartStore {
   setGuestName: (name: string) => void;
   setLastOrderTime: () => void;
   setPendingPayment: (pending: PendingPayment | null) => void;
+  /** Forget the table entirely — the visit is over. */
+  endVisit: () => void;
   total: () => number;
   itemCount: () => number;
   startHeartbeat: () => void;
@@ -141,6 +154,28 @@ export const useCartStore = create<CartStore>()(persist((set, get) => ({
   setLastOrderTime: () => set({ lastOrderTime: Date.now() }),
 
   setPendingPayment: (pendingPayment) => set({ pendingPayment }),
+
+  /**
+   * End the visit on this device.
+   *
+   * Clears the cart too: carrying a half-built order from last week's table
+   * into a new visit is worse than starting empty, and the prices may have
+   * changed. Does NOT close the server session — other phones may still be on
+   * that table and the tab must survive one guest pocketing their phone.
+   */
+  endVisit: () => {
+    get().stopHeartbeat();
+    try { sessionStorage?.removeItem('lasoul-session-checked'); } catch { /* not available */ }
+    set({
+      items: [],
+      sessionId: null,
+      sessionToken: null,
+      tableNumber: null,
+      qrToken: null,
+      guestName: null,
+      pendingPayment: null,
+    });
+  },
 
   total: () => get().items.reduce((sum, i) => sum + i.price * i.quantity, 0),
 

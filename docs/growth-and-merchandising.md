@@ -64,6 +64,113 @@ Managed in **Admin → Service & suggestions**.
 
 ---
 
+## How the engine actually decides
+
+Four signals, scored, then guardrails applied on top. Every weight is visible
+and editable in **Admin → Service & suggestions**, and the live values are shown
+in **Admin → Menu Intelligence**.
+
+| Signal | Default weight | Source | What it means |
+|---|---|---|---|
+| Curated | 40 | `menu_item_recommendations` | Pairings you added by hand |
+| Observed | 25 | `menu_item_affinity` | Market-basket **lift** from completed orders |
+| Learned | 25 | `suggestion_stats` | Acceptance for this exact pair and placement |
+| Margin | 10 | `menu_items.margin_score` | Internal only. Never returned to the browser |
+| Exploration | 15 | — | Decaying bonus so new items get a hearing |
+
+### Why lift, not counts
+
+A raw co-occurrence count tells you both items are popular. **Lift** tells you
+whether they go together:
+
+```
+lift = P(B | A) / P(B)
+```
+
+Cola in every second order has a high count with everything and a lift near 1.0
+— not a pairing, just a default. Fries that appear in 80% of burger orders but
+30% of orders overall have a lift of 2.7 — that is a real pairing worth
+curating. Menu Intelligence ranks by lift and offers one-click curation.
+
+A pair needs at least 3 co-occurrences, and the whole model needs at least 5
+orders, before the engine will claim anything.
+
+### Why smoothing
+
+A suggestion shown once and accepted once is not a 100% pair. The engine uses a
+Beta(1, 12) prior — roughly "assume about 8% until shown otherwise":
+
+```
+smoothed = (accepted + 1) / (shown + 13)
+```
+
+So 1-of-1 scores 0.14 while 60-of-400 scores 0.15 and keeps climbing with
+evidence. Small samples cannot hijack the ranking; large ones converge on the
+truth.
+
+### Why exploration
+
+Without it, whatever was popular in week one is shown forever and a new dish is
+never tried. The bonus is full at zero impressions, about half at 30, and
+negligible past a few hundred — multiplied by a stable per-table hash so
+different tables explore different items rather than everyone seeing the same
+experiment.
+
+Set it to 0 to freeze the engine on what it already knows.
+
+### Automatic retirement
+
+A pair shown 60+ times with a smoothed acceptance below 3% stops being shown.
+It appears as **Retired** in Menu Intelligence, with its numbers, so you can see
+what was dropped and why rather than wondering where it went.
+
+### What learning cannot do
+
+Guardrails are applied **after** scoring and are covered by tests that
+deliberately turn the learning signals up:
+
+- never a sold-out or out-of-window item
+- never something already in the cart
+- never another item from the same subcategory, unless typed `upgrade_to` or `add_on`
+- never the margin score across the wire
+- never anything at all when suggestions are switched off, or for a holdout table
+
+Learning changes the **order** of good suggestions. It cannot introduce a bad one.
+
+---
+
+## Knowing whether any of it works
+
+Two numbers, and they answer different questions.
+
+**Attributed revenue** — money from lines a guest added after seeing a
+suggestion, in orders that completed, priced by the server. Precise, but an
+**upper bound**: some of those guests wanted the coffee anyway.
+
+**The holdout** — set `reco_holdout_pct` to 10 in Admin → Service & suggestions.
+One table in ten then sees no suggestions at all, deterministically and
+consistently for the whole visit. Menu Intelligence compares average order value
+between the two groups. That difference is the real effect.
+
+The comparison reports itself as **not reliable** below 100 orders on each side,
+because below that the difference is noise. Run it for two weeks, read it, then
+turn it back to 0 — every holdout table is revenue you chose to forgo to learn
+something, so do not leave it running once you have the answer.
+
+### Reading Menu Intelligence
+
+| Panel | The question it answers | What to do |
+|---|---|---|
+| Earned by suggestions | Is the feature paying for itself? | If uplift is under 1%, the pairings are wrong, not the feature |
+| How the engine decides | What is it weighting, what has it learned and retired? | Adjust weights; check retirements are sensible |
+| Which suggestions work | Which specific pairs earn? | Delete anything "weak" after 60+ impressions |
+| What goes together | What have guests told us by ordering? | Curate anything with lift > 1.5 |
+| Looked at, not ordered | Which dishes lose people? | Fix the photo, the description or the price — in that order |
+| Not selling at all | What is dead weight? | Cut it, or re-describe and give it three weeks |
+| Sold out cost | What is running out costing? | Prep levels, or mark unavailable earlier |
+
+---
+
 ## Placements
 
 | Placement | When | Intent | Why it works |
@@ -119,6 +226,10 @@ Each is stated so it can be falsified.
 | 8 | Undo on cart removal | Accidental removals become recoveries | Items per order | — | **Shipped** |
 | 9 | Sold-out items shown in search, labelled | A guest who searched deserves an answer | `search_no_results` rate | — | **Shipped** |
 | 10 | Post-order status with a real ETA path | Guests stop asking "where is my food?" | Waiter-call rate between order and serve | — | **Partly** — tab exists, ETA not modelled |
+| 11 | Learned ranking (lift + smoothed acceptance) | Relevance beats a fixed list; the engine improves without anyone editing it | Suggestion acceptance; attributed revenue | Dismissal rate; guardrail tests | **Shipped** |
+| 12 | Automatic retirement of refused pairs | A suggestion nobody takes is clutter, and clutter costs attention | Acceptance of what remains | Nothing sensible retired | **Shipped** |
+| 13 | Exploration bonus for new dishes | A new item should get a hearing, not inherit week one's ranking forever | Share of impressions going to items with <30 shows | Overall acceptance must not fall | **Shipped** |
+| 14 | Holdout measurement | Attribution overstates; only a holdout gives the causal number | AOV difference between groups | Revenue forgone while running | **Shipped**, default off |
 
 ### Recommended as experiments, not shipped
 

@@ -26,7 +26,7 @@ npm run dev                 # http://localhost:8080
 | `npm run build` | Production build |
 | `npm run typecheck` | `tsc --noEmit` |
 | `npm run lint` | ESLint |
-| `npm test` | Unit + SQL integration tests (114) |
+| `npm test` | Unit + SQL integration tests (167) |
 | `npm run test:e2e` | Playwright, 3 browser projects (55) |
 | `npm run scan:secrets` | Fails on committed credentials |
 | **`npm run verify`** | **typecheck → lint → tests → secret scan → build** |
@@ -127,12 +127,14 @@ account.
   function that opts in via a transaction-local GUC.
 - **Append-only audit log** with actor, timestamp, before/after and reason.
   `INSERT`/`UPDATE`/`DELETE` are revoked from every client role.
-- **Refunds and cancellations** are modelled, authorised and audited. The Monri
-  refund call is built as an adapter and deliberately gated — production
-  credentials do not exist.
+- **Cancellations** are modelled, authorised and audited. **Refunds** are
+  recorded internally with actor, reason, amount and status — there is
+  **no provider refund call**; refunding a card payment today means doing it in
+  the Monri dashboard and recording it here.
 - **Fiscalization** upgraded from a boolean to status, actor, receipt number,
-  provider reference and error. The app states plainly that it is **not** a
-  certified fiscal device.
+  provider reference and error, and Admin → Orders now captures the receipt
+  number from the certified device. The app states plainly that it is **not** a
+  certified fiscal device — see `docs/fiscalization-workflow.md`.
 - **CORS allow-listed** on the payment endpoints instead of `*`; provider error
   bodies are logged, not forwarded to the browser.
 - **`.env` untracked**, `.env*` ignored, and `npm run scan:secrets` fails on
@@ -157,6 +159,56 @@ The suites paid for themselves before they were even green:
   just-cleared cart.
 - `TablePresence`, mounted globally for every guest, crashed the whole app if an
   RPC returned a non-array.
+
+
+### The suggestion engine learns
+
+Three signals, individually weighted in Admin → Service & suggestions:
+
+| Signal | Where it comes from |
+|---|---|
+| **Curated** | Pairings management adds by hand |
+| **Observed** | Market-basket **lift** over completed orders — so an item that is merely popular is not mistaken for a pairing |
+| **Learned** | Acceptance per pair and placement, Bayesian-smoothed so a 1-of-1 fluke cannot outrank a proven pair |
+
+Plus margin (internal, never returned to the browser) and an exploration bonus
+that decays with impressions, so a new dish gets a hearing instead of being
+frozen out by whatever was popular the week it launched. Pairs that have been
+shown fairly and refused retire themselves.
+
+Every guardrail is applied **after** scoring and is re-asserted in tests with
+the learning signals turned up: never sold out, never already in the cart, never
+the same shelf unless typed as an upgrade or add-on. Learning reorders good
+suggestions; it cannot introduce a bad one.
+
+**Measured honestly.** Revenue attribution is written server-side at order time
+and priced from the menu, so the number is money that arrived. Because
+attribution is still an upper bound — some guests would have ordered the coffee
+anyway — there is an optional **holdout**: a deterministic share of tables sees
+no suggestions at all, and Menu Intelligence reports the difference in average
+order value, flagging itself as unreliable below 100 orders a side.
+
+**Admin → Menu Intelligence** shows all of it: earned revenue, acceptance,
+average order with vs without, the engine's own weights and what it has learned
+and retired, discovered pairings with one-click curation, items that get looked
+at and not ordered, dead weight, and what being sold out costs.
+
+### One QR for the room
+
+La Soul prints a single code. The guest scans it and types the table they are
+sitting at — **every visit**, because they will not be in the same seat next
+time. Sessions expire after a configurable period of silence (default 3 hours;
+the app heartbeats every minute while open), so a returning phone is asked for
+its table rather than resuming a previous visit's.
+
+The venue token is a first-class, rotatable value — "new code" is one click and
+kills every printed one instantly. Per-table sticker tokens still work if you
+ever want them.
+
+Honest about the limit: with a venue QR the table number is guest-declared.
+Someone can claim table 4 while sitting at table 9. That is inherent to the
+single-QR product and no worse than a paper menu; what it buys is that nobody
+outside the restaurant can order at all.
 
 ---
 
@@ -202,7 +254,7 @@ Functions) · Sentry · vite-plugin-pwa · Netlify.
 | `/privacy` | Trust & privacy |
 | `/kitchen` | Kitchen display (staff) |
 | `/waiter`, `/waiter/monitor` | Waiter (PIN) |
-| `/admin/*` | Admin — dashboard, menu, tables, orders, QR, sections, tonight, printing, **service & suggestions**, reports, waiters, performance, analytics |
+| `/admin/*` | Admin — dashboard, menu, tables, orders, QR, sections, tonight, printing, **service & suggestions**, **menu intelligence**, reports, waiters, performance, analytics |
 
 ---
 
@@ -216,6 +268,9 @@ Migrations added by this release (additive and idempotent):
 | `20260731090100_payment_safety.sql` | Order columns (code, release, paid-by, cancel, refund, fiscal), `audit_log`, the transition function and integrity trigger, `release_order_to_kitchen`, `guest_place_order` v3, guest payment-status and switch-to-table RPCs, service switches |
 | `20260731090200_monri_callbacks_and_staff_payments.sql` | Callback event ledger, attempt registration and response recording, `monri_apply_callback`, `record_table_payment`, `staff_update_order_status`, `cancel_order`, `order_refunds` + `record_order_refund`, `set_order_fiscalization`, ticket claim/report/requeue |
 | `20260731090300_merchandising_and_analytics.sql` | Menu-engineering columns, `menu_item_recommendations`, `guest_get_recommendations`, `guest_search_menu`, `analytics_events` + ingestion, `completed_orders` view, `day_reconciliation()` |
+| `20260801090000_venue_qr_and_visits.sql` | Rotatable venue token, `resolve_table_for_token`, session idle expiry, `guest_resume_session`, `close_stale_sessions` |
+| `20260801090100_learning_recommendations.sql` | `menu_item_affinity` + market-basket refresh, `suggestion_stats`, `suggestion_conversions`, Bayesian smoothing, holdout, the blended engine, `guest_place_order` v4 with attribution |
+| `20260801090200_menu_intelligence_reporting.sql` | `menu_item_performance`, `menu_pairings`, `suggestion_performance`, `suggestion_impact`, `recommendation_engine_health`, `sold_out_impact`, `reco_holdout_comparison` |
 
 Full lifecycle contract: [docs/order-state-machine.md](docs/order-state-machine.md).
 
@@ -224,7 +279,7 @@ Full lifecycle contract: [docs/order-state-machine.md](docs/order-state-machine.
 ## Testing
 
 ```bash
-npm test                                              # 114 unit + integration
+npm test                                              # 167 unit + integration
 npx vitest run supabase/tests/payment-safety.test.ts  # 41 money tests
 npm run test:e2e                                      # 55 specs, 3 browsers
 npm run verify                                        # every gate
