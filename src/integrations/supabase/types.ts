@@ -508,6 +508,7 @@ export type Database = {
           last_error: string | null
           order_id: string
           payload: Json
+          print_verified: boolean | null
           printed_at: string | null
           status: string
           ticket_type: string
@@ -525,6 +526,7 @@ export type Database = {
           last_error?: string | null
           order_id: string
           payload?: Json
+          print_verified?: boolean | null
           printed_at?: string | null
           status?: string
           ticket_type?: string
@@ -542,6 +544,7 @@ export type Database = {
           last_error?: string | null
           order_id?: string
           payload?: Json
+          print_verified?: boolean | null
           printed_at?: string | null
           status?: string
           ticket_type?: string
@@ -1592,6 +1595,7 @@ export type Database = {
         Args: { _order_id: string; _ticket_type?: string }
         Returns: string
       }
+      enqueue_station_tickets: { Args: { _order_id: string }; Returns: string }
       get_popular_items: {
         Args: { _days?: number; _limit?: number }
         Returns: {
@@ -1921,12 +1925,17 @@ export type Database = {
           _ok: boolean
           _order_id: string
           _ticket_type?: string
+          _verified?: boolean
         }
         Returns: undefined
       }
+      requeue_stale_ticket_prints: {
+        Args: { _older_than_seconds?: number }
+        Returns: number
+      }
       requeue_ticket_print: {
         Args: { _order_id: string; _ticket_type?: string }
-        Returns: boolean
+        Returns: Json
       }
       resolve_table_for_token: {
         Args: { _table_number: number; _token: string }
