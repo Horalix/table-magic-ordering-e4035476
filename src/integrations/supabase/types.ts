@@ -1278,6 +1278,10 @@ export type Database = {
         }
         Returns: Json
       }
+      sales_analytics: {
+        Args: { _from?: string; _to?: string }
+        Returns: Json
+      }
       day_reconciliation: {
         Args: { _day?: string }
         Returns: Json

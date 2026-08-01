@@ -59,19 +59,33 @@ const SetupChecklist = ({ counts, onDismiss }: { counts: SetupCounts; onDismiss:
   );
 };
 import type { Database } from '@/integrations/supabase/types';
+import { localDayRange, onlySales, summarise, timeToAccept, timeToReady, timeToServe, openAgeMinutes } from '@/lib/reporting';
 
 type OrderStatus = Database['public']['Enums']['order_status'];
-type DashboardOrder = Pick<Database['public']['Tables']['orders']['Row'], 'total' | 'created_at' | 'status' | 'updated_at' | 'guest_name'>;
+type DashboardOrder = Pick<
+  Database['public']['Tables']['orders']['Row'],
+  'total' | 'created_at' | 'status' | 'updated_at' | 'guest_name'
+  | 'released_to_kitchen_at' | 'confirmed_at' | 'ready_at' | 'served_at'
+>;
 type RecentOrder = Pick<Database['public']['Tables']['orders']['Row'], 'id' | 'created_at' | 'guest_name' | 'status' | 'total'> & {
   table_sessions: { tables: { table_number: number } | null } | null;
 };
 
-interface WaitTimeStats {
-  pending: { avg: number; count: number };
-  confirmed: { avg: number; count: number };
-  preparing: { avg: number; count: number };
-  ready: { avg: number; count: number };
-  served: { avg: number; count: number };
+/**
+ * Service timings measured from the stage stamps, not from "now".
+ *
+ * The previous version computed `now - created_at` and bucketed by *current*
+ * status, so a lunch order served at 12:10 still read 480 minutes at 20:00 and
+ * the "average" grew all evening. These stop moving once an order completes,
+ * which is the only way an average means anything — and each reports how many
+ * orders it is actually based on, because an average over three of fifty is not
+ * a fact about the service.
+ */
+interface ServiceTimings {
+  accept: ReturnType<typeof summarise>;
+  ready: ReturnType<typeof summarise>;
+  serve: ReturnType<typeof summarise>;
+  oldestOpen: number | null;
 }
 
 /** Single stat tile — count-up animation + consistent elevation. */
@@ -118,25 +132,28 @@ const AdminDashboard = () => {
   const [recentOrders, setRecentOrders] = useState<RecentOrder[]>([]);
   const [setup, setSetup] = useState<SetupCounts | null>(null);
   const [dismissed, setDismissed] = useState(() => localStorage.getItem(SETUP_DISMISS_KEY) === '1');
-  const [waitTimeStats, setWaitTimeStats] = useState<WaitTimeStats>({
-    pending: { avg: 0, count: 0 },
-    confirmed: { avg: 0, count: 0 },
-    preparing: { avg: 0, count: 0 },
-    ready: { avg: 0, count: 0 },
-    served: { avg: 0, count: 0 },
+  const empty = { median: null, p90: null, counted: 0, total: 0 };
+  const [timings, setTimings] = useState<ServiceTimings>({
+    accept: empty, ready: empty, serve: empty, oldestOpen: null,
   });
 
   useEffect(() => {
     const fetchStats = async () => {
-      const today = new Date().toISOString().split('T')[0];
+      // The restaurant's day, not UTC's. For a UTC+2 venue the old
+      // `toISOString()` boundary ran 02:00 to 02:00 local, so the Dashboard and
+      // the Performance page were reporting different windows.
+      const { start, end } = localDayRange();
 
       const { data: orders } = await supabase
         .from('orders')
-        .select('total, created_at, status, updated_at, guest_name')
-        .gte('created_at', today)
-        .neq('status', 'cancelled');
+        .select('total, created_at, status, updated_at, guest_name, released_to_kitchen_at, confirmed_at, ready_at, served_at')
+        .gte('created_at', start)
+        .lte('created_at', end);
 
-      const todayOrders = (orders ?? []) as DashboardOrder[];
+      // One shared definition of a sale. Excluding only `cancelled` counted
+      // abandoned card checkouts that never reached the kitchen as takings,
+      // which is why this page and the Daily Report disagreed.
+      const todayOrders = onlySales((orders ?? []) as DashboardOrder[]);
       const revenue = todayOrders.reduce((sum, order) => sum + Number(order.total), 0);
       const count = todayOrders.length;
 
@@ -158,7 +175,8 @@ const AdminDashboard = () => {
       const { count: guestCount } = await supabase
         .from('table_sessions')
         .select('*', { count: 'exact', head: true })
-        .gte('opened_at', today);
+        .gte('opened_at', start)
+        .lte('opened_at', end);
 
       setStats({
         todayRevenue: revenue,
@@ -170,29 +188,21 @@ const AdminDashboard = () => {
         guestCount: guestCount || 0,
       });
 
-      if (todayOrders.length > 0) {
-        const grouped: Partial<Record<OrderStatus, number[]>> = {};
-        for (const order of todayOrders) {
-          const mins = Math.floor((Date.now() - new Date(order.created_at).getTime()) / 60000);
-          grouped[order.status] ??= [];
-          grouped[order.status]?.push(mins);
-        }
-        const compute = (status: OrderStatus) => {
-          const arr = grouped[status] || [];
-          return { avg: arr.length > 0 ? Math.round(arr.reduce((a, b) => a + b, 0) / arr.length) : 0, count: arr.length };
-        };
-        setWaitTimeStats({
-          pending: compute('pending'),
-          confirmed: compute('confirmed'),
-          preparing: compute('preparing'),
-          ready: compute('ready'),
-          served: compute('served'),
-        });
-      }
+      const openAges = todayOrders
+        .map((o) => openAgeMinutes(o as never))
+        .filter((v): v is number => v !== null);
+
+      setTimings({
+        accept: summarise(todayOrders.map((o) => timeToAccept(o as never)), todayOrders.length),
+        ready: summarise(todayOrders.map((o) => timeToReady(o as never)), todayOrders.length),
+        serve: summarise(todayOrders.map((o) => timeToServe(o as never)), todayOrders.length),
+        oldestOpen: openAges.length > 0 ? Math.max(...openAges) : null,
+      });
 
       const { data: recent } = await supabase
         .from('orders')
-        .select(`*, table_sessions!inner(tables!inner(table_number))`)
+        .select('id, created_at, guest_name, status, total, table_sessions!inner(tables!inner(table_number))')
+        .gte('created_at', start)
         .order('created_at', { ascending: false })
         .limit(10);
 
@@ -245,16 +255,14 @@ const AdminDashboard = () => {
     { label: 'Avg Order', value: stats.avgOrderValue, format: money, icon: TrendingUp, color: 'text-accent' },
     { label: 'Bill Requests', value: stats.billRequests, format: whole, icon: CreditCard, color: 'text-primary' },
     { label: 'Waiter Calls', value: stats.waiterCalls, format: whole, icon: Hand, color: 'text-accent' },
-    { label: 'Guests Today', value: stats.guestCount, format: whole, icon: Users, color: 'text-primary' },
+    { label: 'Tables seated today', value: stats.guestCount, format: whole, icon: Users, color: 'text-primary' },
   ];
 
-  const waitTimeRows = [
-    { status: 'pending', label: 'Pending', color: 'bg-destructive/10 text-destructive' },
-    { status: 'confirmed', label: 'Confirmed', color: 'bg-accent/10 text-accent' },
-    { status: 'preparing', label: 'Preparing', color: 'bg-accent/15 text-accent' },
-    { status: 'ready', label: 'Ready', color: 'bg-primary/10 text-primary' },
-    { status: 'served', label: 'Served', color: 'bg-muted text-muted-foreground' },
-  ] as const;
+  const timingRows = [
+    { key: 'accept' as const, label: 'Kitchen accepted', hint: 'from reaching the kitchen' },
+    { key: 'ready' as const, label: 'Food ready', hint: 'from reaching the kitchen' },
+    { key: 'serve' as const, label: 'Ready to table', hint: 'how long it waited under the lamp' },
+  ];
 
   return (
     <div>
@@ -297,24 +305,43 @@ const AdminDashboard = () => {
         <CardHeader>
           <CardTitle className="font-serif text-lg flex items-center gap-2">
             <Timer className="w-5 h-5 text-primary" />
-            Today's Average Wait Times
+            Service times today
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-            {waitTimeRows.map((row) => {
-              const data = waitTimeStats[row.status as keyof WaitTimeStats];
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {timingRows.map((row) => {
+              const data = timings[row.key];
               return (
-                <div key={row.status} className="rounded-xl border border-border p-4 text-center">
-                  <span className={`text-xs font-sans font-medium px-2 py-0.5 rounded-full ${row.color}`}>{row.label}</span>
-                  <p className="font-serif text-2xl font-bold text-foreground mt-2 tabular-nums">
-                    {data.avg}<span className="text-sm font-sans text-muted-foreground ml-1">min</span>
+                <div key={row.key} className="rounded-xl border border-border p-4">
+                  <p className="text-xs font-sans font-medium text-muted-foreground">{row.label}</p>
+                  <p className="font-serif text-2xl font-bold text-foreground mt-1 tabular-nums">
+                    {data.median === null ? '—' : Math.round(data.median)}
+                    <span className="text-sm font-sans text-muted-foreground ml-1">min</span>
                   </p>
-                  <p className="text-xs font-sans text-muted-foreground mt-1">{data.count} order{data.count !== 1 ? 's' : ''}</p>
+                  <p className="text-xs font-sans text-muted-foreground mt-1">
+                    {/* The slow tail is what guests complain about; a median
+                        alone hides it, and a mean alone is dragged by it. */}
+                    {data.p90 === null ? row.hint : `slowest 10%: ${Math.round(data.p90)} min`}
+                  </p>
+                  <p className="text-[11px] font-sans text-muted-foreground/80 mt-0.5">
+                    {data.counted === 0
+                      ? 'no completed orders yet'
+                      : `median of ${data.counted} of ${data.total} orders`}
+                  </p>
                 </div>
               );
             })}
           </div>
+
+          {timings.oldestOpen !== null && timings.oldestOpen > 20 && (
+            <div className="mt-3 flex items-center gap-2 rounded-xl border border-destructive/25 bg-destructive/5 px-3 py-2">
+              <Timer className="w-4 h-4 text-destructive shrink-0" />
+              <p className="text-sm font-sans text-destructive">
+                An order has been open for {Math.round(timings.oldestOpen)} minutes.
+              </p>
+            </div>
+          )}
         </CardContent>
       </Card>
 
