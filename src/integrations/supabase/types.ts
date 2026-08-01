@@ -85,23 +85,32 @@ export type Database = {
       }
       bill_requests: {
         Row: {
+          acknowledged_at: string | null
+          acknowledged_by: string | null
           created_at: string
           id: string
           resolved_at: string | null
+          resolved_by: string | null
           status: string
           table_session_id: string
         }
         Insert: {
+          acknowledged_at?: string | null
+          acknowledged_by?: string | null
           created_at?: string
           id?: string
           resolved_at?: string | null
+          resolved_by?: string | null
           status?: string
           table_session_id: string
         }
         Update: {
+          acknowledged_at?: string | null
+          acknowledged_by?: string | null
           created_at?: string
           id?: string
           resolved_at?: string | null
+          resolved_by?: string | null
           status?: string
           table_session_id?: string
         }
@@ -1249,6 +1258,7 @@ export type Database = {
         Row: {
           assigned_waiter_id: string | null
           closed_at: string | null
+          covers: number | null
           first_order_at: string | null
           guest_name: string | null
           host_client_id: string | null
@@ -1263,6 +1273,7 @@ export type Database = {
         Insert: {
           assigned_waiter_id?: string | null
           closed_at?: string | null
+          covers?: number | null
           first_order_at?: string | null
           guest_name?: string | null
           host_client_id?: string | null
@@ -1277,6 +1288,7 @@ export type Database = {
         Update: {
           assigned_waiter_id?: string | null
           closed_at?: string | null
+          covers?: number | null
           first_order_at?: string | null
           guest_name?: string | null
           host_client_id?: string | null
@@ -1360,26 +1372,35 @@ export type Database = {
       }
       waiter_calls: {
         Row: {
+          acknowledged_at: string | null
+          acknowledged_by: string | null
           created_at: string
           id: string
           reason: string | null
           resolved_at: string | null
+          resolved_by: string | null
           status: string
           table_session_id: string
         }
         Insert: {
+          acknowledged_at?: string | null
+          acknowledged_by?: string | null
           created_at?: string
           id?: string
           reason?: string | null
           resolved_at?: string | null
+          resolved_by?: string | null
           status?: string
           table_session_id: string
         }
         Update: {
+          acknowledged_at?: string | null
+          acknowledged_by?: string | null
           created_at?: string
           id?: string
           reason?: string | null
           resolved_at?: string | null
+          resolved_by?: string | null
           status?: string
           table_session_id?: string
         }
@@ -1563,6 +1584,7 @@ export type Database = {
         Returns: {
           assigned_waiter_id: string | null
           closed_at: string | null
+          covers: number | null
           first_order_at: string | null
           guest_name: string | null
           host_client_id: string | null
@@ -1590,6 +1612,7 @@ export type Database = {
         Returns: boolean
       }
       close_stale_sessions: { Args: never; Returns: number }
+      covers_summary: { Args: { _day?: string }; Returns: Json }
       day_reconciliation: { Args: { _day?: string }; Returns: Json }
       enqueue_order_ticket: {
         Args: { _order_id: string; _ticket_type?: string }
@@ -1982,6 +2005,8 @@ export type Database = {
           views: number
         }[]
       }
+      staff_ack_bill_request: { Args: { _request_id: string }; Returns: Json }
+      staff_ack_waiter_call: { Args: { _call_id: string }; Returns: Json }
       staff_bump_order_item: {
         Args: {
           _item_id: string
@@ -1996,12 +2021,21 @@ export type Database = {
         }
         Returns: Json
       }
+      staff_resolve_bill_request: {
+        Args: { _close_session?: boolean; _request_id: string }
+        Returns: Json
+      }
+      staff_resolve_waiter_call: { Args: { _call_id: string }; Returns: Json }
       staff_revert_order_status: {
         Args: {
           _order_id: string
           _reason?: string
           _to: Database["public"]["Enums"]["order_status"]
         }
+        Returns: Json
+      }
+      staff_set_covers: {
+        Args: { _covers: number; _session_id: string }
         Returns: Json
       }
       staff_update_order_status: {
