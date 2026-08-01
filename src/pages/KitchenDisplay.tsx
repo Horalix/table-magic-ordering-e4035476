@@ -11,7 +11,9 @@ import {
 } from '@/components/ui/dialog';
 import { playOrderAlert, playWaiterCallAlert, playBillRequestAlert, unlockAudio, audioReady, playTestTone } from '@/lib/kitchen-sounds';
 import { buildKitchenTicketText, downloadKitchenTicketCsv, downloadKitchenTicketJson, printKitchenTicket, type KitchenPrintSettings } from '@/lib/ticket-export';
-import { isBluetoothConnected, tryReconnectBluetoothPrinter, printTextBluetooth } from '@/lib/printer-connect';
+import { isBluetoothConnected, tryReconnectBluetoothPrinter, printTextBluetooth, printerStatusCapable } from '@/lib/printer-connect';
+import { enqueuePrint, retryPrintQueue, usePrintQueue } from '@/lib/print-queue';
+import type { PrintOutcome } from '@/lib/print-outcome';
 import ConnectionPill from '@/components/staff/ConnectionPill';
 import KitchenOrderCard, { type KitchenOrder, type OrderItemStatus, type OrderStatus, type StationFilter } from '@/components/staff/KitchenOrderCard';
 import AllDayPanel from '@/components/staff/AllDayPanel';
@@ -19,7 +21,8 @@ import { useStaffRealtime, useStaffRealtimeEvent } from '@/lib/realtime';
 import { useElapsedMinutes, formatMinutes } from '@/lib/timing';
 import {
   bumpOrderItem, bumpOrderItems, cancelOrder, claimTicketPrint, deviceId, reportTicketPrint,
-  requeueTicketPrint, revertOrderStatus, updateOrderStatus as rpcUpdateOrderStatus,
+  requeueStaleTicketPrints, requeueTicketPrint, revertOrderStatus,
+  updateOrderStatus as rpcUpdateOrderStatus, type TicketType,
 } from '@/lib/staff-api';
 import type { Database } from '@/integrations/supabase/types';
 
@@ -162,6 +165,11 @@ const KitchenDisplay = () => {
   /** Cheap local gate; the authoritative claim lives in the database. */
   const printedRef = useRef<Set<string>>(new Set());
   const [failedPrints, setFailedPrints] = useState<string[]>([]);
+  /**
+   * Queue health. `stuck` is the state that matters: it means a job stopped
+   * answering and everything behind it is waiting for a person, not a retry.
+   */
+  const printQueue = usePrintQueue();
 
   // Live-data health, owned by the shared realtime module: one channel per tab
   // instead of one per screen, events coalesced so a six-item order causes one
@@ -206,18 +214,78 @@ const KitchenDisplay = () => {
   }, []);
 
   /**
+   * Which tickets this device is responsible for.
+   *
+   * A bar tablet prints bar tickets. A screen set to All prints both, because
+   * a single-printer restaurant is the common case and nobody should have to
+   * know that "All" also means "and print everything".
+   */
+  const ticketTypes = useCallback((): TicketType[] => (
+    station === 'all' ? ['kitchen', 'bar'] : [station]
+  ), [station]);
+
+  /**
+   * Print one station's ticket for one order, through the queue.
+   *
+   * Every step reports honestly:
+   *   - no claim, no print (a duplicate ticket is worse than a missing one,
+   *     and the missing one is at least visible);
+   *   - the outcome that comes back distinguishes "the printer confirmed it"
+   *     from "we wrote bytes at something that cannot be asked";
+   *   - a failure is recorded server-side so the ticket returns to the queue
+   *     with a Reprint, rather than being silently counted as done.
+   */
+  const printTicket = useCallback((
+    order: KitchenOrder,
+    type: TicketType,
+    reprintOf: string | null = null,
+  ) => {
+    const settings = { ...toPrintSettings(printConfig), station: type, reprintOf };
+    // An order with nothing for this station has no ticket. Printing a blank
+    // one teaches staff to ignore that printer.
+    if (!order.items.some((i) => i.station === type)) return;
+
+    enqueuePrint({
+      id: `${order.id}:${type}`,
+      label: `Table ${order.table_number} (${type})`,
+      run: async (): Promise<PrintOutcome> => {
+        let won = false;
+        try {
+          won = await claimTicketPrint(order.id, deviceId(), type);
+        } catch (error) {
+          return { ok: false, reason: error instanceof Error ? error.message : 'Could not claim the ticket' };
+        }
+        if (!won) return { ok: true, verified: false };
+
+        const outcome = isBluetoothConnected()
+          ? await printTextBluetooth(buildKitchenTicketText(order, settings), printConfig.print_copies)
+          : await printKitchenTicket(order, settings);
+
+        await reportTicketPrint(order.id, outcome.ok, outcome.ok ? undefined : outcome.reason, type,
+          outcome.ok ? outcome.verified : undefined).catch(() => {});
+        return outcome;
+      },
+      onSettled: (outcome) => {
+        setFailedPrints((prev) => {
+          if (outcome.ok) return prev.filter((id) => id !== order.id);
+          return prev.includes(order.id) ? prev : [...prev, order.id];
+        });
+        if (!outcome.ok) toast.error(`Table ${order.table_number}: ${outcome.reason}`);
+      },
+    });
+  }, [printConfig]);
+
+  /**
    * Auto-print newly-released orders.
    *
-   * The database owns the claim: claim_ticket_print() flips the ticket from
-   * queued to printed atomically and tells us whether THIS device won. Two
-   * kitchen screens, or one screen reloaded inside the old 60-second window,
-   * can no longer both print the same order. A failed print is reported back
-   * so the ticket returns to the queue with a visible Reprint.
+   * The database owns the claim: claim_ticket_print() moves the ticket to
+   * `claimed` atomically and tells us whether THIS device won. Two kitchen
+   * screens, or one screen reloaded inside the window, cannot both print the
+   * same ticket.
    */
   useEffect(() => {
     if ((!isPrinter && !isBluetoothConnected()) || !printConfig.print_enabled || !printConfig.print_auto) return;
     const now = Date.now();
-    const device = deviceId();
 
     for (const order of printable) {
       if (order.status !== 'pending' || printedRef.current.has(order.id)) continue;
@@ -227,47 +295,38 @@ const KitchenDisplay = () => {
         continue;
       }
       printedRef.current.add(order.id);
-
-      void (async () => {
-        let won = false;
-        try {
-          won = await claimTicketPrint(order.id, device);
-        } catch {
-          // Without a confirmed claim we do not print: a duplicate ticket is
-          // worse than a missing one, and the missing one is visible.
-          return;
-        }
-        if (!won) return;
-
-        try {
-          if (isBluetoothConnected()) {
-            await printTextBluetooth(buildKitchenTicketText(order, toPrintSettings(printConfig)), printConfig.print_copies);
-          } else {
-            printKitchenTicket(order, toPrintSettings(printConfig));
-          }
-        } catch (error) {
-          await reportTicketPrint(order.id, false, error instanceof Error ? error.message : 'print failed').catch(() => {});
-          setFailedPrints((prev) => (prev.includes(order.id) ? prev : [...prev, order.id]));
-          toast.error(`Ticket for table ${order.table_number} did not print`);
-        }
-      })();
+      for (const type of ticketTypes()) printTicket(order, type);
     }
-  }, [printable, isPrinter, printConfig, btName]);
+  }, [printable, isPrinter, printConfig, btName, printTicket, ticketTypes]);
 
-  /** Put a ticket back in the queue and let this device try again. */
+  /**
+   * Sweep claims nobody reported on.
+   *
+   * A tablet that claims a ticket and then dies leaves work that no screen
+   * shows and no timer retries. Running it from every open kitchen device
+   * needs no pg_cron and is idempotent — and if no kitchen device is open,
+   * there is nothing to print to anyway.
+   */
+  useEffect(() => {
+    const sweep = () => {
+      void requeueStaleTicketPrints().then((n) => {
+        if (n > 0) toast.warning(`${n} ticket${n === 1 ? '' : 's'} were claimed but never printed — reprint below`);
+      }).catch(() => {});
+    };
+    sweep();
+    const id = setInterval(sweep, 60_000);
+    return () => clearInterval(id);
+  }, []);
+
+  /** Put a ticket back in the queue and print it again, marked as a reprint. */
   const reprint = async (order: KitchenOrder) => {
     try {
-      await requeueTicketPrint(order.id);
-      printedRef.current.delete(order.id);
-      setFailedPrints((prev) => prev.filter((id) => id !== order.id));
-      const won = await claimTicketPrint(order.id, deviceId());
-      if (!won) { toast.info('Another device is printing this ticket'); return; }
-      if (isBluetoothConnected()) {
-        await printTextBluetooth(buildKitchenTicketText(order, toPrintSettings(printConfig)), printConfig.print_copies);
-      } else {
-        printKitchenTicket(order, toPrintSettings(printConfig));
+      for (const type of ticketTypes()) {
+        if (!order.items.some((i) => i.station === type)) continue;
+        const result = await requeueTicketPrint(order.id, type);
+        printedRef.current.delete(order.id);
+        printTicket(order, type, result?.previous_printed_at ?? null);
       }
-      toast.success('Ticket reprinted');
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Reprint failed');
     }
@@ -619,9 +678,29 @@ const KitchenDisplay = () => {
 
               <ConnectionPill state={connection} />
 
-              {(btName || isPrinter) && (
+              {/* A stuck queue is the loudest thing on this screen. Everything
+                  behind it is waiting for a person, not for a retry. */}
+              {printQueue.state === 'stuck' ? (
+                <button
+                  onClick={retryPrintQueue}
+                  className="inline-flex items-center gap-1.5 text-xs font-sans font-bold px-3 py-1 rounded-full bg-destructive text-destructive-foreground hover:opacity-90 transition-opacity"
+                >
+                  <Printer className="w-3.5 h-3.5" />
+                  PRINTER STUCK{printQueue.pending > 0 ? ` — ${printQueue.pending} waiting` : ''} · Retry
+                </button>
+              ) : (btName || isPrinter) && (
                 <span className="inline-flex items-center gap-1 text-[11px] font-sans font-medium text-primary">
-                  <span className="w-1.5 h-1.5 rounded-full bg-primary breathe" /> <Printer className="w-3 h-3" /> {btName ? `Printing · ${btName}` : 'Printing on this device'}
+                  <span className="w-1.5 h-1.5 rounded-full bg-primary breathe" /> <Printer className="w-3 h-3" />
+                  {btName ? `Printing · ${btName}` : 'Printing on this device'}
+                  {/* Never call an unverifiable write "printed" without saying so. */}
+                  {btName && !printerStatusCapable() && <span className="text-muted-foreground"> (unverified)</span>}
+                  {printQueue.state === 'printing' && <span className="text-muted-foreground"> · {printQueue.current}</span>}
+                </span>
+              )}
+
+              {printQueue.state !== 'stuck' && printQueue.lastError && (
+                <span className="inline-flex items-center gap-1 text-[11px] font-sans font-medium px-2 py-0.5 rounded-full bg-destructive/10 text-destructive">
+                  {printQueue.lastError}
                 </span>
               )}
 

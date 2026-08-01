@@ -149,20 +149,59 @@ export const setFiscalization = (
     _error: error ?? null,
   });
 
+/** Kitchen and bar get their own ticket; the bar cannot work off a food ticket. */
+export type TicketType = 'kitchen' | 'bar';
+
 /**
  * Try to become the device that prints this ticket.
  *
  * Returns true only for the one caller that wins. Two kitchen screens, or the
  * same screen after a reload, cannot both print the same order.
+ *
+ * A claim is an intention, not an outcome — the winner must come back with
+ * `reportTicketPrint`, and a claim nobody reports on is swept back into the
+ * queue by `requeueStaleTicketPrints`.
  */
-export const claimTicketPrint = (orderId: string, deviceId: string) =>
-  rpc<boolean>('claim_ticket_print', { _order_id: orderId, _device_id: deviceId });
+export const claimTicketPrint = (orderId: string, deviceId: string, type: TicketType = 'kitchen') =>
+  rpc<boolean>('claim_ticket_print', { _order_id: orderId, _device_id: deviceId, _ticket_type: type });
 
-export const reportTicketPrint = (orderId: string, ok: boolean, error?: string) =>
-  rpc<void>('report_ticket_print', { _order_id: orderId, _ok: ok, _error: error ?? null });
+/**
+ * Say what actually happened.
+ *
+ * `verified` is the honest bit: true only when the printer itself confirmed
+ * the ticket. Most cheap Bluetooth printers cannot be asked, and every browser
+ * print dialog reports only that a dialog closed — recording those as plain
+ * "printed" is what made the old print log worthless.
+ */
+export const reportTicketPrint = (
+  orderId: string,
+  ok: boolean,
+  error?: string,
+  type: TicketType = 'kitchen',
+  verified?: boolean,
+) =>
+  rpc<void>('report_ticket_print', {
+    _order_id: orderId,
+    _ok: ok,
+    _error: error ?? null,
+    _ticket_type: type,
+    _verified: verified ?? null,
+  });
 
-export const requeueTicketPrint = (orderId: string) =>
-  rpc<boolean>('requeue_ticket_print', { _order_id: orderId });
+/**
+ * Put a ticket back in the queue.
+ *
+ * Returns when the original printed so the reprint can say so on the paper —
+ * a reprint indistinguishable from the original is a dish cooked twice.
+ */
+export const requeueTicketPrint = (orderId: string, type: TicketType = 'kitchen') =>
+  rpc<{ requeued: boolean; previous_printed_at: string | null; attempts: number }>(
+    'requeue_ticket_print', { _order_id: orderId, _ticket_type: type },
+  );
+
+/** Turn claims that were never reported on back into visible work. */
+export const requeueStaleTicketPrints = (olderThanSeconds = 90) =>
+  rpc<number>('requeue_stale_ticket_prints', { _older_than_seconds: olderThanSeconds });
 
 export interface DayReconciliation {
   day: string;

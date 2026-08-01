@@ -76,8 +76,8 @@ const AdminPrinting = () => {
     toast.success('Printing settings saved');
   };
 
-  const testPrint = () => {
-    printKitchenTicket({
+  const testPrint = async () => {
+    const outcome = await printKitchenTicket({
       id: 'test-0000-0000', status: 'pending', total: 27.5, tip_amount: 2.5, payment_method: 'card',
       notes: 'Allergy: nuts', created_at: new Date().toISOString(), table_number: 5, guest_name: 'Test',
       section_name: 'Terrace',
@@ -86,6 +86,10 @@ const AdminPrinting = () => {
         { quantity: 2, notes: null, menu_item_name: 'Espresso', unit_price: 3.5 },
       ],
     }, { paperWidth: cfg.print_paper_width, header: cfg.print_header, footer: cfg.print_footer, showPrices: cfg.print_show_prices, copies: cfg.print_copies });
+    // A browser print dialog can only ever tell us it closed, never that paper
+    // came out — so this says what it actually knows.
+    if (!outcome.ok) toast.error(outcome.reason);
+    else toast.success('Sent to the browser print dialog — check the paper came out.');
   };
 
   const Row = ({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) => (

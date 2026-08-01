@@ -1269,12 +1269,17 @@ export type Database = {
           _ok: boolean
           _order_id: string
           _ticket_type?: string
+          _verified?: boolean
         }
         Returns: undefined
       }
       requeue_ticket_print: {
         Args: { _order_id: string; _ticket_type?: string }
-        Returns: boolean
+        Returns: Json
+      }
+      requeue_stale_ticket_prints: {
+        Args: { _older_than_seconds?: number }
+        Returns: number
       }
       set_order_fiscalization: {
         Args: {
