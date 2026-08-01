@@ -806,7 +806,10 @@ export type Database = {
           print_paper_width: number
           print_show_prices: boolean
           recommendations_enabled: boolean
+          session_idle_timeout_minutes: number
           updated_at: string
+          venue_qr_rotated_at: string
+          venue_qr_token: string
         }
         Insert: {
           id?: number
@@ -824,7 +827,10 @@ export type Database = {
           print_paper_width?: number
           print_show_prices?: boolean
           recommendations_enabled?: boolean
+          session_idle_timeout_minutes?: number
           updated_at?: string
+          venue_qr_rotated_at?: string
+          venue_qr_token?: string
         }
         Update: {
           id?: number
@@ -842,7 +848,10 @@ export type Database = {
           print_paper_width?: number
           print_show_prices?: boolean
           recommendations_enabled?: boolean
+          session_idle_timeout_minutes?: number
           updated_at?: string
+          venue_qr_rotated_at?: string
+          venue_qr_token?: string
         }
         Relationships: []
       }
@@ -1374,6 +1383,7 @@ export type Database = {
         Args: { _device_id: string; _order_id: string; _ticket_type?: string }
         Returns: boolean
       }
+      close_stale_sessions: { Args: never; Returns: number }
       day_reconciliation: { Args: { _day?: string }; Returns: Json }
       enqueue_order_ticket: {
         Args: { _order_id: string; _ticket_type?: string }
@@ -1401,6 +1411,7 @@ export type Database = {
         Args: { _reason?: string; _session_id: string; _session_token: string }
         Returns: Json
       }
+      guest_check_venue_token: { Args: { _token: string }; Returns: Json }
       guest_get_join_request: {
         Args: { _client_id: string; _request_id: string; _session_id: string }
         Returns: Json
@@ -1439,6 +1450,10 @@ export type Database = {
       }
       guest_inspect_table: {
         Args: { _client_id: string; _qr_token: string; _table_number: number }
+        Returns: Json
+      }
+      guest_leave_session: {
+        Args: { _session_id: string; _session_token: string }
         Returns: Json
       }
       guest_list_pending_join_requests: {
@@ -1487,6 +1502,10 @@ export type Database = {
           _session_token: string
           _status: string
         }
+        Returns: Json
+      }
+      guest_resume_session: {
+        Args: { _session_id: string; _session_token: string }
         Returns: Json
       }
       guest_search_menu: {
@@ -1632,6 +1651,26 @@ export type Database = {
         Args: { _order_id: string; _ticket_type?: string }
         Returns: boolean
       }
+      resolve_table_for_token: {
+        Args: { _table_number: number; _token: string }
+        Returns: {
+          created_at: string
+          id: string
+          qr_token: string
+          section_id: string | null
+          status: Database["public"]["Enums"]["table_status"]
+          table_number: number
+        }
+        SetofOptions: {
+          from: "*"
+          to: "tables"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      rotate_table_qr_token: { Args: { _table_id: string }; Returns: string }
+      rotate_venue_qr_token: { Args: never; Returns: string }
+      session_idle_timeout: { Args: never; Returns: number }
       set_order_fiscalization: {
         Args: {
           _error?: string
