@@ -450,6 +450,41 @@ specifically *La Soul*, not template. Motion is tasteful and mostly transform-on
 
 ---
 
+## Addendum — found after the first pass
+
+### P1-36 — The venue QR required every table to share one token
+
+**Problem.** The single-QR flow (the model La Soul actually uses) only worked if
+every table's `qr_token` was set to the same value, and `AdminQRCodes` shipped a
+SQL snippet instructing an admin to do exactly that. The original audit called
+per-table tokens "strong" and did not notice this.
+
+**Impact.** Per-table QR codes became impossible, rotation was a manual database
+edit, and the only thing per-table tokens protected was silently removed.
+
+**Fix.** A first-class, rotatable `venue_qr_token`, with per-table tokens still
+accepted. `resolve_table_for_token()` is the single decision point and fails
+closed. Rotation is one click and audit-logged.
+
+**Residual, stated plainly:** with a venue QR the table number is
+guest-declared. Someone can claim table 4 while sitting at table 9. That is
+inherent to a single-QR product, is no worse than a paper menu, and is accepted.
+**Status: Fixed within the chosen model.**
+
+### P1-37 — A session survived from one visit to the next
+
+**Problem.** `table_sessions` had no idle expiry, and the guest app read its
+table from persisted state. A phone could return a week later still holding a
+live session for a table someone else was now sitting at — sending an order to
+the wrong table.
+
+**Fix.** Configurable idle timeout (default 3 hours) enforced in
+`assert_guest_session` and `touch_session`; `guest_resume_session` for cold
+starts; starting a session closes anything stale on that table.
+**Status: Fixed.**
+
+---
+
 ## Findings summary
 
 | ID | Grade | Area | Title | Status |
@@ -475,7 +510,7 @@ specifically *La Soul*, not template. Motion is tasteful and mostly transform-on
 | P2-12 | P2 | Maintainability | Dead `menu-data.ts` | **Fixed** |
 | P2-13 | P2 | Testing | No E2E harness | **Fixed** (harness + specs) |
 | P2-14 | P2 | Maintainability | Duplicate migrations | Documented, not rewritten |
-| P2-18 | P2 | Operations | No refund/cancellation model | **Fixed** (model + adapter; provider call gated) |
+| P2-18 | P2 | Operations | No refund/cancellation model | Partially — cancellation complete; refunds recorded internally, **no provider call and no refund UI** |
 | P2-19 | P2 | Waiter | Waiter payment clarity | **Fixed** |
 | P2-23 | P2 | Discovery | Search is category-scoped only | **Fixed** (global search added) |
 | P2-24 | P2 | Discovery | Thin product detail | Partially — allergens, portion and prep time added; no modifiers |
