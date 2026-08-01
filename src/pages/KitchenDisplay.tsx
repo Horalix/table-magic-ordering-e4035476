@@ -21,8 +21,8 @@ import { useStaffRealtime, useStaffRealtimeEvent } from '@/lib/realtime';
 import { useElapsedMinutes, formatMinutes } from '@/lib/timing';
 import {
   bumpOrderItem, bumpOrderItems, cancelOrder, claimTicketPrint, deviceId, reportTicketPrint,
-  requeueStaleTicketPrints, requeueTicketPrint, revertOrderStatus,
-  updateOrderStatus as rpcUpdateOrderStatus, type TicketType,
+  kitchenLoad, requeueStaleTicketPrints, requeueTicketPrint, revertOrderStatus,
+  updateOrderStatus as rpcUpdateOrderStatus, type KitchenLoadRow, type TicketType,
 } from '@/lib/staff-api';
 import type { Database } from '@/integrations/supabase/types';
 
@@ -188,6 +188,15 @@ const KitchenDisplay = () => {
   const [printable, setPrintable] = useState<KitchenOrder[]>([]);
   /** True when the row cap was hit — the board is not showing everything. */
   const [truncated, setTruncated] = useState(false);
+
+  /**
+   * How far behind each station is.
+   *
+   * The board shows what is outstanding; this says whether that is a normal
+   * amount. "9 orders" means nothing on its own — nine drinks and nine steaks
+   * are different nights.
+   */
+  const [load, setLoad] = useState<KitchenLoadRow[]>([]);
 
   /** Void needs a reason, so it needs a dialog rather than a bare button. */
   const [voiding, setVoiding] = useState<KitchenOrder | null>(null);
@@ -508,6 +517,8 @@ const KitchenDisplay = () => {
       setSections(data || []);
     });
 
+    void kitchenLoad().then(setLoad).catch(() => {});
+
     Promise.all([fetchOrders(), fetchPrintable(), fetchWaiterCalls(), fetchBillRequests()]).then(() => {
       initialLoadDone.current = true;
     });
@@ -525,7 +536,10 @@ const KitchenDisplay = () => {
    */
   useStaffRealtimeEvent(
     useCallback((table: string) => {
-      if (table === 'orders' || table === 'order_items') { void fetchOrders(); void fetchPrintable(); }
+      if (table === 'orders' || table === 'order_items') {
+        void fetchOrders(); void fetchPrintable();
+        void kitchenLoad().then(setLoad).catch(() => {});
+      }
       if (table === 'waiter_calls') void fetchWaiterCalls();
       if (table === 'bill_requests') void fetchBillRequests();
     }, [fetchOrders, fetchPrintable, fetchWaiterCalls, fetchBillRequests]),
@@ -677,6 +691,24 @@ const KitchenDisplay = () => {
               <p className="text-sm text-muted-foreground font-sans">{visible.length} orders</p>
 
               <ConnectionPill state={connection} />
+
+              {/* Backlog in minutes, which is the unit a cook thinks in. */}
+              {load
+                .filter((l) => (station === 'all' ? l.open_items > 0 : l.station === station))
+                .map((l) => (
+                  <span
+                    key={l.station}
+                    className={`inline-flex items-center gap-1 text-[11px] font-sans font-medium px-2 py-0.5 rounded-full ${
+                      Number(l.load_factor) >= 2 ? 'bg-destructive/10 text-destructive'
+                        : Number(l.load_factor) >= 1 ? 'bg-accent/10 text-accent'
+                          : 'bg-muted text-muted-foreground'
+                    }`}
+                    title="Outstanding prep, against the configured capacity"
+                  >
+                    {l.station}: {Math.round(Number(l.backlog_minutes))} min
+                    {Number(l.load_factor) >= 1 && ' behind'}
+                  </span>
+                ))}
 
               {/* A stuck queue is the loudest thing on this screen. Everything
                   behind it is waiting for a person, not for a retry. */}

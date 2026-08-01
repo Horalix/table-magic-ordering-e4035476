@@ -255,6 +255,38 @@ export type Database = {
         }
         Relationships: []
       }
+      menu_item_prep_stats: {
+        Row: {
+          computed_at: string
+          median_minutes: number | null
+          menu_item_id: string
+          p80_minutes: number | null
+          samples: number
+        }
+        Insert: {
+          computed_at?: string
+          median_minutes?: number | null
+          menu_item_id: string
+          p80_minutes?: number | null
+          samples?: number
+        }
+        Update: {
+          computed_at?: string
+          median_minutes?: number | null
+          menu_item_id?: string
+          p80_minutes?: number | null
+          samples?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "menu_item_prep_stats_menu_item_id_fkey"
+            columns: ["menu_item_id"]
+            isOneToOne: true
+            referencedRelation: "menu_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       order_items: {
         Row: {
           bumped_by: string | null
@@ -1264,6 +1296,7 @@ export type Database = {
       guest_get_recommendations: {
         Args: {
           _cart_item_ids?: string[]
+          _exclude_allergens?: string[]
           _language?: string
           _limit?: number
           _placement?: string
@@ -1414,6 +1447,36 @@ export type Database = {
       shift_close_for: {
         Args: { _day?: string }
         Returns: Json
+      }
+      guest_order_eta: {
+        Args: { _order_id: string }
+        Returns: Json
+      }
+      guest_get_substitutes: {
+        Args: { _item_id: string; _limit?: number }
+        Returns: {
+          dietary_tags: string[]
+          id: string
+          image_url: string
+          match_reason: string
+          name: string
+          name_ar: string
+          name_bs: string
+          price: number
+        }[]
+      }
+      kitchen_load: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          backlog_minutes: number
+          load_factor: number
+          open_items: number
+          station: string
+        }[]
+      }
+      refresh_prep_stats: {
+        Args: { _days?: number }
+        Returns: number
       }
       covers_summary: {
         Args: { _day?: string }

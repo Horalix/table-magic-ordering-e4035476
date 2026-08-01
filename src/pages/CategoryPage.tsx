@@ -17,7 +17,7 @@ import LanguageSelector from '@/components/guest/LanguageSelector';
 import { useT, useLanguageStore, getLocalizedName, getLocalizedDescription } from '@/lib/i18n';
 import { useSessionHeartbeat } from '@/hooks/useSessionHeartbeat';
 import { springPill } from '@/lib/motion';
-import { DIET_TAGS, DIET_BY_KEY, getItemTags } from '@/lib/dietary';
+import { DIET_TAGS, DIET_BY_KEY, getItemTags, useDietFilterStore } from '@/lib/dietary';
 import { merchBadges, unorderableReason, windowLabel } from '@/lib/availability';
 import type { Database } from '@/integrations/supabase/types';
 
@@ -61,7 +61,9 @@ const CategoryPage = () => {
   const [selectedItem, setSelectedItem] = useState<MenuItemRow | null>(null);
   const [search, setSearch] = useState('');
   const [view, setView] = useState<'list' | 'grid'>(() => (typeof localStorage !== 'undefined' && localStorage.getItem('lasoul-menu-view') === 'grid' ? 'grid' : 'list'));
-  const [activeDiets, setActiveDiets] = useState<string[]>([]);
+  // Shared, so the cart can avoid suggesting around a filter set here.
+  const activeDiets = useDietFilterStore((st) => st.activeDiets);
+  const setActiveDiets = useDietFilterStore((st) => st.setActiveDiets);
   const [showHint, setShowHint] = useState(false);
   const pillRefs = useRef<Record<string, HTMLButtonElement | null>>({});
   const deferredSearch = useDeferredValue(search);

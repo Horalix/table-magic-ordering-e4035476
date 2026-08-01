@@ -150,6 +150,27 @@ export interface CoversSummary {
   coverage: number;
 }
 
+export interface KitchenLoadRow {
+  station: Station;
+  open_items: number;
+  backlog_minutes: number;
+  /** Outstanding prep divided by the configured parallel capacity. */
+  load_factor: number;
+}
+
+/**
+ * How far behind each station is.
+ *
+ * Deliberately not divided by a number of cooks — nobody tells this system how
+ * many people are on tonight, and inventing a divisor would produce a
+ * precise-looking number built on a guess.
+ */
+export const kitchenLoad = () => rpc<KitchenLoadRow[]>('kitchen_load', {});
+
+/** Recompute observed prep times from the kitchen's own stamps. */
+export const refreshPrepStats = (days = 30) =>
+  rpc<number>('refresh_prep_stats', { _days: days });
+
 export const coversSummary = (day?: string) =>
   rpc<CoversSummary>('covers_summary', { _day: day ?? null });
 
