@@ -1103,6 +1103,57 @@ export type Database = {
           },
         ]
       }
+      shift_closes: {
+        Row: {
+          acknowledged_issues: boolean
+          closed_at: string
+          closed_by: string | null
+          counted_cash: number | null
+          counted_terminal: number | null
+          created_at: string
+          day: string
+          expected_cash: number
+          expected_online: number
+          expected_terminal: number
+          id: string
+          notes: string | null
+          snapshot: Json
+          terminal_batch_reference: string | null
+        }
+        Insert: {
+          acknowledged_issues?: boolean
+          closed_at?: string
+          closed_by?: string | null
+          counted_cash?: number | null
+          counted_terminal?: number | null
+          created_at?: string
+          day: string
+          expected_cash?: number
+          expected_online?: number
+          expected_terminal?: number
+          id?: string
+          notes?: string | null
+          snapshot?: Json
+          terminal_batch_reference?: string | null
+        }
+        Update: {
+          acknowledged_issues?: boolean
+          closed_at?: string
+          closed_by?: string | null
+          counted_cash?: number | null
+          counted_terminal?: number | null
+          created_at?: string
+          day?: string
+          expected_cash?: number
+          expected_online?: number
+          expected_terminal?: number
+          id?: string
+          notes?: string | null
+          snapshot?: Json
+          terminal_batch_reference?: string | null
+        }
+        Relationships: []
+      }
       subcategories: {
         Row: {
           category_id: string
@@ -1611,6 +1662,17 @@ export type Database = {
         Args: { _device_id: string; _order_id: string; _ticket_type?: string }
         Returns: boolean
       }
+      close_shift: {
+        Args: {
+          _acknowledge_issues?: boolean
+          _counted_cash?: number
+          _counted_terminal?: number
+          _day?: string
+          _notes?: string
+          _terminal_batch_reference?: string
+        }
+        Returns: Json
+      }
       close_stale_sessions: { Args: never; Returns: number }
       covers_summary: { Args: { _day?: string }; Returns: Json }
       day_reconciliation: { Args: { _day?: string }; Returns: Json }
@@ -1991,6 +2053,7 @@ export type Database = {
         }
         Returns: Json
       }
+      shift_close_for: { Args: { _day?: string }; Returns: Json }
       smoothed_acceptance: {
         Args: { _accepted: number; _shown: number }
         Returns: number
