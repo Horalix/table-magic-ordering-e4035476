@@ -6,7 +6,7 @@ import { Bell, Clock, ChefHat, Check, Utensils, Hand, X, CreditCard, Volume2, Vo
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { playOrderAlert, playWaiterCallAlert, playBillRequestAlert } from '@/lib/kitchen-sounds';
+import { playOrderAlert, playWaiterCallAlert, playBillRequestAlert, unlockAudio, audioReady, playTestTone } from '@/lib/kitchen-sounds';
 import { buildKitchenTicketText, downloadKitchenTicketCsv, downloadKitchenTicketJson, printKitchenTicket, type KitchenPrintSettings } from '@/lib/ticket-export';
 import { isBluetoothConnected, tryReconnectBluetoothPrinter, printTextBluetooth } from '@/lib/printer-connect';
 import PaymentBadge from '@/components/PaymentBadge';
@@ -113,6 +113,20 @@ const statusIcons: Partial<Record<OrderStatus, React.ReactNode>> = {
   served: <Utensils className="w-3.5 h-3.5" />,
 };
 
+/**
+ * How far back the board looks.
+ *
+ * 18 hours covers the longest conceivable service plus an overnight tail,
+ * without ever pulling a week of history onto a tablet.
+ */
+const ACTIVE_WINDOW_MS = 18 * 60 * 60 * 1000;
+
+/**
+ * A backstop, not a page size. If this is ever hit something is wrong, and the
+ * UI says so rather than quietly showing a subset.
+ */
+const HARD_ROW_CAP = 300;
+
 // Active-view kanban columns — the line cook reads order state by position.
 const KANBAN: { status: OrderStatus; label: string; dot: string }[] = [
   { status: 'pending', label: 'New', dot: 'bg-destructive' },
@@ -130,6 +144,16 @@ const KitchenDisplay = () => {
   const [sections, setSections] = useState<{ id: string; name: string; color: string }[]>([]);
   const [soundEnabled, setSoundEnabled] = useState(true);
   const soundEnabledRef = useRef(true);
+  /**
+   * Whether the browser will actually let us make a noise.
+   *
+   * Autoplay policy suspends the audio context until a real gesture, so a
+   * wall-mounted tablet nobody has touched since boot is silent. Showing an
+   * "unmuted" speaker over a suspended context is the single most dangerous
+   * lie this screen can tell, because the kitchen stops watching and starts
+   * listening.
+   */
+  const [audioUnlocked, setAudioUnlocked] = useState(false);
   const initialLoadDone = useRef(false);
   const [, setTick] = useState(0); // re-render every 30s so order aging updates live
 
@@ -145,6 +169,18 @@ const KitchenDisplay = () => {
   // worst failure mode there is, so the connection state is always visible and
   // a polling fallback takes over whenever the socket is not subscribed.
   const [connection, setConnection] = useState<'connecting' | 'live' | 'reconnecting'>('connecting');
+  const [loadError, setLoadError] = useState(false);
+  /**
+   * Freshly released orders, fetched independently of the Active/History tab.
+   *
+   * Auto-print used to iterate the same list the board renders, so leaving the
+   * screen on History silently stopped every ticket printing — with nothing on
+   * screen to suggest it. Printing is a background duty of this device and must
+   * not depend on what someone last tapped.
+   */
+  const [printable, setPrintable] = useState<OrderWithItems[]>([]);
+  /** True when the row cap was hit — the board is not showing everything. */
+  const [truncated, setTruncated] = useState(false);
 
   // Silently reconnect a previously-paired Bluetooth printer on load.
   useEffect(() => { tryReconnectBluetoothPrinter().then((n) => { if (n) setBtName(n); }); }, []);
@@ -174,7 +210,7 @@ const KitchenDisplay = () => {
     const now = Date.now();
     const device = deviceId();
 
-    for (const order of orders) {
+    for (const order of printable) {
       if (order.status !== 'pending' || printedRef.current.has(order.id)) continue;
       // Skip the backlog on first load — only print genuinely fresh orders.
       if (now - new Date(order.created_at).getTime() > 60_000) {
@@ -207,7 +243,7 @@ const KitchenDisplay = () => {
         }
       })();
     }
-  }, [orders, isPrinter, printConfig, btName]);
+  }, [printable, isPrinter, printConfig, btName]);
 
   /** Put a ticket back in the queue and let this device try again. */
   const reprint = async (order: OrderWithItems) => {
@@ -233,6 +269,42 @@ const KitchenDisplay = () => {
     soundEnabledRef.current = soundEnabled;
   }, [soundEnabled]);
 
+  /**
+   * Unlock audio on the first interaction anywhere on the page.
+   *
+   * Staff will tap something — a filter, a card, the board — within seconds of
+   * walking up. This turns that incidental tap into working alerts, instead of
+   * requiring someone to know they must press a specific button.
+   */
+  useEffect(() => {
+    setAudioUnlocked(audioReady());
+    if (audioReady()) return;
+
+    const unlock = async () => {
+      const ok = await unlockAudio();
+      setAudioUnlocked(ok);
+      if (ok) {
+        window.removeEventListener('pointerdown', unlock);
+        window.removeEventListener('keydown', unlock);
+      }
+    };
+    window.addEventListener('pointerdown', unlock);
+    window.addEventListener('keydown', unlock);
+    return () => {
+      window.removeEventListener('pointerdown', unlock);
+      window.removeEventListener('keydown', unlock);
+    };
+  }, []);
+
+  /** Prove the speaker works before service, not during it. */
+  const testSound = async () => {
+    const ok = (await unlockAudio()) && playTestTone();
+    setAudioUnlocked(audioReady());
+    if (!ok) {
+      toast.error('No sound — check the tablet volume and that it is not on silent');
+    }
+  };
+
   const connectionRef = useRef(connection);
   useEffect(() => { connectionRef.current = connection; }, [connection]);
 
@@ -241,6 +313,54 @@ const KitchenDisplay = () => {
     const id = setInterval(() => setTick((t) => t + 1), 30000);
     return () => clearInterval(id);
   }, []);
+
+  /** Shared row → card mapping, used by both the board and the print feed. */
+  const mapOrderRow = useCallback((o: KitchenOrderRow): OrderWithItems => ({
+    id: o.id,
+    order_code: (o as { order_code?: string | null }).order_code ?? null,
+    status: o.status,
+    total: o.total,
+    tip_amount: (o as { tip_amount?: number | null }).tip_amount ?? null,
+    payment_method: o.payment_method ?? null,
+    payment_status: o.payment_status ?? null,
+    notes: o.notes,
+    created_at: o.created_at,
+    table_number: o.table_sessions?.tables?.table_number || 0,
+    guest_name: o.guest_name || null,
+    section_id: o.table_sessions?.tables?.section_id || null,
+    section_name: o.table_sessions?.tables?.sections?.name || null,
+    section_color: o.table_sessions?.tables?.sections?.color || null,
+    items: (o.order_items || []).map((oi) => ({
+      id: oi.id,
+      quantity: oi.quantity,
+      unit_price: oi.unit_price,
+      notes: oi.notes,
+      status: oi.status,
+      menu_item_name: oi.menu_items?.name || 'Unknown',
+    })),
+  }), []);
+
+  /**
+   * Orders eligible for auto-print, independent of the visible tab.
+   *
+   * Only the last few minutes: anything older was either already printed or is
+   * backlog this device should not spew on a reload.
+   */
+  const fetchPrintable = useCallback(async () => {
+    const { data } = await supabase
+      .from('orders')
+      .select(`
+        *,
+        table_sessions!inner(tables!inner(table_number, section_id, sections(name, color))),
+        order_items(*, menu_items(name))
+      `)
+      .eq('status', 'pending')
+      .gte('created_at', new Date(Date.now() - 5 * 60 * 1000).toISOString())
+      .order('created_at', { ascending: false })
+      .limit(50);
+
+    setPrintable(((data || []) as KitchenOrderRow[]).map(mapOrderRow));
+  }, [mapOrderRow]);
 
   const fetchOrders = useCallback(async () => {
     const { data: ordersData, error } = await supabase
@@ -256,41 +376,26 @@ const KitchenDisplay = () => {
         )
       `)
       .in('status', filter === 'active' ? ['pending', 'confirmed', 'preparing', 'ready'] : ['served', 'cancelled'])
+      // Bound by AGE, not by row count. The previous `.limit(50)` combined with
+      // a descending sort silently dropped the OLDEST open orders — which are
+      // precisely the late ones the kitchen most needs to see. An age bound
+      // cannot hide a live ticket; at worst it hides a stale one.
+      .gte('created_at', new Date(Date.now() - ACTIVE_WINDOW_MS).toISOString())
       .order('created_at', { ascending: false })
-      .limit(50);
+      .limit(HARD_ROW_CAP);
 
     if (error) {
       console.error('Error fetching orders:', error);
+      setLoadError(true);
       return;
     }
+    setLoadError(false);
 
-    const mapped: OrderWithItems[] = ((ordersData || []) as KitchenOrderRow[]).map((o) => ({
-      id: o.id,
-      order_code: (o as { order_code?: string | null }).order_code ?? null,
-      status: o.status,
-      total: o.total,
-      tip_amount: (o as { tip_amount?: number | null }).tip_amount ?? null,
-      payment_method: o.payment_method ?? null,
-      payment_status: o.payment_status ?? null,
-      notes: o.notes,
-      created_at: o.created_at,
-      table_number: o.table_sessions?.tables?.table_number || 0,
-      guest_name: o.guest_name || null,
-      section_id: o.table_sessions?.tables?.section_id || null,
-      section_name: o.table_sessions?.tables?.sections?.name || null,
-      section_color: o.table_sessions?.tables?.sections?.color || null,
-      items: (o.order_items || []).map((oi) => ({
-        id: oi.id,
-        quantity: oi.quantity,
-        unit_price: oi.unit_price,
-        notes: oi.notes,
-        status: oi.status,
-        menu_item_name: oi.menu_items?.name || 'Unknown',
-      })),
-    }));
+    const mapped = ((ordersData || []) as KitchenOrderRow[]).map(mapOrderRow);
 
     setOrders(mapped);
-  }, [filter]);
+    setTruncated(mapped.length >= HARD_ROW_CAP);
+  }, [filter, mapOrderRow]);
 
   const fetchWaiterCalls = async () => {
     const { data, error } = await supabase
@@ -333,7 +438,7 @@ const KitchenDisplay = () => {
       setSections(data || []);
     });
 
-    Promise.all([fetchOrders(), fetchWaiterCalls(), fetchBillRequests()]).then(() => {
+    Promise.all([fetchOrders(), fetchPrintable(), fetchWaiterCalls(), fetchBillRequests()]).then(() => {
       initialLoadDone.current = true;
     });
 
@@ -341,6 +446,7 @@ const KitchenDisplay = () => {
       .channel('kitchen-all')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders' }, () => {
         fetchOrders();
+        fetchPrintable();
         if (initialLoadDone.current && soundEnabledRef.current) playOrderAlert();
         if (Notification.permission === 'granted') {
           new Notification('New Order!', { body: 'A new order has been placed.' });
@@ -348,6 +454,9 @@ const KitchenDisplay = () => {
       })
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'orders' }, () => {
         fetchOrders();
+        // An order released after a card payment becomes printable on UPDATE,
+        // not INSERT — it was created as awaiting_payment.
+        fetchPrintable();
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'order_items' }, () => {
         fetchOrders();
@@ -382,17 +491,14 @@ const KitchenDisplay = () => {
     const poll = setInterval(() => {
       if (connectionRef.current !== 'live') {
         void fetchOrders();
+        void fetchPrintable();
         void fetchWaiterCalls();
         void fetchBillRequests();
       }
     }, 15_000);
 
-    if ('Notification' in window && Notification.permission === 'default') {
-      Notification.requestPermission();
-    }
-
     return () => { clearInterval(poll); supabase.removeChannel(channel); };
-  }, [filter, fetchOrders]);
+  }, [filter, fetchOrders, fetchPrintable]);
 
   const updateOrderStatus = async (orderId: string, newStatus: OrderStatus) => {
     try {
@@ -501,6 +607,29 @@ const KitchenDisplay = () => {
                   <Printer className="w-3 h-3" /> {failedPrints.length} ticket{failedPrints.length === 1 ? '' : 's'} failed to print
                 </span>
               )}
+
+              {/* Never show an unmuted speaker over a context the browser has
+                  suspended — the kitchen would stop watching and start listening. */}
+              {soundEnabled && !audioUnlocked && (
+                <button
+                  onClick={testSound}
+                  className="inline-flex items-center gap-1 text-[11px] font-sans font-medium px-2 py-0.5 rounded-full bg-destructive/10 text-destructive hover:bg-destructive/20 transition-colors"
+                >
+                  <VolumeX className="w-3 h-3" /> Sound blocked — tap to enable
+                </button>
+              )}
+
+              {truncated && (
+                <span className="inline-flex items-center gap-1 text-[11px] font-sans font-medium px-2 py-0.5 rounded-full bg-accent/10 text-accent">
+                  Showing the newest {HARD_ROW_CAP} — some orders are not on screen
+                </span>
+              )}
+
+              {loadError && (
+                <span className="inline-flex items-center gap-1 text-[11px] font-sans font-medium px-2 py-0.5 rounded-full bg-destructive/10 text-destructive">
+                  Could not load orders — this board may be out of date
+                </span>
+              )}
             </div>
           </div>
           <div className="flex gap-2 flex-wrap">
@@ -528,8 +657,27 @@ const KitchenDisplay = () => {
             <Button asChild variant="ghost" size="icon" className="rounded-full min-h-[44px] min-w-[44px]" title="Printing settings">
               <Link to="/admin/printing" aria-label="Printing settings"><Settings className="w-5 h-5" /></Link>
             </Button>
-            <Button variant="ghost" size="icon" onClick={() => setSoundEnabled(!soundEnabled)} className="rounded-full min-h-[44px] min-w-[44px]" aria-label={soundEnabled ? 'Mute alerts' : 'Enable alerts'}>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={async () => {
+                const next = !soundEnabled;
+                setSoundEnabled(next);
+                if (next) { const ok = await unlockAudio(); setAudioUnlocked(ok); }
+              }}
+              className="rounded-full min-h-[44px] min-w-[44px]"
+              aria-label={soundEnabled ? 'Mute alerts' : 'Enable alerts'}
+            >
               {soundEnabled ? <Volume2 className="w-5 h-5" /> : <VolumeX className="w-5 h-5 text-muted-foreground" />}
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={testSound}
+              className="rounded-full font-sans min-h-[44px] text-xs"
+              title="Play a test tone so you know alerts will be heard"
+            >
+              Test sound
             </Button>
             <Button variant={filter === 'active' ? 'default' : 'outline'} size="sm" onClick={() => setFilter('active')} className="rounded-full font-sans min-h-[44px]">Active</Button>
             <Button variant={filter === 'history' ? 'default' : 'outline'} size="sm" onClick={() => setFilter('history')} className="rounded-full font-sans min-h-[44px]">History</Button>
