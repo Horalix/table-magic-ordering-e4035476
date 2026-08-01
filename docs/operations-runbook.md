@@ -40,6 +40,8 @@ staff-facing "how do I do X", see `docs/restaurant-staff-training.md`.
 | Fiscal workflow and what needs the accountant | `docs/fiscalization-workflow.md` |
 | Metrics, denominators, queries | `docs/product-metrics.md` |
 | Merchandising and the 30-day plan | `docs/growth-and-merchandising.md` |
+| Item bumping, stations, undo, ticket printing | `docs/kitchen-and-printing.md` |
+| How suggestions are chosen and waits estimated | `docs/suggestions-and-timing.md` |
 | Test suites and how to add to them | `docs/testing-guide.md` |
 | Step-by-step go-live and rollback | `docs/launch-checklist.md` |
 | Floor-staff guide (printable) | `docs/restaurant-staff-training.md` |
