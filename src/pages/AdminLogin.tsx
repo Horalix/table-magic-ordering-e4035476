@@ -27,7 +27,19 @@ const AdminLogin = () => {
 
       if (!hasAdminRole && !hasStaffRole) {
         await supabase.auth.signOut();
-        toast.error('You do not have admin access.');
+        /*
+         * The password was right. The account simply has no role.
+         *
+         * This is the state every fresh install starts in — nothing seeds an
+         * admin — and the old wording ("You do not have admin access") sent
+         * people back to re-check a password that was never the problem. Say
+         * which half of the login failed.
+         */
+        toast.error(
+          'Password accepted, but this account has no admin or staff role yet. ' +
+          'It needs a row in user_roles before it can sign in here.',
+          { duration: 8000 },
+        );
         return;
       }
 
@@ -42,10 +54,16 @@ const AdminLogin = () => {
       // VPN, or a blocker. Saying "login failed" here sends people hunting for
       // a password problem that doesn't exist.
       const isNetwork = /failed to fetch|networkerror|load failed/i.test(raw);
+      // An unconfirmed address is the other common fresh-install failure, and
+      // the provider's raw wording does not say what to do about it.
+      const isUnconfirmed = /email not confirmed/i.test(raw);
       toast.error(
         isNetwork
           ? 'Cannot reach the server. Check your internet connection (or disable VPN/ad blocker) and try again.'
-          : raw,
+          : isUnconfirmed
+            ? 'This address has never been confirmed. Confirm it in Supabase → Authentication, or create the account with auto-confirm on.'
+            : raw,
+        { duration: isNetwork || isUnconfirmed ? 8000 : 5000 },
       );
     } finally {
       setLoading(false);
