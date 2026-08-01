@@ -22,6 +22,7 @@ const AdminFloorTonight = () => {
   const [tables, setTables] = useState<Table[]>([]);
   const [date, setDate] = useState(todayISO());
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [picking, setPicking] = useState<Section | null>(null);
 
   const isToday = date === todayISO();
@@ -33,6 +34,15 @@ const AdminFloorTonight = () => {
       supabase.from('section_assignments').select('*').eq('shift_date', date),
       supabase.from('tables').select('id, section_id'),
     ]);
+    // A failed load must not render as "you have no sections". That empty
+    // state invites a manager to recreate sections that already exist, and the
+    // duplicates then have to be untangled table by table.
+    if (s.error || w.error || a.error || t.error) {
+      setLoadError(true);
+      setLoading(false);
+      return;
+    }
+    setLoadError(false);
     setSections(s.data || []);
     setWaiters((w.data as Waiter[]) || []);
     setAssignments((a.data as SectionAssignment[]) || []);
@@ -90,6 +100,18 @@ const AdminFloorTonight = () => {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-36 rounded-2xl" />)}
         </div>
+      ) : loadError ? (
+        <Card className="border-destructive/40">
+          <CardContent className="py-12 text-center">
+            <p className="font-serif text-lg font-semibold text-foreground">Could not load the floor plan</p>
+            <p className="font-sans text-muted-foreground text-sm mt-1">
+              This is a connection problem, not an empty restaurant — nothing has been deleted.
+            </p>
+            <Button variant="outline" className="mt-4" onClick={() => { setLoading(true); void fetchAll(); }}>
+              Try again
+            </Button>
+          </CardContent>
+        </Card>
       ) : sections.length === 0 ? (
         <Card className="border-dashed">
           <CardContent className="py-14 text-center">

@@ -16,6 +16,9 @@ export type Database = {
     Tables: {
       bill_requests: {
         Row: {
+          acknowledged_at: string | null
+          acknowledged_by: string | null
+          resolved_by: string | null
           created_at: string
           id: string
           resolved_at: string | null
@@ -23,6 +26,9 @@ export type Database = {
           table_session_id: string
         }
         Insert: {
+          acknowledged_at?: string | null
+          acknowledged_by?: string | null
+          resolved_by?: string | null
           created_at?: string
           id?: string
           resolved_at?: string | null
@@ -30,6 +36,9 @@ export type Database = {
           table_session_id: string
         }
         Update: {
+          acknowledged_at?: string | null
+          acknowledged_by?: string | null
+          resolved_by?: string | null
           created_at?: string
           id?: string
           resolved_at?: string | null
@@ -784,6 +793,7 @@ export type Database = {
       }
       table_sessions: {
         Row: {
+          covers: number | null
           assigned_waiter_id: string | null
           closed_at: string | null
           first_order_at: string | null
@@ -897,6 +907,9 @@ export type Database = {
       }
       waiter_calls: {
         Row: {
+          acknowledged_at: string | null
+          acknowledged_by: string | null
+          resolved_by: string | null
           created_at: string
           id: string
           reason: string | null
@@ -905,6 +918,9 @@ export type Database = {
           table_session_id: string
         }
         Insert: {
+          acknowledged_at?: string | null
+          acknowledged_by?: string | null
+          resolved_by?: string | null
           created_at?: string
           id?: string
           reason?: string | null
@@ -913,6 +929,9 @@ export type Database = {
           table_session_id: string
         }
         Update: {
+          acknowledged_at?: string | null
+          acknowledged_by?: string | null
+          resolved_by?: string | null
           created_at?: string
           id?: string
           reason?: string | null
@@ -1300,6 +1319,30 @@ export type Database = {
       }
       sales_analytics: {
         Args: { _from?: string; _to?: string }
+        Returns: Json
+      }
+      staff_ack_waiter_call: {
+        Args: { _call_id: string }
+        Returns: Json
+      }
+      staff_resolve_waiter_call: {
+        Args: { _call_id: string }
+        Returns: Json
+      }
+      staff_ack_bill_request: {
+        Args: { _request_id: string }
+        Returns: Json
+      }
+      staff_resolve_bill_request: {
+        Args: { _close_session?: boolean; _request_id: string }
+        Returns: Json
+      }
+      staff_set_covers: {
+        Args: { _covers: number; _session_id: string }
+        Returns: Json
+      }
+      covers_summary: {
+        Args: { _day?: string }
         Returns: Json
       }
       staff_bump_order_item: {

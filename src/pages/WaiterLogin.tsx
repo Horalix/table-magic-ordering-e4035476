@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
-import { User, Lock, Loader2 } from 'lucide-react';
+import { User, Lock, Loader2, Eye, EyeOff } from 'lucide-react';
 
 const synthEmail = (u: string) => `${u}@waiter.lasoul.local`;
 const normalizeUsername = (value: string) =>
@@ -21,10 +21,20 @@ interface WaiterLoginResponse {
   error?: string;
 }
 
+/**
+ * Something broke, as opposed to the credentials being wrong.
+ *
+ * Every failure used to end in "Wrong username or password", so a waiter
+ * locked out by an outage retyped a correct password until someone senior
+ * walked over. Telling them the truth costs nothing and saves the shift.
+ */
+class InfrastructureError extends Error {}
+
 const WaiterLogin = () => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const navigate = useNavigate();
 
   const setWaiterSessionFromFunction = async (u: string) => {
@@ -32,7 +42,12 @@ const WaiterLogin = () => {
       body: { username: u, password },
     });
 
-    if (error || data?.error || !data?.session) {
+    // A transport failure is not a rejected password. Falling through to the
+    // synthetic-email path is correct here (it is the deployment without the
+    // edge function), but the DISTINCTION has to survive so the final message
+    // can be honest about which happened.
+    if (error) throw new InfrastructureError('Could not reach the login service');
+    if (data?.error || !data?.session) {
       return false;
     }
 
@@ -51,7 +66,12 @@ const WaiterLogin = () => {
       password,
     });
 
-    if (error) throw error;
+    if (error) {
+      // Supabase reports bad credentials with a specific message; anything
+      // else here is the service, not the person standing at the till.
+      if (/invalid login credentials|invalid_grant/i.test(error.message)) throw error;
+      throw new InfrastructureError(error.message);
+    }
     return data.user.id;
   };
 
@@ -106,7 +126,11 @@ const WaiterLogin = () => {
       navigate('/waiter', { replace: true });
     } catch (err) {
       console.error('Waiter login failed:', err);
-      toast.error('Wrong username or password');
+      if (err instanceof InfrastructureError) {
+        toast.error(`${err.message}. Your password is probably fine — check the connection or ask a manager.`);
+      } else {
+        toast.error('Wrong username or password');
+      }
     } finally {
       setLoading(false);
     }
@@ -143,20 +167,37 @@ const WaiterLogin = () => {
                 className="pl-9 h-12"
               />
             </div>
+            {/* Usernames are lower-cased and stripped. Showing the result stops
+                a waiter retyping "Marko " forever without ever seeing why. */}
+            {username && normalizeUsername(username) !== username && (
+              <p className="text-xs text-muted-foreground font-sans mt-1">
+                Signing in as <span className="font-medium text-foreground">{normalizeUsername(username)}</span>
+              </p>
+            )}
           </div>
           <div>
             <Label className="font-sans text-sm text-foreground">Password</Label>
             <div className="relative mt-1.5">
               <Lock className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
               <Input
-                type="password"
+                type={showPassword ? 'text' : 'password'}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
                 required
                 autoComplete="current-password"
-                className="pl-9 h-12"
+                className="pl-9 pr-12 h-12"
               />
+              {/* A shared phone with a greasy screen and a shift about to
+                  start. Being able to see what you typed is not a luxury. */}
+              <button
+                type="button"
+                onClick={() => setShowPassword((v) => !v)}
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
+                className="absolute right-1 top-1/2 -translate-y-1/2 w-11 h-11 flex items-center justify-center text-muted-foreground hover:text-foreground"
+              >
+                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
             </div>
           </div>
           <Button

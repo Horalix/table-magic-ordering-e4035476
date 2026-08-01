@@ -107,6 +107,52 @@ export const recordTablePayment = (orderId: string, method: TablePaymentMethod, 
     _note: note ?? null,
   });
 
+export interface AlertClaim {
+  status: 'acknowledged' | 'resolved';
+  claimed_by: string | null;
+  /** False when someone else already has it — the UI must say who, not fail silently. */
+  mine: boolean;
+}
+
+/** Take responsibility for a table that is calling. */
+export const ackWaiterCall = (callId: string) =>
+  rpc<AlertClaim>('staff_ack_waiter_call', { _call_id: callId });
+
+export const resolveWaiterCall = (callId: string) =>
+  rpc<{ resolved: boolean }>('staff_resolve_waiter_call', { _call_id: callId });
+
+export const ackBillRequest = (requestId: string) =>
+  rpc<AlertClaim>('staff_ack_bill_request', { _request_id: requestId });
+
+/**
+ * Close a bill request, and optionally free the table.
+ *
+ * Returns `closed: false` with the outstanding amount when the table still
+ * owes money — freeing it would hide an unpaid order behind a closed session
+ * that nobody looks at again.
+ */
+export const resolveBillRequest = (requestId: string, closeSession = false) =>
+  rpc<{ resolved: boolean; closed: boolean; outstanding: number }>('staff_resolve_bill_request', {
+    _request_id: requestId,
+    _close_session: closeSession,
+  });
+
+/** Head count for a table. `null` means unknown, which is not the same as zero. */
+export const setCovers = (sessionId: string, covers: number | null) =>
+  rpc<{ covers: number | null }>('staff_set_covers', { _session_id: sessionId, _covers: covers });
+
+export interface CoversSummary {
+  day: string;
+  sittings: number;
+  counted: number;
+  covers: number;
+  /** Fraction of sittings with a head count. Any per-head figure must show it. */
+  coverage: number;
+}
+
+export const coversSummary = (day?: string) =>
+  rpc<CoversSummary>('covers_summary', { _day: day ?? null });
+
 /** Cancel with a recorded reason. A manager is required once food is in production or money has moved. */
 export const cancelOrder = (orderId: string, reason: string) =>
   rpc<{ status: string; requires_refund?: boolean; total?: number }>('cancel_order', {

@@ -39,8 +39,11 @@ import {
   VolumeX,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { formatDuration, useElapsed, waitBg } from '@/lib/timing';
-import { recordTablePayment, updateOrderStatus as rpcUpdateOrderStatus, type TablePaymentMethod } from '@/lib/staff-api';
+import { formatDuration, useElapsed, waitBg, seatedBg } from '@/lib/timing';
+import {
+  recordTablePayment, resolveWaiterCall as rpcResolveWaiterCall,
+  updateOrderStatus as rpcUpdateOrderStatus, type TablePaymentMethod,
+} from '@/lib/staff-api';
 import type { Database } from '@/integrations/supabase/types';
 
 type OrderStatus = Database['public']['Enums']['order_status'];
@@ -51,11 +54,15 @@ type WaiterSession = Pick<Database['public']['Tables']['table_sessions']['Row'],
   tables: { table_number: number; section_id: string | null } | null;
 };
 type WaiterOrderItem = {
+  notes?: string | null;
   quantity: number;
   status: OrderItemStatus;
   menu_items: { name: string } | null;
 };
-type WaiterOrder = Pick<Database['public']['Tables']['orders']['Row'], 'id' | 'created_at' | 'status' | 'table_session_id' | 'payment_method' | 'payment_status'> & {
+type WaiterOrder = Pick<
+  Database['public']['Tables']['orders']['Row'],
+  'id' | 'created_at' | 'status' | 'table_session_id' | 'payment_method' | 'payment_status' | 'total' | 'notes'
+> & {
   table_sessions: { tables: { table_number: number } | null } | null;
   order_items: WaiterOrderItem[] | null;
 };
@@ -122,7 +129,7 @@ const WaiterDashboard = () => {
     const { data: ord, error: ordersError } = sessionIds.length > 0
       ? await supabase
           .from('orders')
-          .select('*, table_sessions!inner(tables!inner(table_number)), order_items(quantity, status, menu_items(name))')
+          .select('*, table_sessions!inner(tables!inner(table_number)), order_items(quantity, status, notes, menu_items(name))')
           .in('table_session_id', sessionIds)
           .neq('status', 'served')
           .neq('status', 'cancelled')
@@ -229,10 +236,8 @@ const WaiterDashboard = () => {
   };
 
   const resolveCall = async (id: string) => {
-    const { error } = await supabase
-      .from('waiter_calls')
-      .update({ status: 'resolved', resolved_at: new Date().toISOString() })
-      .eq('id', id);
+    // Through the RPC, so the cleared call has a name attached to it.
+    const error = await rpcResolveWaiterCall(id).then(() => null, (e: unknown) => e);
     if (error) toast.error(error.message);
   };
 
@@ -549,7 +554,10 @@ const TableCard = ({ session, activeOrders, onClose }: { session: WaiterSession;
             <p className="font-serif text-2xl font-bold leading-none">T{tableNumber}</p>
             {session.guest_name && <p className="text-xs text-muted-foreground mt-1 truncate max-w-[160px]">{session.guest_name}</p>}
           </div>
-          <span className={`text-[11px] px-2 py-0.5 rounded-full border tabular-nums ${waitBg(ms)}`}>
+          {/* Seated duration, on the seated scale. Colouring it with the
+              ORDER scale turned every table twenty minutes into a normal
+              dinner destructive-red, and the colour stopped meaning anything. */}
+          <span className={`text-[11px] px-2 py-0.5 rounded-full border tabular-nums ${seatedBg(ms)}`}>
             <Clock className="w-3 h-3 inline -mt-0.5 mr-1" />{formatDuration(ms)}
           </span>
         </div>
@@ -589,10 +597,18 @@ const STATUS_META: Partial<Record<OrderStatus, { dot: string; label: string }>> 
   ready: { dot: 'bg-emerald-500', label: 'Ready' },
 };
 
+/**
+ * What a WAITER may do to an order.
+ *
+ * Deliberately only two things: accept it, and say the plates are down.
+ *
+ * "Start prep" and "Mark ready" used to be here, which meant a waiter on the
+ * floor could mark food ready that the kitchen had not touched — irreversibly,
+ * from a phone, with the pass none the wiser. Those transitions belong to
+ * whoever is holding the pan. The board derives them from the lines now.
+ */
 const NEXT_META: Partial<Record<OrderStatus, { status: OrderStatus; label: string; icon: React.ReactNode }>> = {
-  pending: { status: 'confirmed', label: 'Confirm', icon: <Check className="w-4 h-4 mr-1.5" /> },
-  confirmed: { status: 'preparing', label: 'Start prep', icon: <Flame className="w-4 h-4 mr-1.5" /> },
-  preparing: { status: 'ready', label: 'Mark ready', icon: <Bell className="w-4 h-4 mr-1.5" /> },
+  pending: { status: 'confirmed', label: 'Accept', icon: <Check className="w-4 h-4 mr-1.5" /> },
   ready: { status: 'served', label: 'Mark served', icon: <Utensils className="w-4 h-4 mr-1.5" /> },
 };
 
@@ -602,6 +618,7 @@ const OrderCard = ({ order, onUpdate, onMarkPaid }: {
   onMarkPaid: (id: string, method: TablePaymentMethod) => void;
 }) => {
   const ms = useElapsed(order.created_at);
+  const [confirming, setConfirming] = useState<TablePaymentMethod | null>(null);
   const next = NEXT_META[order.status];
   const meta = STATUS_META[order.status] ?? STATUS_META.pending;
   const tableNumber = order.table_sessions?.tables?.table_number ?? '?';
@@ -625,24 +642,61 @@ const OrderCard = ({ order, onUpdate, onMarkPaid }: {
           {(order.order_items ?? []).map((item, index) => (
             <li key={`${item.menu_items?.name ?? 'item'}-${index}`} className="flex gap-2">
               <span className="tabular-nums text-muted-foreground w-6">{item.quantity}x</span>
-              {item.menu_items?.name ?? 'Menu item'}
+              <span>
+                {item.menu_items?.name ?? 'Menu item'}
+                {item.notes && <span className="block text-xs text-accent italic">! {item.notes}</span>}
+              </span>
             </li>
           ))}
         </ul>
+        {/* The kitchen has always printed this. The person actually carrying
+            the plate to the guest could not see it. */}
+        {order.notes && (
+          <p className="text-xs text-accent italic mb-3 -mt-2">Note: {order.notes}</p>
+        )}
         {next && (
           <Button size="sm" className="w-full tap" onClick={() => onUpdate(order.id, next.status)}>
             {next.icon}{next.label}
           </Button>
         )}
 
-        {owes && (
+        {owes && !confirming && (
           <div className="flex gap-2 mt-2">
-            <Button size="sm" variant="outline" className="flex-1 tap text-xs gap-1.5" onClick={() => onMarkPaid(order.id, 'cash')}>
+            <Button size="sm" variant="outline" className="flex-1 tap text-xs gap-1.5" onClick={() => setConfirming('cash')}>
               <Banknote className="w-3.5 h-3.5" /> Paid cash
             </Button>
-            <Button size="sm" variant="outline" className="flex-1 tap text-xs gap-1.5" onClick={() => onMarkPaid(order.id, 'pos_terminal')}>
+            <Button size="sm" variant="outline" className="flex-1 tap text-xs gap-1.5" onClick={() => setConfirming('pos_terminal')}>
               <Smartphone className="w-3.5 h-3.5" /> Paid terminal
             </Button>
+          </div>
+        )}
+
+        {/*
+          A single tap next to a status button, on a phone, in a busy room, is
+          not a safe way to move money. There is no undo on a recorded payment
+          — reversing one is a refund and a manager's decision — so the guard
+          has to come before the fact.
+        */}
+        {owes && confirming && (
+          <div className="mt-2 rounded-lg border-2 border-destructive/40 bg-destructive/5 p-2.5">
+            <p className="text-xs font-sans font-semibold text-foreground">
+              Take {Number(order.total ?? 0).toFixed(2)} KM {confirming === 'cash' ? 'in cash' : 'on the terminal'}?
+            </p>
+            <p className="text-[11px] text-muted-foreground font-sans mt-0.5">
+              This goes into the end-of-day count and cannot be undone here.
+            </p>
+            <div className="flex gap-2 mt-2">
+              <Button size="sm" variant="outline" className="flex-1 tap text-xs" onClick={() => setConfirming(null)}>
+                Cancel
+              </Button>
+              <Button
+                size="sm"
+                className="flex-1 tap text-xs"
+                onClick={() => { onMarkPaid(order.id, confirming); setConfirming(null); }}
+              >
+                Yes, record it
+              </Button>
+            </div>
           </div>
         )}
       </CardContent>

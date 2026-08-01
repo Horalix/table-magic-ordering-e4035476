@@ -50,6 +50,7 @@ const AdminSections = () => {
   const [newColor, setNewColor] = useState(PRESET_COLORS[0]);
   const [date, setDate] = useState(todayISO());
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
 
   const isToday = date === todayISO();
 
@@ -60,6 +61,15 @@ const AdminSections = () => {
       supabase.from('section_assignments').select('*').eq('shift_date', date),
       supabase.from('tables').select('id, table_number, section_id').order('table_number'),
     ]);
+    // A failed load must not render as "you have no sections". That empty
+    // state invites a manager to recreate sections that already exist, and the
+    // duplicates then have to be untangled table by table.
+    if (s.error || w.error || a.error || t.error) {
+      setLoadError(true);
+      setLoading(false);
+      return;
+    }
+    setLoadError(false);
     setSections(s.data || []);
     setWaiters((w.data as Waiter[]) || []);
     setAssignments((a.data as SectionAssignment[]) || []);
@@ -178,6 +188,18 @@ const AdminSections = () => {
 
       {loading ? (
         <div className="space-y-4">{[1, 2].map((i) => <Skeleton key={i} className="h-44 w-full rounded-xl" />)}</div>
+      ) : loadError ? (
+        <Card className="border-destructive/40">
+          <CardContent className="py-12 text-center">
+            <p className="font-serif text-lg font-semibold text-foreground">Could not load the floor plan</p>
+            <p className="font-sans text-muted-foreground text-sm mt-1">
+              This is a connection problem, not an empty restaurant — nothing has been deleted.
+            </p>
+            <Button variant="outline" className="mt-4" onClick={() => { setLoading(true); void fetchAll(); }}>
+              Try again
+            </Button>
+          </CardContent>
+        </Card>
       ) : sections.length === 0 ? (
         <Card className="border-dashed">
           <CardContent className="py-12 text-center">
