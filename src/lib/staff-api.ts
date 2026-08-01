@@ -2,6 +2,8 @@ import { supabase } from '@/integrations/supabase/client';
 import type { Database } from '@/integrations/supabase/types';
 
 export type OrderStatus = Database['public']['Enums']['order_status'];
+export type OrderItemStatus = Database['public']['Enums']['order_item_status'];
+export type Station = 'kitchen' | 'bar';
 export type TablePaymentMethod = 'cash' | 'pos_terminal';
 
 /**
@@ -22,6 +24,75 @@ const rpc = async <T>(fn: string, args: Record<string, unknown>): Promise<T> => 
 /** Advance an order through the kitchen flow. Illegal moves are rejected. */
 export const updateOrderStatus = (orderId: string, status: OrderStatus) =>
   rpc<{ status: OrderStatus }>('staff_update_order_status', { _order_id: orderId, _status: status });
+
+/**
+ * Move one line through the kitchen.
+ *
+ * The caller always states the TARGET state, never "next". A double-tap on a
+ * tablet with a laggy screen is then a no-op rather than a two-state jump —
+ * which is the difference between a cook seeing the same button twice and a
+ * dish being marked ready before anyone cooked it.
+ *
+ * The order's own status is derived by the database from its lines; nothing
+ * here needs to keep the two in step.
+ */
+export const bumpOrderItem = (itemId: string, status: OrderItemStatus) =>
+  rpc<{ status: OrderItemStatus; order_status: OrderStatus }>('staff_bump_order_item', {
+    _item_id: itemId,
+    _status: status,
+  });
+
+/**
+ * Bump several lines at once — "all six portions of fries are up".
+ *
+ * Ids are passed explicitly rather than re-derived server-side so the action
+ * applies to exactly what the cook saw on screen, even if a new order landed
+ * between the render and the tap.
+ */
+export const bumpOrderItems = (itemIds: string[], status: OrderItemStatus) =>
+  rpc<{ updated: number; failed: number }>('staff_bump_order_items', {
+    _item_ids: itemIds,
+    _status: status,
+  });
+
+/**
+ * Take an order back a step after a mis-tap.
+ *
+ * Time-boxed by the database (`kitchen_undo_seconds`), and a manager is
+ * required to undo something already served and paid for. This is not the
+ * normal transition path — it is a separate, audited RPC precisely so that a
+ * plain UPDATE still cannot walk an order backwards.
+ */
+export const revertOrderStatus = (orderId: string, status: OrderStatus, reason?: string) =>
+  rpc<{ status: OrderStatus; reverted_from: OrderStatus }>('staff_revert_order_status', {
+    _order_id: orderId,
+    _to: status,
+    _reason: reason ?? null,
+  });
+
+export interface AllDayRow {
+  menu_item_id: string;
+  name: string;
+  station: Station;
+  qty_pending: number;
+  qty_preparing: number;
+  qty_ready: number;
+  oldest_at: string;
+  /** Lines not yet started. Safe to send to "start all". */
+  pending_ids: string[];
+  /** Lines not yet up — pending and in prep. Safe to send to "all up". */
+  open_ids: string[];
+}
+
+/**
+ * How much of each dish is outstanding across every open order.
+ *
+ * Aggregated in SQL rather than rolled up from the board, because the board is
+ * capped — and an undercounted "8x Fries" is invisible in a way a missing card
+ * is not.
+ */
+export const allDay = (station?: Station) =>
+  rpc<AllDayRow[]>('kds_all_day', { _station: station ?? null });
 
 /**
  * Record that the guest settled in person.

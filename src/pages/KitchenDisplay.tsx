@@ -1,18 +1,26 @@
-import React, { useEffect, useState, useRef, useCallback } from 'react';
+import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Bell, Clock, ChefHat, Check, Utensils, Hand, X, CreditCard, Volume2, VolumeX, Printer, FileJson, FileText, Settings } from 'lucide-react';
+import { Check, ChefHat, CreditCard, CupSoda, Hand, LayoutList, Printer, Settings, Volume2, VolumeX, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
+import { Textarea } from '@/components/ui/textarea';
+import {
+  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
+} from '@/components/ui/dialog';
 import { playOrderAlert, playWaiterCallAlert, playBillRequestAlert, unlockAudio, audioReady, playTestTone } from '@/lib/kitchen-sounds';
 import { buildKitchenTicketText, downloadKitchenTicketCsv, downloadKitchenTicketJson, printKitchenTicket, type KitchenPrintSettings } from '@/lib/ticket-export';
 import { isBluetoothConnected, tryReconnectBluetoothPrinter, printTextBluetooth } from '@/lib/printer-connect';
-import PaymentBadge from '@/components/PaymentBadge';
 import ConnectionPill from '@/components/staff/ConnectionPill';
+import KitchenOrderCard, { type KitchenOrder, type OrderItemStatus, type OrderStatus, type StationFilter } from '@/components/staff/KitchenOrderCard';
+import AllDayPanel from '@/components/staff/AllDayPanel';
 import { useStaffRealtime, useStaffRealtimeEvent } from '@/lib/realtime';
-import { claimTicketPrint, deviceId, reportTicketPrint, requeueTicketPrint, updateOrderStatus as rpcUpdateOrderStatus } from '@/lib/staff-api';
+import { useElapsedMinutes, formatMinutes } from '@/lib/timing';
+import {
+  bumpOrderItem, bumpOrderItems, cancelOrder, claimTicketPrint, deviceId, reportTicketPrint,
+  requeueTicketPrint, revertOrderStatus, updateOrderStatus as rpcUpdateOrderStatus,
+} from '@/lib/staff-api';
 import type { Database } from '@/integrations/supabase/types';
 
 interface PrintConfig {
@@ -33,7 +41,6 @@ const toPrintSettings = (c: PrintConfig): KitchenPrintSettings => ({
   showPrices: c.print_show_prices, copies: c.print_copies,
 });
 
-type OrderStatus = Database['public']['Enums']['order_status'];
 type OrderItemRow = Database['public']['Tables']['order_items']['Row'];
 type OrderRow = Database['public']['Tables']['orders']['Row'];
 type WaiterCallRow = Database['public']['Tables']['waiter_calls']['Row'];
@@ -47,7 +54,7 @@ type KitchenOrderRow = OrderRow & {
       sections?: { name?: string | null; color?: string | null } | null;
     } | null;
   } | null;
-  order_items?: (OrderItemRow & { menu_items?: { name?: string | null } | null })[] | null;
+  order_items?: (OrderItemRow & { menu_items?: { name?: string | null; allergens?: string[] | null } | null })[] | null;
 };
 
 type WaiterCallQueryRow = WaiterCallRow & {
@@ -57,31 +64,6 @@ type WaiterCallQueryRow = WaiterCallRow & {
 type BillRequestQueryRow = BillRequestRow & {
   table_sessions?: { tables?: { table_number?: number | null } | null } | null;
 };
-
-interface OrderWithItems {
-  id: string;
-  order_code: string | null;
-  status: OrderStatus;
-  total: number;
-  tip_amount: number | null;
-  payment_method: string | null;
-  payment_status: string | null;
-  notes: string | null;
-  created_at: string;
-  table_number: number;
-  guest_name: string | null;
-  section_id: string | null;
-  section_name: string | null;
-  section_color: string | null;
-  items: {
-    id: string;
-    quantity: number;
-    unit_price: number;
-    notes: string | null;
-    status: Database['public']['Enums']['order_item_status'];
-    menu_item_name: string;
-  }[];
-}
 
 interface WaiterCall {
   id: string;
@@ -99,22 +81,6 @@ interface BillRequest {
   table_number: number;
 }
 
-const statusColors: Partial<Record<OrderStatus, string>> = {
-  pending: 'bg-destructive/10 text-destructive border-destructive/20',
-  confirmed: 'bg-accent/10 text-accent border-accent/20',
-  preparing: 'bg-accent/15 text-accent border-accent/25',
-  ready: 'bg-primary/10 text-primary border-primary/20',
-  served: 'bg-muted text-muted-foreground border-border',
-};
-
-const statusIcons: Partial<Record<OrderStatus, React.ReactNode>> = {
-  pending: <Bell className="w-3.5 h-3.5" />,
-  confirmed: <Clock className="w-3.5 h-3.5" />,
-  preparing: <ChefHat className="w-3.5 h-3.5" />,
-  ready: <Check className="w-3.5 h-3.5" />,
-  served: <Utensils className="w-3.5 h-3.5" />,
-};
-
 /**
  * How far back the board looks.
  *
@@ -129,20 +95,48 @@ const ACTIVE_WINDOW_MS = 18 * 60 * 60 * 1000;
  */
 const HARD_ROW_CAP = 300;
 
-// Active-view kanban columns — the line cook reads order state by position.
-const KANBAN: { status: OrderStatus; label: string; dot: string }[] = [
-  { status: 'pending', label: 'New', dot: 'bg-destructive' },
-  { status: 'confirmed', label: 'Confirmed', dot: 'bg-accent' },
-  { status: 'preparing', label: 'Preparing', dot: 'bg-accent' },
-  { status: 'ready', label: 'Ready', dot: 'bg-primary' },
+/**
+ * Three columns, not four.
+ *
+ * `confirmed` is vestigial now that lines carry their own status: an order is
+ * "accepted but nothing started" and "new" in exactly the same way to a cook,
+ * and a column nobody moves cards out of is a column that collects them. New
+ * therefore holds both.
+ */
+const KANBAN: { key: string; statuses: OrderStatus[]; label: string; dot: string }[] = [
+  { key: 'new', statuses: ['pending', 'confirmed'], label: 'New', dot: 'bg-destructive' },
+  { key: 'preparing', statuses: ['preparing'], label: 'Preparing', dot: 'bg-accent' },
+  { key: 'ready', statuses: ['ready'], label: 'Ready', dot: 'bg-primary' },
 ];
 
+const STATIONS: { key: StationFilter; label: string }[] = [
+  { key: 'all', label: 'All' },
+  { key: 'kitchen', label: 'Kitchen' },
+  { key: 'bar', label: 'Bar' },
+];
+
+/** Live "n minutes ago", off the shared clock rather than a per-row timer. */
+const Ago = ({ at }: { at: string }) => {
+  const ms = useElapsedMinutes(at);
+  return <>{ms < 60_000 ? 'just now' : `${formatMinutes(ms)} ago`}</>;
+};
+
 const KitchenDisplay = () => {
-  const [orders, setOrders] = useState<OrderWithItems[]>([]);
+  const [orders, setOrders] = useState<KitchenOrder[]>([]);
   const [waiterCalls, setWaiterCalls] = useState<WaiterCall[]>([]);
   const [billRequests, setBillRequests] = useState<BillRequest[]>([]);
-  const [filter, setFilter] = useState<string>('active');
+  const [view, setView] = useState<'active' | 'allday' | 'history'>('active');
   const [sectionFilter, setSectionFilter] = useState<string>('all');
+  /**
+   * Which station this screen belongs to.
+   *
+   * Persisted per device, like the printer flag: a bar tablet is a bar tablet
+   * every shift, and re-picking it after every reload is exactly the sort of
+   * chore that ends with someone leaving it on "All".
+   */
+  const [station, setStation] = useState<StationFilter>(
+    () => (localStorage.getItem('kitchen:station') as StationFilter) || 'all',
+  );
   const [sections, setSections] = useState<{ id: string; name: string; color: string }[]>([]);
   const [soundEnabled, setSoundEnabled] = useState(true);
   const soundEnabledRef = useRef(true);
@@ -157,7 +151,9 @@ const KitchenDisplay = () => {
    */
   const [audioUnlocked, setAudioUnlocked] = useState(false);
   const initialLoadDone = useRef(false);
-  const [, setTick] = useState(0); // re-render every 30s so order aging updates live
+
+  /** How long the database will still accept an undo. Drives the countdown. */
+  const [undoSeconds, setUndoSeconds] = useState(90);
 
   // Printing
   const [isPrinter, setIsPrinter] = useState(() => localStorage.getItem('kitchen:isPrinter') === 'true');
@@ -174,16 +170,21 @@ const KitchenDisplay = () => {
   const connection = useStaffRealtime();
   const [loadError, setLoadError] = useState(false);
   /**
-   * Freshly released orders, fetched independently of the Active/History tab.
+   * Freshly released orders, fetched independently of the visible tab.
    *
    * Auto-print used to iterate the same list the board renders, so leaving the
    * screen on History silently stopped every ticket printing — with nothing on
    * screen to suggest it. Printing is a background duty of this device and must
    * not depend on what someone last tapped.
    */
-  const [printable, setPrintable] = useState<OrderWithItems[]>([]);
+  const [printable, setPrintable] = useState<KitchenOrder[]>([]);
   /** True when the row cap was hit — the board is not showing everything. */
   const [truncated, setTruncated] = useState(false);
+
+  /** Void needs a reason, so it needs a dialog rather than a bare button. */
+  const [voiding, setVoiding] = useState<KitchenOrder | null>(null);
+  const [voidReason, setVoidReason] = useState('');
+  const [voidBusy, setVoidBusy] = useState(false);
 
   // Silently reconnect a previously-paired Bluetooth printer on load.
   useEffect(() => { tryReconnectBluetoothPrinter().then((n) => { if (n) setBtName(n); }); }, []);
@@ -191,7 +192,12 @@ const KitchenDisplay = () => {
   // Load print settings + keep them live.
   useEffect(() => {
     const load = () => supabase.from('restaurant_settings').select('*').eq('id', 1).maybeSingle()
-      .then(({ data }) => { if (data) setPrintConfig({ ...DEFAULT_PRINT, ...(data as Partial<PrintConfig>) }); });
+      .then(({ data }) => {
+        if (!data) return;
+        setPrintConfig({ ...DEFAULT_PRINT, ...(data as Partial<PrintConfig>) });
+        const undo = (data as { kitchen_undo_seconds?: number | null }).kitchen_undo_seconds;
+        if (typeof undo === 'number') setUndoSeconds(undo);
+      });
     load();
     const ch = supabase.channel('settings')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'restaurant_settings' }, () => load())
@@ -249,7 +255,7 @@ const KitchenDisplay = () => {
   }, [printable, isPrinter, printConfig, btName]);
 
   /** Put a ticket back in the queue and let this device try again. */
-  const reprint = async (order: OrderWithItems) => {
+  const reprint = async (order: KitchenOrder) => {
     try {
       await requeueTicketPrint(order.id);
       printedRef.current.delete(order.id);
@@ -308,14 +314,8 @@ const KitchenDisplay = () => {
     }
   };
 
-  // Tick so time-since + aging colours stay current without new data.
-  useEffect(() => {
-    const id = setInterval(() => setTick((t) => t + 1), 30000);
-    return () => clearInterval(id);
-  }, []);
-
   /** Shared row → card mapping, used by both the board and the print feed. */
-  const mapOrderRow = useCallback((o: KitchenOrderRow): OrderWithItems => ({
+  const mapOrderRow = useCallback((o: KitchenOrderRow): KitchenOrder => ({
     id: o.id,
     order_code: (o as { order_code?: string | null }).order_code ?? null,
     status: o.status,
@@ -325,6 +325,10 @@ const KitchenDisplay = () => {
     payment_status: o.payment_status ?? null,
     notes: o.notes,
     created_at: o.created_at,
+    confirmed_at: (o as { confirmed_at?: string | null }).confirmed_at ?? null,
+    preparing_at: (o as { preparing_at?: string | null }).preparing_at ?? null,
+    ready_at: (o as { ready_at?: string | null }).ready_at ?? null,
+    served_at: (o as { served_at?: string | null }).served_at ?? null,
     table_number: o.table_sessions?.tables?.table_number || 0,
     guest_name: o.guest_name || null,
     section_id: o.table_sessions?.tables?.section_id || null,
@@ -336,7 +340,11 @@ const KitchenDisplay = () => {
       unit_price: oi.unit_price,
       notes: oi.notes,
       status: oi.status,
+      station: (oi as { station?: string | null }).station ?? 'kitchen',
+      started_at: (oi as { started_at?: string | null }).started_at ?? null,
+      ready_at: (oi as { ready_at?: string | null }).ready_at ?? null,
       menu_item_name: oi.menu_items?.name || 'Unknown',
+      allergens: oi.menu_items?.allergens ?? null,
     })),
   }), []);
 
@@ -352,7 +360,7 @@ const KitchenDisplay = () => {
       .select(`
         *,
         table_sessions!inner(tables!inner(table_number, section_id, sections(name, color))),
-        order_items(*, menu_items(name))
+        order_items(*, menu_items(name, allergens))
       `)
       .eq('status', 'pending')
       .gte('created_at', new Date(Date.now() - 5 * 60 * 1000).toISOString())
@@ -361,6 +369,8 @@ const KitchenDisplay = () => {
 
     setPrintable(((data || []) as KitchenOrderRow[]).map(mapOrderRow));
   }, [mapOrderRow]);
+
+  const historyView = view === 'history';
 
   const fetchOrders = useCallback(async () => {
     const { data: ordersData, error } = await supabase
@@ -372,10 +382,10 @@ const KitchenDisplay = () => {
         ),
         order_items(
           *,
-          menu_items(name)
+          menu_items(name, allergens)
         )
       `)
-      .in('status', filter === 'active' ? ['pending', 'confirmed', 'preparing', 'ready'] : ['served', 'cancelled'])
+      .in('status', historyView ? ['served', 'cancelled'] : ['pending', 'confirmed', 'preparing', 'ready'])
       // Bound by AGE, not by row count. The previous `.limit(50)` combined with
       // a descending sort silently dropped the OLDEST open orders — which are
       // precisely the late ones the kitchen most needs to see. An age bound
@@ -395,14 +405,15 @@ const KitchenDisplay = () => {
 
     setOrders(mapped);
     setTruncated(mapped.length >= HARD_ROW_CAP);
-  }, [filter, mapOrderRow]);
+  }, [historyView, mapOrderRow]);
 
   const fetchWaiterCalls = useCallback(async () => {
     const { data, error } = await supabase
       .from('waiter_calls')
       .select(`*, table_sessions!inner(tables!inner(table_number))`)
       .eq('status', 'pending')
-      .order('created_at', { ascending: false });
+      // Oldest first: the longest-waiting guest is the one to deal with next.
+      .order('created_at', { ascending: true });
 
     if (error) { console.error('Error fetching waiter calls:', error); return; }
 
@@ -420,7 +431,7 @@ const KitchenDisplay = () => {
       .from('bill_requests')
       .select(`*, table_sessions!inner(tables!inner(table_number))`)
       .eq('status', 'pending')
-      .order('created_at', { ascending: false });
+      .order('created_at', { ascending: true });
 
     if (error) { console.error('Error fetching bill requests:', error); return; }
 
@@ -445,7 +456,7 @@ const KitchenDisplay = () => {
     // Data lives here; the shared realtime module decides WHEN to refetch.
     // It coalesces bursts, invalidates only what changed, keeps one channel
     // per tab, and polls whenever the socket is not subscribed.
-  }, [filter, fetchOrders, fetchPrintable, fetchWaiterCalls, fetchBillRequests]);
+  }, [fetchOrders, fetchPrintable, fetchWaiterCalls, fetchBillRequests]);
 
   /**
    * Refetch on live events.
@@ -471,28 +482,71 @@ const KitchenDisplay = () => {
     }, []),
   );
 
-  const updateOrderStatus = async (orderId: string, newStatus: OrderStatus) => {
+  /* ---- Actions -------------------------------------------------------- */
+
+  const bumpItem = useCallback(async (itemId: string, status: OrderItemStatus) => {
+    try {
+      await bumpOrderItem(itemId, status);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Could not update that line');
+    }
+    await fetchOrders();
+  }, [fetchOrders]);
+
+  const bumpMany = useCallback(async (itemIds: string[], status: OrderItemStatus) => {
+    try {
+      const result = await bumpOrderItems(itemIds, status);
+      if (result.failed > 0) toast.warning(`${result.updated} updated, ${result.failed} could not be`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Could not update those lines');
+    }
+    await fetchOrders();
+  }, [fetchOrders]);
+
+  const advanceOrder = useCallback(async (orderId: string, status: OrderStatus) => {
     try {
       // Goes through the state machine: an illegal move is rejected by the
       // database rather than silently corrupting the board.
-      await rpcUpdateOrderStatus(orderId, newStatus);
-      toast.success(`Order marked as ${newStatus}`);
+      await rpcUpdateOrderStatus(orderId, status);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to update order status');
     }
-    void fetchOrders();
+    await fetchOrders();
+  }, [fetchOrders]);
+
+  const revertOrder = useCallback(async (orderId: string, status: OrderStatus) => {
+    try {
+      await revertOrderStatus(orderId, status, 'kitchen undo');
+      toast.success(`Back to ${status}`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Could not undo');
+    }
+    await fetchOrders();
+  }, [fetchOrders]);
+
+  const confirmVoid = async () => {
+    if (!voiding || voidReason.trim().length < 3) return;
+    setVoidBusy(true);
+    try {
+      const result = await cancelOrder(voiding.id, voidReason.trim());
+      // A voided order that was already paid for is a refund the manager still
+      // has to make. Saying so here is the only place anyone will see it.
+      if (result?.requires_refund) {
+        toast.warning('Voided — this order was paid for and needs a refund');
+      } else {
+        toast.success('Order voided');
+      }
+      setVoiding(null);
+      setVoidReason('');
+      await fetchOrders();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Could not void this order');
+    } finally {
+      setVoidBusy(false);
+    }
   };
 
-  const exportTicket = (order: OrderWithItems, format: 'print' | 'json' | 'csv') => {
-    if (format === 'print') {
-      if (isBluetoothConnected()) {
-        printTextBluetooth(buildKitchenTicketText(order, toPrintSettings(printConfig)), printConfig.print_copies)
-          .catch(() => printKitchenTicket(order, toPrintSettings(printConfig)));
-      } else {
-        printKitchenTicket(order, toPrintSettings(printConfig));
-      }
-      return;
-    }
+  const exportTicket = (order: KitchenOrder, format: 'json' | 'csv') => {
     if (format === 'json') {
       downloadKitchenTicketJson(order);
       toast.success('Ticket JSON exported');
@@ -523,34 +577,45 @@ const KitchenDisplay = () => {
     fetchOrders();
   };
 
-  const getNextStatus = (current: OrderStatus) => {
-    const flow: Partial<Record<OrderStatus, OrderStatus>> = { pending: 'confirmed', confirmed: 'preparing', preparing: 'ready', ready: 'served' };
-    return flow[current];
-  };
+  /**
+   * What this screen is responsible for.
+   *
+   * An order with nothing for this station is not "empty", it is not this
+   * screen's problem — showing it would invite the barman to bump food.
+   */
+  const visible = useMemo(() => orders
+    .filter((o) => sectionFilter === 'all' || o.section_id === sectionFilter)
+    .filter((o) => station === 'all' || o.items.some((i) => i.station === station)),
+  [orders, sectionFilter, station]);
 
-  const timeSince = (dateStr: string) => {
-    const mins = Math.floor((Date.now() - new Date(dateStr).getTime()) / 60000);
-    if (mins < 1) return 'Just now';
-    if (mins < 60) return `${mins}m ago`;
-    return `${Math.floor(mins / 60)}h ${mins % 60}m ago`;
-  };
-
-  // Graded aging — orders that sit too long escalate in colour.
-  const ageMinutes = (order: OrderWithItems) => Math.floor((Date.now() - new Date(order.created_at).getTime()) / 60000);
-  const agingLevel = (order: OrderWithItems): 'fresh' | 'warn' | 'late' => {
-    if (order.status === 'ready' || order.status === 'served' || order.status === 'cancelled') return 'fresh';
-    const m = ageMinutes(order);
-    return m >= 10 ? 'late' : m >= 5 ? 'warn' : 'fresh';
-  };
+  const renderCard = (order: KitchenOrder, showStatus: boolean) => (
+    <KitchenOrderCard
+      key={order.id}
+      order={order}
+      station={station}
+      undoSeconds={undoSeconds}
+      showStatus={showStatus}
+      failedPrint={failedPrints.includes(order.id)}
+      onBumpItem={bumpItem}
+      onBumpMany={bumpMany}
+      onAdvanceOrder={advanceOrder}
+      onRevertOrder={revertOrder}
+      onCancel={setVoiding}
+      onPrint={reprint}
+      onExport={exportTicket}
+    />
+  );
 
   return (
     <div className="min-h-screen bg-background">
       <div className="sticky top-0 z-30 glass border-b border-border">
-        <div className="flex items-center justify-between px-6 py-4">
+        <div className="flex items-center justify-between px-6 py-4 gap-4 flex-wrap">
           <div>
-            <h1 className="font-serif text-2xl font-bold text-foreground">Kitchen Display</h1>
+            <h1 className="font-serif text-2xl font-bold text-foreground">
+              {station === 'bar' ? 'Bar Display' : station === 'kitchen' ? 'Kitchen Display' : 'Kitchen & Bar'}
+            </h1>
             <div className="flex items-center gap-2 flex-wrap">
-              <p className="text-sm text-muted-foreground font-sans">{orders.length} orders</p>
+              <p className="text-sm text-muted-foreground font-sans">{visible.length} orders</p>
 
               <ConnectionPill state={connection} />
 
@@ -590,7 +655,24 @@ const KitchenDisplay = () => {
               )}
             </div>
           </div>
-          <div className="flex gap-2 flex-wrap">
+
+          <div className="flex gap-2 flex-wrap items-center">
+            {/* Station first: it changes what this whole screen means. */}
+            <div className="inline-flex rounded-full border border-border overflow-hidden" role="group" aria-label="Station">
+              {STATIONS.map((s) => (
+                <button
+                  key={s.key}
+                  onClick={() => { setStation(s.key); localStorage.setItem('kitchen:station', s.key); }}
+                  aria-pressed={station === s.key}
+                  className={`px-3 min-h-[44px] text-sm font-sans transition-colors ${
+                    station === s.key ? 'bg-foreground text-background' : 'bg-card text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  {s.key === 'bar' ? <span className="inline-flex items-center gap-1"><CupSoda className="w-3.5 h-3.5" />{s.label}</span> : s.label}
+                </button>
+              ))}
+            </div>
+
             {sections.length > 0 && (
               <select
                 value={sectionFilter}
@@ -637,8 +719,25 @@ const KitchenDisplay = () => {
             >
               Test sound
             </Button>
-            <Button variant={filter === 'active' ? 'default' : 'outline'} size="sm" onClick={() => setFilter('active')} className="rounded-full font-sans min-h-[44px]">Active</Button>
-            <Button variant={filter === 'history' ? 'default' : 'outline'} size="sm" onClick={() => setFilter('history')} className="rounded-full font-sans min-h-[44px]">History</Button>
+
+            <div className="inline-flex rounded-full border border-border overflow-hidden" role="group" aria-label="View">
+              {([
+                { key: 'active', label: 'Board' },
+                { key: 'allday', label: 'All day' },
+                { key: 'history', label: 'History' },
+              ] as const).map((v) => (
+                <button
+                  key={v.key}
+                  onClick={() => setView(v.key)}
+                  aria-pressed={view === v.key}
+                  className={`px-3 min-h-[44px] text-sm font-sans transition-colors ${
+                    view === v.key ? 'bg-foreground text-background' : 'bg-card text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  {v.key === 'allday' ? <span className="inline-flex items-center gap-1"><LayoutList className="w-3.5 h-3.5" />{v.label}</span> : v.label}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
       </div>
@@ -654,7 +753,7 @@ const KitchenDisplay = () => {
                 {waiterCalls.map((call) => (
                   <motion.div key={call.id} initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="flex items-center gap-2 px-3 py-2 rounded-full bg-accent/15 border border-accent/25 min-h-[44px]">
                     <span className="text-sm font-sans font-semibold text-accent">Table {call.table_number}</span>
-                    <span className="text-xs text-accent/70 font-sans">{timeSince(call.created_at)}</span>
+                    <span className="text-xs text-accent/70 font-sans"><Ago at={call.created_at} /></span>
                     <button onClick={() => resolveWaiterCall(call.id)} className="w-6 h-6 rounded-full bg-accent/20 flex items-center justify-center hover:bg-accent/40 transition-colors" aria-label="Resolve call">
                       <X className="w-3 h-3 text-accent" />
                     </button>
@@ -677,7 +776,7 @@ const KitchenDisplay = () => {
                 {billRequests.map((req) => (
                   <motion.div key={req.id} initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="flex items-center gap-2 px-3 py-2 rounded-full bg-primary/15 border border-primary/25 min-h-[44px]">
                     <span className="text-sm font-sans font-semibold text-primary">Table {req.table_number}</span>
-                    <span className="text-xs text-primary/70 font-sans">{timeSince(req.created_at)}</span>
+                    <span className="text-xs text-primary/70 font-sans"><Ago at={req.created_at} /></span>
                     <button onClick={() => resolveBillRequest(req)} className="w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center hover:bg-primary/40 transition-colors" aria-label="Resolve bill request">
                       <Check className="w-3 h-3 text-primary" />
                     </button>
@@ -689,138 +788,81 @@ const KitchenDisplay = () => {
         )}
       </AnimatePresence>
 
-      {(() => {
-        const visible = orders.filter(o => sectionFilter === 'all' || o.section_id === sectionFilter);
+      {view === 'allday' && <AllDayPanel station={station} onChanged={fetchOrders} />}
 
-        const renderCard = (order: OrderWithItems, showStatus: boolean) => (
-          <motion.div
-            key={order.id}
-            layout
-            initial={{ opacity: 0, scale: 0.96 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.96 }}
-            transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
-            className={`rounded-xl border bg-card overflow-hidden shadow-lux ${agingLevel(order) === 'late' ? 'border-destructive/60 breathe' : agingLevel(order) === 'warn' ? 'border-accent/50' : 'border-border'}`}
-          >
-            <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-              <div className="flex items-center gap-2 flex-wrap">
-                {order.section_name && (
-                  <span className="inline-flex items-center gap-1 text-[10px] uppercase font-sans px-1.5 py-0.5 rounded" style={{ background: `${order.section_color}33`, color: order.section_color || undefined }}>
-                    {order.section_name}
-                  </span>
-                )}
-                <span className="font-serif text-lg font-bold text-foreground">Table {order.table_number}</span>
-                {order.order_code && (
-                  <span className="text-xs font-sans font-semibold tabular-nums tracking-wider px-1.5 py-0.5 rounded bg-muted text-foreground">
-                    #{order.order_code}
-                  </span>
-                )}
-                {order.guest_name && <span className="text-xs text-muted-foreground font-sans">({order.guest_name})</span>}
-                {showStatus && (
-                  <Badge className={`text-[11px] font-sans ${statusColors[order.status]}`}>
-                    <span className="flex items-center gap-1">{statusIcons[order.status]}{order.status}</span>
-                  </Badge>
-                )}
-                <PaymentBadge method={order.payment_method} status={order.payment_status} />
-              </div>
-              {/* Urgency is spelled out, not just coloured — colour alone fails
-                  for colour-blind staff and for anyone glancing across a room. */}
-              <span className={`text-xs font-sans tabular-nums flex items-center gap-1 ${agingLevel(order) === 'late' ? 'text-destructive font-semibold' : agingLevel(order) === 'warn' ? 'text-accent font-medium' : 'text-muted-foreground'}`}>
-                {agingLevel(order) === 'late' && <span aria-hidden>!!</span>}
-                {agingLevel(order) === 'warn' && <span aria-hidden>!</span>}
-                {timeSince(order.created_at)}
-                {agingLevel(order) === 'late' && <span className="sr-only"> — late</span>}
-              </span>
-            </div>
+      {view !== 'allday' && visible.length === 0 && (
+        <div className="flex flex-col items-center justify-center py-20">
+          <ChefHat className="w-12 h-12 text-muted-foreground mb-4" />
+          <p className="text-muted-foreground font-sans">
+            {historyView ? 'Nothing served yet' : station === 'bar' ? 'No drinks waiting' : 'No orders waiting'}
+          </p>
+        </div>
+      )}
 
-            <div className="px-4 py-3 space-y-2">
-              {order.items.map((item) => (
-                <div key={item.id} className="flex justify-between items-start">
-                  <div>
-                    <p className="text-sm font-sans font-medium text-foreground">{item.quantity}× {item.menu_item_name}</p>
-                    {item.notes && <p className="text-xs text-accent italic mt-0.5">⚠ {item.notes}</p>}
-                  </div>
+      {view === 'history' && visible.length > 0 && (
+        <div className="p-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          <AnimatePresence>{visible.map((o) => renderCard(o, true))}</AnimatePresence>
+        </div>
+      )}
+
+      {view === 'active' && visible.length > 0 && (
+        <div className="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 items-start">
+          {KANBAN.map((col) => {
+            const colOrders = visible.filter((o) => col.statuses.includes(o.status));
+            return (
+              <div key={col.key} className="min-w-0">
+                <div className="flex items-center gap-2 mb-3 px-1">
+                  <span className={`w-2 h-2 rounded-full ${col.dot}`} />
+                  <h2 className="font-serif text-sm font-bold uppercase tracking-wide text-foreground/80">{col.label}</h2>
+                  <span className="text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground tabular-nums">{colOrders.length}</span>
                 </div>
-              ))}
-            </div>
-
-            {order.notes && (
-              <div className="px-4 pb-2">
-                <p className="text-xs text-accent italic">Note: {order.notes}</p>
-              </div>
-            )}
-
-            {failedPrints.includes(order.id) && (
-              <div className="mx-4 mb-2 px-3 py-2 rounded-lg bg-destructive/10 border border-destructive/25">
-                <p className="text-xs font-sans text-destructive">This ticket did not print. Use Reprint below.</p>
-              </div>
-            )}
-
-            <div className="px-4 pb-3 flex flex-wrap gap-2">
-              <Button variant="outline" size="sm" className="h-9 rounded-lg gap-1.5 text-xs" onClick={() => reprint(order)}>
-                <Printer className="w-3.5 h-3.5" /> {failedPrints.includes(order.id) ? 'Reprint' : 'Print'}
-              </Button>
-              <Button variant="outline" size="sm" className="h-9 rounded-lg gap-1.5 text-xs" onClick={() => exportTicket(order, 'json')}>
-                <FileJson className="w-3.5 h-3.5" /> JSON
-              </Button>
-              <Button variant="outline" size="sm" className="h-9 rounded-lg gap-1.5 text-xs" onClick={() => exportTicket(order, 'csv')}>
-                <FileText className="w-3.5 h-3.5" /> CSV
-              </Button>
-            </div>
-
-            {getNextStatus(order.status) && (
-              <div className="px-4 pb-4">
-                <Button onClick={() => updateOrderStatus(order.id, getNextStatus(order.status)!)} className="w-full rounded-lg bg-primary text-primary-foreground font-sans text-sm min-h-[44px] active:scale-95 transition-transform" size="sm">
-                  Mark as {getNextStatus(order.status)}
-                </Button>
-              </div>
-            )}
-          </motion.div>
-        );
-
-        if (orders.length === 0) {
-          return (
-            <div className="flex flex-col items-center justify-center py-20">
-              <ChefHat className="w-12 h-12 text-muted-foreground mb-4" />
-              <p className="text-muted-foreground font-sans">No {filter} orders</p>
-            </div>
-          );
-        }
-
-        // History → flat grid. Active → status kanban columns.
-        if (filter === 'history') {
-          return (
-            <div className="p-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-              <AnimatePresence>{visible.map((o) => renderCard(o, true))}</AnimatePresence>
-            </div>
-          );
-        }
-
-        return (
-          <div className="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-start">
-            {KANBAN.map((col) => {
-              const colOrders = visible.filter((o) => o.status === col.status);
-              return (
-                <div key={col.status} className="min-w-0">
-                  <div className="flex items-center gap-2 mb-3 px-1">
-                    <span className={`w-2 h-2 rounded-full ${col.dot}`} />
-                    <h2 className="font-serif text-sm font-bold uppercase tracking-wide text-foreground/80">{col.label}</h2>
-                    <span className="text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground tabular-nums">{colOrders.length}</span>
-                  </div>
-                  <div className="space-y-3">
-                    <AnimatePresence>{colOrders.map((o) => renderCard(o, false))}</AnimatePresence>
-                    {colOrders.length === 0 && (
-                      <div className="rounded-xl border border-dashed border-border/50 py-8 text-center text-xs text-muted-foreground/60 font-sans">
-                        Empty
-                      </div>
-                    )}
-                  </div>
+                <div className="space-y-3">
+                  <AnimatePresence>{colOrders.map((o) => renderCard(o, false))}</AnimatePresence>
+                  {colOrders.length === 0 && (
+                    <div className="rounded-xl border border-dashed border-border/50 py-8 text-center text-xs text-muted-foreground/60 font-sans">
+                      Empty
+                    </div>
+                  )}
                 </div>
-              );
-            })}
-          </div>
-        );
-      })()}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      <Dialog open={voiding !== null} onOpenChange={(open) => { if (!open) { setVoiding(null); setVoidReason(''); } }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="font-serif">
+              Void order {voiding?.order_code ? `#${voiding.order_code}` : ''} — table {voiding?.table_number}
+            </DialogTitle>
+            <DialogDescription>
+              This cancels the whole order and is recorded against you. If it has already been paid
+              for, a manager still has to refund it.
+            </DialogDescription>
+          </DialogHeader>
+          <Textarea
+            value={voidReason}
+            onChange={(e) => setVoidReason(e.target.value)}
+            placeholder="Why? e.g. guest changed their mind, item unavailable"
+            className="min-h-[88px] font-sans"
+            aria-label="Reason for voiding"
+          />
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => { setVoiding(null); setVoidReason(''); }} className="min-h-[44px]">
+              Keep order
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={voidBusy || voidReason.trim().length < 3}
+              onClick={confirmVoid}
+              className="min-h-[44px]"
+            >
+              {voidBusy ? 'Voiding…' : 'Void order'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

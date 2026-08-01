@@ -612,8 +612,11 @@ GRANT EXECUTE ON FUNCTION public.staff_update_order_status(uuid, public.order_st
  * SILENT. A missing order card is visible; an undercounted "8x Fries" is not,
  * and that is the number the cook batches against.
  *
- * `item_ids` comes back so "bump all fries" is one round trip against exactly
- * what was on screen, with no client-side re-derivation.
+ * The ids come back so "bump all fries" is one round trip against exactly what
+ * was on screen, with no client-side re-derivation. They are returned SPLIT BY
+ * STATUS, not as one list: "start all" applied to a line that is already up
+ * would walk it BACKWARDS through the undo window, silently un-cooking a dish
+ * the pass is waiting on. The caller must not have to filter to be safe.
  */
 CREATE OR REPLACE FUNCTION public.kds_all_day(_station text DEFAULT NULL)
 RETURNS TABLE(
@@ -624,7 +627,8 @@ RETURNS TABLE(
   qty_preparing int,
   qty_ready int,
   oldest_at timestamptz,
-  item_ids uuid[]
+  pending_ids uuid[],
+  open_ids uuid[]
 )
 LANGUAGE plpgsql
 STABLE
@@ -644,7 +648,8 @@ BEGIN
          COALESCE(sum(oi.quantity) FILTER (WHERE oi.status = 'preparing'), 0)::int,
          COALESCE(sum(oi.quantity) FILTER (WHERE oi.status = 'ready'), 0)::int,
          min(o.created_at),
-         array_agg(oi.id ORDER BY o.created_at)
+         COALESCE(array_agg(oi.id ORDER BY o.created_at) FILTER (WHERE oi.status = 'pending'), '{}'),
+         COALESCE(array_agg(oi.id ORDER BY o.created_at) FILTER (WHERE oi.status IN ('pending', 'preparing')), '{}')
     FROM public.order_items oi
     JOIN public.orders o ON o.id = oi.order_id
     LEFT JOIN public.menu_items mi ON mi.id = oi.menu_item_id

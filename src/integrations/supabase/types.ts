@@ -189,32 +189,47 @@ export type Database = {
       }
       order_items: {
         Row: {
+          bumped_by: string | null
           created_at: string
           id: string
           menu_item_id: string
           notes: string | null
           order_id: string
           quantity: number
+          ready_at: string | null
+          served_at: string | null
+          started_at: string | null
+          station: string
           status: Database["public"]["Enums"]["order_item_status"]
           unit_price: number
         }
         Insert: {
+          bumped_by?: string | null
           created_at?: string
           id?: string
           menu_item_id: string
           notes?: string | null
           order_id: string
           quantity?: number
+          ready_at?: string | null
+          served_at?: string | null
+          started_at?: string | null
+          station?: string
           status?: Database["public"]["Enums"]["order_item_status"]
           unit_price: number
         }
         Update: {
+          bumped_by?: string | null
           created_at?: string
           id?: string
           menu_item_id?: string
           notes?: string | null
           order_id?: string
           quantity?: number
+          ready_at?: string | null
+          served_at?: string | null
+          started_at?: string | null
+          station?: string
           status?: Database["public"]["Enums"]["order_item_status"]
           unit_price?: number
         }
@@ -1281,6 +1296,42 @@ export type Database = {
       sales_analytics: {
         Args: { _from?: string; _to?: string }
         Returns: Json
+      }
+      staff_bump_order_item: {
+        Args: {
+          _item_id: string
+          _status: Database["public"]["Enums"]["order_item_status"]
+        }
+        Returns: Json
+      }
+      staff_bump_order_items: {
+        Args: {
+          _item_ids: string[]
+          _status: Database["public"]["Enums"]["order_item_status"]
+        }
+        Returns: Json
+      }
+      staff_revert_order_status: {
+        Args: {
+          _order_id: string
+          _reason?: string
+          _to: Database["public"]["Enums"]["order_status"]
+        }
+        Returns: Json
+      }
+      kds_all_day: {
+        Args: { _station?: string }
+        Returns: {
+          menu_item_id: string
+          name: string
+          oldest_at: string
+          open_ids: string[]
+          pending_ids: string[]
+          qty_pending: number
+          qty_preparing: number
+          qty_ready: number
+          station: string
+        }[]
       }
       day_reconciliation: {
         Args: { _day?: string }

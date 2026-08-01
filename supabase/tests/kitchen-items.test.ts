@@ -349,12 +349,12 @@ describe('all day', () => {
     await placeOrder([FRIES]);
 
     await actAs(db, STAFF);
-    const { rows } = await db.query<{ name: string; qty_pending: number; item_ids: string[] }>(
-      `SELECT name, qty_pending, item_ids FROM public.kds_all_day(NULL) WHERE name = 'French Fries'`);
+    const { rows } = await db.query<{ name: string; qty_pending: number; pending_ids: string[] }>(
+      `SELECT name, qty_pending, pending_ids FROM public.kds_all_day(NULL) WHERE name = 'French Fries'`);
     await actAs(db, null);
 
     expect(rows[0].qty_pending).toBe(3);
-    expect(rows[0].item_ids).toHaveLength(3);
+    expect(rows[0].pending_ids).toHaveLength(3);
   });
 
   it('splits the count by what stage each line is at', async () => {
@@ -384,15 +384,34 @@ describe('all day', () => {
     expect(rows).toHaveLength(0);
   });
 
+  it('never offers a finished line to "start all"', async () => {
+    // If the ids came back as one list, tapping "start all" would walk an
+    // already-plated dish BACKWARDS through the undo window — silently
+    // un-cooking something the pass is waiting on.
+    const a = await placeOrder([FRIES]);
+    await placeOrder([FRIES]);
+    const items = await itemIds(a);
+
+    await actAs(db, STAFF);
+    await bump(items[0].id, 'ready');
+    const { rows } = await db.query<{ pending_ids: string[]; open_ids: string[] }>(
+      `SELECT pending_ids, open_ids FROM public.kds_all_day(NULL) WHERE name = 'French Fries'`);
+    await actAs(db, null);
+
+    expect(rows[0].pending_ids).toHaveLength(1);
+    expect(rows[0].pending_ids).not.toContain(items[0].id);
+    expect(rows[0].open_ids).not.toContain(items[0].id);
+  });
+
   it('bumps a whole tray in one call', async () => {
     await placeOrder([FRIES]);
     await placeOrder([FRIES]);
 
     await actAs(db, STAFF);
-    const { rows: all } = await db.query<{ item_ids: string[] }>(
-      `SELECT item_ids FROM public.kds_all_day(NULL) WHERE name = 'French Fries'`);
+    const { rows: all } = await db.query<{ open_ids: string[] }>(
+      `SELECT open_ids FROM public.kds_all_day(NULL) WHERE name = 'French Fries'`);
     const { rows } = await db.query<{ result: Record<string, number> }>(
-      `SELECT public.staff_bump_order_items($1::uuid[], 'ready') AS result`, [all[0].item_ids]);
+      `SELECT public.staff_bump_order_items($1::uuid[], 'ready') AS result`, [all[0].open_ids]);
     await actAs(db, null);
 
     expect(rows[0].result.updated).toBe(2);
