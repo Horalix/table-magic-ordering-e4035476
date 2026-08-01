@@ -243,9 +243,74 @@ export type Database = {
           },
         ]
       }
+      order_refunds: {
+        Row: {
+          amount: number
+          completed_at: string | null
+          completed_by: string | null
+          created_at: string
+          failure_reason: string | null
+          id: string
+          method: string
+          order_id: string
+          payment_transaction_id: string | null
+          provider_reference: string | null
+          reason: string
+          requested_by: string | null
+          status: string
+        }
+        Insert: {
+          amount: number
+          completed_at?: string | null
+          completed_by?: string | null
+          created_at?: string
+          failure_reason?: string | null
+          id?: string
+          method: string
+          order_id: string
+          payment_transaction_id?: string | null
+          provider_reference?: string | null
+          reason: string
+          requested_by?: string | null
+          status?: string
+        }
+        Update: {
+          amount?: number
+          completed_at?: string | null
+          completed_by?: string | null
+          created_at?: string
+          failure_reason?: string | null
+          id?: string
+          method?: string
+          order_id?: string
+          payment_transaction_id?: string | null
+          provider_reference?: string | null
+          reason?: string
+          requested_by?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "order_refunds_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "order_refunds_payment_transaction_id_fkey"
+            columns: ["payment_transaction_id"]
+            isOneToOne: false
+            referencedRelation: "payment_transactions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       order_ticket_events: {
         Row: {
           attempts: number
+          claimed_at: string | null
+          claimed_by_device: string | null
           created_at: string
           destination: string | null
           exported_at: string | null
@@ -261,6 +326,8 @@ export type Database = {
         }
         Insert: {
           attempts?: number
+          claimed_at?: string | null
+          claimed_by_device?: string | null
           created_at?: string
           destination?: string | null
           exported_at?: string | null
@@ -276,6 +343,8 @@ export type Database = {
         }
         Update: {
           attempts?: number
+          claimed_at?: string | null
+          claimed_by_device?: string | null
           created_at?: string
           destination?: string | null
           exported_at?: string | null
@@ -419,45 +488,117 @@ export type Database = {
           },
         ]
       }
+      payment_callback_events: {
+        Row: {
+          amount_minor: number | null
+          created_at: string
+          currency: string | null
+          detail: string | null
+          event_hash: string
+          id: string
+          monri_order_number: string | null
+          normalized_status: string | null
+          order_id: string | null
+          outcome: string
+          payment_transaction_id: string | null
+          provider: string
+          raw_payload: Json
+        }
+        Insert: {
+          amount_minor?: number | null
+          created_at?: string
+          currency?: string | null
+          detail?: string | null
+          event_hash: string
+          id?: string
+          monri_order_number?: string | null
+          normalized_status?: string | null
+          order_id?: string | null
+          outcome: string
+          payment_transaction_id?: string | null
+          provider?: string
+          raw_payload?: Json
+        }
+        Update: {
+          amount_minor?: number | null
+          created_at?: string
+          currency?: string | null
+          detail?: string | null
+          event_hash?: string
+          id?: string
+          monri_order_number?: string | null
+          normalized_status?: string | null
+          order_id?: string | null
+          outcome?: string
+          payment_transaction_id?: string | null
+          provider?: string
+          raw_payload?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payment_callback_events_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payment_callback_events_payment_transaction_id_fkey"
+            columns: ["payment_transaction_id"]
+            isOneToOne: false
+            referencedRelation: "payment_transactions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       payment_transactions: {
         Row: {
           amount_minor: number
+          approved_at: string | null
           created_at: string
           currency: string
+          failure_reason: string | null
           id: string
           monri_order_number: string
           monri_payment_id: string | null
           order_id: string
           provider: string
           provider_payload: Json
+          refunded_minor: number
           status: string
           transaction_type: string
           updated_at: string
         }
         Insert: {
           amount_minor: number
+          approved_at?: string | null
           created_at?: string
           currency?: string
+          failure_reason?: string | null
           id?: string
           monri_order_number: string
           monri_payment_id?: string | null
           order_id: string
           provider?: string
           provider_payload?: Json
+          refunded_minor?: number
           status?: string
           transaction_type?: string
           updated_at?: string
         }
         Update: {
           amount_minor?: number
+          approved_at?: string | null
           created_at?: string
           currency?: string
+          failure_reason?: string | null
           id?: string
           monri_order_number?: string
           monri_payment_id?: string | null
           order_id?: string
           provider?: string
           provider_payload?: Json
+          refunded_minor?: number
           status?: string
           transaction_type?: string
           updated_at?: string
@@ -958,6 +1099,14 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      cancel_order: {
+        Args: { _order_id: string; _reason: string }
+        Returns: Json
+      }
+      claim_ticket_print: {
+        Args: { _device_id: string; _order_id: string; _ticket_type?: string }
+        Returns: boolean
+      }
       enqueue_order_ticket: {
         Args: { _order_id: string; _ticket_type?: string }
         Returns: string
@@ -1093,6 +1242,37 @@ export type Database = {
         Returns: boolean
       }
       is_staff_member: { Args: never; Returns: boolean }
+      monri_apply_callback: {
+        Args: {
+          _amount_minor: number
+          _currency: string
+          _event_hash: string
+          _monri_order_number: string
+          _monri_payment_id: string
+          _normalized_status: string
+          _raw: Json
+        }
+        Returns: Json
+      }
+      monri_record_attempt_response: {
+        Args: {
+          _monri_payment_id: string
+          _ok: boolean
+          _payload: Json
+          _payment_transaction_id: string
+        }
+        Returns: undefined
+      }
+      monri_register_attempt: {
+        Args: {
+          _currency?: string
+          _order_id: string
+          _session_id: string
+          _session_token: string
+          _transaction_type?: string
+        }
+        Returns: Json
+      }
       next_order_code: { Args: never; Returns: string }
       online_card_payments_enabled: { Args: never; Returns: boolean }
       order_transition_allowed: {
@@ -1102,9 +1282,55 @@ export type Database = {
         }
         Returns: boolean
       }
+      payment_status_rank: { Args: { _status: string }; Returns: number }
+      record_order_refund: {
+        Args: {
+          _amount: number
+          _mark_completed?: boolean
+          _method: string
+          _order_id: string
+          _provider_reference?: string
+          _reason: string
+        }
+        Returns: Json
+      }
+      record_table_payment: {
+        Args: { _method: string; _note?: string; _order_id: string }
+        Returns: Json
+      }
       release_order_to_kitchen: {
         Args: { _order_id: string }
         Returns: boolean
+      }
+      report_ticket_print: {
+        Args: {
+          _error?: string
+          _ok: boolean
+          _order_id: string
+          _ticket_type?: string
+        }
+        Returns: undefined
+      }
+      requeue_ticket_print: {
+        Args: { _order_id: string; _ticket_type?: string }
+        Returns: boolean
+      }
+      set_order_fiscalization: {
+        Args: {
+          _error?: string
+          _order_id: string
+          _provider_reference?: string
+          _receipt_number?: string
+          _status: string
+        }
+        Returns: Json
+      }
+      staff_update_order_status: {
+        Args: {
+          _order_id: string
+          _status: Database["public"]["Enums"]["order_status"]
+        }
+        Returns: Json
       }
       touch_session: { Args: { _id: string; _token: string }; Returns: boolean }
       verify_waiter_pin: {
