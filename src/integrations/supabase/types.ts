@@ -14,6 +14,33 @@ export type Database = {
   }
   public: {
     Tables: {
+      analytics_events: {
+        Row: {
+          created_at: string
+          event: string
+          id: number
+          occurred_at: string
+          props: Json
+          visit_id: string
+        }
+        Insert: {
+          created_at?: string
+          event: string
+          id?: number
+          occurred_at?: string
+          props?: Json
+          visit_id: string
+        }
+        Update: {
+          created_at?: string
+          event?: string
+          id?: number
+          occurred_at?: string
+          props?: Json
+          visit_id?: string
+        }
+        Relationships: []
+      }
       audit_log: {
         Row: {
           action: string
@@ -118,8 +145,75 @@ export type Database = {
         }
         Relationships: []
       }
+      menu_item_recommendations: {
+        Row: {
+          created_at: string
+          enabled: boolean
+          end_time: string | null
+          id: string
+          language: string | null
+          priority: number
+          recommendation_type: string
+          recommended_item_id: string
+          source_item_id: string | null
+          source_subcategory_id: string | null
+          start_time: string | null
+        }
+        Insert: {
+          created_at?: string
+          enabled?: boolean
+          end_time?: string | null
+          id?: string
+          language?: string | null
+          priority?: number
+          recommendation_type?: string
+          recommended_item_id: string
+          source_item_id?: string | null
+          source_subcategory_id?: string | null
+          start_time?: string | null
+        }
+        Update: {
+          created_at?: string
+          enabled?: boolean
+          end_time?: string | null
+          id?: string
+          language?: string | null
+          priority?: number
+          recommendation_type?: string
+          recommended_item_id?: string
+          source_item_id?: string | null
+          source_subcategory_id?: string | null
+          start_time?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "menu_item_recommendations_recommended_item_id_fkey"
+            columns: ["recommended_item_id"]
+            isOneToOne: false
+            referencedRelation: "menu_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "menu_item_recommendations_source_item_id_fkey"
+            columns: ["source_item_id"]
+            isOneToOne: false
+            referencedRelation: "menu_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "menu_item_recommendations_source_subcategory_id_fkey"
+            columns: ["source_subcategory_id"]
+            isOneToOne: false
+            referencedRelation: "subcategories"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       menu_items: {
         Row: {
+          allergens: string[]
+          available_from: string | null
+          available_to: string | null
           created_at: string
           description: string | null
           description_ar: string | null
@@ -128,15 +222,22 @@ export type Database = {
           id: string
           image_url: string | null
           is_available: boolean
+          margin_score: number
+          merchandising_tags: string[]
           name: string
           name_ar: string | null
           name_bs: string | null
+          portion_note: string | null
+          prep_minutes: number | null
           price: number
           sort_order: number
           subcategory_id: string
           updated_at: string
         }
         Insert: {
+          allergens?: string[]
+          available_from?: string | null
+          available_to?: string | null
           created_at?: string
           description?: string | null
           description_ar?: string | null
@@ -145,15 +246,22 @@ export type Database = {
           id?: string
           image_url?: string | null
           is_available?: boolean
+          margin_score?: number
+          merchandising_tags?: string[]
           name: string
           name_ar?: string | null
           name_bs?: string | null
+          portion_note?: string | null
+          prep_minutes?: number | null
           price: number
           sort_order?: number
           subcategory_id: string
           updated_at?: string
         }
         Update: {
+          allergens?: string[]
+          available_from?: string | null
+          available_to?: string | null
           created_at?: string
           description?: string | null
           description_ar?: string | null
@@ -162,9 +270,13 @@ export type Database = {
           id?: string
           image_url?: string | null
           is_available?: boolean
+          margin_score?: number
+          merchandising_tags?: string[]
           name?: string
           name_ar?: string | null
           name_bs?: string | null
+          portion_note?: string | null
+          prep_minutes?: number | null
           price?: number
           sort_order?: number
           subcategory_id?: string
@@ -238,6 +350,13 @@ export type Database = {
             foreignKeyName: "order_items_order_id_fkey"
             columns: ["order_id"]
             isOneToOne: false
+            referencedRelation: "completed_orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "order_items_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
             referencedRelation: "orders"
             referencedColumns: ["id"]
           },
@@ -290,6 +409,13 @@ export type Database = {
           status?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "order_refunds_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "completed_orders"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "order_refunds_order_id_fkey"
             columns: ["order_id"]
@@ -359,6 +485,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "order_ticket_events_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "completed_orders"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "order_ticket_events_order_id_fkey"
             columns: ["order_id"]
@@ -539,6 +672,13 @@ export type Database = {
             foreignKeyName: "payment_callback_events_order_id_fkey"
             columns: ["order_id"]
             isOneToOne: false
+            referencedRelation: "completed_orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payment_callback_events_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
             referencedRelation: "orders"
             referencedColumns: ["id"]
           },
@@ -604,6 +744,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "payment_transactions_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "completed_orders"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "payment_transactions_order_id_fkey"
             columns: ["order_id"]
@@ -1069,13 +1216,133 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      completed_orders: {
+        Row: {
+          assigned_waiter_id: string | null
+          cancel_reason: string | null
+          cancelled_at: string | null
+          cancelled_by: string | null
+          confirmed_at: string | null
+          created_at: string | null
+          fiscal_provider_reference: string | null
+          fiscal_receipt_number: string | null
+          fiscalization_error: string | null
+          fiscalization_status: string | null
+          fiscalized: boolean | null
+          fiscalized_at: string | null
+          fiscalized_by: string | null
+          guest_name: string | null
+          id: string | null
+          notes: string | null
+          order_code: string | null
+          paid_at: string | null
+          paid_by: string | null
+          payment_method: string | null
+          payment_note: string | null
+          payment_status: string | null
+          preparing_at: string | null
+          ready_at: string | null
+          refunded_amount: number | null
+          released_to_kitchen_at: string | null
+          served_at: string | null
+          status: Database["public"]["Enums"]["order_status"] | null
+          table_session_id: string | null
+          tip_amount: number | null
+          total: number | null
+          updated_at: string | null
+        }
+        Insert: {
+          assigned_waiter_id?: string | null
+          cancel_reason?: string | null
+          cancelled_at?: string | null
+          cancelled_by?: string | null
+          confirmed_at?: string | null
+          created_at?: string | null
+          fiscal_provider_reference?: string | null
+          fiscal_receipt_number?: string | null
+          fiscalization_error?: string | null
+          fiscalization_status?: string | null
+          fiscalized?: boolean | null
+          fiscalized_at?: string | null
+          fiscalized_by?: string | null
+          guest_name?: string | null
+          id?: string | null
+          notes?: string | null
+          order_code?: string | null
+          paid_at?: string | null
+          paid_by?: string | null
+          payment_method?: string | null
+          payment_note?: string | null
+          payment_status?: string | null
+          preparing_at?: string | null
+          ready_at?: string | null
+          refunded_amount?: number | null
+          released_to_kitchen_at?: string | null
+          served_at?: string | null
+          status?: Database["public"]["Enums"]["order_status"] | null
+          table_session_id?: string | null
+          tip_amount?: number | null
+          total?: number | null
+          updated_at?: string | null
+        }
+        Update: {
+          assigned_waiter_id?: string | null
+          cancel_reason?: string | null
+          cancelled_at?: string | null
+          cancelled_by?: string | null
+          confirmed_at?: string | null
+          created_at?: string | null
+          fiscal_provider_reference?: string | null
+          fiscal_receipt_number?: string | null
+          fiscalization_error?: string | null
+          fiscalization_status?: string | null
+          fiscalized?: boolean | null
+          fiscalized_at?: string | null
+          fiscalized_by?: string | null
+          guest_name?: string | null
+          id?: string | null
+          notes?: string | null
+          order_code?: string | null
+          paid_at?: string | null
+          paid_by?: string | null
+          payment_method?: string | null
+          payment_note?: string | null
+          payment_status?: string | null
+          preparing_at?: string | null
+          ready_at?: string | null
+          refunded_amount?: number | null
+          released_to_kitchen_at?: string | null
+          served_at?: string | null
+          status?: Database["public"]["Enums"]["order_status"] | null
+          table_session_id?: string | null
+          tip_amount?: number | null
+          total?: number | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "orders_assigned_waiter_id_fkey"
+            columns: ["assigned_waiter_id"]
+            isOneToOne: false
+            referencedRelation: "waiters"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "orders_table_session_id_fkey"
+            columns: ["table_session_id"]
+            isOneToOne: false
+            referencedRelation: "table_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
       admin_set_waiter_pin: {
         Args: { _pin: string; _waiter_id: string }
         Returns: undefined
       }
+      analytics_event_allowed: { Args: { _event: string }; Returns: boolean }
       assert_guest_session: {
         Args: { _session_id: string; _session_token: string }
         Returns: {
@@ -1107,6 +1374,7 @@ export type Database = {
         Args: { _device_id: string; _order_id: string; _ticket_type?: string }
         Returns: boolean
       }
+      day_reconciliation: { Args: { _day?: string }; Returns: Json }
       enqueue_order_ticket: {
         Args: { _order_id: string; _ticket_type?: string }
         Returns: string
@@ -1140,6 +1408,25 @@ export type Database = {
       guest_get_order_payment: {
         Args: { _order_id: string; _session_id: string; _session_token: string }
         Returns: Json
+      }
+      guest_get_recommendations: {
+        Args: {
+          _cart_item_ids?: string[]
+          _language?: string
+          _limit?: number
+          _placement?: string
+        }
+        Returns: {
+          dietary_tags: string[]
+          id: string
+          image_url: string
+          name: string
+          name_ar: string
+          name_bs: string
+          price: number
+          reason: string
+          recommendation_type: string
+        }[]
       }
       guest_get_service_status: { Args: never; Returns: Json }
       guest_get_tab: {
@@ -1202,6 +1489,25 @@ export type Database = {
         }
         Returns: Json
       }
+      guest_search_menu: {
+        Args: { _limit?: number; _query: string }
+        Returns: {
+          category_name: string
+          description: string
+          description_ar: string
+          description_bs: string
+          dietary_tags: string[]
+          id: string
+          image_url: string
+          is_available: boolean
+          merchandising_tags: string[]
+          name: string
+          name_ar: string
+          name_bs: string
+          price: number
+          subcategory_id: string
+        }[]
+      }
       guest_start_table_session: {
         Args: {
           _client_id: string
@@ -1242,6 +1548,13 @@ export type Database = {
         Returns: boolean
       }
       is_staff_member: { Args: never; Returns: boolean }
+      menu_item_orderable: {
+        Args: {
+          _at?: string
+          _item: Database["public"]["Tables"]["menu_items"]["Row"]
+        }
+        Returns: boolean
+      }
       monri_apply_callback: {
         Args: {
           _amount_minor: number
@@ -1283,6 +1596,10 @@ export type Database = {
         Returns: boolean
       }
       payment_status_rank: { Args: { _status: string }; Returns: number }
+      record_analytics_events: {
+        Args: { _events: Json; _visit_id: string }
+        Returns: number
+      }
       record_order_refund: {
         Args: {
           _amount: number
