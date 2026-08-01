@@ -20,6 +20,7 @@ type OrderFilter = OrderStatus | 'all';
 type AdminOrder = Database['public']['Tables']['orders']['Row'] & {
   fiscalized?: boolean | null;
   fiscalization_status?: string | null;
+  fiscal_receipt_number?: string | null;
   order_code?: string | null;
   table_sessions?: { tables?: { table_number?: number | null } | null } | null;
   order_items?: (Database['public']['Tables']['order_items']['Row'] & { menu_items?: { name?: string | null } | null })[] | null;
@@ -74,12 +75,32 @@ const AdminOrders = () => {
     run(() => recordTablePayment(order.id, method),
       method === 'cash' ? 'Recorded as paid in cash' : 'Recorded as paid on the terminal');
 
-  /** Rung into the certified fiscal POS. Not a fiscalisation itself — see docs/fiscalization-workflow.md. */
+  /**
+   * Record that the order was rung into the certified fiscal POS.
+   *
+   * The app is not a fiscal device and does not issue receipts — it records the
+   * receipt NUMBER from the certified device, which is the thing that makes an
+   * end-of-day reconciliation against the fiscal report possible. Without a
+   * number, "fiscalized" is an unverifiable tick.
+   * See docs/fiscalization-workflow.md.
+   */
   const toggleFiscalized = (order: AdminOrder) => {
     const fiscalized = (order.fiscalization_status ?? (order.fiscalized ? 'fiscalized' : 'not_fiscalized')) === 'fiscalized';
+
+    if (fiscalized) {
+      return run(() => setFiscalization(order.id, 'not_fiscalized'), 'Fiscalization cleared');
+    }
+
+    const receipt = window.prompt(
+      'Fiscal receipt number from the POS device (leave blank if not to hand):',
+      order.fiscal_receipt_number ?? '',
+    );
+    // Cancel means cancel — do not silently mark it done.
+    if (receipt === null) return Promise.resolve();
+
     return run(
-      () => setFiscalization(order.id, fiscalized ? 'not_fiscalized' : 'fiscalized'),
-      fiscalized ? 'Fiscalization cleared' : 'Marked fiscalized',
+      () => setFiscalization(order.id, 'fiscalized', receipt.trim() || undefined),
+      receipt.trim() ? `Recorded receipt ${receipt.trim()}` : 'Marked fiscalized (no receipt number)',
     );
   };
 
@@ -163,7 +184,9 @@ const AdminOrders = () => {
                         title="Mark as rung into the certified fiscal POS"
                         className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-sans font-medium transition-colors ${order.fiscalized ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground hover:bg-muted/70 border border-dashed border-border'}`}
                       >
-                        {order.fiscalized ? <><Check className="w-3 h-3" /> Fiscalized</> : 'Mark fiscalized'}
+                        {order.fiscalized
+                          ? <><Check className="w-3 h-3" /> {order.fiscal_receipt_number ? `Fiscal ${order.fiscal_receipt_number}` : 'Fiscalized'}</>
+                          : 'Mark fiscalized'}
                       </button>
                     )}
                     {!['served', 'cancelled'].includes(order.status) && (() => {

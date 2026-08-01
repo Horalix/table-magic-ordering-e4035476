@@ -182,6 +182,10 @@ const CartPage = () => {
           menu_item_id: item.menuItemId ?? item.id,
           quantity: item.quantity,
           notes: item.notes || null,
+          // Priced server-side regardless; this only records what earned what.
+          from_suggestion: item.fromSuggestion
+            ? { source_item_id: item.fromSuggestion.sourceItemId, placement: item.fromSuggestion.placement }
+            : null,
         })),
         tip,
       );

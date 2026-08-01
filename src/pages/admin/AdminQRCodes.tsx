@@ -3,7 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { QRCodeSVG } from 'qrcode.react';
-import { Printer, LayoutGrid, Square, ScanLine, AlertTriangle, Copy } from 'lucide-react';
+import { Printer, LayoutGrid, Square, ScanLine, AlertTriangle, Copy, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import type { Database } from '@/integrations/supabase/types';
 
@@ -13,22 +13,45 @@ type TableRow = Database['public']['Tables']['tables']['Row'];
 
 const AdminQRCodes = () => {
   const [tables, setTables] = useState<TableRow[]>([]);
-  const [mode, setMode] = useState<Mode>('sheet');
+  const [mode, setMode] = useState<Mode>('venue');
+  const [venueToken, setVenueToken] = useState<string | null>(null);
+  const [rotatedAt, setRotatedAt] = useState<string | null>(null);
+  const [rotating, setRotating] = useState(false);
 
-  useEffect(() => {
-    const fetchTables = async () => {
-      const { data } = await supabase.from('tables').select('*').order('table_number');
-      setTables(data || []);
-    };
-    fetchTables();
-  }, []);
+  const load = async () => {
+    const [{ data: rows }, { data: settings }] = await Promise.all([
+      supabase.from('tables').select('*').order('table_number'),
+      supabase.from('restaurant_settings').select('venue_qr_token, venue_qr_rotated_at').eq('id', 1).maybeSingle(),
+    ]);
+    setTables(rows || []);
+    setVenueToken((settings as { venue_qr_token?: string } | null)?.venue_qr_token ?? null);
+    setRotatedAt((settings as { venue_qr_rotated_at?: string } | null)?.venue_qr_rotated_at ?? null);
+  };
+
+  useEffect(() => { void load(); }, []);
 
   const getQRUrl = (table: TableRow) =>
     `${window.location.origin}/table/${table.table_number}?token=${table.qr_token}`;
 
-  const venueToken = tables[0]?.qr_token;
   const venueUrl = `${window.location.origin}/start?token=${venueToken ?? ''}`;
-  const tokensUnified = tables.length > 0 && tables.every((t) => t.qr_token === venueToken);
+
+  /**
+   * Rotating kills every printed code instantly. That is the point — it is the
+   * one-click answer to "someone photographed our QR".
+   */
+  const rotateVenue = async () => {
+    setRotating(true);
+    try {
+      const { error } = await supabase.rpc('rotate_venue_qr_token' as never, {} as never);
+      if (error) throw new Error(error.message);
+      await load();
+      toast.success('New venue QR generated — reprint and replace the old codes');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Could not rotate the QR');
+    } finally {
+      setRotating(false);
+    }
+  };
 
   const printAll = () => window.print();
 
@@ -96,18 +119,33 @@ const AdminQRCodes = () => {
       {/* ===== VENUE MODE (single QR for the whole place) ===== */}
       {mode === 'venue' && (
         <div className="max-w-md mx-auto">
-          {!tokensUnified && tables.length > 0 && (
-            <div className="mb-4 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3.5 text-xs font-sans text-amber-700 dark:text-amber-400 no-print">
-              <p className="font-semibold flex items-center gap-1.5"><AlertTriangle className="w-4 h-4" /> One-time step to enable the single QR</p>
-              <p className="mt-1.5 text-foreground/70">So one QR works for every table, all tables must share a token. Run this once (Supabase → SQL, or Lovable), then refresh:</p>
-              <div className="mt-2 flex items-stretch gap-2">
-                <code className="flex-1 bg-card border border-border rounded p-2 break-all text-[11px] text-foreground/80 whitespace-pre-wrap">{UNIFY_SQL}</code>
-                <Button type="button" variant="outline" size="sm" className="shrink-0" onClick={() => { navigator.clipboard.writeText(UNIFY_SQL).then(() => toast.success('Copied')); }}>
-                  <Copy className="w-3.5 h-3.5" />
-                </Button>
-              </div>
+          <div className="mb-4 rounded-lg border border-border bg-muted/40 p-3.5 text-xs font-sans no-print">
+            <p className="font-semibold text-foreground">One code for the whole room.</p>
+            <p className="mt-1 text-muted-foreground leading-relaxed">
+              Guests scan it and type the table they are sitting at — every visit, because they will
+              not be in the same seat next time. The code proves they are in the restaurant; the
+              table number is what they tell you.
+            </p>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <Button type="button" variant="outline" size="sm" className="gap-1.5"
+                onClick={() => { navigator.clipboard.writeText(venueUrl).then(() => toast.success('Link copied')); }}>
+                <Copy className="w-3.5 h-3.5" /> Copy link
+              </Button>
+              <Button type="button" variant="outline" size="sm" className="gap-1.5" onClick={rotateVenue} disabled={rotating}>
+                <RefreshCw className={`w-3.5 h-3.5 ${rotating ? 'animate-spin' : ''}`} /> New code
+              </Button>
+              {rotatedAt && (
+                <span className="text-muted-foreground">
+                  Current code issued {new Date(rotatedAt).toLocaleDateString()}
+                </span>
+              )}
             </div>
-          )}
+            <p className="mt-2 text-muted-foreground inline-flex items-start gap-1.5">
+              <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+              Generating a new code stops every printed one working immediately. Print and put the
+              new ones out first.
+            </p>
+          </div>
           <Card className="border-border">
             <CardContent className="p-6 flex flex-col items-center text-center qr-card" id="qr-card-venue">
               <p className="font-serif text-xs tracking-[0.2em] uppercase text-muted-foreground mb-3 qr-brand">La Soul</p>

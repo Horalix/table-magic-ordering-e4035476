@@ -30,6 +30,7 @@ const CartSuggestion = ({ placement, disabled }: Props) => {
   const t = useT();
   const locale = useLanguageStore((s) => s.locale);
   const { items, addItem } = useCartStore();
+  const sessionId = useCartStore((st) => st.sessionId);
   const [dismissed, setDismissed] = useState<string[]>([]);
 
   const cartIds = useMemo(
@@ -38,8 +39,8 @@ const CartSuggestion = ({ placement, disabled }: Props) => {
   );
 
   const { data = [] } = useQuery({
-    queryKey: ['recommendations', placement, locale, cartIds.join(',')],
-    queryFn: () => fetchRecommendations(cartIds, placement, locale, 4),
+    queryKey: ['recommendations', placement, locale, cartIds.join(','), sessionId],
+    queryFn: () => fetchRecommendations(cartIds, placement, locale, 4, sessionId),
     staleTime: 5 * 60 * 1000,
     enabled: !disabled,
   });
@@ -49,7 +50,12 @@ const CartSuggestion = ({ placement, disabled }: Props) => {
 
   useEffect(() => {
     if (primary) {
-      track('suggestion_shown', { placement, item_id: primary.id, type: primary.recommendation_type });
+      track('suggestion_shown', {
+        placement,
+        item_id: primary.id,
+        source_item_id: primary.source_item_id ?? null,
+        type: primary.recommendation_type,
+      });
     }
   }, [primary?.id, placement]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -64,8 +70,15 @@ const CartSuggestion = ({ placement, disabled }: Props) => {
       name: primary.name,
       price: primary.price,
       image_url: primary.image_url || undefined,
+      // Lets the server attribute what this suggestion actually earned.
+      fromSuggestion: { sourceItemId: primary.source_item_id ?? null, placement },
     });
-    track('suggestion_accepted', { placement, item_id: primary.id, type: primary.recommendation_type });
+    track('suggestion_accepted', {
+      placement,
+      item_id: primary.id,
+      source_item_id: primary.source_item_id ?? null,
+      type: primary.recommendation_type,
+    });
     setDismissed((prev) => [...prev, primary.id]);
     if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
       try { navigator.vibrate(8); } catch { /* not supported */ }
@@ -73,7 +86,12 @@ const CartSuggestion = ({ placement, disabled }: Props) => {
   };
 
   const dismiss = () => {
-    track('suggestion_dismissed', { placement, item_id: primary.id, type: primary.recommendation_type });
+    track('suggestion_dismissed', {
+      placement,
+      item_id: primary.id,
+      source_item_id: primary.source_item_id ?? null,
+      type: primary.recommendation_type,
+    });
     setDismissed((prev) => [...prev, primary.id]);
   };
 

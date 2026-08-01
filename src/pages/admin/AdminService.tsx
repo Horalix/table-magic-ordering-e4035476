@@ -12,6 +12,13 @@ import { toast } from 'sonner';
 
 interface Settings {
   ordering_enabled: boolean;
+  reco_weight_curated: number;
+  reco_weight_observed: number;
+  reco_weight_learned: number;
+  reco_weight_margin: number;
+  reco_exploration: number;
+  reco_holdout_pct: number;
+  session_idle_timeout_minutes: number;
   online_card_enabled: boolean;
   pay_at_table_enabled: boolean;
   recommendations_enabled: boolean;
@@ -290,6 +297,85 @@ const AdminService = () => {
               ))}
             </ul>
           )}
+        </CardContent>
+      </Card>
+
+      <Card className="border-border">
+        <CardHeader>
+          <CardTitle className="font-serif text-lg flex items-center gap-2">
+            <Sparkles className="w-5 h-5 text-accent" /> How suggestions are chosen
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-5">
+          <p className="text-sm font-sans text-muted-foreground leading-relaxed">
+            Each candidate is scored from four signals and the highest wins. Raise a number to lean
+            on that signal more. Whatever you set, the safety rules still apply on top: never a
+            sold-out dish, never something already in the cart, never another item from the same
+            part of the menu unless you marked it an upgrade or add-on.
+            See <strong>Menu intelligence</strong> for what it is currently learning.
+          </p>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {([
+              ['reco_weight_curated',  'Your own rules',        'Pairings you added by hand.'],
+              ['reco_weight_observed', 'What sells together',   'Measured from real orders.'],
+              ['reco_weight_learned',  'What guests accept',    'Learned from what gets tapped.'],
+              ['reco_weight_margin',   'Profitability',         'Internal only — never shown to guests.'],
+              ['reco_exploration',     'Try new items',         'How much room a new dish gets to prove itself.'],
+            ] as const).map(([key, label, hint]) => (
+              <div key={key}>
+                <Label htmlFor={key} className="font-sans font-semibold text-sm">{label}</Label>
+                <p className="text-xs text-muted-foreground font-sans mb-1.5">{hint}</p>
+                <Input
+                  id={key}
+                  type="number"
+                  min={0}
+                  max={key === 'reco_exploration' ? 50 : 100}
+                  defaultValue={settings[key]}
+                  onBlur={(e) => patch({ [key]: Math.max(0, Number(e.target.value) || 0) } as Partial<Settings>)}
+                />
+              </div>
+            ))}
+          </div>
+
+          <div className="pt-4 border-t border-border">
+            <Label htmlFor="holdout" className="font-sans font-semibold text-sm">
+              Measurement holdout (% of tables that see no suggestions)
+            </Label>
+            <p className="text-xs text-muted-foreground font-sans mb-1.5 leading-relaxed">
+              Leave at 0 normally. Set it to 10 for a couple of weeks when you want to know what the
+              suggestions are <em>really</em> worth: comparing those tables against the rest is the
+              only honest way to separate "the guest took our suggestion" from "the guest was going
+              to order a coffee anyway". The comparison appears under Menu intelligence.
+            </p>
+            <Input
+              id="holdout"
+              type="number"
+              min={0}
+              max={50}
+              defaultValue={settings.reco_holdout_pct}
+              onBlur={(e) => patch({ reco_holdout_pct: Math.min(50, Math.max(0, Number(e.target.value) || 0)) })}
+            />
+          </div>
+
+          <div className="pt-4 border-t border-border">
+            <Label htmlFor="idle" className="font-sans font-semibold text-sm">
+              Close an idle table session after (minutes)
+            </Label>
+            <p className="text-xs text-muted-foreground font-sans mb-1.5 leading-relaxed">
+              The guest app checks in every minute while it is open, so this only ends sessions
+              nobody has touched for hours. It is what makes a returning guest type their table
+              number again instead of resuming a session from a previous visit.
+            </p>
+            <Input
+              id="idle"
+              type="number"
+              min={15}
+              max={1440}
+              defaultValue={settings.session_idle_timeout_minutes}
+              onBlur={(e) => patch({ session_idle_timeout_minutes: Math.min(1440, Math.max(15, Number(e.target.value) || 180)) })}
+            />
+          </div>
         </CardContent>
       </Card>
     </div>

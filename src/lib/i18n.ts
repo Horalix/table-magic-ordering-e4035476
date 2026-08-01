@@ -300,6 +300,11 @@ const translations: Record<string, Record<Locale, string>> = {
   'decrease': { en: 'One fewer', bs: 'Jedan manje', ar: 'واحد أقل' },
   'undo_remove': { en: 'Undo', bs: 'Vrati', ar: 'تراجع' },
 
+  // ---- Table entry (one venue QR, table typed each visit)
+  'table_number_range': { en: 'Please enter a table number between 1 and {max}.', bs: 'Unesite broj stola između 1 i {max}.', ar: 'يرجى إدخال رقم طاولة بين 1 و {max}.' },
+  'change_table': { en: 'Change table', bs: 'Promijeni stol', ar: 'تغيير الطاولة' },
+  'not_your_table': { en: 'Not at this table?', bs: 'Niste za ovim stolom?', ar: 'لست على هذه الطاولة؟' },
+
   // ---- Allergens (a safety field, never abbreviated)
   'allergens': { en: 'Allergens', bs: 'Alergeni', ar: 'مسببات الحساسية' },
   'allergens_ask_staff': { en: 'Please tell your waiter about any allergy before ordering.', bs: 'Molimo obavijestite konobara o alergijama prije narudžbe.', ar: 'يرجى إبلاغ النادل بأي حساسية قبل الطلب.' },

@@ -495,6 +495,17 @@ export type Database = {
       }
       restaurant_settings: {
         Row: {
+          reco_exploration: number
+          reco_holdout_pct: number
+          reco_min_acceptance: number
+          reco_retire_after_impressions: number
+          reco_weight_curated: number
+          reco_weight_learned: number
+          reco_weight_margin: number
+          reco_weight_observed: number
+          session_idle_timeout_minutes: number
+          venue_qr_rotated_at: string
+          venue_qr_token: string
           kitchen_delay_minutes: number
           last_order_time: string | null
           online_card_enabled: boolean
@@ -513,6 +524,17 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          reco_exploration?: number
+          reco_holdout_pct?: number
+          reco_min_acceptance?: number
+          reco_retire_after_impressions?: number
+          reco_weight_curated?: number
+          reco_weight_learned?: number
+          reco_weight_margin?: number
+          reco_weight_observed?: number
+          session_idle_timeout_minutes?: number
+          venue_qr_rotated_at?: string
+          venue_qr_token?: string
           kitchen_delay_minutes?: number
           last_order_time?: string | null
           online_card_enabled?: boolean
@@ -531,6 +553,17 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          reco_exploration?: number
+          reco_holdout_pct?: number
+          reco_min_acceptance?: number
+          reco_retire_after_impressions?: number
+          reco_weight_curated?: number
+          reco_weight_learned?: number
+          reco_weight_margin?: number
+          reco_weight_observed?: number
+          session_idle_timeout_minutes?: number
+          venue_qr_rotated_at?: string
+          venue_qr_token?: string
           kitchen_delay_minutes?: number
           last_order_time?: string | null
           online_card_enabled?: boolean
@@ -1017,6 +1050,120 @@ export type Database = {
         }
         Returns: Json
       }
+      guest_check_venue_token: {
+        Args: { _token: string }
+        Returns: Json
+      }
+      guest_resume_session: {
+        Args: { _session_id: string; _session_token: string }
+        Returns: Json
+      }
+      guest_leave_session: {
+        Args: { _session_id: string; _session_token: string }
+        Returns: Json
+      }
+      guest_in_reco_holdout: {
+        Args: { _session_id: string }
+        Returns: boolean
+      }
+      rotate_venue_qr_token: {
+        Args: Record<string, never>
+        Returns: string
+      }
+      rotate_table_qr_token: {
+        Args: { _table_id: string }
+        Returns: string
+      }
+      close_stale_sessions: {
+        Args: Record<string, never>
+        Returns: number
+      }
+      refresh_menu_intelligence: {
+        Args: Record<string, never>
+        Returns: Json
+      }
+      refresh_menu_affinity: {
+        Args: { _days?: number; _min_pair_orders?: number }
+        Returns: number
+      }
+      refresh_suggestion_stats: {
+        Args: { _days?: number }
+        Returns: number
+      }
+      suggestion_impact: {
+        Args: { _days?: number }
+        Returns: Json
+      }
+      recommendation_engine_health: {
+        Args: Record<string, never>
+        Returns: Json
+      }
+      reco_holdout_comparison: {
+        Args: { _days?: number }
+        Returns: Json
+      }
+      menu_item_performance: {
+        Args: { _days?: number }
+        Returns: {
+          abandon_rate: number | null
+          add_rate: number | null
+          adds: number
+          category_name: string
+          is_available: boolean
+          item_id: string
+          margin_score: number
+          name: string
+          order_rate: number | null
+          orders: number
+          price: number
+          removes: number
+          revenue: number
+          subcategory_name: string
+          units: number
+          views: number
+        }[]
+      }
+      menu_pairings: {
+        Args: { _limit?: number }
+        Returns: {
+          already_curated: boolean
+          confidence: number
+          item_a: string
+          item_b: string
+          lift: number
+          name_a: string
+          name_b: string
+          pair_orders: number
+        }[]
+      }
+      suggestion_performance: {
+        Args: { _limit?: number }
+        Returns: {
+          acceptance_rate: number | null
+          accepted: number
+          attributed_revenue: number
+          dismissed: number
+          placement: string
+          recommended_item_id: string
+          recommended_name: string
+          revenue_per_impression: number | null
+          shown: number
+          smoothed_rate: number
+          source_item_id: string | null
+          source_name: string
+          status: string
+        }[]
+      }
+      sold_out_impact: {
+        Args: { _days?: number }
+        Returns: {
+          avg_daily_revenue_when_available: number
+          estimated_lost_revenue: number
+          item_id: string
+          name: string
+          views: number
+        }[]
+      }
       guest_get_order_payment: {
         Args: { _order_id: string; _session_id: string; _session_token: string }
         Returns: Json
@@ -1027,6 +1174,7 @@ export type Database = {
           _language?: string
           _limit?: number
           _placement?: string
+          _session_id?: string
         }
         Returns: {
           dietary_tags: string[]
@@ -1038,6 +1186,7 @@ export type Database = {
           price: number
           reason: string
           recommendation_type: string
+          source_item_id: string | null
         }[]
       }
       guest_get_service_status: {

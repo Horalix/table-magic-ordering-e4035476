@@ -20,6 +20,8 @@ export interface Recommendation {
   image_url: string | null;
   dietary_tags: string[];
   recommendation_type: RecommendationType;
+  /** Which cart item triggered this, if any. Needed for attribution. */
+  source_item_id: string | null;
 }
 
 /**
@@ -34,12 +36,15 @@ export async function fetchRecommendations(
   placement: Placement,
   locale: Locale,
   limit = 4,
+  sessionId?: string | null,
 ): Promise<Recommendation[]> {
   const { data, error } = await supabase.rpc('guest_get_recommendations' as never, {
     _cart_item_ids: cartItemIds,
     _placement: placement,
     _language: locale,
     _limit: limit,
+    // Keeps the suggestion stable for this table, and decides holdout membership.
+    _session_id: sessionId ?? null,
   } as never);
 
   if (error) return [];

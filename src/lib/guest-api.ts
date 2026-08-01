@@ -33,6 +33,12 @@ export interface GuestOrderItemInput {
   menu_item_id: string;
   quantity: number;
   notes?: string | null;
+  /**
+   * Set when this line came from a suggestion. The server prices it from the
+   * menu and records the conversion, which is how "suggestions earned X" is
+   * measured in money rather than clicks. It cannot influence the total.
+   */
+  from_suggestion?: { source_item_id: string | null; placement: string } | null;
 }
 
 /**
@@ -241,6 +247,38 @@ export const switchToPayAtTable = (
 
 /** Whether the restaurant is accepting orders, and how it can be paid. */
 export const getServiceStatus = () => rpcJson<ServiceStatus>('guest_get_service_status', {});
+
+export interface VenueTokenCheck {
+  valid: boolean;
+  ordering_enabled: boolean;
+  paused_message: string | null;
+  max_table_number: number | null;
+}
+
+/** Validate the venue QR before asking the guest which table they are at. */
+export const checkVenueToken = (token: string) =>
+  rpcJson<VenueTokenCheck>('guest_check_venue_token', { _token: token });
+
+export interface ResumeResult {
+  status: 'active' | 'closed' | 'expired' | 'unknown';
+  session_id?: string;
+  table_number?: number;
+  guest_name?: string | null;
+  opened_at?: string;
+}
+
+/**
+ * Ask the server whether a remembered session is still real.
+ *
+ * The app calls this on every cold start. A guest mid-meal resumes silently; a
+ * guest returning next week is sent back to type their table number, because
+ * they will not be sitting where they sat last time.
+ */
+export const resumeSession = (sessionId: string, sessionToken: string) =>
+  rpcJson<ResumeResult>('guest_resume_session', {
+    _session_id: sessionId,
+    _session_token: sessionToken,
+  });
 
 export const callWaiter = (sessionId: string, sessionToken: string, reason: 'assist' | 'pay' = 'assist') =>
   rpcJson<{ call_id: string; status: string }>('guest_call_waiter', {
