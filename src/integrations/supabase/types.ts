@@ -145,6 +145,51 @@ export type Database = {
         }
         Relationships: []
       }
+      menu_item_affinity: {
+        Row: {
+          a_orders: number
+          computed_at: string
+          confidence: number
+          item_a: string
+          item_b: string
+          lift: number
+          pair_orders: number
+        }
+        Insert: {
+          a_orders?: number
+          computed_at?: string
+          confidence?: number
+          item_a: string
+          item_b: string
+          lift?: number
+          pair_orders?: number
+        }
+        Update: {
+          a_orders?: number
+          computed_at?: string
+          confidence?: number
+          item_a?: string
+          item_b?: string
+          lift?: number
+          pair_orders?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "menu_item_affinity_item_a_fkey"
+            columns: ["item_a"]
+            isOneToOne: false
+            referencedRelation: "menu_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "menu_item_affinity_item_b_fkey"
+            columns: ["item_b"]
+            isOneToOne: false
+            referencedRelation: "menu_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       menu_item_recommendations: {
         Row: {
           created_at: string
@@ -805,6 +850,14 @@ export type Database = {
           print_header: string
           print_paper_width: number
           print_show_prices: boolean
+          reco_exploration: number
+          reco_holdout_pct: number
+          reco_min_acceptance: number
+          reco_retire_after_impressions: number
+          reco_weight_curated: number
+          reco_weight_learned: number
+          reco_weight_margin: number
+          reco_weight_observed: number
           recommendations_enabled: boolean
           session_idle_timeout_minutes: number
           updated_at: string
@@ -826,6 +879,14 @@ export type Database = {
           print_header?: string
           print_paper_width?: number
           print_show_prices?: boolean
+          reco_exploration?: number
+          reco_holdout_pct?: number
+          reco_min_acceptance?: number
+          reco_retire_after_impressions?: number
+          reco_weight_curated?: number
+          reco_weight_learned?: number
+          reco_weight_margin?: number
+          reco_weight_observed?: number
           recommendations_enabled?: boolean
           session_idle_timeout_minutes?: number
           updated_at?: string
@@ -847,6 +908,14 @@ export type Database = {
           print_header?: string
           print_paper_width?: number
           print_show_prices?: boolean
+          reco_exploration?: number
+          reco_holdout_pct?: number
+          reco_min_acceptance?: number
+          reco_retire_after_impressions?: number
+          reco_weight_curated?: number
+          reco_weight_learned?: number
+          reco_weight_margin?: number
+          reco_weight_observed?: number
           recommendations_enabled?: boolean
           session_idle_timeout_minutes?: number
           updated_at?: string
@@ -1035,6 +1104,119 @@ export type Database = {
             columns: ["category_id"]
             isOneToOne: false
             referencedRelation: "categories"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      suggestion_conversions: {
+        Row: {
+          created_at: string
+          id: string
+          line_total: number
+          order_id: string
+          placement: string
+          quantity: number
+          recommended_item_id: string
+          source_item_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          line_total?: number
+          order_id: string
+          placement: string
+          quantity?: number
+          recommended_item_id: string
+          source_item_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          line_total?: number
+          order_id?: string
+          placement?: string
+          quantity?: number
+          recommended_item_id?: string
+          source_item_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "suggestion_conversions_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "completed_orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "suggestion_conversions_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "suggestion_conversions_recommended_item_id_fkey"
+            columns: ["recommended_item_id"]
+            isOneToOne: false
+            referencedRelation: "menu_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "suggestion_conversions_source_item_id_fkey"
+            columns: ["source_item_id"]
+            isOneToOne: false
+            referencedRelation: "menu_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      suggestion_stats: {
+        Row: {
+          accepted: number
+          attributed_orders: number
+          attributed_revenue: number
+          dismissed: number
+          placement: string
+          recommended_item_id: string
+          shown: number
+          source_item_id: string
+          updated_at: string
+        }
+        Insert: {
+          accepted?: number
+          attributed_orders?: number
+          attributed_revenue?: number
+          dismissed?: number
+          placement: string
+          recommended_item_id: string
+          shown?: number
+          source_item_id: string
+          updated_at?: string
+        }
+        Update: {
+          accepted?: number
+          attributed_orders?: number
+          attributed_revenue?: number
+          dismissed?: number
+          placement?: string
+          recommended_item_id?: string
+          shown?: number
+          source_item_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "suggestion_stats_recommended_item_id_fkey"
+            columns: ["recommended_item_id"]
+            isOneToOne: false
+            referencedRelation: "menu_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "suggestion_stats_source_item_id_fkey"
+            columns: ["source_item_id"]
+            isOneToOne: false
+            referencedRelation: "menu_items"
             referencedColumns: ["id"]
           },
         ]
@@ -1426,6 +1608,7 @@ export type Database = {
           _language?: string
           _limit?: number
           _placement?: string
+          _session_id?: string
         }
         Returns: {
           dietary_tags: string[]
@@ -1437,6 +1620,7 @@ export type Database = {
           price: number
           reason: string
           recommendation_type: string
+          source_item_id: string
         }[]
       }
       guest_get_service_status: { Args: never; Returns: Json }
@@ -1448,6 +1632,7 @@ export type Database = {
         Args: { _session_id: string; _session_token: string }
         Returns: Json
       }
+      guest_in_reco_holdout: { Args: { _session_id: string }; Returns: boolean }
       guest_inspect_table: {
         Args: { _client_id: string; _qr_token: string; _table_number: number }
         Returns: Json
@@ -1634,6 +1819,12 @@ export type Database = {
         Args: { _method: string; _note?: string; _order_id: string }
         Returns: Json
       }
+      refresh_menu_affinity: {
+        Args: { _days?: number; _min_pair_orders?: number }
+        Returns: number
+      }
+      refresh_menu_intelligence: { Args: never; Returns: Json }
+      refresh_suggestion_stats: { Args: { _days?: number }; Returns: number }
       release_order_to_kitchen: {
         Args: { _order_id: string }
         Returns: boolean
@@ -1680,6 +1871,10 @@ export type Database = {
           _status: string
         }
         Returns: Json
+      }
+      smoothed_acceptance: {
+        Args: { _accepted: number; _shown: number }
+        Returns: number
       }
       staff_update_order_status: {
         Args: {
