@@ -1294,33 +1294,36 @@ export type Database = {
           accepted: number
           attributed_orders: number
           attributed_revenue: number
+          daypart: string | null
           dismissed: number
           placement: string
           recommended_item_id: string
           shown: number
-          source_item_id: string
+          source_item_id: string | null
           updated_at: string
         }
         Insert: {
           accepted?: number
           attributed_orders?: number
           attributed_revenue?: number
+          daypart?: string | null
           dismissed?: number
           placement: string
           recommended_item_id: string
           shown?: number
-          source_item_id: string
+          source_item_id?: string | null
           updated_at?: string
         }
         Update: {
           accepted?: number
           attributed_orders?: number
           attributed_revenue?: number
+          daypart?: string | null
           dismissed?: number
           placement?: string
           recommended_item_id?: string
           shown?: number
-          source_item_id?: string
+          source_item_id?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -1693,6 +1696,8 @@ export type Database = {
         Args: { _order_id: string; _reason: string }
         Returns: Json
       }
+      cart_diet: { Args: { _cart_item_ids: string[] }; Returns: string }
+      cart_has_drink: { Args: { _cart_item_ids: string[] }; Returns: boolean }
       claim_ticket_print: {
         Args: { _device_id: string; _order_id: string; _ticket_type?: string }
         Returns: boolean
@@ -1711,6 +1716,15 @@ export type Database = {
       close_stale_sessions: { Args: never; Returns: number }
       covers_summary: { Args: { _day?: string }; Returns: Json }
       day_reconciliation: { Args: { _day?: string }; Returns: Json }
+      daypart_acceptance: {
+        Args: {
+          _daypart: string
+          _item_id: string
+          _placement: string
+          _source_item_id: string
+        }
+        Returns: number
+      }
       daypart_of: { Args: { _at?: string }; Returns: string }
       enqueue_order_ticket: {
         Args: { _order_id: string; _ticket_type?: string }
@@ -1751,6 +1765,7 @@ export type Database = {
       guest_get_recommendations: {
         Args: {
           _cart_item_ids?: string[]
+          _exclude_allergens?: string[]
           _language?: string
           _limit?: number
           _placement?: string
@@ -1770,6 +1785,19 @@ export type Database = {
         }[]
       }
       guest_get_service_status: { Args: never; Returns: Json }
+      guest_get_substitutes: {
+        Args: { _item_id: string; _limit?: number }
+        Returns: {
+          dietary_tags: string[]
+          id: string
+          image_url: string
+          match_reason: string
+          name: string
+          name_ar: string
+          name_bs: string
+          price: number
+        }[]
+      }
       guest_get_tab: {
         Args: { _session_id: string; _session_token: string }
         Returns: Json
