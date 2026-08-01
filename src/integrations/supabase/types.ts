@@ -610,7 +610,6 @@ export type Database = {
       }
       orders: {
         Row: {
-          reco_holdout: boolean | null
           assigned_waiter_id: string | null
           cancel_reason: string | null
           cancelled_at: string | null
@@ -645,7 +644,6 @@ export type Database = {
           updated_at: string
         }
         Insert: {
-          reco_holdout?: boolean | null
           assigned_waiter_id?: string | null
           cancel_reason?: string | null
           cancelled_at?: string | null
@@ -680,7 +678,6 @@ export type Database = {
           updated_at?: string
         }
         Update: {
-          reco_holdout?: boolean | null
           assigned_waiter_id?: string | null
           cancel_reason?: string | null
           cancelled_at?: string | null
@@ -2193,17 +2190,6 @@ export type Database = {
           _status: Database["public"]["Enums"]["order_status"]
         }
         Returns: Json
-      }
-      suggestion_impact_by_placement: {
-        Args: { _days?: number }
-        Returns: {
-          acceptance_pct: number
-          accepted: number
-          attributed_revenue: number
-          placement: string
-          revenue_per_impression: number
-          shown: number
-        }[]
       }
       suggestion_impact: { Args: { _days?: number }; Returns: Json }
       suggestion_performance: {
