@@ -1897,6 +1897,7 @@ export type Database = {
       }
       rotate_table_qr_token: { Args: { _table_id: string }; Returns: string }
       rotate_venue_qr_token: { Args: never; Returns: string }
+      sales_analytics: { Args: { _from?: string; _to?: string }; Returns: Json }
       session_idle_timeout: { Args: never; Returns: number }
       set_order_fiscalization: {
         Args: {
