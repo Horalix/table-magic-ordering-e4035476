@@ -10,6 +10,11 @@
     <!-- iOS uses apple-touch-icon for the Home Screen icon (it ignores the web manifest icons) -->
     <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
     <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png" />
+    <!-- The CSS @import for Google Fonts cannot start its connection until the
+         stylesheet has parsed, which on a phone on 3G is most of a second of
+         invisible text. Preconnecting here overlaps that with the HTML parse. -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link rel="preconnect" href="https://wsrv.nl" crossorigin />
     <link rel="dns-prefetch" href="//wsrv.nl" />
     <link rel="dns-prefetch" href="//menu.lasoul.net" />

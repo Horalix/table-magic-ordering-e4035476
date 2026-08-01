@@ -18,6 +18,7 @@ import { useT, useLanguageStore, getLocalizedName, getLocalizedDescription } fro
 import { useSessionHeartbeat } from '@/hooks/useSessionHeartbeat';
 import { springPill } from '@/lib/motion';
 import { DIET_TAGS, DIET_BY_KEY, getItemTags } from '@/lib/dietary';
+import { merchBadges, unorderableReason, windowLabel } from '@/lib/availability';
 import type { Database } from '@/integrations/supabase/types';
 
 type CategoryRow = Database['public']['Tables']['categories']['Row'];
@@ -106,7 +107,13 @@ const CategoryPage = () => {
   const { data: allItems = [], isLoading: allLoading } = useQuery({
     queryKey: ['menu_items_all', category?.id],
     queryFn: async () => {
-      const { data, error } = await supabase.from('menu_items').select('*').in('subcategory_id', subIds).eq('is_available', true).order('sort_order');
+      // Everything, including what is currently off.
+      //
+      // The hard `is_available = true` filter made 86'd items VANISH, while
+      // MenuSearch deliberately showed them — so the two surfaces disagreed,
+      // and a guest who came for one dish concluded the restaurant had stopped
+      // making it. Showing it greyed out answers the question instead.
+      const { data, error } = await supabase.from('menu_items').select('*').in('subcategory_id', subIds).order('sort_order');
       if (error) throw error;
       return data;
     },
@@ -181,16 +188,27 @@ const CategoryPage = () => {
   const renderGridCard = (item: MenuItemRow, i: number) => {
     const name = getLocalizedName(item, locale);
     const tags = getItemTags(item);
+    const blocked = unorderableReason(item);
+    const badges = merchBadges(item);
     return (
       <ImpressionCard key={item.id} itemId={item.id} variants={gridItem} onClick={() => setSelectedItem(item)} className="text-left tap-sm card-lux card-lux-hover overflow-hidden">
         <div className="relative">
-          <SmartImage src={item.image_url || undefined} id={item.id} alt={name} width={220} height={165} priority={i < 6} fallbackText={name} wrapperClassName="w-full aspect-[4/3]" />
-          {popularIds.has(item.id) && (
+          <SmartImage src={item.image_url || undefined} id={item.id} alt={name} width={220} height={165} priority={i < 6} fallbackText={name} wrapperClassName={`w-full aspect-[4/3] ${blocked ? 'opacity-45 saturate-50' : ''}`} />
+          {popularIds.has(item.id) && !blocked && (
             <span className="absolute top-1.5 left-1.5 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-gold/90 text-[10px] font-sans font-semibold text-white shadow"><Star className="w-2.5 h-2.5 fill-white" /></span>
           )}
-          {hasSession && (
-            <span role="button" aria-label={`${t('add_to_order')} ${name}`}
-              className="absolute bottom-1.5 right-1.5 w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center shadow-md active:scale-90 transition-transform"
+          {/* Why it cannot be ordered, in words. A greyed card with no reason
+              reads as a bug. */}
+          {blocked && (
+            <span className="absolute top-1.5 left-1.5 px-2 py-0.5 rounded-full bg-foreground/85 text-[10px] font-sans font-semibold text-background">
+              {blocked === 'sold_out' ? t('sold_out') : windowLabel(item)}
+            </span>
+          )}
+          {hasSession && !blocked && (
+            <button
+              type="button"
+              aria-label={`${t('add_to_order')} ${name}`}
+              className="absolute bottom-1.5 right-1.5 w-9 h-9 rounded-full bg-primary text-primary-foreground flex items-center justify-center shadow-md active:scale-90 transition-transform focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
               onClick={(e) => {
                 e.stopPropagation();
                 addItem({ id: item.id, name: item.name, price: Number(item.price), image_url: item.image_url || undefined });
@@ -198,13 +216,16 @@ const CategoryPage = () => {
                 toast.success(t('added_to_order'), { description: name, duration: 1400 });
                 if (typeof navigator !== 'undefined' && 'vibrate' in navigator) { try { navigator.vibrate(8); } catch { /* gesture-gated */ } }
               }}
-            ><Plus className="w-4 h-4" /></span>
+            ><Plus className="w-4 h-4" /></button>
           )}
         </div>
         <div className="p-2.5">
-          <h3 className="font-serif text-sm font-semibold text-foreground line-clamp-1">{name}</h3>
+          <h3 className={`font-serif text-sm font-semibold line-clamp-1 ${blocked ? 'text-muted-foreground' : 'text-foreground'}`}>{name}</h3>
+          {badges.length > 0 && !blocked && (
+            <span className="block text-[10px] font-sans font-semibold uppercase tracking-wide text-primary mt-0.5">{badges[0]}</span>
+          )}
           {tags.length > 0 && <span className="block text-xs mt-0.5">{tags.slice(0, 3).map((k) => DIET_BY_KEY[k]?.emoji).filter(Boolean).join(' ')}</span>}
-          <p className="text-sm font-sans font-bold text-primary mt-1 tabular-nums">{Number(item.price).toFixed(2)} KM</p>
+          <p className={`text-sm font-sans font-bold mt-1 tabular-nums ${blocked ? 'text-muted-foreground' : 'text-primary'}`}>{Number(item.price).toFixed(2)} KM</p>
         </div>
       </ImpressionCard>
     );
@@ -215,14 +236,26 @@ const CategoryPage = () => {
     const localizedDesc = getLocalizedDescription(item, locale);
     const inCart = cartItems.find((c) => (c.menuItemId ?? c.id) === item.id && !c.notes);
     const qty = inCart?.quantity ?? 0;
+    const blocked = unorderableReason(item);
+    const badges = merchBadges(item);
     return (
       <ImpressionCard key={item.id} itemId={item.id} variants={listItem} onClick={() => setSelectedItem(item)} className="w-full text-left tap">
         <div className="group flex gap-4 p-4 card-lux card-lux-hover">
-          <SmartImage src={item.image_url || undefined} id={item.id} alt={localizedName} width={80} height={80} priority={i < 8} fallbackText={localizedName} wrapperClassName="w-20 h-20 rounded-lg flex-shrink-0" className="group-hover:scale-105 transition-transform duration-300" />
+          <SmartImage src={item.image_url || undefined} id={item.id} alt={localizedName} width={80} height={80} priority={i < 8} fallbackText={localizedName} wrapperClassName={`w-20 h-20 rounded-lg flex-shrink-0 ${blocked ? 'opacity-45 saturate-50' : ''}`} className="group-hover:scale-105 transition-transform duration-300" />
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
-              <h3 className="font-serif text-base font-semibold text-foreground">{localizedName}</h3>
-              {popularIds.has(item.id) && (
+              <h3 className={`font-serif text-base font-semibold ${blocked ? 'text-muted-foreground' : 'text-foreground'}`}>{localizedName}</h3>
+              {blocked && (
+                <span className="px-1.5 py-0.5 rounded-full bg-muted text-[10px] font-sans font-semibold text-muted-foreground uppercase tracking-wide">
+                  {blocked === 'sold_out' ? t('sold_out') : windowLabel(item)}
+                </span>
+              )}
+              {badges.length > 0 && !blocked && (
+                <span className="px-1.5 py-0.5 rounded-full bg-primary/10 text-[10px] font-sans font-semibold text-primary uppercase tracking-wide">
+                  {badges[0]}
+                </span>
+              )}
+              {popularIds.has(item.id) && !blocked && (
                 <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-gold/15 text-[10px] font-sans font-semibold text-gold"><Star className="w-2.5 h-2.5 fill-gold" /> {t('popular')}</span>
               )}
               {getItemTags(item).slice(0, 3).map((k) => DIET_BY_KEY[k] && (
@@ -233,9 +266,17 @@ const CategoryPage = () => {
               )}
             </div>
             {localizedDesc && <p className="text-sm text-muted-foreground font-sans mt-0.5 line-clamp-2">{localizedDesc}</p>}
-            <p className="text-sm font-sans font-bold text-primary mt-2 tabular-nums">{Number(item.price).toFixed(2)} KM</p>
+            <div className="flex items-baseline gap-2 mt-2 flex-wrap">
+              <p className={`text-sm font-sans font-bold tabular-nums ${blocked ? 'text-muted-foreground' : 'text-primary'}`}>{Number(item.price).toFixed(2)} KM</p>
+              {/* Prep time on the card, not just in the sheet. It is the
+                  question a hungry table asks before it asks the price. */}
+              {item.prep_minutes != null && !blocked && (
+                <span className="text-xs font-sans text-muted-foreground">~{item.prep_minutes} min</span>
+              )}
+              {item.portion_note && <span className="text-xs font-sans text-muted-foreground">{item.portion_note}</span>}
+            </div>
           </div>
-          {hasSession && (
+          {hasSession && !blocked && (
             <div className="flex items-center" onClick={(e) => e.stopPropagation()}>
               {qty > 0 ? (
                 <div role="group" aria-label={`${localizedName} quantity`} className="flex items-center gap-1 bg-primary/10 rounded-full p-1">

@@ -2,6 +2,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { MotionConfig } from "framer-motion";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { lazy, Suspense } from "react";
 import StaffGate from "./components/auth/StaffGate";
@@ -59,6 +60,16 @@ const RouteFallback = () => (
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
+    {/*
+      Honour the OS "reduce motion" setting everywhere at once.
+
+      The CSS `prefers-reduced-motion` block only neutralises CSS animation and
+      transitions. Every framer-motion animation in the app — the pager drag,
+      the grid scale-in, sheet slides, the cart bar — ignored it entirely and
+      played at full amplitude, which for a vestibular-sensitive guest is the
+      difference between usable and nauseating. One line covers all of them.
+    */}
+    <MotionConfig reducedMotion="user">
     <TooltipProvider>
       <Toaster />
       <Sonner />
@@ -113,6 +124,7 @@ const App = () => (
         </Suspense>
       </BrowserRouter>
     </TooltipProvider>
+    </MotionConfig>
   </QueryClientProvider>
 );
 

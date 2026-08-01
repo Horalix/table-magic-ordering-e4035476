@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { X, Plus, Minus, QrCode, UtensilsCrossed, AlertTriangle } from 'lucide-react';
 import { useCartStore } from '@/lib/cart-store';
+import { useDialog } from '@/lib/use-dialog';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import SmartImage from '@/components/ui/SmartImage';
@@ -31,6 +32,8 @@ interface Props {
 }
 
 const MenuItemDetail = ({ item, onClose, canOrder = true }: Props) => {
+  // role=dialog, focus trap, Escape, scroll lock, focus restore.
+  const { dialogProps } = useDialog({ onClose, labelledBy: 'item-detail-title' });
   const [quantity, setQuantity] = useState(1);
   const [notes, setNotes] = useState('');
   const { addItem } = useCartStore();
@@ -77,7 +80,8 @@ const MenuItemDetail = ({ item, onClose, canOrder = true }: Props) => {
         onDragEnd={(_, info) => {
           if (info.offset.y > 120 || info.velocity.y > 600) onClose();
         }}
-        className="relative w-full max-w-lg bg-card rounded-t-3xl sm:rounded-3xl overflow-hidden"
+        className="relative w-full max-w-lg bg-card rounded-t-3xl sm:rounded-3xl overflow-hidden focus:outline-none"
+        {...dialogProps}
       >
         {/* Drag handle — signals the sheet can be flicked away. */}
         <div className="absolute top-2.5 left-1/2 -translate-x-1/2 z-10 h-1.5 w-10 rounded-full bg-white/70 sm:hidden" />
@@ -108,7 +112,7 @@ const MenuItemDetail = ({ item, onClose, canOrder = true }: Props) => {
         )}
 
         <div className="p-6">
-          <h2 className="font-serif text-2xl font-bold text-foreground">{localizedName}</h2>
+          <h2 id="item-detail-title" className="font-serif text-2xl font-bold text-foreground">{localizedName}</h2>
           {localizedDesc && (
             <p className="text-sm text-muted-foreground font-sans mt-2 leading-relaxed">{localizedDesc}</p>
           )}

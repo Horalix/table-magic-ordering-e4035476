@@ -20,28 +20,9 @@ export interface StubState {
   sessionResume: Record<string, unknown>;
   /** What guest_check_venue_token reports for the scanned code. */
   venueToken: Record<string, unknown>;
+  /** The menu. Mutable so a spec can 86 something. */
+  menuItems: Record<string, unknown>[];
 }
-
-export const defaultState = (): StubState => ({
-  serviceStatus: {
-    ordering_enabled: true,
-    online_card_enabled: false,
-    pay_at_table_enabled: true,
-    paused_message: null,
-    last_order_time: null,
-    kitchen_delay_minutes: 0,
-    recommendations_enabled: true,
-  },
-  categories: [
-    { id: 'cat-food', name: 'Food', name_bs: 'Hrana', name_ar: 'الطعام', sort_order: 1, image_url: null, created_at: new Date().toISOString() },
-    { id: 'cat-drinks', name: 'Drinks', name_bs: 'Pića', name_ar: 'المشروبات', sort_order: 2, image_url: null, created_at: new Date().toISOString() },
-  ],
-  paymentPolls: [],
-  placedOrders: [],
-  cardStartFails: false,
-  sessionResume: { status: 'active', session_id: 'session-1', table_number: 7, guest_name: 'Amina' },
-  venueToken: { valid: true, ordering_enabled: true, paused_message: null, max_table_number: 12 },
-});
 
 const MENU_ITEM = {
   id: 'item-burger',
@@ -63,6 +44,29 @@ const MENU_ITEM = {
   sort_order: 1,
   category_name: 'Food',
 };
+
+export const defaultState = (): StubState => ({
+  serviceStatus: {
+    ordering_enabled: true,
+    online_card_enabled: false,
+    pay_at_table_enabled: true,
+    paused_message: null,
+    last_order_time: null,
+    kitchen_delay_minutes: 0,
+    recommendations_enabled: true,
+  },
+  categories: [
+    { id: 'cat-food', name: 'Food', name_bs: 'Hrana', name_ar: 'الطعام', sort_order: 1, image_url: null, created_at: new Date().toISOString() },
+    { id: 'cat-drinks', name: 'Drinks', name_bs: 'Pića', name_ar: 'المشروبات', sort_order: 2, image_url: null, created_at: new Date().toISOString() },
+  ],
+  paymentPolls: [],
+  placedOrders: [],
+  cardStartFails: false,
+  sessionResume: { status: 'active', session_id: 'session-1', table_number: 7, guest_name: 'Amina' },
+  venueToken: { valid: true, ordering_enabled: true, paused_message: null, max_table_number: 12 },
+  menuItems: [MENU_ITEM],
+});
+
 
 function jsonRoute(route: Route, body: unknown, status = 200) {
   return route.fulfill({
@@ -176,7 +180,7 @@ export async function installSupabaseStubs(page: Page, state: StubState) {
   });
   await page.route('**/rest/v1/subcategories**', (route) =>
     jsonRoute(route, [{ id: 'sub-burgers', category_id: 'cat-food', name: 'Burgers', name_bs: 'Burgeri', sort_order: 1 }]));
-  await page.route('**/rest/v1/menu_items**', (route) => jsonRoute(route, [MENU_ITEM]));
+  await page.route('**/rest/v1/menu_items**', (route) => jsonRoute(route, state.menuItems));
   await page.route('**/rest/v1/restaurant_settings**', (route) => jsonRoute(route, null));
 
   // The card-start Edge Function. Never reaches Monri.

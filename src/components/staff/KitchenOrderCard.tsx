@@ -205,7 +205,7 @@ const KitchenOrderCard = ({
       exit={{ opacity: 0, scale: 0.96 }}
       transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
       className={`rounded-xl border bg-card overflow-hidden shadow-lux ${
-        urgency === 'critical' ? 'border-destructive/60 breathe'
+        urgency === 'critical' ? 'border-destructive/60 breathe breathe-urgent'
           : urgency === 'late' ? 'border-destructive/50'
             : urgency === 'attention' ? 'border-accent/50' : 'border-border'
       }`}

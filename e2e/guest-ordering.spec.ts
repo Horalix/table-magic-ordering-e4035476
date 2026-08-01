@@ -37,11 +37,49 @@ test.describe('menu and discovery', () => {
     await page.goto('/menu/food');
     await page.getByText('La Soul Burger').first().click();
 
-    await expect(page.getByText(/Allergens|Alergeni/i)).toBeVisible();
-    await expect(page.getByText('gluten, dairy')).toBeVisible();
-    await expect(page.getByText(/220 g/)).toBeVisible();
-    await expect(page.getByText(/~12 min/)).toBeVisible();
-    await expect(page.getByText(/tell your waiter|obavijestite konobara/i)).toBeVisible();
+    // Scoped to the sheet, which also asserts the sheet IS a dialog — it had
+    // no role, no focus trap and no Escape until this pass, so a screen-reader
+    // user could open it and never be told anything had happened.
+    const sheet = page.getByRole('dialog');
+    await expect(sheet).toBeVisible();
+    await expect(sheet.getByText(/Allergens|Alergeni/i)).toBeVisible();
+    await expect(sheet.getByText('gluten, dairy')).toBeVisible();
+    await expect(sheet.getByText(/220 g/)).toBeVisible();
+    await expect(sheet.getByText(/~12 min/)).toBeVisible();
+    await expect(sheet.getByText(/tell your waiter|obavijestite konobara/i)).toBeVisible();
+
+    // And that Escape closes it.
+    await page.keyboard.press('Escape');
+    await expect(sheet).toBeHidden();
+  });
+
+  test('a sold-out dish is shown, not hidden, and cannot be added', async ({ page, state }) => {
+    // CategoryPage hard-filtered `is_available = true`, so an 86'd dish simply
+    // vanished — while MenuSearch deliberately showed it. The two surfaces
+    // disagreed, and a guest who came for that dish concluded the restaurant
+    // had stopped making it rather than learning it had run out today.
+    state.menuItems = [{ ...state.menuItems[0], is_available: false }];
+
+    await page.goto('/menu/food');
+
+    await expect(page.getByText('La Soul Burger').first()).toBeVisible();
+    await expect(page.getByText(/Sold out|Rasprodano/i).first()).toBeVisible();
+    await expect(page.getByRole('button', { name: /Add to order La Soul Burger/i })).toHaveCount(0);
+  });
+
+  test('an item outside its hours says when it comes back', async ({ page, state }) => {
+    // A breakfast item at 23:00 was orderable, because nothing read
+    // available_from/available_to outside the database.
+    state.menuItems = [{
+      ...state.menuItems[0],
+      available_from: '07:00:00',
+      available_to: '07:01:00',
+    }];
+
+    await page.goto('/menu/food');
+
+    await expect(page.getByText('La Soul Burger').first()).toBeVisible();
+    await expect(page.getByText('07:00–07:01').first()).toBeVisible();
   });
 
   test('the page never scrolls sideways on a phone', async ({ page }) => {

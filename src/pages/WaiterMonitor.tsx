@@ -495,7 +495,7 @@ const RailView = ({
             onClick={() => onSelectWaiter(waiter)}
             className={`min-h-[120px] rounded-2xl border-2 p-5 text-left active:scale-[0.98] transition-all ${
               urgent > 0
-                ? 'border-destructive/60 bg-destructive/5 hover:bg-destructive/10 breathe'
+                ? 'border-destructive/60 bg-destructive/5 hover:bg-destructive/10 breathe breathe-urgent'
                 : stats.ready > 0
                   ? 'border-accent/60 bg-accent/5 hover:bg-accent/10'
                   : 'border-border bg-card hover:bg-accent/10'
@@ -672,7 +672,7 @@ const TableCard = ({
     occupied: { ring: 'border-primary/30', bg: 'bg-primary/5', chip: 'bg-primary/15 text-primary', label: 'Seated' },
     ready: { ring: 'border-accent/40', bg: 'bg-accent/5', chip: 'bg-accent/20 text-accent', label: 'Ready' },
     call: { ring: 'border-accent/60 animate-pulse', bg: 'bg-accent/10', chip: 'bg-accent text-accent-foreground', label: 'Calling' },
-    bill: { ring: 'border-destructive/60 breathe', bg: 'bg-destructive/10', chip: 'bg-destructive text-destructive-foreground', label: 'Bill' },
+    bill: { ring: 'border-destructive/60 breathe breathe-urgent', bg: 'bg-destructive/10', chip: 'bg-destructive text-destructive-foreground', label: 'Bill' },
   };
   const selectedPalette = palette[state];
 
