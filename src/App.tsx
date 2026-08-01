@@ -33,6 +33,7 @@ const AdminMenuIntelligence = lazy(() => import("./pages/admin/AdminMenuIntellig
 const AdminReports = lazy(() => import("./pages/admin/AdminReports"));
 const AdminWaiters = lazy(() => import("./pages/admin/AdminWaiters"));
 const AdminPerformance = lazy(() => import("./pages/admin/AdminPerformance"));
+const AdminAudit = lazy(() => import("./pages/admin/AdminAudit"));
 const KitchenDisplay = lazy(() => import("./pages/KitchenDisplay"));
 const WaiterDashboard = lazy(() => import("./pages/WaiterDashboard"));
 const WaiterLogin = lazy(() => import("./pages/WaiterLogin"));
@@ -96,6 +97,7 @@ const App = () => (
               <Route path="reports" element={<AdminReports />} />
               <Route path="waiters" element={<AdminWaiters />} />
               <Route path="performance" element={<AdminPerformance />} />
+              <Route path="audit" element={<AdminAudit />} />
             </Route>
 
             {/* Kitchen & Waiter. Wrapped in ClockProvider so every elapsed-time

@@ -136,6 +136,7 @@ export type Database = {
           merchandising_tags: string[]
           portion_note: string | null
           prep_minutes: number | null
+          station: string
           created_at: string
           description: string | null
           description_ar: string | null
@@ -153,6 +154,14 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          allergens?: string[]
+          available_from?: string | null
+          available_to?: string | null
+          margin_score?: number
+          merchandising_tags?: string[]
+          portion_note?: string | null
+          prep_minutes?: number | null
+          station?: string
           created_at?: string
           description?: string | null
           description_ar?: string | null
@@ -170,6 +179,14 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          allergens?: string[]
+          available_from?: string | null
+          available_to?: string | null
+          margin_score?: number
+          merchandising_tags?: string[]
+          portion_note?: string | null
+          prep_minutes?: number | null
+          station?: string
           created_at?: string
           description?: string | null
           description_ar?: string | null
@@ -195,6 +212,48 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      audit_log: {
+        Row: {
+          action: string
+          actor_label: string | null
+          actor_user_id: string | null
+          after_state: Json | null
+          before_state: Json | null
+          correlation_id: string | null
+          created_at: string
+          entity_id: string | null
+          entity_type: string
+          id: string
+          reason: string | null
+        }
+        Insert: {
+          action: string
+          actor_label?: string | null
+          actor_user_id?: string | null
+          after_state?: Json | null
+          before_state?: Json | null
+          correlation_id?: string | null
+          created_at?: string
+          entity_id?: string | null
+          entity_type: string
+          id?: string
+          reason?: string | null
+        }
+        Update: {
+          action?: string
+          actor_label?: string | null
+          actor_user_id?: string | null
+          after_state?: Json | null
+          before_state?: Json | null
+          correlation_id?: string | null
+          created_at?: string
+          entity_id?: string | null
+          entity_type?: string
+          id?: string
+          reason?: string | null
+        }
+        Relationships: []
       }
       order_items: {
         Row: {
@@ -1339,6 +1398,21 @@ export type Database = {
       }
       staff_set_covers: {
         Args: { _covers: number; _session_id: string }
+        Returns: Json
+      }
+      close_shift: {
+        Args: {
+          _acknowledge_issues?: boolean
+          _counted_cash?: number
+          _counted_terminal?: number
+          _day?: string
+          _notes?: string
+          _terminal_batch_reference?: string
+        }
+        Returns: Json
+      }
+      shift_close_for: {
+        Args: { _day?: string }
         Returns: Json
       }
       covers_summary: {

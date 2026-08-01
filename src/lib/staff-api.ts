@@ -273,6 +273,55 @@ export interface DayReconciliation {
 export const dayReconciliation = (day?: string) =>
   rpc<DayReconciliation>('day_reconciliation', { _day: day ?? null });
 
+export interface ShiftClose {
+  id: string;
+  day: string;
+  closed_at: string;
+  closed_by: string | null;
+  expected_cash: number;
+  counted_cash: number | null;
+  expected_terminal: number;
+  counted_terminal: number | null;
+  terminal_batch_reference: string | null;
+  notes: string | null;
+  acknowledged_issues: boolean;
+}
+
+/**
+ * Sign off a day.
+ *
+ * Records what was counted next to what the system believes, and reports the
+ * difference. It does not adjust anything: counting the drawer cannot change
+ * what was sold, and a close that quietly balanced the two would make a slow
+ * leak invisible.
+ *
+ * Manager only, and idempotent per day — closing again corrects the same row
+ * while leaving both attempts in the audit log.
+ */
+export const closeShift = (
+  day: string,
+  countedCash: number | null,
+  countedTerminal: number | null,
+  terminalBatchReference?: string,
+  notes?: string,
+  acknowledgeIssues = false,
+) =>
+  rpc<{
+    id: string; day: string;
+    expected_cash: number; expected_terminal: number; expected_online: number;
+    cash_difference: number | null; terminal_difference: number | null;
+  }>('close_shift', {
+    _day: day,
+    _counted_cash: countedCash,
+    _counted_terminal: countedTerminal,
+    _terminal_batch_reference: terminalBatchReference ?? null,
+    _notes: notes ?? null,
+    _acknowledge_issues: acknowledgeIssues,
+  });
+
+export const shiftCloseFor = (day?: string) =>
+  rpc<ShiftClose | null>('shift_close_for', { _day: day ?? null });
+
 /** Stable per-device id so print claims can be attributed. */
 export function deviceId(): string {
   const key = 'lasoul-device-id';
