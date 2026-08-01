@@ -199,6 +199,38 @@ export type Database = {
           },
         ]
       }
+      menu_item_prep_stats: {
+        Row: {
+          computed_at: string
+          median_minutes: number | null
+          menu_item_id: string
+          p80_minutes: number | null
+          samples: number
+        }
+        Insert: {
+          computed_at?: string
+          median_minutes?: number | null
+          menu_item_id: string
+          p80_minutes?: number | null
+          samples?: number
+        }
+        Update: {
+          computed_at?: string
+          median_minutes?: number | null
+          menu_item_id?: string
+          p80_minutes?: number | null
+          samples?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "menu_item_prep_stats_menu_item_id_fkey"
+            columns: ["menu_item_id"]
+            isOneToOne: true
+            referencedRelation: "menu_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       menu_item_recommendations: {
         Row: {
           created_at: string
@@ -867,6 +899,7 @@ export type Database = {
       restaurant_settings: {
         Row: {
           id: number
+          kitchen_capacity_minutes: number
           kitchen_delay_minutes: number
           kitchen_undo_seconds: number
           last_order_time: string | null
@@ -897,6 +930,7 @@ export type Database = {
         }
         Insert: {
           id?: number
+          kitchen_capacity_minutes?: number
           kitchen_delay_minutes?: number
           kitchen_undo_seconds?: number
           last_order_time?: string | null
@@ -927,6 +961,7 @@ export type Database = {
         }
         Update: {
           id?: number
+          kitchen_capacity_minutes?: number
           kitchen_delay_minutes?: number
           kitchen_undo_seconds?: number
           last_order_time?: string | null
@@ -1676,6 +1711,7 @@ export type Database = {
       close_stale_sessions: { Args: never; Returns: number }
       covers_summary: { Args: { _day?: string }; Returns: Json }
       day_reconciliation: { Args: { _day?: string }; Returns: Json }
+      daypart_of: { Args: { _at?: string }; Returns: string }
       enqueue_order_ticket: {
         Args: { _order_id: string; _ticket_type?: string }
         Returns: string
@@ -1765,6 +1801,7 @@ export type Database = {
           status: string
         }[]
       }
+      guest_order_eta: { Args: { _order_id: string }; Returns: Json }
       guest_place_order: {
         Args: {
           _guest_name: string
@@ -1862,6 +1899,13 @@ export type Database = {
         Returns: boolean
       }
       is_staff_member: { Args: never; Returns: boolean }
+      item_prep_estimate: {
+        Args: { _item_id: string }
+        Returns: {
+          minutes: number
+          source: string
+        }[]
+      }
       kds_all_day: {
         Args: { _station?: string }
         Returns: {
@@ -1873,6 +1917,15 @@ export type Database = {
           qty_pending: number
           qty_preparing: number
           qty_ready: number
+          station: string
+        }[]
+      }
+      kitchen_load: {
+        Args: never
+        Returns: {
+          backlog_minutes: number
+          load_factor: number
+          open_items: number
           station: string
         }[]
       }
@@ -1973,6 +2026,7 @@ export type Database = {
         Returns: boolean
       }
       payment_status_rank: { Args: { _status: string }; Returns: number }
+      prep_confidence_threshold: { Args: never; Returns: number }
       reco_holdout_comparison: { Args: { _days?: number }; Returns: Json }
       recommendation_engine_health: { Args: never; Returns: Json }
       record_analytics_events: {
@@ -1999,6 +2053,7 @@ export type Database = {
         Returns: number
       }
       refresh_menu_intelligence: { Args: never; Returns: Json }
+      refresh_prep_stats: { Args: { _days?: number }; Returns: number }
       refresh_suggestion_stats: { Args: { _days?: number }; Returns: number }
       release_order_to_kitchen: {
         Args: { _order_id: string }
