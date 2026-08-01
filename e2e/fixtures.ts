@@ -16,6 +16,10 @@ export interface StubState {
   paymentPolls: Record<string, unknown>[];
   placedOrders: Record<string, unknown>[];
   cardStartFails: boolean;
+  /** What guest_resume_session reports on a cold start. */
+  sessionResume: Record<string, unknown>;
+  /** What guest_check_venue_token reports for the scanned code. */
+  venueToken: Record<string, unknown>;
 }
 
 export const defaultState = (): StubState => ({
@@ -35,6 +39,8 @@ export const defaultState = (): StubState => ({
   paymentPolls: [],
   placedOrders: [],
   cardStartFails: false,
+  sessionResume: { status: 'active', session_id: 'session-1', table_number: 7, guest_name: 'Amina' },
+  venueToken: { valid: true, ordering_enabled: true, paused_message: null, max_table_number: 12 },
 });
 
 const MENU_ITEM = {
@@ -73,6 +79,23 @@ export async function installSupabaseStubs(page: Page, state: StubState) {
     switch (fn) {
       case 'guest_get_service_status':
         return jsonRoute(route, state.serviceStatus);
+
+      // Explicit rather than falling through to null: the session guard's
+      // behaviour on a cold start is exactly what these specs are testing.
+      case 'guest_resume_session':
+        return jsonRoute(route, state.sessionResume);
+
+      case 'guest_check_venue_token':
+        return jsonRoute(route, state.venueToken);
+
+      case 'guest_start_table_session':
+        return jsonRoute(route, {
+          status: 'created', role: 'host',
+          session_id: 'session-1', session_token: 'sess-token-7', guest_name: 'Amina',
+        });
+
+      case 'guest_inspect_table':
+        return jsonRoute(route, { status: 'empty' });
 
       case 'guest_search_menu': {
         const q = String(body._query ?? '').toLowerCase();
