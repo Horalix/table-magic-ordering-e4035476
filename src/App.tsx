@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { lazy, Suspense } from "react";
 import StaffGate from "./components/auth/StaffGate";
+import { ClockProvider } from "./lib/clock";
 
 // Code-split route bundles so guests, staff, and admin screens load only when needed.
 const GuestMenu = lazy(() => import("./pages/GuestMenu"));
@@ -80,7 +81,7 @@ const App = () => (
 
             {/* Admin Routes */}
             <Route path="/admin/login" element={<AdminLogin />} />
-            <Route path="/admin" element={<AdminLayout />}>
+            <Route path="/admin" element={<ClockProvider><AdminLayout /></ClockProvider>}>
               <Route index element={<AdminDashboard />} />
               <Route path="menu" element={<AdminMenu />} />
               <Route path="tables" element={<AdminTables />} />
@@ -97,11 +98,13 @@ const App = () => (
               <Route path="performance" element={<AdminPerformance />} />
             </Route>
 
-            {/* Kitchen & Waiter */}
-            <Route path="/kitchen" element={<StaffGate><KitchenDisplay /></StaffGate>} />
+            {/* Kitchen & Waiter. Wrapped in ClockProvider so every elapsed-time
+                card on these screens shares one interval instead of owning its
+                own — forty table cards used to mean forty timers. */}
+            <Route path="/kitchen" element={<StaffGate><ClockProvider><KitchenDisplay /></ClockProvider></StaffGate>} />
             <Route path="/waiter/login" element={<WaiterLogin />} />
-            <Route path="/waiter/monitor" element={<StaffGate redirectTo="/waiter/login"><WaiterMonitor /></StaffGate>} />
-            <Route path="/waiter" element={<StaffGate redirectTo="/waiter/login"><WaiterDashboard /></StaffGate>} />
+            <Route path="/waiter/monitor" element={<StaffGate redirectTo="/waiter/login"><ClockProvider><WaiterMonitor /></ClockProvider></StaffGate>} />
+            <Route path="/waiter" element={<StaffGate redirectTo="/waiter/login"><ClockProvider><WaiterDashboard /></ClockProvider></StaffGate>} />
 
             <Route path="*" element={<NotFound />} />
           </Routes>

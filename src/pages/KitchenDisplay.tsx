@@ -10,6 +10,8 @@ import { playOrderAlert, playWaiterCallAlert, playBillRequestAlert, unlockAudio,
 import { buildKitchenTicketText, downloadKitchenTicketCsv, downloadKitchenTicketJson, printKitchenTicket, type KitchenPrintSettings } from '@/lib/ticket-export';
 import { isBluetoothConnected, tryReconnectBluetoothPrinter, printTextBluetooth } from '@/lib/printer-connect';
 import PaymentBadge from '@/components/PaymentBadge';
+import ConnectionPill from '@/components/staff/ConnectionPill';
+import { useStaffRealtime, useStaffRealtimeEvent } from '@/lib/realtime';
 import { claimTicketPrint, deviceId, reportTicketPrint, requeueTicketPrint, updateOrderStatus as rpcUpdateOrderStatus } from '@/lib/staff-api';
 import type { Database } from '@/integrations/supabase/types';
 
@@ -165,10 +167,11 @@ const KitchenDisplay = () => {
   const printedRef = useRef<Set<string>>(new Set());
   const [failedPrints, setFailedPrints] = useState<string[]>([]);
 
-  // Live-data health. A kitchen screen that silently stops updating is the
-  // worst failure mode there is, so the connection state is always visible and
-  // a polling fallback takes over whenever the socket is not subscribed.
-  const [connection, setConnection] = useState<'connecting' | 'live' | 'reconnecting'>('connecting');
+  // Live-data health, owned by the shared realtime module: one channel per tab
+  // instead of one per screen, events coalesced so a six-item order causes one
+  // refetch rather than seven, and a polling fallback whenever the socket is
+  // not subscribed.
+  const connection = useStaffRealtime();
   const [loadError, setLoadError] = useState(false);
   /**
    * Freshly released orders, fetched independently of the Active/History tab.
@@ -305,9 +308,6 @@ const KitchenDisplay = () => {
     }
   };
 
-  const connectionRef = useRef(connection);
-  useEffect(() => { connectionRef.current = connection; }, [connection]);
-
   // Tick so time-since + aging colours stay current without new data.
   useEffect(() => {
     const id = setInterval(() => setTick((t) => t + 1), 30000);
@@ -397,7 +397,7 @@ const KitchenDisplay = () => {
     setTruncated(mapped.length >= HARD_ROW_CAP);
   }, [filter, mapOrderRow]);
 
-  const fetchWaiterCalls = async () => {
+  const fetchWaiterCalls = useCallback(async () => {
     const { data, error } = await supabase
       .from('waiter_calls')
       .select(`*, table_sessions!inner(tables!inner(table_number))`)
@@ -413,9 +413,9 @@ const KitchenDisplay = () => {
       created_at: c.created_at,
       table_number: c.table_sessions?.tables?.table_number || 0,
     })));
-  };
+  }, []);
 
-  const fetchBillRequests = async () => {
+  const fetchBillRequests = useCallback(async () => {
     const { data, error } = await supabase
       .from('bill_requests')
       .select(`*, table_sessions!inner(tables!inner(table_number))`)
@@ -431,7 +431,7 @@ const KitchenDisplay = () => {
       created_at: b.created_at,
       table_number: b.table_sessions?.tables?.table_number || 0,
     })));
-  };
+  }, []);
 
   useEffect(() => {
     supabase.from('sections').select('id, name, color').order('sort_order').then(({ data }) => {
@@ -442,63 +442,34 @@ const KitchenDisplay = () => {
       initialLoadDone.current = true;
     });
 
-    const channel = supabase
-      .channel('kitchen-all')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders' }, () => {
-        fetchOrders();
-        fetchPrintable();
-        if (initialLoadDone.current && soundEnabledRef.current) playOrderAlert();
-        if (Notification.permission === 'granted') {
-          new Notification('New Order!', { body: 'A new order has been placed.' });
-        }
-      })
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'orders' }, () => {
-        fetchOrders();
-        // An order released after a card payment becomes printable on UPDATE,
-        // not INSERT — it was created as awaiting_payment.
-        fetchPrintable();
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'order_items' }, () => {
-        fetchOrders();
-      })
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'waiter_calls' }, () => {
-        fetchWaiterCalls();
-        if (initialLoadDone.current && soundEnabledRef.current) playWaiterCallAlert();
-        if (Notification.permission === 'granted') {
-          new Notification('🔔 Waiter Call!', { body: 'A table is requesting assistance.' });
-        }
-      })
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'waiter_calls' }, () => {
-        fetchWaiterCalls();
-      })
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'bill_requests' }, () => {
-        fetchBillRequests();
-        if (initialLoadDone.current && soundEnabledRef.current) playBillRequestAlert();
-        if (Notification.permission === 'granted') {
-          new Notification('💳 Bill Requested!', { body: 'A table is ready to pay.' });
-        }
-      })
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'bill_requests' }, () => {
-        fetchBillRequests();
-      })
-      .subscribe((status) => {
-        // SUBSCRIBED is the only state in which this screen is trustworthy.
-        setConnection(status === 'SUBSCRIBED' ? 'live' : status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED' ? 'reconnecting' : 'connecting');
-      });
+    // Data lives here; the shared realtime module decides WHEN to refetch.
+    // It coalesces bursts, invalidates only what changed, keeps one channel
+    // per tab, and polls whenever the socket is not subscribed.
+  }, [filter, fetchOrders, fetchPrintable, fetchWaiterCalls, fetchBillRequests]);
 
-    // Polling fallback. Cheap, and it means a dropped socket degrades to
-    // "slightly stale" instead of "silently frozen".
-    const poll = setInterval(() => {
-      if (connectionRef.current !== 'live') {
-        void fetchOrders();
-        void fetchPrintable();
-        void fetchWaiterCalls();
-        void fetchBillRequests();
-      }
-    }, 15_000);
+  /**
+   * Refetch on live events.
+   *
+   * Split from the sound effect below on purpose: alerts must not wait on a
+   * refetch, and a refetch must not depend on whether sound is on.
+   */
+  useStaffRealtimeEvent(
+    useCallback((table: string) => {
+      if (table === 'orders' || table === 'order_items') { void fetchOrders(); void fetchPrintable(); }
+      if (table === 'waiter_calls') void fetchWaiterCalls();
+      if (table === 'bill_requests') void fetchBillRequests();
+    }, [fetchOrders, fetchPrintable, fetchWaiterCalls, fetchBillRequests]),
+  );
 
-    return () => { clearInterval(poll); supabase.removeChannel(channel); };
-  }, [filter, fetchOrders, fetchPrintable]);
+  /** Alerts, fired straight off the event so they are never held up by data. */
+  useStaffRealtimeEvent(
+    useCallback((table: string, eventType: string) => {
+      if (!initialLoadDone.current || !soundEnabledRef.current || eventType !== 'INSERT') return;
+      if (table === 'orders') playOrderAlert();
+      else if (table === 'waiter_calls') playWaiterCallAlert();
+      else if (table === 'bill_requests') playBillRequestAlert();
+    }, []),
+  );
 
   const updateOrderStatus = async (orderId: string, newStatus: OrderStatus) => {
     try {
@@ -581,20 +552,7 @@ const KitchenDisplay = () => {
             <div className="flex items-center gap-2 flex-wrap">
               <p className="text-sm text-muted-foreground font-sans">{orders.length} orders</p>
 
-              {/* Never let this screen look healthy while it is stale. */}
-              <span
-                role="status"
-                className={`inline-flex items-center gap-1 text-[11px] font-sans font-medium px-2 py-0.5 rounded-full ${
-                  connection === 'live'
-                    ? 'bg-primary/10 text-primary'
-                    : connection === 'connecting'
-                      ? 'bg-muted text-muted-foreground'
-                      : 'bg-destructive/10 text-destructive'
-                }`}
-              >
-                <span className={`w-1.5 h-1.5 rounded-full ${connection === 'live' ? 'bg-primary breathe' : connection === 'connecting' ? 'bg-muted-foreground' : 'bg-destructive animate-pulse'}`} />
-                {connection === 'live' ? 'Live' : connection === 'connecting' ? 'Connecting…' : 'Reconnecting — refreshing every 15s'}
-              </span>
+              <ConnectionPill state={connection} />
 
               {(btName || isPrinter) && (
                 <span className="inline-flex items-center gap-1 text-[11px] font-sans font-medium text-primary">
