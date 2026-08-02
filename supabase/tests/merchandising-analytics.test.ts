@@ -263,9 +263,16 @@ describe('reconciliation', () => {
     return id;
   }
 
+  /*
+   * Called with no argument on purpose. The default is `business_day()` — the
+   * Sarajevo trading day — and passing CURRENT_DATE here would ask for the UTC
+   * one, which between local midnight and 02:00 is a different day and no
+   * longer the day these orders belong to. That mismatch was a real bug; see
+   * business-day.test.ts.
+   */
   it('requires staff to read it at all', async () => {
     await actAs(db, null);
-    await expect(db.query(`SELECT public.day_reconciliation(CURRENT_DATE)`))
+    await expect(db.query(`SELECT public.day_reconciliation()`))
       .rejects.toThrow(/Only staff/i);
   });
 
@@ -275,7 +282,7 @@ describe('reconciliation', () => {
 
     await actAs(db, STAFF_ID);
     const { rows } = await db.query<{ result: Record<string, number> }>(
-      `SELECT public.day_reconciliation(CURRENT_DATE) AS result`);
+      `SELECT public.day_reconciliation() AS result`);
     await actAs(db, null);
 
     expect(Number(rows[0].result.paid_cash)).toBe(18);
@@ -292,7 +299,7 @@ describe('reconciliation', () => {
 
     await actAs(db, STAFF_ID);
     const { rows } = await db.query<{ result: Record<string, number> }>(
-      `SELECT public.day_reconciliation(CURRENT_DATE) AS result`);
+      `SELECT public.day_reconciliation() AS result`);
     await actAs(db, null);
 
     expect(Number(rows[0].result.gross)).toBe(0);
@@ -310,7 +317,7 @@ describe('reconciliation', () => {
     await db.query(`SELECT public.cancel_order($1, 'guest left')`, [id]);
 
     const { rows } = await db.query<{ result: Record<string, number> }>(
-      `SELECT public.day_reconciliation(CURRENT_DATE) AS result`);
+      `SELECT public.day_reconciliation() AS result`);
     await actAs(db, null);
 
     expect(Number(rows[0].result.gross)).toBe(0);
@@ -325,7 +332,7 @@ describe('reconciliation', () => {
 
     await actAs(db, STAFF_ID);
     const { rows } = await db.query<{ result: Record<string, number> }>(
-      `SELECT public.day_reconciliation(CURRENT_DATE) AS result`);
+      `SELECT public.day_reconciliation() AS result`);
     await actAs(db, null);
 
     expect(Number(rows[0].result.outstanding)).toBe(36);
@@ -338,7 +345,7 @@ describe('reconciliation', () => {
 
     await actAs(db, STAFF_ID);
     const { rows } = await db.query<{ result: Record<string, number> }>(
-      `SELECT public.day_reconciliation(CURRENT_DATE) AS result`);
+      `SELECT public.day_reconciliation() AS result`);
     await actAs(db, null);
 
     expect(Number(rows[0].result.callback_problems)).toBe(2);
