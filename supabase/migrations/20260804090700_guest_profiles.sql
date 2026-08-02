@@ -219,6 +219,10 @@ BEGIN
   SELECT pg_get_functiondef(p.oid) INTO v_def
     FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
    WHERE n.nspname = 'public' AND p.proname = 'run_daily_maintenance';
+  -- Line endings are not content. Git rewrites .sql to CRLF on Windows
+  -- checkouts, which would make every search literal below miss silently.
+  v_def := replace(v_def, chr(13) || chr(10), chr(10));
+
 
   IF v_def IS NOT NULL AND position('refresh_guest_profiles' in v_def) = 0 THEN
     v_def := replace(v_def,
