@@ -1868,6 +1868,18 @@ export type Database = {
         Args: { _days?: number; _min_pair_sessions?: number }
         Returns: number
       }
+      guest_forget_me: {
+        Args: { _client_id: string }
+        Returns: Json
+      }
+      returning_guest_stats: {
+        Args: { _days?: number }
+        Returns: Json
+      }
+      refresh_guest_profiles: {
+        Args: Record<PropertyKey, never>
+        Returns: number
+      }
       app_impact_summary: {
         Args: { _days?: number }
         Returns: Json

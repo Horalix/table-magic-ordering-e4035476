@@ -60,6 +60,14 @@ interface CartStore {
   pendingPayment: PendingPayment | null;
   /** Stable per-device id — identifies this phone across reloads (join flow). */
   clientId: string;
+  /**
+   * Issue a new device identifier.
+   *
+   * Part of "forget this device": without it the server would forget the old
+   * id and the phone would immediately start rebuilding the same profile under
+   * it on the next visit, which would make the deletion cosmetic.
+   */
+  rotateClientId: () => void;
   addItem: (item: Omit<CartItem, 'quantity'>) => void;
   removeItem: (id: string) => void;
   updateQuantity: (id: string, quantity: number) => void;
@@ -110,6 +118,7 @@ export const useCartStore = create<CartStore>()(persist((set, get) => ({
   lastOrderTime: null,
   pendingPayment: null,
   clientId: genId(),
+  rotateClientId: () => set({ clientId: genId() }),
 
   addItem: (item) => {
     set((state) => {
