@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { AlertTriangle, CheckCircle2, Eye, HelpCircle, TrendingDown, TrendingUp } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Eye, HelpCircle, Sparkles, TrendingDown, TrendingUp } from 'lucide-react';
 import { toast } from 'sonner';
 
 /**
@@ -54,17 +54,47 @@ interface Summary {
   food_cost: { items: number; with_cost: number; coverage: number };
 }
 
+interface Readiness {
+  ready: boolean;
+  sampling_enabled: boolean;
+  policy_version: string;
+  decisions: number;
+  checks: { check: string; pass: boolean; have?: number; need?: number; note?: string }[];
+}
+
+/**
+ * The ranker can weigh a pair it has seen four times against one it has seen
+ * four hundred times only if it knows the difference. Sampling from the
+ * acceptance posterior is how it learns that; it switches itself on the first
+ * night the evidence supports it, so this is a countdown rather than a button.
+ */
+const CHECK_LABELS: Record<string, string> = {
+  impressions_are_server_verified: 'Sightings counted on the server',
+  acceptance_linked_to_paid_outcome: 'Acceptance means paid for',
+  action_probabilities_logged: 'Decisions recorded with their odds',
+  enough_decisions: 'Enough suggestions made',
+  enough_pairs_with_support: 'Enough pairings with real history',
+  conversions_observed: 'Someone has actually accepted one',
+};
+
 const AdminImpact = () => {
   const [days, setDays] = useState(30);
   const [data, setData] = useState<Summary | null>(null);
+  const [readiness, setReadiness] = useState<Readiness | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
-    const { data: result, error: err } = await supabase.rpc('app_impact_summary' as never, { _days: days } as never);
-    if (err) { setError(err.message); setData(null); }
-    else { setError(null); setData(result as unknown as Summary); }
+    const [summary, gate] = await Promise.all([
+      supabase.rpc('app_impact_summary' as never, { _days: days } as never),
+      supabase.rpc('bandit_readiness' as never),
+    ]);
+    if (summary.error) { setError(summary.error.message); setData(null); }
+    else { setError(null); setData(summary.data as unknown as Summary); }
+    // The gate is a footnote, not the page. A failure to read it must not
+    // replace the number the owner came here for.
+    setReadiness(gate.error ? null : (gate.data as unknown as Readiness));
     setLoading(false);
   }, [days]);
 
@@ -273,6 +303,57 @@ const AdminImpact = () => {
                     </div>
                   ))}
                 </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* ---- Learning readiness: a countdown, not a switch ---- */}
+          {readiness && (
+            <Card className={readiness.sampling_enabled ? 'border-primary/40' : undefined}>
+              <CardHeader className="pb-3">
+                <CardTitle className="font-serif text-lg flex items-center gap-2">
+                  <Sparkles className="w-5 h-5 text-accent" /> How the app is choosing suggestions
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {readiness.sampling_enabled ? (
+                  <p className="text-sm font-sans text-muted-foreground max-w-2xl">
+                    It is testing as it goes. When it has only seen a pairing a handful of times it treats that as a
+                    guess rather than a fact, and gives it a share of the suggestions until it knows either way.
+                    Turned on automatically once there was enough history to learn from.
+                  </p>
+                ) : (
+                  <>
+                    <p className="text-sm font-sans text-muted-foreground mb-4 max-w-2xl">
+                      It is following fixed rules — your pairings, what sells together, and the kitchen's load.
+                      Once there is enough history it will start testing as it goes, treating a pairing it has seen
+                      four times as the guess it is instead of ranking it against one it has seen four hundred
+                      times. That happens on its own overnight; nothing to press.
+                    </p>
+                    <div className="space-y-1.5">
+                      {readiness.checks.map((row) => (
+                        <div
+                          key={row.check}
+                          className="flex items-center justify-between gap-3 py-2 px-3 rounded-lg bg-muted/40"
+                        >
+                          <span className="text-sm font-sans flex items-center gap-2">
+                            {row.pass
+                              ? <CheckCircle2 className="w-4 h-4 text-primary shrink-0" aria-hidden />
+                              : <span className="w-4 h-4 rounded-full border-2 border-muted-foreground/40 shrink-0" aria-hidden />}
+                            <span className={row.pass ? 'text-muted-foreground' : 'font-medium'}>
+                              {CHECK_LABELS[row.check] ?? row.check}
+                            </span>
+                          </span>
+                          <span className="text-sm font-sans tabular-nums text-muted-foreground shrink-0">
+                            {row.need !== undefined
+                              ? `${row.have ?? 0} of ${row.need}`
+                              : row.pass ? 'ready' : 'waiting'}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
               </CardContent>
             </Card>
           )}
