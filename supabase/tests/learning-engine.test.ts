@@ -32,7 +32,8 @@ const TOKEN = 'sess-token-7';
 
 async function seed() {
   await db.exec(`
-    TRUNCATE public.suggestion_conversions, public.suggestion_stats, public.menu_item_affinity,
+    TRUNCATE public.experiments, public.session_experiment_assignment,
+             public.suggestion_conversions, public.suggestion_stats, public.menu_item_affinity,
              public.analytics_events, public.menu_item_recommendations, public.audit_log,
              public.payment_callback_events, public.payment_transactions,
              public.order_ticket_events, public.order_items, public.orders,
@@ -462,16 +463,29 @@ describe('holdout', () => {
     await db.query(
       `INSERT INTO public.menu_item_recommendations(source_item_id, recommended_item_id, recommendation_type)
        VALUES ($1, $2, 'pair_with')`, [BURGER, COFFEE]);
-    // The setting is capped at 50% on purpose — holding out more than half the
-    // room to measure a suggestion is not a trade any restaurant should make.
-    await db.query(`UPDATE public.restaurant_settings SET reco_holdout_pct = 50 WHERE id = 1`);
 
-    const { rows: split } = await db.query<{ id: string; held: boolean }>(`
-      SELECT id::text AS id, public.guest_in_reco_holdout(id) AS held
-        FROM (SELECT gen_random_uuid() AS id FROM generate_series(1, 200)) s
-    `);
-    const heldOut = split.find((r) => r.held)!.id;
-    const shown = split.find((r) => !r.held)!.id;
+    /*
+     * Membership now comes from the assignment ledger rather than a hash of
+     * the current percentage — that coupling is what previously let the dial
+     * rewrite history. So the test assigns two real sessions explicitly.
+     */
+    await actAs(db, STAFF);
+    await db.query(`SELECT public.start_experiment('holdout test', 'v1', 50::smallint)`);
+    await actAs(db, null);
+
+    const mk = async (arm: string) => {
+      const { rows } = await db.query<{ id: string }>(
+        `INSERT INTO public.table_sessions(table_id, token, is_active)
+         SELECT id, $1, true FROM public.tables LIMIT 1 RETURNING id`, [`tok-${arm}-${Date.now()}`]);
+      await db.query(`DELETE FROM public.session_experiment_assignment WHERE session_id = $1`, [rows[0].id]);
+      await db.query(
+        `INSERT INTO public.session_experiment_assignment(session_id, experiment_id, arm)
+         SELECT $1, id, $2 FROM public.experiments WHERE ended_at IS NULL LIMIT 1`, [rows[0].id, arm]);
+      return rows[0].id;
+    };
+
+    const heldOut = await mk('holdout');
+    const shown = await mk('treatment');
 
     expect(await recommend([BURGER], 'cart', heldOut)).toHaveLength(0);
     expect((await recommend([BURGER], 'cart', shown)).length).toBeGreaterThan(0);
@@ -485,11 +499,21 @@ describe('holdout', () => {
   });
 
   it('splits sessions roughly in line with the configured percentage', async () => {
-    await db.query(`UPDATE public.restaurant_settings SET reco_holdout_pct = 20 WHERE id = 1`);
+    // Now a property of the assigner writing the ledger, not of a hash that
+    // could be recomputed differently tomorrow.
+    await actAs(db, STAFF);
+    await db.query(`SELECT public.start_experiment('split test', 'v1', 20::smallint)`);
+    await actAs(db, null);
+
+    await db.exec(`
+      INSERT INTO public.table_sessions(table_id, token, is_active)
+      SELECT (SELECT id FROM public.tables LIMIT 1), 'split-' || g, true
+        FROM generate_series(1, 2000) g;
+    `);
+
     const { rows } = await db.query<{ held: string; total: string }>(`
-      SELECT count(*) FILTER (WHERE public.guest_in_reco_holdout(id))::text AS held,
-             count(*)::text AS total
-        FROM (SELECT gen_random_uuid() AS id FROM generate_series(1, 2000)) s
+      SELECT count(*) FILTER (WHERE arm = 'holdout')::text AS held, count(*)::text AS total
+        FROM public.session_experiment_assignment
     `);
     const share = (Number(rows[0].held) / Number(rows[0].total)) * 100;
     expect(share).toBeGreaterThan(14);
@@ -502,7 +526,9 @@ describe('holdout', () => {
     const { rows } = await db.query<{ result: Record<string, unknown> }>(
       `SELECT public.reco_holdout_comparison(30) AS result`);
     await actAs(db, null);
-    expect(rows[0].result.reliable).toBe(false);
+    // No experiment running is a distinct, more honest answer than
+              // "not reliable" — there is nothing to be reliable about.
+    expect(rows[0].result.status).toBe('not_running');
   });
 });
 
