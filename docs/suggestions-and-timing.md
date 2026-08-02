@@ -154,6 +154,12 @@ an honest "sorry, that is off tonight".
 
 ## 7. Is any of it working?
 
+> **The measurement described below has been substantially rebuilt.** It was
+> assigned per session but analysed per order, counted tips as uplift, and
+> re-bucketed its own history when the holdout dial moved. See
+> [measuring-upsell.md](measuring-upsell.md) for what it does now.
+
+
 `reco_holdout_pct` (0–50) withholds suggestions from a deterministic slice of
 sessions. **Menu intelligence → "How much of that is really the suggestions?"**
 compares the two groups and reports `reliable: false` below 100 orders a side.

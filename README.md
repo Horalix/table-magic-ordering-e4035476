@@ -343,6 +343,7 @@ ALLOWED_ORIGINS               # https://order.lasoul.net,http://localhost:8080
 | [growth-and-merchandising.md](docs/growth-and-merchandising.md) | Raising order value without becoming pushy |
 | [kitchen-and-printing.md](docs/kitchen-and-printing.md) | You are touching the kitchen board, stations, or the printer |
 | [suggestions-and-timing.md](docs/suggestions-and-timing.md) | How suggestions get chosen, and how a wait is estimated |
+| [measuring-upsell.md](docs/measuring-upsell.md) | Whether the suggestions earn their place, and why the obvious ways to measure that are wrong |
 | [operations-runbook.md](docs/operations-runbook.md) | Something is broken during service |
 | [restaurant-staff-training.md](docs/restaurant-staff-training.md) | Print it for the floor |
 | [testing-guide.md](docs/testing-guide.md) | Adding tests |
