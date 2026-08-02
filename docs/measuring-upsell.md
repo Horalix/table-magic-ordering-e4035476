@@ -143,8 +143,10 @@ away:
 
 A outranks B permanently on four data points, and nothing in the system knows
 one of those numbers is a guess. `sample_acceptance` draws from each posterior
-instead, so A wins about a third of the impressions — enough to find out — and
-then settles above B or falls away.
+instead: A still leads, as it should on the evidence, but takes **67.9%** of
+the impressions rather than 100%, so B keeps the rest and A's guess resolves
+into a fact within a couple of weeks. A pair that is genuinely bad — 2% over
+400 shows — wins **0.0%**, so exploring does not cost exploitation.
 
 The existing exploration term already favours new pairs, but it keys on
 **novelty**: `0.15 × 30/(30+shown)`. A pair seen 100 times with wildly

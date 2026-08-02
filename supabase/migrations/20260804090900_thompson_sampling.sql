@@ -23,9 +23,10 @@
 --     B 400 shown, 100 accepted -> 0.244, and reliably 20%..29%
 --
 -- Today A outranks B permanently on four data points, and nothing in the
--- system knows that one of those numbers is a guess. Sampling from the
--- posterior lets A win roughly a third of the impressions — enough to find out
--- which it is — and then settle above B or fall away.
+-- system knows that one of those numbers is a guess. Sampling keeps A ahead —
+-- it should be, on the evidence — but only about two thirds of the time, so B
+-- claws back the rest and A's guess resolves into a fact either way. Measured
+-- at 67.9% over 4000 draws, against 100% under the mean.
 --
 -- The existing exploration term already favours NEW pairs, decaying as
 -- 30/(30+shown). That is novelty, not uncertainty: a pair seen 100 times with
