@@ -150,6 +150,10 @@ BEGIN
   SELECT pg_get_functiondef(p.oid) INTO v_def
     FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
    WHERE n.nspname = 'public' AND p.proname = 'refresh_menu_intelligence';
+  -- Line endings are not content. Git rewrites .sql to CRLF on Windows
+  -- checkouts, which would make every search literal below miss silently.
+  v_def := replace(v_def, chr(13) || chr(10), chr(10));
+
 
   IF v_def IS NOT NULL AND position('refresh_session_affinity' in v_def) = 0 THEN
     v_def := replace(v_def,
@@ -170,6 +174,10 @@ BEGIN
   SELECT pg_get_functiondef(p.oid) INTO v_def
     FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
    WHERE n.nspname = 'public' AND p.proname = 'rank_recommendations';
+  -- Line endings are not content. Git rewrites .sql to CRLF on Windows
+  -- checkouts, which would make every search literal below miss silently.
+  v_def := replace(v_def, chr(13) || chr(10), chr(10));
+
 
   IF v_def IS NULL THEN
     RAISE EXCEPTION 'rank_recommendations is missing — migrations are out of order';

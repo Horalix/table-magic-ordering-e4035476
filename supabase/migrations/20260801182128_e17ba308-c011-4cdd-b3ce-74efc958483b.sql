@@ -437,6 +437,10 @@ BEGIN
        AND p.prosrc LIKE '%enqueue_order_ticket(%''kitchen''%'
   LOOP
     v_def := pg_get_functiondef(r.oid);
+  -- Line endings are not content. Git rewrites .sql to CRLF on Windows
+  -- checkouts, which would make every search literal below miss silently.
+  v_def := replace(v_def, chr(13) || chr(10), chr(10));
+
     v_def := regexp_replace(
       v_def,
       'public\.enqueue_order_ticket\(\s*([A-Za-z_][A-Za-z0-9_.]*)\s*,\s*''kitchen''\s*\)',

@@ -1,0 +1,20 @@
+# Line endings are CONTENT in this repository, not formatting.
+#
+# Several migrations modify an existing function by fetching
+# pg_get_functiondef() and doing exact text replacement on the result. That is
+# how the kitchen release path and the recommendation ranker are changed
+# without forking a two-hundred-line body into a new file and letting the two
+# copies drift apart.
+#
+# A CRLF checkout breaks it: the search literal inside the migration gains
+# carriage returns while the function body stored in the database does not, so
+# every replace() matches nothing. Each rewrite asserts that it matched and
+# raises if it did not, so the failure is loud rather than silent — but the
+# point of this file is that it should not happen at all.
+#
+# Found the hard way, and verified by forcing every .sql file to CRLF and
+# watching the test harness refuse to boot.
+*.sql text eol=lf
+
+# The harness reads those files; keep it consistent.
+*.mjs text eol=lf
