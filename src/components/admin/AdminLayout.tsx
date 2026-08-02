@@ -5,7 +5,7 @@ import { supabase } from '@/integrations/supabase/client';
 import {
   LayoutDashboard, UtensilsCrossed, TableProperties, ClipboardList,
   BarChart3, QrCode, LogOut, ChefHat, Menu, X, Layers, Users, Star, Monitor,
-  CalendarCheck, Printer, Receipt, Sparkles, Brain, ScrollText,
+  CalendarCheck, Printer, Receipt, Sparkles, Brain, ScrollText, TrendingUp,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { springPill } from '@/lib/motion';
@@ -38,6 +38,7 @@ const navGroups = [
   {
     heading: 'Insights',
     items: [
+      { label: 'What the app earned', icon: TrendingUp, path: '/admin/impact' },
       { label: 'Daily Report', icon: Receipt, path: '/admin/reports' },
       { label: 'Performance', icon: Star, path: '/admin/performance' },
       { label: 'Menu intelligence', icon: Brain, path: '/admin/menu-intelligence' },

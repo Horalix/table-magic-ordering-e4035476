@@ -1868,6 +1868,18 @@ export type Database = {
         Args: { _days?: number; _min_pair_sessions?: number }
         Returns: number
       }
+      app_impact_summary: {
+        Args: { _days?: number }
+        Returns: Json
+      }
+      run_daily_maintenance: {
+        Args: Record<PropertyKey, never>
+        Returns: Json
+      }
+      food_cost_coverage: {
+        Args: Record<PropertyKey, never>
+        Returns: Json
+      }
       after_meal_moment: {
         Args: { _session_id: string }
         Returns: boolean
