@@ -4,7 +4,9 @@ import { Plus, X } from 'lucide-react';
 import { useCartStore } from '@/lib/cart-store';
 import { useT, useLanguageStore, getLocalizedName } from '@/lib/i18n';
 import SmartImage from '@/components/ui/SmartImage';
-import { fetchRecommendations, markSuggestionSeen, headlineKeyFor, type Placement } from '@/lib/recommendations';
+import {
+  fetchRecommendations, fetchSuggestionEvidence, markSuggestionSeen, headlineKeyFor, type Placement,
+} from '@/lib/recommendations';
 import { allergensToAvoid, useDietFilterStore } from '@/lib/dietary';
 import { track } from '@/lib/analytics';
 
@@ -101,6 +103,21 @@ const CartSuggestion = ({ placement, disabled, forItemIds }: Props) => {
     return () => { clearTimeout(timer); observer.disconnect(); };
   }, [decisionId, primary, placement, sessionId, sessionToken]);
 
+  /*
+   * Social proof, but only what the data supports.
+   *
+   * The server decides whether a claim may be made at all and, if a number is
+   * allowed, returns the conservative end of the interval. The client never
+   * computes a percentage — that is how "4 out of 4 visits" turns into a
+   * confident 100% on a card.
+   */
+  const { data: evidence } = useQuery({
+    queryKey: ['suggestion-evidence', primary?.source_item_id, primary?.id],
+    queryFn: () => fetchSuggestionEvidence(primary!.source_item_id, primary!.id),
+    enabled: !!primary?.source_item_id,
+    staleTime: 10 * 60 * 1000,
+  });
+
   if (disabled || !primary) return null;
 
   const name = getLocalizedName(primary, locale);
@@ -164,6 +181,17 @@ const CartSuggestion = ({ placement, disabled, forItemIds }: Props) => {
           <p className="text-sm font-sans font-bold text-primary tabular-nums mt-0.5">
             {primary.price.toFixed(2)} KM
           </p>
+          {/* Only what the data supports, and only when it supports it. */}
+          {evidence?.kind === 'quantified' && (
+            <p className="text-[11px] font-sans text-muted-foreground mt-0.5">
+              {t('ordered_by_share').replace('{pct}', String(evidence.percent))}
+            </p>
+          )}
+          {evidence?.kind === 'qualitative' && (
+            <p className="text-[11px] font-sans text-muted-foreground mt-0.5">
+              {t('often_ordered_with')}
+            </p>
+          )}
         </div>
         <div className="flex items-center gap-1.5 shrink-0">
           <button

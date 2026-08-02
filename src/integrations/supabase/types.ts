@@ -1860,6 +1860,14 @@ export type Database = {
         Args: { _notes?: string }
         Returns: Json
       }
+      suggestion_evidence: {
+        Args: { _recommended_item_id: string; _source_item_id: string }
+        Returns: Json
+      }
+      refresh_session_affinity: {
+        Args: { _days?: number; _min_pair_sessions?: number }
+        Returns: number
+      }
       after_meal_moment: {
         Args: { _session_id: string }
         Returns: boolean

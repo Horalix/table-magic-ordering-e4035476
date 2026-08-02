@@ -77,6 +77,34 @@ export async function fetchRecommendations(
 }
 
 /**
+ * What may honestly be claimed about a pairing.
+ *
+ * `none` means say nothing at all — the pairing is unproven or no better than
+ * chance. `qualitative` is a wording claim. `quantified` carries a percentage
+ * that has cleared a support threshold and is the CONSERVATIVE end of the
+ * interval, not the point estimate: a number printed in front of a guest
+ * should survive being wrong.
+ */
+export interface SuggestionEvidence {
+  kind: 'none' | 'qualitative' | 'quantified';
+  percent?: number;
+  sessions?: number;
+}
+
+export async function fetchSuggestionEvidence(
+  sourceItemId: string | null,
+  recommendedItemId: string,
+): Promise<SuggestionEvidence> {
+  if (!sourceItemId) return { kind: 'none' };
+  const { data, error } = await supabase.rpc('suggestion_evidence' as never, {
+    _source_item_id: sourceItemId,
+    _recommended_item_id: recommendedItemId,
+  } as never);
+  if (error || !data) return { kind: 'none' };
+  return data as SuggestionEvidence;
+}
+
+/**
  * Tell the server the guest actually saw a suggestion.
  *
  * Idempotent server-side by primary key, so this is safe to call from more
