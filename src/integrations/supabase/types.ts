@@ -334,6 +334,7 @@ export type Database = {
           image_url?: string | null
           is_available?: boolean
           margin_score?: number
+          meal_role?: Database["public"]["Enums"]["meal_role"] | null
           merchandising_tags?: string[]
           name: string
           name_ar?: string | null
@@ -359,6 +360,7 @@ export type Database = {
           image_url?: string | null
           is_available?: boolean
           margin_score?: number
+          meal_role?: Database["public"]["Enums"]["meal_role"] | null
           merchandising_tags?: string[]
           name?: string
           name_ar?: string | null
@@ -1858,6 +1860,10 @@ export type Database = {
         Args: { _notes?: string }
         Returns: Json
       }
+      after_meal_moment: {
+        Args: { _session_id: string }
+        Returns: boolean
+      }
       guest_order_eta: { Args: { _order_id: string }; Returns: Json }
       guest_place_order: {
         Args: {
@@ -2282,6 +2288,14 @@ export type Database = {
     }
     Enums: {
       app_role: "admin" | "staff"
+      meal_role:
+        | "starter"
+        | "main"
+        | "side"
+        | "dessert"
+        | "hot_drink"
+        | "cold_drink"
+        | "alcohol"
       order_item_status: "pending" | "preparing" | "ready" | "served"
       order_status:
         | "awaiting_payment"

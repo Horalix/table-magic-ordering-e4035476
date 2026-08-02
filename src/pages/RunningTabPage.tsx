@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { ArrowLeft, Clock, CheckCircle, ChefHat, Utensils, Receipt, CreditCard, Loader2, Users } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
 import { useCartStore } from '@/lib/cart-store';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
@@ -104,6 +105,26 @@ const RunningTabPage = () => {
   /** At least one order has actually reached the table. */
   const hasServedFood = orders.some((o) => o.status === 'served' || o.status === 'ready');
 
+  /*
+   * When the after-meal prompt is actually welcome.
+   *
+   * `hasServedFood` fired the instant anything reached the table, which could
+   * mean offering dessert alongside the starters. The server knows whether a
+   * MAIN was served and how long ago, and the interval is a setting a manager
+   * can tune — too soon reads as rushing the table out.
+   */
+  const { data: afterMeal = false } = useQuery({
+    queryKey: ['after-meal-moment', sessionId],
+    queryFn: async () => {
+      if (!sessionId) return false;
+      const { data, error } = await supabase.rpc('after_meal_moment' as never, { _session_id: sessionId } as never);
+      return error ? false : Boolean(data);
+    },
+    enabled: !!sessionId && hasServedFood,
+    refetchInterval: 60_000,
+    staleTime: 30_000,
+  });
+
   React.useEffect(() => { track('tab_viewed', { orders: orders.length }); }, [orders.length]);
 
   return (
@@ -194,7 +215,7 @@ const RunningTabPage = () => {
           {/* Post-meal suggestion. Only once food has actually been served and
               only while the guest has not asked for the bill — offering coffee
               to someone who is trying to leave is the definition of pushy. */}
-          {hasServedFood && !billRequested && <CartSuggestion placement="after_meal" />}
+          {afterMeal && !billRequested && <CartSuggestion placement="after_meal" />}
 
           <div className="px-4 pt-3 grid grid-cols-2 gap-2">
             <Button onClick={goBack} variant="outline" className="rounded-xl min-h-[48px] font-sans text-sm gap-2">
