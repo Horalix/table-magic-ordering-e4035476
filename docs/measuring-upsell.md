@@ -114,9 +114,10 @@ the impact page it sits **below** the holdout figure, explicitly labelled.
 arithmetic turns it into money. Set `menu_items.food_cost` and the impact page
 can report margin; until then it reports net sales and states the coverage.
 
-## 9. The bandit gate
+## 9. Thompson sampling, gated
 
-Thompson sampling is **not built**. `bandit_readiness()` reports why:
+The sampler **is built**, and it is **off**. `bandit_readiness()` decides when
+it turns on:
 
 | Check | Status |
 | --- | --- |
@@ -127,16 +128,60 @@ Thompson sampling is **not built**. `bandit_readiness()` reports why:
 | ≥15 pairs with 50+ impressions each | needs real service data |
 | Any verified conversions | needs real service data |
 
-`smoothed_acceptance` returns the posterior **mean** and discards the variance,
-so a pair seen twice and a pair seen 400 times score alike. Sampling would fix
-that properly in about ten lines. But a bandit optimises whatever it is fed,
-and pointed at mount-counted impressions it would have learned — efficiently,
-confidently — to maximise noise.
+The three failures are one fact stated three ways: none of this has run in a
+real service yet. At roughly 50 sessions a day it is three to four weeks.
 
-Run the gate before building it. When it passes, a Gaussian approximation to
-the Beta posterior is adequate for ranking at these sample sizes; a hand-rolled
-gamma sampler in PL/pgSQL buys nothing when the draw only has to sort five
-candidates.
+### What it changes
+
+`smoothed_acceptance` returns the posterior **mean** and throws the variance
+away:
+
+| | shown | accepted | score | actually plausible |
+| --- | --- | --- | --- | --- |
+| A | 4 | 4 | 0.294 | 8%–51% |
+| B | 400 | 100 | 0.244 | 20%–29% |
+
+A outranks B permanently on four data points, and nothing in the system knows
+one of those numbers is a guess. `sample_acceptance` draws from each posterior
+instead, so A wins about a third of the impressions — enough to find out — and
+then settles above B or falls away.
+
+The existing exploration term already favours new pairs, but it keys on
+**novelty**: `0.15 × 30/(30+shown)`. A pair seen 100 times with wildly
+inconsistent results decays exactly like one seen 100 times with consistent
+results, though the first plainly deserves more testing.
+
+Expect a modest gain. Bandits pay off with many arms and heavy traffic; a café
+with ~50 items finds its good pairings a few weeks sooner and wastes fewer
+impressions in the meantime. Phases 3 and 4 — seeing the whole visit, learning
+pairs across rounds — are what made suggestions *better*. This only allocates
+impressions between candidates the ranker already produced.
+
+### Turning on
+
+`maybe_enable_sampling()` runs nightly inside `run_daily_maintenance()`. It is
+one-way: it will switch sampling **on**, never off, because "off" is a
+judgement about whether the thing is working and that belongs to a person, not
+to a cron job that has just watched a quiet week.
+
+It also **closes the running experiment**, because an experiment compares one
+policy against no suggestions and swapping the ranker underneath it would
+average two treatments into a number describing neither. Start the next one
+from the Impact page.
+
+To stop it by hand:
+
+```sql
+UPDATE public.restaurant_settings SET reco_sampling_enabled = false WHERE id = 1;
+```
+
+### Propensities under sampling
+
+Under a sampled policy the action probability is no longer 1.0 and is not
+cheaply computable — it needs Monte Carlo over every candidate's posterior.
+Rather than log a wrong number, each decision records the posterior **inputs**
+per candidate, so the propensity can be reconstructed exactly offline if
+anyone ever needs off-policy evaluation.
 
 ## 10. Regulars
 

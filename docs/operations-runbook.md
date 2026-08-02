@@ -93,6 +93,46 @@ orders; a blocked guest asks a waiter, which is more work for you.
 
 ---
 
+## 6b. The trading day
+
+Every operational "today" — reconciliation, shift close, the sales report, the
+waiter rota — runs on the **Sarajevo** day via `business_day()`, not on UTC.
+
+This matters because the restaurant serves past midnight. Sarajevo is UTC+2 in
+summer, so 00:30 local is 22:30 UTC the *previous* day. When the two
+definitions disagreed:
+
+- a close at 01:15 reported an `expected_cash` missing everything sold since
+  midnight, so the drawer was over by the late-night trade every night;
+- that trade was reconciled by no close at all, because the previous day had
+  been signed off hours before those orders existed;
+- at 02:00 local, mid-service, every waiter lost their section and new tables
+  stopped being auto-assigned.
+
+If you ever query reconciliation by hand, use `public.day_reconciliation()`
+with no argument, or pass a date from `public.business_day()`. Passing
+`CURRENT_DATE` asks for the UTC day and reintroduces the bug.
+
+```sql
+-- correct
+SELECT public.day_reconciliation();
+SELECT public.day_reconciliation(public.business_day() - 1);  -- yesterday
+
+-- wrong between local midnight and 02:00
+SELECT public.day_reconciliation(CURRENT_DATE);
+```
+
+Shift closes already written keep their original snapshots — a signed-off day
+is a record, and the fix does not rewrite history. If a past close shows a
+surplus roughly equal to a night's after-midnight takings, this was why.
+
+One exception, left alone on purpose: `order_code_counters` still rolls on
+`CURRENT_DATE`. Order numbering has fiscalisation implications and neither
+boundary is obviously right for a service that runs past midnight; decide it
+against the actual requirement.
+
+---
+
 ## 7. Failure modes
 
 Designed for, and what actually happens.
