@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { supabase } from '@/integrations/supabase/client';
+import { supabase, supabaseConfigured, supabaseHost } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -54,6 +54,21 @@ const AdminLogin = () => {
       // VPN, or a blocker. Saying "login failed" here sends people hunting for
       // a password problem that doesn't exist.
       const isNetwork = /failed to fetch|networkerror|load failed/i.test(raw);
+      if (isNetwork) console.error(`Supabase request failed. Host: ${supabaseHost}`);
+      /*
+       * A build with no Supabase URL falls back to an unroutable placeholder,
+       * so every request fails exactly like a dead connection. Distinguishing
+       * the two matters: one is fixed by a deploy setting, the other by wifi,
+       * and the wrong message sends you to the wrong place for an hour.
+       */
+      if (isNetwork && !supabaseConfigured) {
+        toast.error(
+          'This build has no Supabase configuration. Set VITE_SUPABASE_URL and ' +
+          'VITE_SUPABASE_PUBLISHABLE_KEY in the hosting environment and redeploy.',
+          { duration: 12000 },
+        );
+        return;
+      }
       // An unconfirmed address is the other common fresh-install failure, and
       // the provider's raw wording does not say what to do about it.
       const isUnconfirmed = /email not confirmed/i.test(raw);
@@ -84,6 +99,18 @@ const AdminLogin = () => {
           <h1 className="font-serif text-2xl font-bold text-white">La Soul Admin</h1>
           <p className="text-sm text-white/60 font-sans mt-1">Sign in to manage your restaurant</p>
         </div>
+
+        {/* Unmissable, because with no configuration nothing on any screen works. */}
+        {!supabaseConfigured && (
+          <div className="mb-4 rounded-xl bg-destructive text-destructive-foreground p-4 text-sm font-sans">
+            <p className="font-semibold">This build is not connected to a database.</p>
+            <p className="mt-1 opacity-90">
+              VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY are missing from the hosting
+              environment. Nothing will work until they are set and the site is redeployed —
+              this is not a network problem.
+            </p>
+          </div>
+        )}
 
         <form onSubmit={handleLogin} className="space-y-4 bg-card rounded-2xl p-6 shadow-xl">
           <div>

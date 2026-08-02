@@ -32,6 +32,20 @@ if (!configured && typeof window !== 'undefined') {
 /** False when the build has no Supabase configuration. Useful for health checks. */
 export const supabaseConfigured = configured;
 
+/**
+ * The host requests are actually going to.
+ *
+ * Exposed for diagnostics only — never the key. When a deploy forgets its
+ * environment variables this reads `supabase-not-configured.invalid`, which
+ * turns an unexplained "failed to fetch" into an obvious answer. Without it,
+ * a missing variable and a dead wifi connection are indistinguishable from
+ * the browser's error alone.
+ */
+export const supabaseHost = (() => {
+  try { return new URL(SUPABASE_URL || MISSING_CONFIG_URL).host; }
+  catch { return 'invalid-url'; }
+})();
+
 export const supabase = createClient<Database>(
   SUPABASE_URL || MISSING_CONFIG_URL,
   SUPABASE_PUBLISHABLE_KEY || 'not-configured',
