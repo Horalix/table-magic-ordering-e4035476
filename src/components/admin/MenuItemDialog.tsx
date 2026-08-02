@@ -45,6 +45,24 @@ const ALLERGENS = [
  * Free text here would become fake urgency within a week ("Only 2 left!"), and
  * that is exactly what the brief rules out.
  */
+/**
+ * What kind of thing a dish is.
+ *
+ * Separate from `station`, which says where it is MADE. A tiramisu and a steak
+ * are both "kitchen"; an espresso and a beer are both "bar". Coursing rules —
+ * "suggest a dessert once the mains are down", "a second coffee is fine but a
+ * second steak is not" — need this axis, and cannot be expressed without it.
+ */
+const MEAL_ROLES: { key: string; label: string }[] = [
+  { key: 'starter', label: 'Starter' },
+  { key: 'main', label: 'Main' },
+  { key: 'side', label: 'Side' },
+  { key: 'dessert', label: 'Dessert' },
+  { key: 'hot_drink', label: 'Hot drink' },
+  { key: 'cold_drink', label: 'Cold drink' },
+  { key: 'alcohol', label: 'Alcohol' },
+];
+
 const MERCH_TAGS: { key: string; label: string }[] = [
   { key: 'signature', label: 'Signature' },
   { key: 'chef_pick', label: "Chef's pick" },
@@ -128,6 +146,7 @@ const MenuItemDialog = ({ open, onOpenChange, subcategoryId, item, onSaved }: Pr
   const [prep, setPrep] = useState('');
   const [portion, setPortion] = useState('');
   const [station, setStation] = useState<'kitchen' | 'bar'>('kitchen');
+  const [mealRole, setMealRole] = useState<string>('');
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
   const [saving, setSaving] = useState(false);
@@ -156,6 +175,7 @@ const MenuItemDialog = ({ open, onOpenChange, subcategoryId, item, onSaved }: Pr
     setPrep(item?.prep_minutes != null ? String(item.prep_minutes) : '');
     setPortion(item?.portion_note ?? '');
     setStation((item?.station as 'kitchen' | 'bar') ?? 'kitchen');
+    setMealRole((item as { meal_role?: string | null })?.meal_role ?? '');
     setFrom(toTimeInput(item?.available_from));
     setTo(toTimeInput(item?.available_to));
   }, [open, item]);
@@ -215,6 +235,8 @@ const MenuItemDialog = ({ open, onOpenChange, subcategoryId, item, onSaved }: Pr
       prep_minutes: prepNum,
       portion_note: portion.trim() || null,
       station,
+      // Empty means unclassified, and the rules skip it rather than guessing.
+      meal_role: (mealRole || null) as MenuItemInsert['meal_role'],
       available_from: fromTimeInput(from),
       available_to: fromTimeInput(to),
     };
@@ -318,6 +340,26 @@ const MenuItemDialog = ({ open, onOpenChange, subcategoryId, item, onSaved }: Pr
             <p className="text-[11px] text-muted-foreground font-sans mt-1">
               Decides which board and which ticket printer this item goes to.
             </p>
+          </div>
+
+          {/* Course, which is a different question from station. */}
+          <div>
+            <Label className="text-xs text-muted-foreground">Course</Label>
+            <p className="text-[11px] text-muted-foreground font-sans">
+              Used to time suggestions — dessert after mains — and to stop the app offering
+              a second identical main. Leave blank if none of these fit.
+            </p>
+            <div className="mt-1.5 flex flex-wrap gap-1.5">
+              {MEAL_ROLES.map((r) => (
+                <Chip
+                  key={r.key}
+                  on={mealRole === r.key}
+                  onClick={() => setMealRole(mealRole === r.key ? '' : r.key)}
+                >
+                  {r.label}
+                </Chip>
+              ))}
+            </div>
           </div>
 
           {/* Dietary — a guest preference */}

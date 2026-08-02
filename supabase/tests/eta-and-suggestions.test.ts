@@ -84,10 +84,16 @@ const eta = async (orderId: string) => {
   return rows[0].result;
 };
 
+/*
+ * Ranking behaviour is tested against `rank_recommendations`, which is the
+ * pure, side-effect-free scorer. `guest_get_recommendations` is now a thin
+ * wrapper that authorises the session and records the decision; that wrapper
+ * has its own tests in decision-ledger.test.ts.
+ */
 const recommend = async (cart: string[], allergens: string[] = []) => {
   const { rows } = await db.query<{ id: string; name: string; recommendation_type: string }>(
     `SELECT id, name, recommendation_type
-       FROM public.guest_get_recommendations($1::uuid[], 'cart', 'en', 8, $2::uuid, $3::text[])`,
+       FROM public.rank_recommendations($1::uuid[], 'cart', 'en', 8, $2::uuid, $3::text[])`,
     [cart, SESSION, allergens],
   );
   return rows;
@@ -348,10 +354,30 @@ describe('suggestions read the kitchen', () => {
     const quiet = (await recommend([COFFEE])).map((r) => r.id);
     expect(quiet.indexOf(BURGER)).toBeLessThan(quiet.indexOf(NUTCAKE));
 
-    // Pile on work until the kitchen is well past capacity.
-    await db.exec(`ALTER TABLE public.orders DISABLE TRIGGER trg_enforce_order_limits`);
-    for (let i = 0; i < 8; i += 1) await placeOrder([BURGER]);
-    await db.exec(`ALTER TABLE public.orders ENABLE TRIGGER trg_enforce_order_limits`);
+    /*
+     * Pile on work from OTHER tables until the kitchen is past capacity.
+     *
+     * Deliberately not this session's own orders: the repeat rules would then
+     * exclude the burger as something this table already ordered, which is
+     * correct behaviour but a different effect from the one under test here.
+     * A kitchen is busy because of the room, not because of one table.
+     */
+    await db.exec(`
+      INSERT INTO public.table_sessions(id, table_id, token, is_active, last_heartbeat_at)
+      SELECT gen_random_uuid(), 'dddddddd-0000-0000-0000-000000000001', 'busy-' || g, true, now()
+        FROM generate_series(1, 8) g;
+
+      INSERT INTO public.orders(table_session_id, total, status, payment_status, payment_method,
+                                released_to_kitchen_at)
+      SELECT s.id, 20, 'pending', 'unpaid', 'cash', now()
+        FROM public.table_sessions s WHERE s.token LIKE 'busy-%';
+
+      INSERT INTO public.order_items(order_id, menu_item_id, quantity, unit_price, status)
+      SELECT o.id, '${BURGER}', 1, 20, 'pending'
+        FROM public.orders o
+        JOIN public.table_sessions s ON s.id = o.table_session_id
+       WHERE s.token LIKE 'busy-%';
+    `);
 
     const busy = (await recommend([COFFEE])).map((r) => r.id);
 

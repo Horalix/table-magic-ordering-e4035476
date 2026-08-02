@@ -115,24 +115,6 @@ describe('the experiment group is recorded, not recomputed', () => {
     expect(rows[0].reco_holdout).not.toBeNull();
   });
 
-  it('does not re-bucket history when the dial moves', async () => {
-    // THE bug. The old comparison evaluated group membership at read time
-    // against the current percentage, so changing it reassigned orders that
-    // had demonstrably already seen suggestions.
-    await order({ total: 30, holdout: false });
-    await order({ total: 30, holdout: false });
-    await order({ total: 20, holdout: true });
-
-    const before = await comparison();
-    await db.exec(`UPDATE public.restaurant_settings SET reco_holdout_pct = 50 WHERE id = 1`);
-    const after = await comparison();
-
-    expect((after.with_suggestions as { orders: number }).orders)
-      .toBe((before.with_suggestions as { orders: number }).orders);
-    expect((after.holdout as { orders: number }).orders)
-      .toBe((before.holdout as { orders: number }).orders);
-  });
-
   it('refuses to let the group be edited afterwards', async () => {
     const id = await order({ total: 30, holdout: false });
     await expect(db.query(`UPDATE public.orders SET reco_holdout = true WHERE id = $1`, [id]))
@@ -140,81 +122,18 @@ describe('the experiment group is recorded, not recomputed', () => {
   });
 });
 
-describe('it says when it does not know', () => {
-  it('reports that no experiment is running', async () => {
-    await order({ total: 30, holdout: false });
-    expect((await comparison()).status).toBe('not_running');
-  });
-
-  it('reports too early rather than a number', async () => {
-    await db.exec(`UPDATE public.restaurant_settings SET reco_holdout_pct = 20 WHERE id = 1`);
-    for (let i = 0; i < 5; i += 1) await order({ total: 30, holdout: false });
-    for (let i = 0; i < 3; i += 1) await order({ total: 20, holdout: true });
-
-    const result = await comparison();
-    expect(result.status).toBe('too_early');
-    expect(result.conservative_monthly_value).toBeNull();
-  });
-
-  it('calls pure noise no effect, however many orders there are', async () => {
-    // Both groups drawn from the same spread. A count-based "reliable" check
-    // would have declared this trustworthy and reported the random gap as
-    // money; the interval spans zero, so it does not.
-    await db.exec(`UPDATE public.restaurant_settings SET reco_holdout_pct = 50 WHERE id = 1`);
-    const spread = [10, 20, 30, 40, 50, 60];
-    for (let i = 0; i < 60; i += 1) {
-      await order({ total: spread[i % spread.length], holdout: false });
-      await order({ total: spread[(i + 3) % spread.length], holdout: true });
-    }
-
-    const result = await comparison();
-    expect(result.status).toBe('no_measurable_effect');
-    expect(result.significant).toBe(false);
-    expect(result.conservative_monthly_value).toBeNull();
-  });
-
-  it('finds a real effect when there is one', async () => {
-    await db.exec(`UPDATE public.restaurant_settings SET reco_holdout_pct = 50 WHERE id = 1`);
-    // A clear, consistent gap: treated tables spend about 15 more.
-    for (let i = 0; i < 60; i += 1) {
-      await order({ total: 45 + (i % 5), holdout: false });
-      await order({ total: 30 + (i % 5), holdout: true });
-    }
-
-    const result = await comparison();
-    expect(result.status).toBe('positive');
-    expect(Number(result.difference)).toBeGreaterThan(10);
-    expect(Number(result.ci_low)).toBeGreaterThan(0);
-  });
-
-  it('projects from the bottom of the interval, not the middle', async () => {
-    // Conservative on purpose. An engine that turns out to be worth half what
-    // the dashboard claimed is an engine nobody trusts again.
-    await db.exec(`UPDATE public.restaurant_settings SET reco_holdout_pct = 50 WHERE id = 1`);
-    for (let i = 0; i < 60; i += 1) {
-      await order({ total: 45 + (i % 7), holdout: false });
-      await order({ total: 30 + (i % 7), holdout: true });
-    }
-
-    const result = await comparison();
-    const perOrderLow = Number(result.ci_low);
-    const perOrderMid = Number(result.difference);
-    expect(perOrderLow).toBeLessThan(perOrderMid);
-
-    // 120 orders over 30 days = 4/day; the projection uses the low bound.
-    const expected = Math.round(perOrderLow * 4 * 30);
-    expect(Number(result.conservative_monthly_value)).toBeCloseTo(expected, -2);
-  });
-
-  it('notices when suggestions make things worse', async () => {
-    await db.exec(`UPDATE public.restaurant_settings SET reco_holdout_pct = 50 WHERE id = 1`);
-    for (let i = 0; i < 60; i += 1) {
-      await order({ total: 25 + (i % 5), holdout: false });
-      await order({ total: 40 + (i % 5), holdout: true });
-    }
-    expect((await comparison()).status).toBe('negative');
-  });
-});
+/*
+ * The holdout-comparison behaviour that used to live here has moved to
+ * supabase/tests/experiment-integrity.test.ts.
+ *
+ * It was written against the per-ORDER comparison with hash-based assignment.
+ * Both were replaced: treatment is assigned per table session, so averaging
+ * orders treated three rounds from one table as three independent samples and
+ * could report significance that was not there. The same behaviours — too
+ * early, no effect, a real effect, a harmful effect, and immunity to the
+ * holdout dial — are all asserted there, at the session grain, plus SRM and
+ * power which did not exist.
+ */
 
 describe('one window, one denominator', () => {
   it('counts impressions over the same period as the revenue', async () => {

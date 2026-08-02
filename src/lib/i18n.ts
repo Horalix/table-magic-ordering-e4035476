@@ -291,6 +291,14 @@ const translations: Record<string, Record<Locale, string>> = {
   'goes_well_with': { en: 'Goes well with', bs: 'Odlično uz', ar: 'يتناسب مع' },
   'complete_your_order': { en: 'Complete your order', bs: 'Upotpunite narudžbu', ar: 'أكمل طلبك' },
   'anything_else': { en: 'Anything else?', bs: 'Još nešto?', ar: 'أي شيء آخر؟' },
+  // Social proof. Deliberately "ordered with", never "add" — the affinity data
+  // says these appear in the same visit, not that the suggestion caused it.
+  'your_usual': { en: 'Your usual', bs: 'Vaše uobičajeno', ar: 'طلبك المعتاد' },
+  'usual_add': { en: 'Add it again', bs: 'Dodaj ponovo', ar: 'أضفه مرة أخرى' },
+  'forget_device': { en: 'Forget what this phone has ordered', bs: 'Zaboravi šta je ovaj telefon naručio', ar: 'انسَ ما طلبه هذا الهاتف' },
+  'forget_device_done': { en: 'Forgotten. This phone starts fresh.', bs: 'Zaboravljeno. Ovaj telefon počinje ispočetka.', ar: 'تم النسيان. يبدأ هذا الهاتف من جديد.' },
+  'often_ordered_with': { en: 'Often ordered with this', bs: 'Često se naruči uz ovo', ar: 'كثيرًا ما يُطلب مع هذا' },
+  'ordered_by_share': { en: '{pct}% of tables order this too', bs: '{pct}% stolova naruči i ovo', ar: '{pct}٪ من الطاولات تطلب هذا أيضًا' },
   'no_thanks': { en: 'No thanks', bs: 'Ne, hvala', ar: 'لا، شكراً' },
   'add': { en: 'Add', bs: 'Dodaj', ar: 'أضف' },
 
