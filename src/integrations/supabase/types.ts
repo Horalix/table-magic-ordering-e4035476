@@ -1772,7 +1772,8 @@ export type Database = {
           _language?: string
           _limit?: number
           _placement?: string
-          _session_id?: string
+          _session_id: string
+          _session_token: string
         }
         Returns: {
           dietary_tags: string[]
@@ -1831,6 +1832,31 @@ export type Database = {
           id: string
           status: string
         }[]
+      }
+      guest_mark_suggestion_seen: {
+        Args: { _decision_id: string; _session_id: string; _session_token: string }
+        Returns: undefined
+      }
+      decision_performance: {
+        Args: { _days?: number }
+        Returns: {
+          acceptance_pct: number
+          accepted: number
+          decisions: number
+          placement: string
+          policy_version: string
+          revenue: number
+          seen: number
+          with_suggestion: number
+        }[]
+      }
+      start_experiment: {
+        Args: { _holdout_pct?: number; _name: string; _policy_version: string }
+        Returns: Json
+      }
+      stop_experiment: {
+        Args: { _notes?: string }
+        Returns: Json
       }
       guest_order_eta: { Args: { _order_id: string }; Returns: Json }
       guest_place_order: {

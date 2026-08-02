@@ -107,9 +107,15 @@ async function seedBaskets(baskets: string[][]) {
   await db.exec(`ALTER TABLE public.orders ENABLE TRIGGER trg_enforce_order_limits`);
 }
 
+/*
+ * Ranking behaviour is tested against `rank_recommendations`, which is the
+ * pure, side-effect-free scorer. `guest_get_recommendations` is now a thin
+ * wrapper that authorises the session and records the decision; that wrapper
+ * has its own tests in decision-ledger.test.ts.
+ */
 async function recommend(cart: string[], placement = 'cart', sessionId: string | null = SESSION) {
   const { rows } = await db.query<{ id: string; recommendation_type: string; source_item_id: string | null }>(
-    `SELECT * FROM public.guest_get_recommendations($1::uuid[], $2, 'en', 8, $3::uuid)`,
+    `SELECT * FROM public.rank_recommendations($1::uuid[], $2, 'en', 8, $3::uuid)`,
     [cart, placement, sessionId],
   );
   return rows;
@@ -297,7 +303,7 @@ describe('learning changes the order of suggestions', () => {
     let coffeeFirst = 0;
     for (let i = 0; i < 40; i += 1) {
       const { rows } = await db.query<{ id: string }>(
-        `SELECT id FROM public.guest_get_recommendations($1::uuid[], 'cart', 'en', 1, gen_random_uuid())`,
+        `SELECT id FROM public.rank_recommendations($1::uuid[], 'cart', 'en', 1, gen_random_uuid())`,
         [[BURGER]]);
       if (rows[0]?.id === COFFEE) coffeeFirst += 1;
     }
@@ -348,7 +354,7 @@ describe('learning can never break a guardrail', () => {
       `INSERT INTO public.menu_item_recommendations(source_item_id, recommended_item_id, recommendation_type)
        VALUES ($1, $2, 'pair_with')`, [BURGER, COFFEE]);
     const { rows } = await db.query<Record<string, unknown>>(
-      `SELECT * FROM public.guest_get_recommendations($1::uuid[], 'cart', 'en', 4, $2::uuid)`,
+      `SELECT * FROM public.rank_recommendations($1::uuid[], 'cart', 'en', 4, $2::uuid)`,
       [[BURGER], SESSION]);
     for (const row of rows) expect(Object.keys(row)).not.toContain('margin_score');
   });

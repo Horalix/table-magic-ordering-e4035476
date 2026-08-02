@@ -38,7 +38,7 @@ export interface GuestOrderItemInput {
    * menu and records the conversion, which is how "suggestions earned X" is
    * measured in money rather than clicks. It cannot influence the total.
    */
-  from_suggestion?: { source_item_id: string | null; placement: string } | null;
+  from_suggestion?: { source_item_id: string | null; placement: string; decision_id?: string | null } | null;
 }
 
 /**

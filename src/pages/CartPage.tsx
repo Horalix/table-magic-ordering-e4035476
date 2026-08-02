@@ -194,7 +194,12 @@ const CartPage = () => {
           notes: item.notes || null,
           // Priced server-side regardless; this only records what earned what.
           from_suggestion: item.fromSuggestion
-            ? { source_item_id: item.fromSuggestion.sourceItemId, placement: item.fromSuggestion.placement }
+            ? {
+              source_item_id: item.fromSuggestion.sourceItemId,
+              placement: item.fromSuggestion.placement,
+              // Joins the sale back to the decision that produced it.
+              decision_id: item.fromSuggestion.decisionId ?? null,
+            }
             : null,
         })),
         tip,

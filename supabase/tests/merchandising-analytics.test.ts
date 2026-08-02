@@ -78,9 +78,15 @@ async function seed() {
   await actAs(db, null);
 }
 
+/*
+ * Ranking behaviour is tested against `rank_recommendations`, which is the
+ * pure, side-effect-free scorer. `guest_get_recommendations` is now a thin
+ * wrapper that authorises the session and records the decision; that wrapper
+ * has its own tests in decision-ledger.test.ts.
+ */
 async function recommend(cart: string[], placement = 'cart', language = 'en') {
   const { rows } = await db.query<{ id: string; recommendation_type: string; name: string }>(
-    `SELECT * FROM public.guest_get_recommendations($1::uuid[], $2, $3, 8)`,
+    `SELECT * FROM public.rank_recommendations($1::uuid[], $2, $3, 8)`,
     [cart, placement, language],
   );
   return rows;
@@ -180,7 +186,7 @@ describe('recommendations', () => {
 
   it('never exposes the internal margin score', async () => {
     const { rows } = await db.query<Record<string, unknown>>(
-      `SELECT * FROM public.guest_get_recommendations($1::uuid[], 'cart', 'en', 4)`, [[BURGER]]);
+      `SELECT * FROM public.rank_recommendations($1::uuid[], 'cart', 'en', 4)`, [[BURGER]]);
     for (const row of rows) {
       expect(Object.keys(row)).not.toContain('margin_score');
     }

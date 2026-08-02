@@ -1,10 +1,10 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Plus, X } from 'lucide-react';
 import { useCartStore } from '@/lib/cart-store';
 import { useT, useLanguageStore, getLocalizedName } from '@/lib/i18n';
 import SmartImage from '@/components/ui/SmartImage';
-import { fetchRecommendations, headlineKeyFor, type Placement } from '@/lib/recommendations';
+import { fetchRecommendations, markSuggestionSeen, headlineKeyFor, type Placement } from '@/lib/recommendations';
 import { allergensToAvoid, useDietFilterStore } from '@/lib/dietary';
 import { track } from '@/lib/analytics';
 
@@ -41,6 +41,7 @@ const CartSuggestion = ({ placement, disabled, forItemIds }: Props) => {
   const locale = useLanguageStore((s) => s.locale);
   const { items, addItem } = useCartStore();
   const sessionId = useCartStore((st) => st.sessionId);
+  const sessionToken = useCartStore((st) => st.sessionToken);
   const [dismissed, setDismissed] = useState<string[]>([]);
   const activeDiets = useDietFilterStore((st) => st.activeDiets);
   const avoid = useMemo(() => allergensToAvoid(activeDiets), [activeDiets]);
@@ -50,26 +51,55 @@ const CartSuggestion = ({ placement, disabled, forItemIds }: Props) => {
     [forItemIds, items],
   );
 
-  const { data = [] } = useQuery({
+  const { data } = useQuery({
     queryKey: ['recommendations', placement, locale, cartIds.join(','), sessionId, avoid.join(',')],
-    queryFn: () => fetchRecommendations(cartIds, placement, locale, 4, sessionId, avoid),
+    queryFn: () => fetchRecommendations(sessionId!, sessionToken!, cartIds, placement, locale, 4, avoid),
     staleTime: 5 * 60 * 1000,
-    enabled: !disabled,
+    enabled: !disabled && !!sessionId && !!sessionToken,
   });
 
-  const visible = data.filter((r) => !dismissed.includes(r.id));
+  const visible = (data?.items ?? []).filter((r) => !dismissed.includes(r.id));
   const primary = visible[0];
+  const decisionId = data?.decisionId ?? null;
+
+  /**
+   * Report a sighting only when the card is genuinely on screen.
+   *
+   * The previous version fired on mount, which counted a suggestion the guest
+   * scrolled past, counted it again on every remount, and counted it twice
+   * because `placement="cart"` is rendered from both the cart page and the
+   * cart sheet. The server dedupes by decision id regardless, so this is
+   * belt and braces — but reporting a sighting that did not happen is still a
+   * lie, even if the database throws it away.
+   */
+  const cardRef = useRef<HTMLDivElement | null>(null);
+  const reported = useRef<string | null>(null);
 
   useEffect(() => {
-    if (primary) {
-      track('suggestion_shown', {
-        placement,
-        item_id: primary.id,
-        source_item_id: primary.source_item_id ?? null,
-        type: primary.recommendation_type,
-      });
-    }
-  }, [primary?.id, placement]); // eslint-disable-line react-hooks/exhaustive-deps
+    const node = cardRef.current;
+    if (!node || !primary || !decisionId || !sessionId || !sessionToken) return;
+    if (reported.current === decisionId) return;
+
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const observer = new IntersectionObserver(([entry]) => {
+      if (!entry.isIntersecting) { clearTimeout(timer); return; }
+      timer = setTimeout(() => {
+        if (reported.current === decisionId) return;
+        reported.current = decisionId;
+        void markSuggestionSeen(decisionId, sessionId, sessionToken);
+        track('suggestion_shown', {
+          placement,
+          decision_id: decisionId,
+          item_id: primary.id,
+          source_item_id: primary.source_item_id ?? null,
+          type: primary.recommendation_type,
+        });
+      }, 400);
+    }, { threshold: 0.5 });
+
+    observer.observe(node);
+    return () => { clearTimeout(timer); observer.disconnect(); };
+  }, [decisionId, primary, placement, sessionId, sessionToken]);
 
   if (disabled || !primary) return null;
 
@@ -83,10 +113,15 @@ const CartSuggestion = ({ placement, disabled, forItemIds }: Props) => {
       price: primary.price,
       image_url: primary.image_url || undefined,
       // Lets the server attribute what this suggestion actually earned.
-      fromSuggestion: { sourceItemId: primary.source_item_id ?? null, placement },
+      fromSuggestion: {
+        sourceItemId: primary.source_item_id ?? null,
+        placement,
+        decisionId,
+      },
     });
     track('suggestion_accepted', {
       placement,
+      decision_id: decisionId,
       item_id: primary.id,
       source_item_id: primary.source_item_id ?? null,
       type: primary.recommendation_type,
@@ -100,6 +135,7 @@ const CartSuggestion = ({ placement, disabled, forItemIds }: Props) => {
   const dismiss = () => {
     track('suggestion_dismissed', {
       placement,
+      decision_id: decisionId,
       item_id: primary.id,
       source_item_id: primary.source_item_id ?? null,
       type: primary.recommendation_type,
@@ -113,7 +149,7 @@ const CartSuggestion = ({ placement, disabled, forItemIds }: Props) => {
         {t(headlineKeyFor(placement, primary.recommendation_type))}
       </p>
 
-      <div className="card-lux p-3 flex items-center gap-3">
+      <div ref={cardRef} className="card-lux p-3 flex items-center gap-3">
         <SmartImage
           src={primary.image_url || undefined}
           id={primary.id}

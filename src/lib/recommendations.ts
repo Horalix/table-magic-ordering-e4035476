@@ -12,6 +12,15 @@ export type RecommendationType =
 export type Placement = 'cart' | 'after_meal' | 'item';
 
 export interface Recommendation {
+  /**
+   * The server-side decision this suggestion came from.
+   *
+   * Carried through the impression and into the order line, so a completed
+   * sale can be tied back to the exact decision, policy version and experiment
+   * arm that produced it. Without it, "suggestions earned X" is an inference;
+   * with it, it is a join.
+   */
+  decision_id: string;
   id: string;
   name: string;
   name_bs: string | null;
@@ -31,27 +40,59 @@ export interface Recommendation {
  * all enforced in SQL — the browser cannot talk the server into recommending a
  * sold-out dish, and the internal margin weight never crosses the wire.
  */
+export interface RecommendationResult {
+  decisionId: string | null;
+  items: Recommendation[];
+}
+
 export async function fetchRecommendations(
+  sessionId: string,
+  sessionToken: string,
   cartItemIds: string[],
   placement: Placement,
   locale: Locale,
   limit = 4,
-  sessionId?: string | null,
   excludeAllergens: string[] = [],
-): Promise<Recommendation[]> {
+): Promise<RecommendationResult> {
   const { data, error } = await supabase.rpc('guest_get_recommendations' as never, {
+    _session_id: sessionId,
+    _session_token: sessionToken,
     _cart_item_ids: cartItemIds,
     _placement: placement,
     _language: locale,
     _limit: limit,
-    // Keeps the suggestion stable for this table, and decides holdout membership.
-    _session_id: sessionId ?? null,
     // Never suggest around a filter the guest has already set.
     _exclude_allergens: excludeAllergens,
   } as never);
 
-  if (error) return [];
-  return ((data ?? []) as Recommendation[]).map((row) => ({ ...row, price: Number(row.price) }));
+  if (error) return { decisionId: null, items: [] };
+
+  const rows = (data ?? []) as Recommendation[];
+  return {
+    // Every row of one response shares a decision; an empty response still has
+    // one server-side, but the client has nothing to mark as seen.
+    decisionId: rows[0]?.decision_id ?? null,
+    items: rows.map((row) => ({ ...row, price: Number(row.price) })),
+  };
+}
+
+/**
+ * Tell the server the guest actually saw a suggestion.
+ *
+ * Idempotent server-side by primary key, so this is safe to call from more
+ * than one place and safe to retry. The client no longer has to be trusted to
+ * count correctly — it only has to report a sighting.
+ */
+export async function markSuggestionSeen(
+  decisionId: string,
+  sessionId: string,
+  sessionToken: string,
+): Promise<void> {
+  await supabase.rpc('guest_mark_suggestion_seen' as never, {
+    _decision_id: decisionId,
+    _session_id: sessionId,
+    _session_token: sessionToken,
+  } as never);
 }
 
 /** The line of copy shown above a suggestion, by intent. */

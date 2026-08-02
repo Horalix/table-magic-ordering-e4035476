@@ -7,6 +7,14 @@ import { touchSession } from '@/lib/guest-api';
 export interface SuggestionOrigin {
   sourceItemId: string | null;
   placement: string;
+  /**
+   * The server-side decision that produced this suggestion.
+   *
+   * Carried all the way into the order line so a completed sale joins back to
+   * the exact decision, policy version and experiment arm — turning "this
+   * feature earned X" from an inference into a join.
+   */
+  decisionId?: string | null;
 }
 
 export interface CartItem {

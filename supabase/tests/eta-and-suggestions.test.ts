@@ -84,10 +84,16 @@ const eta = async (orderId: string) => {
   return rows[0].result;
 };
 
+/*
+ * Ranking behaviour is tested against `rank_recommendations`, which is the
+ * pure, side-effect-free scorer. `guest_get_recommendations` is now a thin
+ * wrapper that authorises the session and records the decision; that wrapper
+ * has its own tests in decision-ledger.test.ts.
+ */
 const recommend = async (cart: string[], allergens: string[] = []) => {
   const { rows } = await db.query<{ id: string; name: string; recommendation_type: string }>(
     `SELECT id, name, recommendation_type
-       FROM public.guest_get_recommendations($1::uuid[], 'cart', 'en', 8, $2::uuid, $3::text[])`,
+       FROM public.rank_recommendations($1::uuid[], 'cart', 'en', 8, $2::uuid, $3::text[])`,
     [cart, SESSION, allergens],
   );
   return rows;
