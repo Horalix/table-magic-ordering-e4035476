@@ -349,6 +349,7 @@ export type Database = {
           image_url: string | null
           is_available: boolean
           margin_score: number
+          meal_role: Database["public"]["Enums"]["meal_role"] | null
           merchandising_tags: string[]
           name: string
           name_ar: string | null
@@ -374,6 +375,7 @@ export type Database = {
           image_url?: string | null
           is_available?: boolean
           margin_score?: number
+          meal_role?: Database["public"]["Enums"]["meal_role"] | null
           merchandising_tags?: string[]
           name: string
           name_ar?: string | null
@@ -399,6 +401,7 @@ export type Database = {
           image_url?: string | null
           is_available?: boolean
           margin_score?: number
+          meal_role?: Database["public"]["Enums"]["meal_role"] | null
           merchandising_tags?: string[]
           name?: string
           name_ar?: string | null
@@ -2445,6 +2448,14 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      role_is_drink: {
+        Args: { _role: Database["public"]["Enums"]["meal_role"] }
+        Returns: boolean
+      }
+      role_repeat_minutes: {
+        Args: { _role: Database["public"]["Enums"]["meal_role"] }
+        Returns: number
+      }
       rotate_table_qr_token: { Args: { _table_id: string }; Returns: string }
       rotate_venue_qr_token: { Args: never; Returns: string }
       sales_analytics: { Args: { _from?: string; _to?: string }; Returns: Json }
@@ -2581,6 +2592,14 @@ export type Database = {
     }
     Enums: {
       app_role: "admin" | "staff"
+      meal_role:
+        | "starter"
+        | "main"
+        | "side"
+        | "dessert"
+        | "hot_drink"
+        | "cold_drink"
+        | "alcohol"
       order_item_status: "pending" | "preparing" | "ready" | "served"
       order_status:
         | "awaiting_payment"
@@ -2720,6 +2739,15 @@ export const Constants = {
   public: {
     Enums: {
       app_role: ["admin", "staff"],
+      meal_role: [
+        "starter",
+        "main",
+        "side",
+        "dessert",
+        "hot_drink",
+        "cold_drink",
+        "alcohol",
+      ],
       order_item_status: ["pending", "preparing", "ready", "served"],
       order_status: [
         "awaiting_payment",
