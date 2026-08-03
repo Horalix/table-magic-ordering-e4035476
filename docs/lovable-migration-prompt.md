@@ -2,23 +2,27 @@
 
 Copy everything between the rules into Lovable. Nothing else needs to be said.
 
-Last updated: **3 August 2026**, for the twelve migrations from
-`20260804090000` to `20260805090100`.
+Last updated: **3 August 2026**, for the nine migrations from
+`20260804090300` to `20260805090100`.
+
+> **Already applied.** The first three of the original batch — experiment
+> integrity, the decision ledger and meal roles — are live. Lovable recorded
+> them under its own timestamps (`20260803002004`, `20260803002115`,
+> `20260803002144`); the contents matched mine exactly, so the duplicates were
+> removed from the repository and Lovable's filenames kept, since those are the
+> ones the database's migration history knows about.
 
 ---
 
 ## The prompt
 
-> **Task: apply twelve existing migration files to Supabase. Do not write any
+> **Task: apply nine existing migration files to Supabase. Do not write any
 > new SQL.**
 >
-> These twelve files are already in the repository under `supabase/migrations/`,
+> These nine files are already in the repository under `supabase/migrations/`,
 > in this order:
 >
 > ```
-> 20260804090000_experiment_integrity.sql
-> 20260804090100_decision_ledger.sql
-> 20260804090200_meal_roles.sql
 > 20260804090300_session_context.sql
 > 20260804090400_session_affinity.sql
 > 20260804090500_maintenance.sql
@@ -37,7 +41,7 @@ Last updated: **3 August 2026**, for the twelve migrations from
 >
 > This matters more than it usually does, for three specific reasons:
 >
-> 1. **Five of these files modify an existing database function in place.** They
+> 1. **Four of these files modify an existing database function in place.** They
 >    fetch the current definition with `pg_get_functiondef()` and perform exact
 >    string replacement on it. If the text is paraphrased by even one character,
 >    the replacement finds nothing. Each rewrite asserts that it matched and
@@ -49,8 +53,9 @@ Last updated: **3 August 2026**, for the twelve migrations from
 >    bodies stored in Postgres have none, and every replacement misses. There is
 >    a `.gitattributes` pinning this; please do not override it.
 >
-> 3. **Order is load-bearing.** `20260804090300` rewrites a function that
->    `20260804090100` renames. Running them out of order will fail.
+> 3. **Order is load-bearing.** `20260804090300` rewrites a function that the
+>    already-applied decision-ledger migration renamed, and `20260804090900`
+>    rewrites one from `20260804090300`. Running them out of order will fail.
 >
 > **If a file fails, stop.** Report the exact error text and the file name, and
 > do not continue to the next file or attempt a workaround. A partial apply is
@@ -101,13 +106,10 @@ Last updated: **3 August 2026**, for the twelve migrations from
 
 ---
 
-## What these twelve change, in one line each
+## What these nine change, in one line each
 
 | File | Effect |
 |---|---|
-| `..090000_experiment_integrity` | Uplift is measured per visit, net of tips and refunds, with the holdout arm frozen in a ledger instead of recomputed on read |
-| `..090100_decision_ledger` | Every ranking decision is recorded, including when it chose to suggest nothing |
-| `..090200_meal_roles` | Adds `meal_role` — starter, main, dessert, drink — which `station` could not express |
 | `..090300_session_context` | The ranker reads the whole visit; **fixes a live bug** where one guest's salad hid every meat dish from the whole table |
 | `..090400_session_affinity` | Learns pairings across rounds, not only within one order; social proof quotes a lower bound or stays silent |
 | `..090500_maintenance` | Retention with a 120-day floor, on an advisory-locked nightly job |
