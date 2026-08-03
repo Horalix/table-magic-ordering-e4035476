@@ -334,7 +334,6 @@ export type Database = {
           image_url?: string | null
           is_available?: boolean
           margin_score?: number
-          meal_role?: Database["public"]["Enums"]["meal_role"] | null
           merchandising_tags?: string[]
           name: string
           name_ar?: string | null
@@ -360,7 +359,6 @@ export type Database = {
           image_url?: string | null
           is_available?: boolean
           margin_score?: number
-          meal_role?: Database["public"]["Enums"]["meal_role"] | null
           merchandising_tags?: string[]
           name?: string
           name_ar?: string | null
@@ -1774,8 +1772,7 @@ export type Database = {
           _language?: string
           _limit?: number
           _placement?: string
-          _session_id: string
-          _session_token: string
+          _session_id?: string
         }
         Returns: {
           dietary_tags: string[]
@@ -1834,67 +1831,6 @@ export type Database = {
           id: string
           status: string
         }[]
-      }
-      guest_mark_suggestion_seen: {
-        Args: { _decision_id: string; _session_id: string; _session_token: string }
-        Returns: undefined
-      }
-      decision_performance: {
-        Args: { _days?: number }
-        Returns: {
-          acceptance_pct: number
-          accepted: number
-          decisions: number
-          placement: string
-          policy_version: string
-          revenue: number
-          seen: number
-          with_suggestion: number
-        }[]
-      }
-      start_experiment: {
-        Args: { _holdout_pct?: number; _name: string; _policy_version: string }
-        Returns: Json
-      }
-      stop_experiment: {
-        Args: { _notes?: string }
-        Returns: Json
-      }
-      suggestion_evidence: {
-        Args: { _recommended_item_id: string; _source_item_id: string }
-        Returns: Json
-      }
-      refresh_session_affinity: {
-        Args: { _days?: number; _min_pair_sessions?: number }
-        Returns: number
-      }
-      guest_forget_me: {
-        Args: { _client_id: string }
-        Returns: Json
-      }
-      returning_guest_stats: {
-        Args: { _days?: number }
-        Returns: Json
-      }
-      refresh_guest_profiles: {
-        Args: Record<PropertyKey, never>
-        Returns: number
-      }
-      app_impact_summary: {
-        Args: { _days?: number }
-        Returns: Json
-      }
-      run_daily_maintenance: {
-        Args: Record<PropertyKey, never>
-        Returns: Json
-      }
-      food_cost_coverage: {
-        Args: Record<PropertyKey, never>
-        Returns: Json
-      }
-      after_meal_moment: {
-        Args: { _session_id: string }
-        Returns: boolean
       }
       guest_order_eta: { Args: { _order_id: string }; Returns: Json }
       guest_place_order: {
@@ -2320,14 +2256,6 @@ export type Database = {
     }
     Enums: {
       app_role: "admin" | "staff"
-      meal_role:
-        | "starter"
-        | "main"
-        | "side"
-        | "dessert"
-        | "hot_drink"
-        | "cold_drink"
-        | "alcohol"
       order_item_status: "pending" | "preparing" | "ready" | "served"
       order_status:
         | "awaiting_payment"
