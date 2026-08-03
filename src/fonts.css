@@ -1,0 +1,30 @@
+/*
+ * Self-hosted, subset webfonts. GENERATED — edit scripts/build-fonts.py.
+ *
+ * These used to come from fonts.googleapis.com via a render-blocking <link>,
+ * which cost two extra handshakes before any text could paint and sent every
+ * guest's IP to a third party while /privacy promised otherwise.
+ *
+ * Variable fonts with the weight axis kept, so these two files cover every
+ * weight the UI uses. Subset to Latin plus the Bosnian diacritics and the
+ * punctuation actually rendered. Arabic was never in either family and still
+ * is not — the ar locale uses the system Arabic font, as before.
+ *
+ * 1063 KB of source font -> 61 KB shipped.
+ */
+
+@font-face {
+  font-family: 'Lora';
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url('/fonts/lora.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url('/fonts/inter.woff2') format('woff2');
+}
