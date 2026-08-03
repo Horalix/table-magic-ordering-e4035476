@@ -133,6 +133,39 @@ against the actual requirement.
 
 ---
 
+## 6c. Orders that never finished
+
+The nightly job closes **unpaid** orders left unserved for more than
+`restaurant_settings.stale_order_hours` (6 by default). Two kinds: card
+attempts that were abandoned before payment, which never reached the kitchen at
+all, and unpaid orders nobody served. Neither involves money, so closing them
+costs nothing and stops them being reported as outstanding forever.
+
+It will **not** close a paid order. Paid-but-never-served is nearly always a
+forgotten tap rather than missing food, and cancelling it would drop the order
+out of `completed_orders` — quietly reducing that day's revenue and making a
+refund look owed for a meal that was eaten. Those appear here instead:
+
+```sql
+SELECT * FROM public.orders_needing_attention();
+```
+
+Paid ones sort first, with the table number, so somebody can go and ask. Once
+you know the food went out, close it normally from Admin → Orders.
+
+The guest's **table session is left open** on purpose. It has its own idle
+expiry, and someone still sitting there should not lose their tab because one
+card attempt failed.
+
+To run it by hand:
+
+```sql
+SELECT public.close_stale_orders();     -- uses the configured window
+SELECT public.close_stale_orders(12);   -- or an explicit one, minimum 2 hours
+```
+
+---
+
 ## 7. Failure modes
 
 Designed for, and what actually happens.

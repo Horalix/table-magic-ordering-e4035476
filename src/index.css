@@ -1,11 +1,21 @@
+@import './fonts.css';
 /*
- * Fonts are loaded from a <link> in index.html, not with @import.
+ * The @font-face rules live in fonts.css and are inlined here at build time.
  *
- * An @import inside the stylesheet cannot be discovered by the browser's
- * preload scanner: it has to download and parse index.css first, THEN start
- * the font request, THEN fetch the font files. That is three serial round
- * trips before any text renders in the right typeface. The <link> starts the
- * font request in parallel with the CSS.
+ * This reverses an earlier decision, and the earlier reasoning was right for
+ * the situation it described. When the fonts came from fonts.googleapis.com,
+ * an @import meant three serial round trips before any text rendered in the
+ * right face: fetch index.css, parse it, fetch Google's stylesheet, parse
+ * that, fetch the woff2. A <link> in index.html started the chain in parallel
+ * with the CSS instead.
+ *
+ * Both halves of that problem are now gone. Vite inlines this @import into the
+ * CSS bundle, so there is no second stylesheet to fetch, and index.html
+ * carries an explicit `<link rel="preload" as="font">` for each of the two
+ * local files — so the font bytes are already in flight before this file has
+ * even been parsed. Discovery is no longer the CSS's job.
+ *
+ * See scripts/build-fonts.py for why the fonts are local at all.
  */
 
 @tailwind base;

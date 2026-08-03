@@ -357,19 +357,34 @@ const KitchenDisplay = () => {
     setAudioUnlocked(audioReady());
     if (audioReady()) return;
 
+    /*
+     * `click`, not `pointerdown` — and that distinction is a bug fix.
+     *
+     * Unlocking hides the "Sound blocked" chip, which changes the header's
+     * size. On pointerdown that happened BETWEEN the press and the release, so
+     * the toolbar moved out from under the finger and the tap landed on
+     * nothing: wider viewports slid the controls sideways, narrow ones shifted
+     * them down a row. Every board load began with one dead tap, because
+     * browsers always suspend audio until a gesture.
+     *
+     * A window-level `click` listener runs after React's delegated handler for
+     * whatever was tapped, so the control does its job first and the layout
+     * settles afterwards. Autoplay policy is satisfied either way — a click is
+     * every bit as much a user gesture as a pointerdown.
+     */
     const unlock = async () => {
       const ok = await unlockAudio();
       setAudioUnlocked(ok);
       if (ok) {
-        window.removeEventListener('pointerdown', unlock);
-        window.removeEventListener('keydown', unlock);
+        window.removeEventListener('click', unlock);
+        window.removeEventListener('keyup', unlock);
       }
     };
-    window.addEventListener('pointerdown', unlock);
-    window.addEventListener('keydown', unlock);
+    window.addEventListener('click', unlock);
+    window.addEventListener('keyup', unlock);
     return () => {
-      window.removeEventListener('pointerdown', unlock);
-      window.removeEventListener('keydown', unlock);
+      window.removeEventListener('click', unlock);
+      window.removeEventListener('keyup', unlock);
     };
   }, []);
 
@@ -682,8 +697,24 @@ const KitchenDisplay = () => {
   return (
     <div className="min-h-screen bg-background">
       <div className="sticky top-0 z-30 glass border-b border-border">
+        {/*
+          `flex-1 min-w-0` lets the left block own the remaining width, so a
+          status chip appearing or vanishing inside it cannot slide the control
+          cluster sideways mid-tap.
+
+          It is the belt to the braces: the actual cure for the swallowed first
+          tap is unlocking audio on `click` rather than `pointerdown` (see the
+          effect above), because on a phone the cluster wraps to its own row
+          and the shift is vertical, which no amount of width stabilising can
+          fix.
+
+          Note what is NOT here: `shrink-0` on the cluster. It looked like the
+          symmetric fix and it broke the board on a phone — the cluster stopped
+          shrinking, overflowed the viewport, and its own container then
+          intercepted every tap aimed at the buttons inside it.
+        */}
         <div className="flex items-center justify-between px-6 py-4 gap-4 flex-wrap">
-          <div>
+          <div className="flex-1 min-w-0">
             <h1 className="font-serif text-2xl font-bold text-foreground">
               {station === 'bar' ? 'Bar Display' : station === 'kitchen' ? 'Kitchen Display' : 'Kitchen & Bar'}
             </h1>

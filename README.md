@@ -26,12 +26,32 @@ npm run dev                 # http://localhost:8080
 | `npm run build` | Production build |
 | `npm run typecheck` | `tsc --noEmit` |
 | `npm run lint` | ESLint |
-| `npm test` | Unit + SQL integration tests (457) |
-| `npm run test:e2e` | Playwright, 3 browser projects (97 across 3 browsers) |
+| `npm test` | Unit + SQL integration tests (489) |
+| `npm run test:e2e` | Playwright, 3 browser projects (151 across 3 browsers) |
 | `npm run scan:secrets` | Fails on committed credentials |
 | **`npm run verify`** | **typecheck → lint → tests → secret scan → build** |
 
 First E2E run needs browsers: `npx playwright install chromium webkit`.
+
+---
+
+## Speed
+
+What a guest downloads before the menu paints, on a phone at a table:
+
+| | gzipped |
+|---|---|
+| JavaScript + CSS | **225 KB** |
+| Fonts (2 files, woff2) | **61 KB** |
+| Third-party requests | **0** |
+
+Two things got it there. `charts-vendor` was in a `modulepreload` — 389 KB of
+Recharts and d3 on the critical path of a menu with no charts, because naming a
+manual chunk makes Rollup hoist it to a static import of the entry. And the
+fonts came from Google's CDN: two extra handshakes before a word could paint,
+plus every guest's IP sent to a third party while `/privacy` promised
+first-party. Both are now covered by `src/lib/build-hygiene.test.ts`, because
+neither shows up in a screenshot.
 
 ---
 
@@ -159,6 +179,22 @@ The suites paid for themselves before they were even green:
   just-cleared cart.
 - `TablePresence`, mounted globally for every guest, crashed the whole app if an
   RPC returned a non-array.
+
+And on the staff screens, the first time an end-to-end suite was pointed at
+them:
+
+- **The first tap on the kitchen toolbar was swallowed, every load.** Audio
+  unlocks on the first gesture, which hid the "Sound blocked" chip, which
+  resized the header *between pointerdown and click* — so the controls moved out
+  from under the finger. A cook taps Bar, nothing happens, they tap again.
+  Nobody reports that; they assume the tablet is slow.
+- **A null took down the whole board.** PostgREST returns `null` with no error
+  for a set-returning function that yields nothing; `rpc<T[]>` handed it back
+  typed as an array and `load.filter()` ran on it. The entire kitchen display
+  went to "Something went wrong", mid-service.
+- My own first fix for the swallowed tap — `shrink-0` on the control cluster —
+  **broke the board on a phone**: it stopped shrinking, overflowed the viewport,
+  and intercepted every tap aimed at its own buttons. Caught by mobile-chrome.
 
 And in the measurement pass, where the tests were the only thing standing
 between a plausible number and a wrong one:
@@ -377,6 +413,7 @@ Measurement and the engine (**not yet applied to production** — see below):
 | `20260804090800_bandit_readiness.sql` | The gate |
 | `20260804090900_thompson_sampling.sql` | `sample_acceptance`, the switch, nightly auto-enable |
 | `20260805090000_business_day.sql` | **The trading day is Sarajevo's, not UTC's** — see below |
+| `20260805090100_stale_orders.sql` | Closes unpaid orders left open for hours; refuses to touch paid ones and hands those to a person |
 
 Full lifecycle contract: [docs/order-state-machine.md](docs/order-state-machine.md).
 
@@ -409,10 +446,10 @@ Line endings are **content** here for the same reason; see `.gitattributes`.
 ## Testing
 
 ```bash
-npm test                                              # 457 unit + integration
+npm test                                              # 489 unit + integration
 npx vitest run supabase/tests/payment-safety.test.ts  # 41 money tests
 npx vitest run supabase/tests/business-day.test.ts    # the trading day
-npm run test:e2e                                      # 97 runs across 3 browsers
+npm run test:e2e                                      # 151 runs across 3 browsers
 npm run verify                                        # every gate
 ```
 

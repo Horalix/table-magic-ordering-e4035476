@@ -13,9 +13,14 @@
     <!-- The CSS @import for Google Fonts cannot start its connection until the
          stylesheet has parsed, which on a phone on 3G is most of a second of
          invisible text. Preconnecting here overlaps that with the HTML parse. -->
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lora:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap" />
+    <!--
+      Fonts are self-hosted and subset; see scripts/build-fonts.py. Preloaded
+      because they are referenced from the CSS bundle, which the browser only
+      parses after fetching it — without these two hints the faces are
+      discovered a full round trip late and the first paint is unstyled.
+    -->
+    <link rel="preload" as="font" type="font/woff2" href="/fonts/inter.woff2" crossorigin />
+    <link rel="preload" as="font" type="font/woff2" href="/fonts/lora.woff2" crossorigin />
     <link rel="preconnect" href="https://wsrv.nl" crossorigin />
     <link rel="dns-prefetch" href="//wsrv.nl" />
     <link rel="dns-prefetch" href="//menu.lasoul.net" />

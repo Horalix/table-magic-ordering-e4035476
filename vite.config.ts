@@ -52,11 +52,12 @@ export default defineConfig(({ mode }) => ({
             handler: "NetworkFirst",
             options: { cacheName: "menu-data", networkTimeoutSeconds: 3, expiration: { maxEntries: 60, maxAgeSeconds: 60 * 60 * 24 } },
           },
-          {
-            urlPattern: ({ url }) => url.origin === "https://fonts.googleapis.com" || url.origin === "https://fonts.gstatic.com",
-            handler: "StaleWhileRevalidate",
-            options: { cacheName: "google-fonts" },
-          },
+          /*
+           * No font CDN rule any more. The faces are self-hosted under
+           * /fonts and are picked up by globPatterns above, so they are
+           * precached with the rest of the shell rather than fetched from a
+           * third party and cached on the way past.
+           */
         ],
       },
       devOptions: { enabled: false },
@@ -85,7 +86,17 @@ export default defineConfig(({ mode }) => ({
            * that import it and hoists genuinely shared ones.
            */
           if (normalized.includes("/node_modules/framer-motion/")) return "motion-vendor";
-          if (normalized.includes("/node_modules/recharts/") || normalized.includes("/node_modules/d3-")) return "charts-vendor";
+          /*
+           * Recharts is deliberately NOT manually chunked, for exactly the
+           * reason Radix is not, one comment above.
+           *
+           * Naming it made Rollup hoist it to a static import of the entry, so
+           * index.html carried a modulepreload for it and every guest fetched
+           * 389 KB of charting library at high priority before the menu could
+           * paint — to render a menu that has no charts. Removing this line
+           * took the eager payload from 330 KB to 225 KB gzipped and put
+           * recharts in the AdminAnalytics chunk, where it is actually used.
+           */
           if (
             normalized.includes("/node_modules/react/") ||
             normalized.includes("/node_modules/react-dom/") ||

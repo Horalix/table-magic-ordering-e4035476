@@ -2,17 +2,17 @@
 
 Copy everything between the rules into Lovable. Nothing else needs to be said.
 
-Last updated: **3 August 2026**, for the eleven migrations from
-`20260804090000` to `20260805090000`.
+Last updated: **3 August 2026**, for the twelve migrations from
+`20260804090000` to `20260805090100`.
 
 ---
 
 ## The prompt
 
-> **Task: apply eleven existing migration files to Supabase. Do not write any
+> **Task: apply twelve existing migration files to Supabase. Do not write any
 > new SQL.**
 >
-> These eleven files are already in the repository under `supabase/migrations/`,
+> These twelve files are already in the repository under `supabase/migrations/`,
 > in this order:
 >
 > ```
@@ -27,6 +27,7 @@ Last updated: **3 August 2026**, for the eleven migrations from
 > 20260804090800_bandit_readiness.sql
 > 20260804090900_thompson_sampling.sql
 > 20260805090000_business_day.sql
+> 20260805090100_stale_orders.sql
 > ```
 >
 > **Run each file, in that exact order, exactly as written.** Read each one from
@@ -100,7 +101,7 @@ Last updated: **3 August 2026**, for the eleven migrations from
 
 ---
 
-## What these eleven change, in one line each
+## What these twelve change, in one line each
 
 | File | Effect |
 |---|---|
@@ -115,16 +116,20 @@ Last updated: **3 August 2026**, for the eleven migrations from
 | `..090800_bandit_readiness` | The gate |
 | `..090900_thompson_sampling` | The sampler, off, plus the nightly job that enables it when the gate passes |
 | `..0805090000_business_day` | **Money.** The trading day is Sarajevo's, not UTC's |
+| `..0805090100_stale_orders` | Closes unpaid orders open for hours; will not touch a paid one |
 
 ## After it applies
 
-Two things change visibly:
+Three things change visibly:
 
 - **`/admin/impact`** starts working. It will say it has no causal result yet,
   which is correct — no experiment is running. Start one from that page when
   you want the measurement to begin.
 - **Shift close** starts including trade after midnight. If a past close showed
   a surplus roughly the size of a night's late takings, this is why it did.
+- **Old open orders get closed** the first night maintenance runs — the ones
+  showing hundreds of hours of wait. Only unpaid ones; anything paid is listed
+  by `orders_needing_attention()` for a person to confirm.
 
 Nothing about ordering, payment or the kitchen changes.
 

@@ -21,6 +21,26 @@ const rpc = async <T>(fn: string, args: Record<string, unknown>): Promise<T> => 
   return data as T;
 };
 
+/**
+ * An RPC that must resolve to an array, even when the database says null.
+ *
+ * PostgREST returns `null` with NO error for a set-returning function that
+ * yields nothing — and for several transient conditions besides. `rpc` then
+ * hands back null typed as `T[]`, the caller does `rows.filter(...)`, and the
+ * screen dies.
+ *
+ * That is not hypothetical: it took down the entire kitchen board with
+ * "Something went wrong" the first time the E2E suite pointed at these
+ * screens, because `kitchen_load` came back null and `load.filter()` ran on
+ * it. A `.catch()` does not help — nothing throws. The type says array and the
+ * value is null, so the guard belongs here, once, rather than at every call
+ * site where it will eventually be forgotten.
+ */
+const rpcList = async <T>(fn: string, args: Record<string, unknown>): Promise<T[]> => {
+  const rows = await rpc<T[] | null>(fn, args);
+  return Array.isArray(rows) ? rows : [];
+};
+
 /** Advance an order through the kitchen flow. Illegal moves are rejected. */
 export const updateOrderStatus = (orderId: string, status: OrderStatus) =>
   rpc<{ status: OrderStatus }>('staff_update_order_status', { _order_id: orderId, _status: status });
@@ -92,7 +112,7 @@ export interface AllDayRow {
  * is not.
  */
 export const allDay = (station?: Station) =>
-  rpc<AllDayRow[]>('kds_all_day', { _station: station ?? null });
+  rpcList<AllDayRow>('kds_all_day', { _station: station ?? null });
 
 /**
  * Record that the guest settled in person.
@@ -165,7 +185,7 @@ export interface KitchenLoadRow {
  * many people are on tonight, and inventing a divisor would produce a
  * precise-looking number built on a guess.
  */
-export const kitchenLoad = () => rpc<KitchenLoadRow[]>('kitchen_load', {});
+export const kitchenLoad = () => rpcList<KitchenLoadRow>('kitchen_load', {});
 
 /** Recompute observed prep times from the kitchen's own stamps. */
 export const refreshPrepStats = (days = 30) =>
