@@ -119,6 +119,13 @@ export type Database = {
             foreignKeyName: "bill_requests_table_session_id_fkey"
             columns: ["table_session_id"]
             isOneToOne: false
+            referencedRelation: "session_outcomes"
+            referencedColumns: ["session_id"]
+          },
+          {
+            foreignKeyName: "bill_requests_table_session_id_fkey"
+            columns: ["table_session_id"]
+            isOneToOne: false
             referencedRelation: "table_sessions"
             referencedColumns: ["id"]
           },
@@ -151,6 +158,39 @@ export type Database = {
           name_ar?: string | null
           name_bs?: string | null
           sort_order?: number
+        }
+        Relationships: []
+      }
+      experiments: {
+        Row: {
+          created_at: string
+          ended_at: string | null
+          holdout_pct: number
+          id: string
+          name: string
+          notes: string | null
+          policy_version: string
+          started_at: string
+        }
+        Insert: {
+          created_at?: string
+          ended_at?: string | null
+          holdout_pct: number
+          id?: string
+          name: string
+          notes?: string | null
+          policy_version: string
+          started_at?: string
+        }
+        Update: {
+          created_at?: string
+          ended_at?: string | null
+          holdout_pct?: number
+          id?: string
+          name?: string
+          notes?: string | null
+          policy_version?: string
+          started_at?: string
         }
         Relationships: []
       }
@@ -309,6 +349,7 @@ export type Database = {
           image_url: string | null
           is_available: boolean
           margin_score: number
+          meal_role: Database["public"]["Enums"]["meal_role"] | null
           merchandising_tags: string[]
           name: string
           name_ar: string | null
@@ -728,6 +769,13 @@ export type Database = {
             foreignKeyName: "orders_table_session_id_fkey"
             columns: ["table_session_id"]
             isOneToOne: false
+            referencedRelation: "session_outcomes"
+            referencedColumns: ["session_id"]
+          },
+          {
+            foreignKeyName: "orders_table_session_id_fkey"
+            columns: ["table_session_id"]
+            isOneToOne: false
             referencedRelation: "table_sessions"
             referencedColumns: ["id"]
           },
@@ -896,7 +944,118 @@ export type Database = {
             foreignKeyName: "ratings_table_session_id_fkey"
             columns: ["table_session_id"]
             isOneToOne: false
+            referencedRelation: "session_outcomes"
+            referencedColumns: ["session_id"]
+          },
+          {
+            foreignKeyName: "ratings_table_session_id_fkey"
+            columns: ["table_session_id"]
+            isOneToOne: false
             referencedRelation: "table_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      recommendation_decisions: {
+        Row: {
+          action_probability: number
+          arm: string | null
+          candidates: Json
+          chosen_item_id: string | null
+          created_at: string
+          experiment_id: string | null
+          id: string
+          placement: string
+          policy_version: string
+          recommendation_type: string | null
+          session_id: string | null
+          source_item_id: string | null
+        }
+        Insert: {
+          action_probability?: number
+          arm?: string | null
+          candidates?: Json
+          chosen_item_id?: string | null
+          created_at?: string
+          experiment_id?: string | null
+          id?: string
+          placement: string
+          policy_version: string
+          recommendation_type?: string | null
+          session_id?: string | null
+          source_item_id?: string | null
+        }
+        Update: {
+          action_probability?: number
+          arm?: string | null
+          candidates?: Json
+          chosen_item_id?: string | null
+          created_at?: string
+          experiment_id?: string | null
+          id?: string
+          placement?: string
+          policy_version?: string
+          recommendation_type?: string | null
+          session_id?: string | null
+          source_item_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "recommendation_decisions_chosen_item_id_fkey"
+            columns: ["chosen_item_id"]
+            isOneToOne: false
+            referencedRelation: "menu_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "recommendation_decisions_experiment_id_fkey"
+            columns: ["experiment_id"]
+            isOneToOne: false
+            referencedRelation: "experiments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "recommendation_decisions_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "session_outcomes"
+            referencedColumns: ["session_id"]
+          },
+          {
+            foreignKeyName: "recommendation_decisions_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "table_sessions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "recommendation_decisions_source_item_id_fkey"
+            columns: ["source_item_id"]
+            isOneToOne: false
+            referencedRelation: "menu_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      recommendation_impressions: {
+        Row: {
+          decision_id: string
+          seen_at: string
+        }
+        Insert: {
+          decision_id: string
+          seen_at?: string
+        }
+        Update: {
+          decision_id?: string
+          seen_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "recommendation_impressions_decision_id_fkey"
+            columns: ["decision_id"]
+            isOneToOne: true
+            referencedRelation: "recommendation_decisions"
             referencedColumns: ["id"]
           },
         ]
@@ -1090,6 +1249,13 @@ export type Database = {
             foreignKeyName: "server_ratings_table_session_id_fkey"
             columns: ["table_session_id"]
             isOneToOne: false
+            referencedRelation: "session_outcomes"
+            referencedColumns: ["session_id"]
+          },
+          {
+            foreignKeyName: "server_ratings_table_session_id_fkey"
+            columns: ["table_session_id"]
+            isOneToOne: false
             referencedRelation: "table_sessions"
             referencedColumns: ["id"]
           },
@@ -1098,6 +1264,49 @@ export type Database = {
             columns: ["waiter_id"]
             isOneToOne: false
             referencedRelation: "waiters"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      session_experiment_assignment: {
+        Row: {
+          arm: string
+          assigned_at: string
+          experiment_id: string
+          session_id: string
+        }
+        Insert: {
+          arm: string
+          assigned_at?: string
+          experiment_id: string
+          session_id: string
+        }
+        Update: {
+          arm?: string
+          assigned_at?: string
+          experiment_id?: string
+          session_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "session_experiment_assignment_experiment_id_fkey"
+            columns: ["experiment_id"]
+            isOneToOne: false
+            referencedRelation: "experiments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "session_experiment_assignment_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: true
+            referencedRelation: "session_outcomes"
+            referencedColumns: ["session_id"]
+          },
+          {
+            foreignKeyName: "session_experiment_assignment_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: true
+            referencedRelation: "table_sessions"
             referencedColumns: ["id"]
           },
         ]
@@ -1134,6 +1343,13 @@ export type Database = {
           table_session_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "session_join_requests_table_session_id_fkey"
+            columns: ["table_session_id"]
+            isOneToOne: false
+            referencedRelation: "session_outcomes"
+            referencedColumns: ["session_id"]
+          },
           {
             foreignKeyName: "session_join_requests_table_session_id_fkey"
             columns: ["table_session_id"]
@@ -1235,6 +1451,7 @@ export type Database = {
       suggestion_conversions: {
         Row: {
           created_at: string
+          decision_id: string | null
           id: string
           line_total: number
           order_id: string
@@ -1245,6 +1462,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          decision_id?: string | null
           id?: string
           line_total?: number
           order_id: string
@@ -1255,6 +1473,7 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          decision_id?: string | null
           id?: string
           line_total?: number
           order_id?: string
@@ -1264,6 +1483,13 @@ export type Database = {
           source_item_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "suggestion_conversions_decision_id_fkey"
+            columns: ["decision_id"]
+            isOneToOne: false
+            referencedRelation: "recommendation_decisions"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "suggestion_conversions_order_id_fkey"
             columns: ["order_id"]
@@ -1503,6 +1729,13 @@ export type Database = {
             foreignKeyName: "waiter_calls_table_session_id_fkey"
             columns: ["table_session_id"]
             isOneToOne: false
+            referencedRelation: "session_outcomes"
+            referencedColumns: ["session_id"]
+          },
+          {
+            foreignKeyName: "waiter_calls_table_session_id_fkey"
+            columns: ["table_session_id"]
+            isOneToOne: false
             referencedRelation: "table_sessions"
             referencedColumns: ["id"]
           },
@@ -1661,7 +1894,40 @@ export type Database = {
             foreignKeyName: "orders_table_session_id_fkey"
             columns: ["table_session_id"]
             isOneToOne: false
+            referencedRelation: "session_outcomes"
+            referencedColumns: ["session_id"]
+          },
+          {
+            foreignKeyName: "orders_table_session_id_fkey"
+            columns: ["table_session_id"]
+            isOneToOne: false
             referencedRelation: "table_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      session_outcomes: {
+        Row: {
+          avg_minutes_to_served: number | null
+          avg_rating: number | null
+          closed_at: string | null
+          covers: number | null
+          first_order_at: string | null
+          last_order_at: string | null
+          net_sales: number | null
+          opened_at: string | null
+          orders: number | null
+          refunded: number | null
+          session_id: string | null
+          table_id: string | null
+          tips: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "table_sessions_table_id_fkey"
+            columns: ["table_id"]
+            isOneToOne: false
+            referencedRelation: "tables"
             referencedColumns: ["id"]
           },
         ]
@@ -1697,6 +1963,10 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      assign_session_to_experiment: {
+        Args: { _session_id: string }
+        Returns: string
+      }
       cancel_order: {
         Args: { _order_id: string; _reason: string }
         Returns: Json
@@ -1731,11 +2001,29 @@ export type Database = {
         Returns: number
       }
       daypart_of: { Args: { _at?: string }; Returns: string }
+      decision_performance: {
+        Args: { _days?: number }
+        Returns: {
+          acceptance_pct: number
+          accepted: number
+          decisions: number
+          placement: string
+          policy_version: string
+          revenue: number
+          seen: number
+          with_suggestion: number
+        }[]
+      }
       enqueue_order_ticket: {
         Args: { _order_id: string; _ticket_type?: string }
         Returns: string
       }
       enqueue_station_tickets: { Args: { _order_id: string }; Returns: string }
+      experiment_power: {
+        Args: { _experiment_id: string; _mde_pct?: number }
+        Returns: Json
+      }
+      experiment_srm: { Args: { _experiment_id: string }; Returns: Json }
       get_popular_items: {
         Args: { _days?: number; _limit?: number }
         Returns: {
@@ -1778,6 +2066,7 @@ export type Database = {
           _session_token: string
         }
         Returns: {
+          decision_id: string
           dietary_tags: string[]
           id: string
           image_url: string
@@ -1836,65 +2125,12 @@ export type Database = {
         }[]
       }
       guest_mark_suggestion_seen: {
-        Args: { _decision_id: string; _session_id: string; _session_token: string }
+        Args: {
+          _decision_id: string
+          _session_id: string
+          _session_token: string
+        }
         Returns: undefined
-      }
-      decision_performance: {
-        Args: { _days?: number }
-        Returns: {
-          acceptance_pct: number
-          accepted: number
-          decisions: number
-          placement: string
-          policy_version: string
-          revenue: number
-          seen: number
-          with_suggestion: number
-        }[]
-      }
-      start_experiment: {
-        Args: { _holdout_pct?: number; _name: string; _policy_version: string }
-        Returns: Json
-      }
-      stop_experiment: {
-        Args: { _notes?: string }
-        Returns: Json
-      }
-      suggestion_evidence: {
-        Args: { _recommended_item_id: string; _source_item_id: string }
-        Returns: Json
-      }
-      refresh_session_affinity: {
-        Args: { _days?: number; _min_pair_sessions?: number }
-        Returns: number
-      }
-      guest_forget_me: {
-        Args: { _client_id: string }
-        Returns: Json
-      }
-      returning_guest_stats: {
-        Args: { _days?: number }
-        Returns: Json
-      }
-      refresh_guest_profiles: {
-        Args: Record<PropertyKey, never>
-        Returns: number
-      }
-      app_impact_summary: {
-        Args: { _days?: number }
-        Returns: Json
-      }
-      run_daily_maintenance: {
-        Args: Record<PropertyKey, never>
-        Returns: Json
-      }
-      food_cost_coverage: {
-        Args: Record<PropertyKey, never>
-        Returns: Json
-      }
-      after_meal_moment: {
-        Args: { _session_id: string }
-        Returns: boolean
       }
       guest_order_eta: { Args: { _order_id: string }; Returns: Json }
       guest_place_order: {
@@ -2122,7 +2358,30 @@ export type Database = {
       }
       payment_status_rank: { Args: { _status: string }; Returns: number }
       prep_confidence_threshold: { Args: never; Returns: number }
+      rank_recommendations: {
+        Args: {
+          _cart_item_ids?: string[]
+          _exclude_allergens?: string[]
+          _language?: string
+          _limit?: number
+          _placement?: string
+          _session_id?: string
+        }
+        Returns: {
+          dietary_tags: string[]
+          id: string
+          image_url: string
+          name: string
+          name_ar: string
+          name_bs: string
+          price: number
+          reason: string
+          recommendation_type: string
+          source_item_id: string
+        }[]
+      }
       reco_holdout_comparison: { Args: { _days?: number }; Returns: Json }
+      reco_policy_version: { Args: never; Returns: string }
       recommendation_engine_health: { Args: never; Returns: Json }
       record_analytics_events: {
         Args: { _events: Json; _visit_id: string }
@@ -2188,6 +2447,14 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      role_is_drink: {
+        Args: { _role: Database["public"]["Enums"]["meal_role"] }
+        Returns: boolean
+      }
+      role_repeat_minutes: {
+        Args: { _role: Database["public"]["Enums"]["meal_role"] }
+        Returns: number
       }
       rotate_table_qr_token: { Args: { _table_id: string }; Returns: string }
       rotate_venue_qr_token: { Args: never; Returns: string }
@@ -2258,6 +2525,11 @@ export type Database = {
         }
         Returns: Json
       }
+      start_experiment: {
+        Args: { _holdout_pct?: number; _name: string; _policy_version: string }
+        Returns: Json
+      }
+      stop_experiment: { Args: { _notes?: string }; Returns: Json }
       suggestion_impact: { Args: { _days?: number }; Returns: Json }
       suggestion_impact_by_placement: {
         Args: { _days?: number }
@@ -2467,6 +2739,15 @@ export const Constants = {
   public: {
     Enums: {
       app_role: ["admin", "staff"],
+      meal_role: [
+        "starter",
+        "main",
+        "side",
+        "dessert",
+        "hot_drink",
+        "cold_drink",
+        "alcohol",
+      ],
       order_item_status: ["pending", "preparing", "ready", "served"],
       order_status: [
         "awaiting_payment",
