@@ -478,6 +478,7 @@ ALLOWED_ORIGINS               # https://order.lasoul.net,http://localhost:8080
 | [operations-runbook.md](docs/operations-runbook.md) | Something is broken during service |
 | [restaurant-staff-training.md](docs/restaurant-staff-training.md) | Print it for the floor |
 | [testing-guide.md](docs/testing-guide.md) | Adding tests |
+| [lovable-migration-prompt.md](docs/lovable-migration-prompt.md) | Applying pending migrations to the live database |
 | [launch-checklist.md](docs/launch-checklist.md) | Going live, or rolling back |
 
 ---

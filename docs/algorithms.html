@@ -1,0 +1,1578 @@
+<title>La Soul — how the algorithms work</title>
+
+<style>
+  /* ---------------------------------------------------------------
+     Tokens. Cold instrument ground, warm signal.
+     Neutrals carry a green-grey bias so they read as chosen.
+     --------------------------------------------------------------- */
+  :root {
+    --ground:  #EFF2F1;
+    --panel:   #FAFBFA;
+    --ink:     #171D1B;
+    --ink-2:   #5C6764;
+    --ink-3:   #8B9691;
+    --rule:    #D6DCDA;
+    --grid:    #E3E8E6;
+    --accent:  #B0641F;
+    --accent-soft: rgba(176, 100, 31, 0.13);
+    --proven:  #2F6D5C;
+    --proven-soft: rgba(47, 109, 92, 0.13);
+    --alarm:   #A03B32;
+    --alarm-soft: rgba(160, 59, 50, 0.11);
+    --shadow:  0 1px 2px rgba(23,29,27,.05), 0 8px 24px -12px rgba(23,29,27,.14);
+
+    --serif: Constantia, "Iowan Old Style", Charter, "Bitstream Charter", Georgia, "Times New Roman", serif;
+    --mono: Consolas, "SF Mono", Menlo, "DejaVu Sans Mono", "Roboto Mono", monospace;
+
+    --measure: 68ch;
+    --wide: 1080px;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --ground:  #0D1211;
+      --panel:   #141A19;
+      --ink:     #E4EAE7;
+      --ink-2:   #8A9793;
+      --ink-3:   #66716D;
+      --rule:    #26302E;
+      --grid:    #1D2624;
+      --accent:  #D98E4A;
+      --accent-soft: rgba(217, 142, 74, 0.16);
+      --proven:  #5FAE95;
+      --proven-soft: rgba(95, 174, 149, 0.15);
+      --alarm:   #D2665A;
+      --alarm-soft: rgba(210, 102, 90, 0.14);
+      --shadow:  0 1px 2px rgba(0,0,0,.4), 0 8px 24px -12px rgba(0,0,0,.6);
+    }
+  }
+
+  /* The viewer's toggle must win over the OS preference, both ways. */
+  :root[data-theme="light"] {
+    --ground:  #EFF2F1; --panel: #FAFBFA; --ink: #171D1B; --ink-2: #5C6764;
+    --ink-3:   #8B9691; --rule: #D6DCDA; --grid: #E3E8E6; --accent: #B0641F;
+    --accent-soft: rgba(176,100,31,.13); --proven: #2F6D5C;
+    --proven-soft: rgba(47,109,92,.13); --alarm: #A03B32;
+    --alarm-soft: rgba(160,59,50,.11);
+    --shadow: 0 1px 2px rgba(23,29,27,.05), 0 8px 24px -12px rgba(23,29,27,.14);
+  }
+  :root[data-theme="dark"] {
+    --ground:  #0D1211; --panel: #141A19; --ink: #E4EAE7; --ink-2: #8A9793;
+    --ink-3:   #66716D; --rule: #26302E; --grid: #1D2624; --accent: #D98E4A;
+    --accent-soft: rgba(217,142,74,.16); --proven: #5FAE95;
+    --proven-soft: rgba(95,174,149,.15); --alarm: #D2665A;
+    --alarm-soft: rgba(210,102,90,.14);
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px -12px rgba(0,0,0,.6);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--serif);
+    font-size: 18px;
+    line-height: 1.62;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap {
+    max-width: var(--wide);
+    margin: 0 auto;
+    padding: 0 24px 96px;
+  }
+
+  /* ---- type ---- */
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: .16em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    margin: 0;
+  }
+
+  h1 {
+    font-size: clamp(38px, 6.2vw, 68px);
+    line-height: 1.02;
+    letter-spacing: -.02em;
+    font-weight: 700;
+    text-wrap: balance;
+    margin: 14px 0 0;
+  }
+
+  h2 {
+    font-size: clamp(26px, 3.4vw, 38px);
+    line-height: 1.14;
+    letter-spacing: -.015em;
+    text-wrap: balance;
+    margin: 0;
+  }
+
+  h3 {
+    font-size: 20px;
+    line-height: 1.3;
+    margin: 0 0 8px;
+    text-wrap: balance;
+  }
+
+  p { margin: 0; max-width: var(--measure); }
+  .lede { font-size: clamp(19px, 2.1vw, 23px); line-height: 1.5; color: var(--ink-2); }
+  .muted { color: var(--ink-2); }
+  .small { font-size: 15.5px; line-height: 1.56; }
+
+  strong { font-weight: 700; }
+  em { font-style: italic; }
+
+  code, .num {
+    font-family: var(--mono);
+    font-variant-numeric: tabular-nums;
+  }
+  code {
+    font-size: .87em;
+    background: var(--accent-soft);
+    color: var(--accent);
+    padding: .1em .34em;
+    border-radius: 3px;
+  }
+
+  a { color: var(--accent); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+  a:focus-visible, button:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 3px;
+    border-radius: 3px;
+  }
+
+  /* ---- masthead ---- */
+  header.masthead {
+    padding: clamp(56px, 9vw, 104px) 0 clamp(36px, 5vw, 56px);
+    border-bottom: 1px solid var(--rule);
+  }
+  .masthead .lede { margin-top: 22px; }
+
+  .facts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0;
+    margin-top: 36px;
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    overflow: hidden;
+    background: var(--panel);
+  }
+  .fact {
+    flex: 1 1 150px;
+    padding: 14px 18px;
+    border-right: 1px solid var(--rule);
+  }
+  .fact:last-child { border-right: 0; }
+  .fact dt {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: .13em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    margin: 0 0 4px;
+  }
+  .fact dd {
+    margin: 0;
+    font-family: var(--mono);
+    font-size: 19px;
+    font-variant-numeric: tabular-nums;
+    color: var(--ink);
+  }
+  .fact dd.warn { color: var(--alarm); }
+  .fact dd.ok { color: var(--proven); }
+
+  /* ---- sections ---- */
+  section {
+    padding: clamp(56px, 8vw, 92px) 0;
+    border-bottom: 1px solid var(--rule);
+  }
+  .sec-head { display: flex; flex-direction: column; gap: 14px; margin-bottom: 34px; }
+  .sec-head .eyebrow { display: flex; align-items: baseline; gap: 10px; }
+  .sec-head .eyebrow .rule {
+    flex: 1; height: 1px; background: var(--rule); transform: translateY(-3px);
+  }
+
+  .prose { display: flex; flex-direction: column; gap: 18px; }
+
+  /* ---- figure shell ---- */
+  figure {
+    margin: 34px 0 0;
+    background: var(--panel);
+    border: 1px solid var(--rule);
+    border-radius: 5px;
+    box-shadow: var(--shadow);
+    overflow: hidden;
+  }
+  .fig-head {
+    display: flex; align-items: center; justify-content: space-between;
+    flex-wrap: wrap; gap: 12px;
+    padding: 13px 18px;
+    border-bottom: 1px solid var(--rule);
+  }
+  .fig-title {
+    font-family: var(--mono);
+    font-size: 11px; letter-spacing: .13em; text-transform: uppercase;
+    color: var(--ink-2); margin: 0;
+  }
+  .fig-body { padding: 22px 18px; }
+  .fig-body.tight { padding: 14px 18px 18px; }
+  figcaption {
+    padding: 14px 18px;
+    border-top: 1px solid var(--rule);
+    font-size: 15px;
+    line-height: 1.55;
+    color: var(--ink-2);
+  }
+  figcaption b { color: var(--ink); font-weight: 700; }
+
+  .scroll-x { overflow-x: auto; }
+
+  canvas { display: block; width: 100%; }
+
+  /* ---- controls ---- */
+  .controls { display: flex; flex-wrap: wrap; gap: 8px; }
+  button.ctl {
+    font-family: var(--mono);
+    font-size: 11.5px;
+    letter-spacing: .07em;
+    text-transform: uppercase;
+    padding: 7px 13px;
+    border: 1px solid var(--rule);
+    background: transparent;
+    color: var(--ink-2);
+    border-radius: 3px;
+    cursor: pointer;
+    transition: background .15s, color .15s, border-color .15s;
+  }
+  button.ctl:hover { color: var(--ink); border-color: var(--ink-3); }
+  button.ctl[aria-pressed="true"] {
+    background: var(--accent-soft);
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  /* ---- readouts ---- */
+  .readout {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 1px;
+    background: var(--rule);
+    border-top: 1px solid var(--rule);
+  }
+  .readout > div { background: var(--panel); padding: 13px 18px; }
+  .readout dt {
+    font-family: var(--mono); font-size: 10.5px; letter-spacing: .12em;
+    text-transform: uppercase; color: var(--ink-3); margin: 0 0 3px;
+  }
+  .readout dd {
+    margin: 0; font-family: var(--mono); font-size: 21px;
+    font-variant-numeric: tabular-nums; line-height: 1.2;
+  }
+  .readout dd small { font-size: 12px; color: var(--ink-3); letter-spacing: .04em; }
+  .v-accent { color: var(--accent); }
+  .v-proven { color: var(--proven); }
+  .v-alarm  { color: var(--alarm); }
+
+  /* ---- key ---- */
+  .key { display: flex; flex-wrap: wrap; gap: 16px; align-items: center; }
+  .key span {
+    font-family: var(--mono); font-size: 11px; letter-spacing: .06em;
+    color: var(--ink-2); display: inline-flex; align-items: center; gap: 7px;
+  }
+  .swatch { width: 13px; height: 3px; border-radius: 2px; display: inline-block; }
+
+  /* ---- tables ---- */
+  table { border-collapse: collapse; width: 100%; font-size: 15.5px; }
+  th, td { text-align: left; padding: 9px 14px 9px 0; border-bottom: 1px solid var(--rule); }
+  th {
+    font-family: var(--mono); font-size: 10.5px; letter-spacing: .12em;
+    text-transform: uppercase; color: var(--ink-3); font-weight: 400;
+    white-space: nowrap;
+  }
+  td.n { font-family: var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  tr.is-guess td { color: var(--accent); }
+  tr.is-fact td { color: var(--proven); }
+
+  /* ---- callout ---- */
+  .callout {
+    border-left: 2px solid var(--alarm);
+    background: var(--alarm-soft);
+    padding: 16px 20px;
+    border-radius: 0 4px 4px 0;
+    display: flex; flex-direction: column; gap: 10px;
+  }
+  .callout .eyebrow { color: var(--alarm); }
+  .callout p { max-width: 62ch; }
+
+  .note {
+    border-left: 2px solid var(--rule);
+    padding: 2px 0 2px 18px;
+    color: var(--ink-2);
+    font-size: 15.5px;
+    line-height: 1.55;
+  }
+
+  /* ---- pipeline ---- */
+  .pipe { display: flex; flex-direction: column; gap: 0; }
+  .stage {
+    display: grid;
+    grid-template-columns: 132px 1fr;
+    gap: 18px;
+    padding: 15px 0;
+    border-bottom: 1px dashed var(--rule);
+    align-items: start;
+  }
+  .stage:last-child { border-bottom: 0; }
+  .stage-label {
+    font-family: var(--mono); font-size: 10.5px; letter-spacing: .12em;
+    text-transform: uppercase; color: var(--ink-3);
+    padding-top: 5px;
+  }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip {
+    font-family: var(--mono); font-size: 12px;
+    padding: 4px 9px; border-radius: 3px;
+    border: 1px solid var(--rule);
+    color: var(--ink-2);
+    white-space: nowrap;
+    opacity: 0; transform: translateY(4px);
+    transition: opacity .34s ease, transform .34s ease, color .34s, border-color .34s, background .34s;
+  }
+  .pipe.run .chip { opacity: 1; transform: none; }
+  .chip.out {
+    color: var(--alarm); border-color: var(--alarm);
+    background: var(--alarm-soft);
+    text-decoration: line-through;
+    text-decoration-thickness: 1px;
+  }
+  .chip.win {
+    color: var(--accent); border-color: var(--accent);
+    background: var(--accent-soft);
+  }
+  .chip .why { color: var(--ink-3); text-decoration: none; display: inline-block; }
+  .chip.out .why { color: var(--alarm); }
+
+  /* ---- status ---- */
+  .status-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+    gap: 14px; margin-top: 28px;
+  }
+  .status {
+    border: 1px solid var(--rule); border-radius: 4px;
+    padding: 16px 18px; background: var(--panel);
+    display: flex; flex-direction: column; gap: 7px;
+  }
+  .status .tag {
+    font-family: var(--mono); font-size: 10.5px; letter-spacing: .12em;
+    text-transform: uppercase;
+  }
+  .status.live .tag { color: var(--proven); }
+  .status.pending .tag { color: var(--accent); }
+  .status.blocked .tag { color: var(--alarm); }
+  .status p { font-size: 15px; line-height: 1.5; color: var(--ink-2); }
+
+  footer {
+    padding: 48px 0 0;
+    font-size: 15px;
+    color: var(--ink-3);
+    display: flex; flex-direction: column; gap: 10px;
+  }
+
+  @media (max-width: 620px) {
+    body { font-size: 17px; }
+    .stage { grid-template-columns: 1fr; gap: 8px; }
+    .fact { flex-basis: 50%; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { animation-duration: .001ms !important; transition-duration: .001ms !important; }
+    .pipe .chip { opacity: 1; transform: none; }
+  }
+</style>
+
+<div class="wrap">
+
+  <header class="masthead">
+    <p class="eyebrow">La Soul · Sarajevo · engine notes</p>
+    <h1>Telling a guess from a fact</h1>
+    <p class="lede">
+      Five algorithms decide what this restaurant suggests, when it suggests it, and whether any
+      of it earned money. Every one of them turns on the same distinction — how much the system
+      actually knows. Here they are, running.
+    </p>
+
+    <dl class="facts">
+      <div class="fact"><dt>Tests</dt><dd class="ok">457</dd></div>
+      <div class="fact"><dt>End to end</dt><dd class="ok">97</dd></div>
+      <div class="fact"><dt>Migrations pending</dt><dd class="warn">11</dd></div>
+      <div class="fact"><dt>Sampling</dt><dd>off</dd></div>
+      <div class="fact"><dt>Policy</dt><dd>v1</dd></div>
+    </dl>
+  </header>
+
+  <!-- ============================================================ -->
+  <section id="thompson">
+    <div class="sec-head">
+      <p class="eyebrow">Thompson sampling <span class="rule"></span> built, switched off</p>
+      <h2>Four data points should not outrank four hundred</h2>
+    </div>
+
+    <div class="prose">
+      <p>
+        The ranker scores each pairing by how often guests accept it. Today it uses the
+        <em>average</em> of what it believes — and throws away how sure it is. So a pairing seen
+        four times and one seen four hundred times get compared as though both numbers were facts.
+      </p>
+      <p>
+        Below, the wide curve is a pairing the system has barely seen; the narrow one it has seen
+        four hundred times. Both are plausible around a quarter. Only one of them knows it.
+      </p>
+    </div>
+
+    <figure>
+      <div class="fig-head">
+        <p class="fig-title">Posterior belief · draws land on the axis</p>
+        <div class="controls">
+          <button class="ctl" id="tsSample" aria-pressed="true" type="button">Sample the spread</button>
+          <button class="ctl" id="tsMean" aria-pressed="false" type="button">Use the average</button>
+        </div>
+      </div>
+      <div class="fig-body tight">
+        <canvas id="tsCanvas" height="360" aria-label="Two probability distributions with samples being drawn from each"></canvas>
+        <div class="key" style="margin-top:6px">
+          <span><i class="swatch" style="background:var(--accent)"></i> A — 4 shown, 4 accepted</span>
+          <span><i class="swatch" style="background:var(--proven)"></i> B — 400 shown, 100 accepted</span>
+        </div>
+      </div>
+      <dl class="readout">
+        <div><dt>A wins</dt><dd class="v-accent" id="tsA">—</dd></div>
+        <div><dt>B wins</dt><dd class="v-proven" id="tsB">—</dd></div>
+        <div><dt>Impressions</dt><dd id="tsN">0</dd></div>
+        <div><dt>Mode</dt><dd id="tsMode" style="font-size:15px">sampling</dd></div>
+      </dl>
+      <figcaption id="tsCap">
+        Sampling from the spread, A keeps the lead it deserves — but only <b>67.9%</b> of the time,
+        so B gets the rest and A&rsquo;s guess resolves into a fact within a couple of weeks.
+      </figcaption>
+    </figure>
+
+    <div class="prose" style="margin-top:30px">
+      <div class="scroll-x">
+        <table>
+          <thead>
+            <tr><th>Pairing</th><th>Shown</th><th>Accepted</th><th>Scores</th><th>Actually plausible</th></tr>
+          </thead>
+          <tbody>
+            <tr class="is-guess"><td>A · burger &rarr; new dessert</td><td class="n">4</td><td class="n">4</td><td class="n">0.294</td><td class="n">8% – 51%</td></tr>
+            <tr class="is-fact"><td>B · burger &rarr; espresso</td><td class="n">400</td><td class="n">100</td><td class="n">0.244</td><td class="n">20% – 29%</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p class="note" style="margin-top:6px">
+        A genuinely bad pairing — 2% accepted over 400 shows — wins <b>0.0%</b> of impressions
+        under the same sampler. Exploring costs nothing in exploitation. That is the second half
+        of the test, and the half that is easy to forget.
+      </p>
+
+      <p>
+        It is <strong>written and switched off</strong>. A gate counts real service data — 2000
+        decisions, 15 pairings with fifty sightings each, at least one confirmed acceptance — and
+        the nightly job turns sampling on the first night all three pass. Roughly three to four
+        weeks of trade.
+      </p>
+      <p class="small muted">
+        Expect a modest gain. Bandits pay off with many options and heavy traffic; a caf&eacute;
+        with fifty menu items finds its good pairings a few weeks sooner and wastes fewer
+        suggestions getting there. What made suggestions <em>better</em> is further down this page.
+      </p>
+    </div>
+  </section>
+
+  <!-- ============================================================ -->
+  <section id="grain">
+    <div class="sec-head">
+      <p class="eyebrow">Market-basket lift <span class="rule"></span> two grains</p>
+      <h2>Steak now, coffee at twenty to nine</h2>
+    </div>
+
+    <div class="prose">
+      <p>
+        The engine learns which dishes go together by looking at what arrives in the same basket.
+        That works for the cart. It cannot work for the moment after the plates are cleared,
+        because by then the steak was a different order, forty minutes ago.
+      </p>
+      <p>
+        Watch one table&rsquo;s evening. Then watch the baskets change shape.
+      </p>
+    </div>
+
+    <figure>
+      <div class="fig-head">
+        <p class="fig-title">Table 7 · Sunday · one visit, three orders</p>
+        <div class="controls">
+          <button class="ctl" id="gnOrder" aria-pressed="true" type="button">Per order</button>
+          <button class="ctl" id="gnVisit" aria-pressed="false" type="button">Per visit</button>
+        </div>
+      </div>
+      <div class="fig-body tight">
+        <canvas id="gnCanvas" height="270" aria-label="A visit timeline showing three orders, grouped either separately or as one basket"></canvas>
+      </div>
+      <dl class="readout">
+        <div><dt>Baskets</dt><dd id="gnBaskets">3</dd></div>
+        <div><dt>Steak + coffee</dt><dd id="gnPair" class="v-alarm" style="font-size:15px">never together</dd></div>
+        <div><dt>Lift learned</dt><dd id="gnLift" class="v-alarm">&mdash;</dd></div>
+      </dl>
+      <figcaption id="gnCap">
+        Per order, steak and coffee never share a basket, so the pairing is <b>not learnable at
+        all</b> — and the after-meal prompt is exactly the moment it was needed.
+      </figcaption>
+    </figure>
+
+    <div class="prose" style="margin-top:30px">
+      <p>
+        Both grains are kept. Order-level lift still drives the cart, where the basket really is
+        the order. Visit-level lift drives the after-meal suggestion and the social proof, where
+        the basket is the evening.
+      </p>
+      <div class="callout">
+        <p class="eyebrow">Honest by construction</p>
+        <p>
+          A percentage is only shown from visit-grained data, above a support threshold, and quotes
+          the <strong>lower</strong> bound of the interval rather than the flattering middle. Below
+          that it says &ldquo;often ordered with the steak&rdquo;, or stays quiet. No invented
+          scarcity, no countdowns — in a room where guests can see each other&rsquo;s tables, a
+          visibly false claim costs more trust than the upsell earns.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================ -->
+  <section id="grainstat">
+    <div class="sec-head">
+      <p class="eyebrow">Unit of analysis <span class="rule"></span> the bug that flattered us</p>
+      <h2>Three orders from one table is one observation</h2>
+    </div>
+
+    <div class="prose">
+      <p>
+        To prove the suggestions earn anything, one table in ten is shown none, and the two groups
+        are compared. The comparison was counting <em>orders</em>. But a table that orders three
+        times has not given three independent opinions — it has given one, three times.
+      </p>
+      <p>
+        Here is a dataset built to contain <strong>exactly no effect</strong>: every table spends
+        thirty marks, whichever group it is in. One side splits it across three rounds.
+      </p>
+    </div>
+
+    <figure>
+      <div class="fig-head">
+        <p class="fig-title">30 tables per group · identical spend · no real difference</p>
+        <div class="controls">
+          <button class="ctl" id="uaOrder" aria-pressed="true" type="button">Count orders</button>
+          <button class="ctl" id="uaVisit" aria-pressed="false" type="button">Count visits</button>
+        </div>
+      </div>
+      <div class="fig-body tight">
+        <canvas id="uaCanvas" height="330" aria-label="Dot plot of spend per group, grouped by order or collapsed to one dot per visit"></canvas>
+      </div>
+      <dl class="readout">
+        <div><dt>Observations</dt><dd id="uaN">120</dd></div>
+        <div><dt>Difference</dt><dd id="uaDiff" class="v-alarm">&minus;20.00 KM</dd></div>
+        <div><dt>Verdict</dt><dd id="uaVerdict" class="v-alarm" style="font-size:15px">significant</dd></div>
+      </dl>
+      <figcaption id="uaCap">
+        Counted by order the test reports a large, confident difference in data that contains
+        none. <b>The significance is manufactured</b> by the double counting.
+      </figcaption>
+    </figure>
+
+    <div class="prose" style="margin-top:30px">
+      <p>Two more defects sat alongside it, and all three failed in the same direction — making the app look better than it was.</p>
+      <div class="scroll-x">
+        <table>
+          <thead><tr><th>Was</th><th>Why it flattered</th><th>Now</th></tr></thead>
+          <tbody>
+            <tr>
+              <td>Analysed per order</td>
+              <td>Correlated rows shrink the error bars</td>
+              <td class="n">one row per visit</td>
+            </tr>
+            <tr>
+              <td>Tips counted as uplift</td>
+              <td><code>orders.total</code> includes the tip — generosity read as persuasion</td>
+              <td class="n">total &minus; tip &minus; refunded</td>
+            </tr>
+            <tr>
+              <td>Holdout recomputed on read</td>
+              <td>Moving the dial silently rewrote which group past visits were in</td>
+              <td class="n">frozen in a ledger</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        Nothing is reported until the split, the statistical power and the service guardrails all
+        pass. A broken experiment is not a caveat printed under a number — it means there is no
+        number. And the money figure quotes the <em>low</em> end of the range, so the true value is
+        probably better than the page claims.
+      </p>
+    </div>
+  </section>
+
+  <!-- ============================================================ -->
+  <section id="day">
+    <div class="sec-head">
+      <p class="eyebrow">The trading day <span class="rule"></span> found at 01:35</p>
+      <h2>Two hours of takings that no drawer count ever saw</h2>
+    </div>
+
+    <div class="prose">
+      <p>
+        Closing the day picked the date in Sarajevo. Counting the takings picked it in UTC. Two
+        hours apart in summer — which for a caf&eacute; that serves past midnight is not a rounding
+        error, it is the end of every shift.
+      </p>
+    </div>
+
+    <figure>
+      <div class="fig-head">
+        <p class="fig-title">A sale, moving through the night</p>
+        <div class="controls">
+          <button class="ctl" id="bdBefore" aria-pressed="true" type="button">Before the fix</button>
+          <button class="ctl" id="bdAfter" aria-pressed="false" type="button">After</button>
+        </div>
+      </div>
+      <div class="fig-body tight">
+        <canvas id="bdCanvas" height="290" aria-label="A timeline through midnight showing which day-window a sale falls into"></canvas>
+      </div>
+      <dl class="readout">
+        <div><dt>Sold at</dt><dd id="bdTime">00:30</dd></div>
+        <div><dt>Filed under</dt><dd id="bdFiled" style="font-size:15px">&mdash;</dd></div>
+        <div><dt>Reconciled by</dt><dd id="bdRec" class="v-alarm" style="font-size:15px">&mdash;</dd></div>
+      </dl>
+      <figcaption id="bdCap">
+        The manager closes up at 01:15. Everything sold since midnight is missing from the expected
+        cash, so <b>the drawer is over by exactly the late-night trade</b> — and the previous day
+        was signed off hours before those orders existed.
+      </figcaption>
+    </figure>
+
+    <div class="prose" style="margin-top:30px">
+      <p class="note">
+        Found because six tests began failing at 01:35 in the morning and passed again by 09:00.
+        That is not a flaky test. That is the bug reporting itself, once a day, for two hours.
+      </p>
+      <p>
+        There is now one definition of the day, used on both sides of every comparison. It also
+        fixed something nobody had reported: at 02:00, mid-service, every waiter silently lost
+        their section and new tables stopped being assigned.
+      </p>
+      <p class="small muted">
+        Closed days keep the snapshots they were written with — a signed-off day is a record, not
+        a thing to rewrite. If a past close shows a surplus roughly equal to a night&rsquo;s
+        after-midnight takings, this is why.
+      </p>
+    </div>
+  </section>
+
+  <!-- ============================================================ -->
+  <section id="ranker">
+    <div class="sec-head">
+      <p class="eyebrow">The ranker <span class="rule"></span> what actually got smarter</p>
+      <h2>It reads the table, not the cart</h2>
+    </div>
+
+    <div class="prose">
+      <p>
+        Before scoring anything, the engine asks what this table has ordered, what has actually
+        been <em>served</em>, how long ago, what it has spent so far and how many people are
+        sitting there. Then it scores, and only then does it apply the rules that can veto.
+      </p>
+    </div>
+
+    <figure>
+      <div class="fig-head">
+        <p class="fig-title">Table 7 · two mains served · 21:04 · 38 KM so far</p>
+        <div class="controls">
+          <button class="ctl" id="pipeReplay" type="button">Replay</button>
+        </div>
+      </div>
+      <div class="fig-body">
+        <div class="pipe" id="pipe">
+          <div class="stage">
+            <div class="stage-label">Candidates</div>
+            <div class="chips" data-stage="0">
+              <span class="chip">Baklava</span>
+              <span class="chip">Espresso</span>
+              <span class="chip">Ribeye 34 KM</span>
+              <span class="chip">Caesar salad</span>
+              <span class="chip">Second burger</span>
+              <span class="chip">Cheesecake</span>
+            </div>
+          </div>
+          <div class="stage">
+            <div class="stage-label">Visit context</div>
+            <div class="chips" data-stage="1">
+              <span class="chip">mains served 19 min ago</span>
+              <span class="chip">after-meal moment</span>
+              <span class="chip">avg line 19 KM</span>
+              <span class="chip">4 covers</span>
+            </div>
+          </div>
+          <div class="stage">
+            <div class="stage-label">Scored</div>
+            <div class="chips" data-stage="2">
+              <span class="chip">curated 40%</span>
+              <span class="chip">observed lift 25%</span>
+              <span class="chip">learned 25%</span>
+              <span class="chip">margin 10%</span>
+              <span class="chip">explore 15%</span>
+            </div>
+          </div>
+          <div class="stage">
+            <div class="stage-label">Vetoed after</div>
+            <div class="chips" data-stage="3">
+              <span class="chip out">Ribeye 34 KM <i class="why">&mdash; 1.8&times; the table&rsquo;s average line</i></span>
+              <span class="chip out">Second burger <i class="why">&mdash; a third main</i></span>
+              <span class="chip out">Caesar salad <i class="why">&mdash; same shelf, not an upgrade</i></span>
+            </div>
+          </div>
+          <div class="stage">
+            <div class="stage-label">Shown</div>
+            <div class="chips" data-stage="4">
+              <span class="chip win">Baklava</span>
+              <span class="chip win">Espresso</span>
+              <span class="chip">&hellip;and a <i class="why">no_suggestion</i> row if it had chosen nothing</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <figcaption>
+        Guardrails run <b>after</b> scoring, never before. Learning can reorder good suggestions;
+        it cannot introduce a bad one. The espresso survives because a second coffee is normal
+        caf&eacute; behaviour — a second main is not.
+      </figcaption>
+    </figure>
+
+    <div class="prose" style="margin-top:30px">
+      <div class="callout">
+        <p class="eyebrow">A live bug, not a hypothesis</p>
+        <p>
+          Diet used to be inferred from the cart and applied as a <strong>hard filter</strong>. One
+          phone at a table of four, somebody adds a salad, and every meat dish was hidden from
+          everybody. A shared device must never speak for the whole table. An inferred preference
+          is now a ranking penalty; only a guest&rsquo;s explicit filter can remove a dish.
+        </p>
+      </div>
+      <p style="margin-top:6px">
+        Underneath all of it sits a <strong>decision ledger</strong>: every ranking writes down what
+        it considered, what it chose, and a <code>no_suggestion</code> row when it chose nothing —
+        without which the denominator is unknowable. Sightings are recorded server-side and deduped;
+        &ldquo;accepted&rdquo; means <em>paid for</em>, not tapped.
+      </p>
+    </div>
+  </section>
+
+  <!-- ============================================================ -->
+  <section id="status" style="border-bottom:0">
+    <div class="sec-head">
+      <p class="eyebrow">Where it stands <span class="rule"></span> 3 August 2026</p>
+      <h2>What is running, and what is waiting</h2>
+    </div>
+
+    <div class="status-grid">
+      <div class="status live">
+        <p class="tag">Live</p>
+        <h3>Ordering and payment</h3>
+        <p>Pay at the table, cash and terminal recorded apart, order state enforced by the database rather than the browser.</p>
+      </div>
+      <div class="status pending">
+        <p class="tag">In the repo, not the database</p>
+        <h3>Eleven migrations</h3>
+        <p>Everything on this page except the ordering core. Written, tested against a real PostgreSQL, pushed — and not yet applied to production.</p>
+      </div>
+      <div class="status pending">
+        <p class="tag">Waiting on data</p>
+        <h3>Thompson sampling</h3>
+        <p>Switches itself on the first night the gate passes. Three to four weeks of ordinary trade.</p>
+      </div>
+      <div class="status blocked">
+        <p class="tag">Blocked outside the code</p>
+        <h3>Card payments</h3>
+        <p>Needs an online merchant account and sandbox credentials. Nothing in the repository can resolve it.</p>
+      </div>
+      <div class="status blocked">
+        <p class="tag">Action needed</p>
+        <h3>Rotate the admin password</h3>
+        <p>It reached a public repository once. Scrubbed from the file, but git history is permanent — the only real fix is a new password.</p>
+      </div>
+      <div class="status live">
+        <p class="tag">Guarding everything</p>
+        <h3>457 tests, 97 end to end</h3>
+        <p>The SQL suite boots a real PostgreSQL in-process and applies every migration in order, so money rules are tested against real triggers.</p>
+      </div>
+    </div>
+
+    <footer>
+      <p>Figures on this page are computed live in the browser using the same arithmetic as the database functions they describe — the Beta posteriors, the sampler and the lift are not illustrations of the algorithms, they are the algorithms.</p>
+    </footer>
+  </section>
+
+</div>
+
+<script>
+(() => {
+  'use strict';
+
+  const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const css = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+
+  /* Redraw everything when the palette changes under us. */
+  const redrawers = [];
+  const onThemeChange = (fn) => redrawers.push(fn);
+  new MutationObserver(() => redrawers.forEach((f) => f()))
+    .observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+  window.matchMedia('(prefers-color-scheme: dark)')
+    .addEventListener('change', () => redrawers.forEach((f) => f()));
+
+  /* Crisp on retina, and re-fit on resize. */
+  function fit(canvas) {
+    const dpr = window.devicePixelRatio || 1;
+    const w = canvas.clientWidth;
+    const h = Number(canvas.getAttribute('height'));
+    canvas.width = Math.round(w * dpr);
+    canvas.height = Math.round(h * dpr);
+    const ctx = canvas.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    return { ctx, w, h };
+  }
+
+  /* Run a loop only while the figure is on screen. */
+  function whenVisible(el, start, stop) {
+    new IntersectionObserver((entries) => {
+      entries.forEach((e) => (e.isIntersecting ? start() : stop()));
+    }, { threshold: 0.15 }).observe(el);
+  }
+
+  function toggle(onBtn, offBtn, onPick) {
+    const set = (isFirst) => {
+      onBtn.setAttribute('aria-pressed', String(isFirst));
+      offBtn.setAttribute('aria-pressed', String(!isFirst));
+      onPick(isFirst);
+    };
+    onBtn.addEventListener('click', () => set(true));
+    offBtn.addEventListener('click', () => set(false));
+    return set;
+  }
+
+  /* ============================================================
+     1. Thompson sampling
+     The same arithmetic as sample_acceptance(): a Gaussian
+     approximation to Beta(1+accepted, 12+shown-accepted).
+     ============================================================ */
+  (() => {
+    const canvas = document.getElementById('tsCanvas');
+    if (!canvas) return;
+
+    const A = { acc: 4, shown: 4, color: '--accent' };
+    const B = { acc: 100, shown: 400, color: '--proven' };
+    [A, B].forEach((d) => {
+      d.alpha = d.acc + 1;
+      d.beta = 12 + Math.max(d.shown - d.acc, 0);
+      d.mean = d.alpha / (d.alpha + d.beta);
+      const n = d.alpha + d.beta;
+      d.sd = Math.sqrt((d.alpha * d.beta) / (n * n * (n + 1)));
+    });
+
+    const XMAX = 0.62;
+    let sampling = true;
+    let aWins = 0, total = 0;
+    let ticks = [];      // recent draws, fading
+    let raf = 0, running = false, last = 0, acc = 0;
+
+    function lgamma(z) {
+      const g = [676.5203681218851, -1259.1392167224028, 771.32342877765313,
+        -176.61502916214059, 12.507343278686905, -0.13857109526572012,
+        9.9843695780195716e-6, 1.5056327351493116e-7];
+      if (z < 0.5) return Math.log(Math.PI / Math.sin(Math.PI * z)) - lgamma(1 - z);
+      z -= 1;
+      let x = 0.99999999999980993;
+      for (let i = 0; i < g.length; i++) x += g[i] / (z + i + 1);
+      const t = z + g.length - 0.5;
+      return 0.5 * Math.log(2 * Math.PI) + (z + 0.5) * Math.log(t) - t + Math.log(x);
+    }
+    function betaPdf(x, a, b) {
+      if (x <= 0 || x >= 1) return 0;
+      const lb = lgamma(a) + lgamma(b) - lgamma(a + b);
+      return Math.exp((a - 1) * Math.log(x) + (b - 1) * Math.log(1 - x) - lb);
+    }
+    function draw(d) {
+      // Box-Muller, exactly as the SQL does it.
+      const u1 = Math.max(1e-9, Math.random());
+      const u2 = Math.max(1e-9, Math.random());
+      const z = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
+      return Math.min(1, Math.max(0, d.mean + z * d.sd));
+    }
+
+    function step() {
+      const a = sampling ? draw(A) : A.mean;
+      const b = sampling ? draw(B) : B.mean;
+      if (a > b) aWins++;
+      total++;
+      ticks.push({ x: a, c: '--accent', t: 1 }, { x: b, c: '--proven', t: 1 });
+      if (ticks.length > 160) ticks.splice(0, ticks.length - 160);
+
+      const pa = (100 * aWins / total);
+      document.getElementById('tsA').textContent = pa.toFixed(1) + '%';
+      document.getElementById('tsB').textContent = (100 - pa).toFixed(1) + '%';
+      document.getElementById('tsN').textContent = total.toLocaleString('en-GB');
+    }
+
+    function render() {
+      const { ctx, w, h } = fit(canvas);
+      const padL = 8, padR = 8, padB = 46, padT = 14;
+      const plotW = w - padL - padR, plotH = h - padT - padB;
+      const X = (v) => padL + (v / XMAX) * plotW;
+
+      ctx.clearRect(0, 0, w, h);
+
+      // peak of the narrow curve sets the vertical scale
+      let peak = 0;
+      for (let i = 1; i < 400; i++) {
+        const x = (i / 400) * XMAX;
+        peak = Math.max(peak, betaPdf(x, A.alpha, A.beta), betaPdf(x, B.alpha, B.beta));
+      }
+      const Y = (v) => padT + plotH - (v / peak) * plotH;
+
+      // grid
+      ctx.strokeStyle = css('--grid');
+      ctx.fillStyle = css('--ink-3');
+      ctx.lineWidth = 1;
+      ctx.font = '11px ' + css('--mono');
+      ctx.textAlign = 'center';
+      for (let p = 0; p <= 60; p += 10) {
+        const x = X(p / 100);
+        ctx.beginPath();
+        ctx.moveTo(x, padT); ctx.lineTo(x, padT + plotH);
+        ctx.stroke();
+        ctx.fillText(p + '%', x, padT + plotH + 17);
+      }
+      ctx.strokeStyle = css('--rule');
+      ctx.beginPath();
+      ctx.moveTo(padL, padT + plotH); ctx.lineTo(padL + plotW, padT + plotH);
+      ctx.stroke();
+
+      // curves, or a single line each if we are using the mean
+      [A, B].forEach((d) => {
+        const col = css(d.color);
+        if (sampling) {
+          ctx.beginPath();
+          ctx.moveTo(X(0), Y(0));
+          for (let i = 0; i <= 500; i++) {
+            const x = (i / 500) * XMAX;
+            ctx.lineTo(X(x), Y(betaPdf(x, d.alpha, d.beta)));
+          }
+          ctx.lineTo(X(XMAX), Y(0));
+          ctx.closePath();
+          ctx.globalAlpha = 0.14; ctx.fillStyle = col; ctx.fill();
+          ctx.globalAlpha = 1; ctx.strokeStyle = col; ctx.lineWidth = 2; ctx.stroke();
+        }
+        // the mean, always marked
+        ctx.strokeStyle = col;
+        ctx.lineWidth = sampling ? 1.5 : 3;
+        ctx.setLineDash(sampling ? [3, 3] : []);
+        ctx.beginPath();
+        ctx.moveTo(X(d.mean), padT); ctx.lineTo(X(d.mean), padT + plotH);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      });
+
+      // draws landing on the axis
+      const base = padT + plotH;
+      ticks.forEach((t) => {
+        ctx.globalAlpha = Math.max(0, t.t) * 0.85;
+        ctx.strokeStyle = css(t.c);
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(X(t.x), base + 1); ctx.lineTo(X(t.x), base + 9 + 8 * t.t);
+        ctx.stroke();
+      });
+      ctx.globalAlpha = 1;
+
+      ctx.textAlign = 'left';
+      ctx.fillStyle = css('--ink-3');
+      ctx.font = '11px ' + css('--mono');
+      ctx.fillText('acceptance rate', padL, 12);
+    }
+
+    function loop(ts) {
+      if (!running) return;
+      if (!last) last = ts;
+      const dt = ts - last; last = ts;
+      acc += dt;
+      const every = 90;
+      while (acc >= every) { acc -= every; step(); }
+      ticks.forEach((t) => { t.t -= dt / 2600; });
+      ticks = ticks.filter((t) => t.t > 0);
+      render();
+      raf = requestAnimationFrame(loop);
+    }
+
+    const start = () => { if (!running && !reduced) { running = true; last = 0; raf = requestAnimationFrame(loop); } };
+    const stop = () => { running = false; cancelAnimationFrame(raf); };
+
+    function reset() {
+      aWins = 0; total = 0; ticks = [];
+      document.getElementById('tsA').textContent = '—';
+      document.getElementById('tsB').textContent = '—';
+      document.getElementById('tsN').textContent = '0';
+    }
+
+    const cap = document.getElementById('tsCap');
+    const CAP_SAMPLE = 'Sampling from the spread, A keeps the lead it deserves — but only <b>67.9%</b> of the time, so B gets the rest and A&rsquo;s guess resolves into a fact within a couple of weeks.';
+    const CAP_MEAN = 'Using the average, A takes <b>every single impression, forever</b>, on four data points — and the system has no way of noticing that one of its two numbers is a guess.';
+
+    toggle(
+      document.getElementById('tsSample'),
+      document.getElementById('tsMean'),
+      (isSampling) => {
+        sampling = isSampling;
+        reset();
+        document.getElementById('tsMode').textContent = isSampling ? 'sampling' : 'the average';
+        cap.innerHTML = isSampling ? CAP_SAMPLE : CAP_MEAN;
+        render();
+        if (reduced) { for (let i = 0; i < 400; i++) step(); render(); }
+      }
+    );
+
+    onThemeChange(render);
+    window.addEventListener('resize', render);
+    whenVisible(canvas, start, stop);
+    render();
+    if (reduced) { for (let i = 0; i < 400; i++) step(); render(); }
+  })();
+
+  /* ============================================================
+     2. Two grains of affinity
+     ============================================================ */
+  (() => {
+    const canvas = document.getElementById('gnCanvas');
+    if (!canvas) return;
+
+    const ORDERS = [
+      { at: 0.06, w: 0.14, label: 'Round 1', items: ['Bread', 'Salad'] },
+      { at: 0.30, w: 0.20, label: 'Round 2', items: ['Steak', 'Wine'] },
+      { at: 0.70, w: 0.22, label: 'Round 3', items: ['Coffee', 'Baklava'] },
+    ];
+    const TIMES = ['19:40', '20:15', '20:47', '21:10'];
+
+    let byVisit = false, t = 0, raf = 0, running = false, last = 0;
+
+    function render() {
+      const { ctx, w, h } = fit(canvas);
+      const padL = 14, padR = 14, padT = 28, padB = 42;
+      const plotW = w - padL - padR;
+      const X = (v) => padL + v * plotW;
+      const laneY = padT + 66;
+      const laneH = 54;
+
+      ctx.clearRect(0, 0, w, h);
+      ctx.font = '11px ' + css('--mono');
+      ctx.textAlign = 'left';
+
+      // ---- the basket outline(s) ----
+      const first = ORDERS[0], lastO = ORDERS[ORDERS.length - 1];
+      ORDERS.forEach((o, i) => {
+        // interpolate each order's box toward the single visit-wide box
+        const x0 = X(o.at) - 8, x1 = X(o.at + o.w) + 8;
+        const vx0 = X(first.at) - 8, vx1 = X(lastO.at + lastO.w) + 8;
+        const bx0 = x0 + (vx0 - x0) * t;
+        const bx1 = x1 + (vx1 - x1) * t;
+        const alpha = i === 0 ? 1 : 1 - t;   // the three boxes merge into one
+        if (alpha <= 0.01) return;
+
+        ctx.globalAlpha = alpha;
+        ctx.fillStyle = t > 0.5 ? css('--proven-soft') : css('--accent-soft');
+        ctx.strokeStyle = t > 0.5 ? css('--proven') : css('--accent');
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([4, 3]);
+        const y = laneY - 16, hh = laneH + 32;
+        ctx.beginPath();
+        if (ctx.roundRect) ctx.roundRect(bx0, y, bx1 - bx0, hh, 4);
+        else ctx.rect(bx0, y, bx1 - bx0, hh);
+        ctx.fill(); ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.globalAlpha = 1;
+      });
+
+      // ---- basket labels ----
+      ctx.textAlign = 'center';
+      if (t < 0.5) {
+        ctx.globalAlpha = 1 - t * 2;
+        ctx.fillStyle = css('--accent');
+        ORDERS.forEach((o) => ctx.fillText('basket', X(o.at + o.w / 2), laneY - 24));
+        ctx.globalAlpha = 1;
+      } else {
+        ctx.globalAlpha = (t - 0.5) * 2;
+        ctx.fillStyle = css('--proven');
+        ctx.fillText('one basket — the whole visit',
+          X((first.at + lastO.at + lastO.w) / 2), laneY - 24);
+        ctx.globalAlpha = 1;
+      }
+
+      // ---- item pills ----
+      ORDERS.forEach((o) => {
+        o.items.forEach((it, j) => {
+          const cx = X(o.at + (j + 0.5) * (o.w / o.items.length));
+          const cy = laneY + laneH / 2;
+          const isPair = it === 'Steak' || it === 'Coffee';
+          ctx.font = (isPair ? 'bold ' : '') + '12px ' + css('--mono');
+          const tw = ctx.measureText(it).width;
+          const bw = tw + 20, bh = 26;
+          ctx.fillStyle = isPair
+            ? (t > 0.5 ? css('--proven-soft') : css('--accent-soft'))
+            : css('--ground');
+          ctx.strokeStyle = isPair ? (t > 0.5 ? css('--proven') : css('--accent')) : css('--rule');
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          if (ctx.roundRect) ctx.roundRect(cx - bw / 2, cy - bh / 2, bw, bh, 13);
+          else ctx.rect(cx - bw / 2, cy - bh / 2, bw, bh);
+          ctx.fill(); ctx.stroke();
+          ctx.fillStyle = isPair ? (t > 0.5 ? css('--proven') : css('--accent')) : css('--ink-2');
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(it, cx, cy + 0.5);
+          ctx.textBaseline = 'alphabetic';
+        });
+      });
+
+      // ---- the link between steak and coffee ----
+      const steakX = X(ORDERS[1].at + 0.25 * ORDERS[1].w);
+      const coffeeX = X(ORDERS[2].at + 0.25 * ORDERS[2].w);
+      const linkY = laneY + laneH + 26;
+      ctx.strokeStyle = t > 0.5 ? css('--proven') : css('--alarm');
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash(t > 0.5 ? [] : [3, 4]);
+      ctx.beginPath();
+      ctx.moveTo(steakX, laneY + laneH / 2 + 16);
+      ctx.bezierCurveTo(steakX, linkY, coffeeX, linkY, coffeeX, laneY + laneH / 2 + 16);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = t > 0.5 ? css('--proven') : css('--alarm');
+      ctx.font = '11px ' + css('--mono');
+      ctx.textAlign = 'center';
+      ctx.fillText(t > 0.5 ? 'learnable' : '32 minutes apart — never in one basket',
+        (steakX + coffeeX) / 2, linkY + 14);
+
+      // ---- time axis ----
+      ctx.strokeStyle = css('--rule');
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(padL, h - padB + 12); ctx.lineTo(w - padR, h - padB + 12);
+      ctx.stroke();
+      ctx.fillStyle = css('--ink-3');
+      ctx.font = '11px ' + css('--mono');
+      TIMES.forEach((tm, i) => {
+        const x = padL + (i / (TIMES.length - 1)) * plotW;
+        ctx.textAlign = i === 0 ? 'left' : i === TIMES.length - 1 ? 'right' : 'center';
+        ctx.fillText(tm, x, h - padB + 28);
+      });
+    }
+
+    function loop(ts) {
+      if (!running) return;
+      if (!last) last = ts;
+      const dt = (ts - last) / 460; last = ts;
+      const target = byVisit ? 1 : 0;
+      if (Math.abs(t - target) > 0.001) {
+        t += Math.sign(target - t) * Math.min(dt, Math.abs(target - t));
+        render();
+      }
+      raf = requestAnimationFrame(loop);
+    }
+    const start = () => { if (!running) { running = true; last = 0; raf = requestAnimationFrame(loop); } };
+    const stop = () => { running = false; cancelAnimationFrame(raf); };
+
+    const cap = document.getElementById('gnCap');
+    toggle(
+      document.getElementById('gnOrder'),
+      document.getElementById('gnVisit'),
+      (perOrder) => {
+        byVisit = !perOrder;
+        if (reduced) { t = byVisit ? 1 : 0; render(); }
+        document.getElementById('gnBaskets').textContent = perOrder ? '3' : '1';
+        const pair = document.getElementById('gnPair');
+        const lift = document.getElementById('gnLift');
+        pair.textContent = perOrder ? 'never together' : 'in the same visit';
+        pair.className = perOrder ? 'v-alarm' : 'v-proven';
+        lift.textContent = perOrder ? '—' : '2.4×';
+        lift.className = perOrder ? 'v-alarm' : 'v-proven';
+        cap.innerHTML = perOrder
+          ? 'Per order, steak and coffee never share a basket, so the pairing is <b>not learnable at all</b> — and the after-meal prompt is exactly the moment it was needed.'
+          : 'Per visit, the evening is one basket. The pairing the after-meal prompt depends on becomes <b>visible for the first time</b>, and can be quoted with a real number behind it.';
+      }
+    );
+
+    onThemeChange(render);
+    window.addEventListener('resize', render);
+    whenVisible(canvas, start, stop);
+    render();
+  })();
+
+  /* ============================================================
+     3. Unit of analysis
+     ============================================================ */
+  (() => {
+    const canvas = document.getElementById('uaCanvas');
+    if (!canvas) return;
+
+    const N = 30;
+    let collapsed = 0, byVisit = false, raf = 0, running = false, last = 0;
+
+    function render() {
+      const { ctx, w, h } = fit(canvas);
+      const padL = 92, padR = 20, padT = 26, padB = 30;
+      const plotW = w - padL - padR;
+      const XMAXV = 40;
+      const X = (kn) => padL + (kn / XMAXV) * plotW;
+      const rowT = padT + 34;      // treatment lane
+      const rowH = padT + 132;     // holdout lane
+      const laneH = 74;
+
+      ctx.clearRect(0, 0, w, h);
+      ctx.font = '11px ' + css('--mono');
+
+      // gridlines
+      ctx.strokeStyle = css('--grid');
+      ctx.fillStyle = css('--ink-3');
+      ctx.textAlign = 'center';
+      for (let v = 0; v <= 40; v += 10) {
+        ctx.beginPath();
+        ctx.moveTo(X(v), padT); ctx.lineTo(X(v), h - padB);
+        ctx.stroke();
+        ctx.fillText(v + ' KM', X(v), h - padB + 16);
+      }
+
+      // lane labels
+      ctx.textAlign = 'right';
+      ctx.fillStyle = css('--ink-2');
+      ctx.font = '12px ' + css('--mono');
+      ctx.fillText('shown', padL - 14, rowT + 4);
+      ctx.fillText('suggestions', padL - 14, rowT + 19);
+      ctx.fillText('shown none', padL - 14, rowH + 4);
+      ctx.fillText('(holdout)', padL - 14, rowH + 19);
+
+      // treatment: three 10 KM orders per table, collapsing to one 30 KM visit
+      const seedRand = (i) => ((Math.sin(i * 12.9898) * 43758.5453) % 1 + 1) % 1;
+      for (let i = 0; i < N; i++) {
+        const jitter = (seedRand(i) - 0.5) * (laneH - 14);
+        const y = rowT + laneH / 2 + jitter;
+        for (let k = 0; k < 3; k++) {
+          const from = 10, to = 30;
+          const x = X(from + (to - from) * collapsed);
+          const spread = (k - 1) * 3 * (1 - collapsed);
+          ctx.globalAlpha = k === 1 ? 1 : 1 - collapsed * 0.85;
+          ctx.fillStyle = css('--accent');
+          ctx.beginPath();
+          ctx.arc(x + spread, y, 3.1, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+      ctx.globalAlpha = 1;
+
+      // holdout: one 30 KM order per table
+      for (let i = 0; i < N; i++) {
+        const jitter = (seedRand(i + 500) - 0.5) * (laneH - 14);
+        ctx.fillStyle = css('--proven');
+        ctx.beginPath();
+        ctx.arc(X(30), rowH + laneH / 2 + jitter, 3.1, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // group means
+      const tMean = 10 + 20 * collapsed;
+      [[tMean, rowT, '--accent'], [30, rowH, '--proven']].forEach(([m, y, c]) => {
+        ctx.strokeStyle = css(c);
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(X(m), y - 4); ctx.lineTo(X(m), y + laneH + 4);
+        ctx.stroke();
+      });
+
+      // the gap between them, annotated
+      if (collapsed < 0.97) {
+        const midY = (rowT + laneH + rowH) / 2;
+        ctx.strokeStyle = css('--alarm');
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([4, 3]);
+        ctx.beginPath();
+        ctx.moveTo(X(tMean), midY); ctx.lineTo(X(30), midY);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.fillStyle = css('--alarm');
+        ctx.textAlign = 'center';
+        ctx.font = '11px ' + css('--mono');
+        ctx.globalAlpha = 1 - collapsed;
+        ctx.fillText('a difference that is not there', (X(tMean) + X(30)) / 2, midY - 7);
+        ctx.globalAlpha = 1;
+      } else {
+        ctx.fillStyle = css('--proven');
+        ctx.textAlign = 'center';
+        ctx.fillText('the two groups sit on top of each other', X(30), (rowT + laneH + rowH) / 2 - 7);
+      }
+    }
+
+    function loop(ts) {
+      if (!running) return;
+      if (!last) last = ts;
+      const dt = (ts - last) / 620; last = ts;
+      const target = byVisit ? 1 : 0;
+      if (Math.abs(collapsed - target) > 0.001) {
+        collapsed += Math.sign(target - collapsed) * Math.min(dt, Math.abs(target - collapsed));
+        render();
+      }
+      raf = requestAnimationFrame(loop);
+    }
+    const start = () => { if (!running) { running = true; last = 0; raf = requestAnimationFrame(loop); } };
+    const stop = () => { running = false; cancelAnimationFrame(raf); };
+
+    const cap = document.getElementById('uaCap');
+    toggle(
+      document.getElementById('uaOrder'),
+      document.getElementById('uaVisit'),
+      (perOrder) => {
+        byVisit = !perOrder;
+        if (reduced) { collapsed = byVisit ? 1 : 0; render(); }
+        document.getElementById('uaN').textContent = perOrder ? '120' : '60';
+        const d = document.getElementById('uaDiff');
+        const v = document.getElementById('uaVerdict');
+        d.textContent = perOrder ? '−20.00 KM' : '0.00 KM';
+        d.className = perOrder ? 'v-alarm' : 'v-proven';
+        v.textContent = perOrder ? 'significant' : 'no effect';
+        v.className = perOrder ? 'v-alarm' : 'v-proven';
+        cap.innerHTML = perOrder
+          ? 'Counted by order the test reports a large, confident difference in data that contains none. <b>The significance is manufactured</b> by the double counting.'
+          : 'Counted by visit — one row per table, tips and refunds removed — the difference is <b>exactly zero</b>, which is the right answer. This is a real regression test in the suite.';
+      }
+    );
+
+    onThemeChange(render);
+    window.addEventListener('resize', render);
+    whenVisible(canvas, start, stop);
+    render();
+  })();
+
+  /* ============================================================
+     4. The trading day
+     ============================================================ */
+  (() => {
+    const canvas = document.getElementById('bdCanvas');
+    if (!canvas) return;
+
+    // 20:00 on 2 Aug through 04:00 on 3 Aug, in local hours from 20:00
+    const SPAN = 8;
+    let fixed = false, pos = 4.5, dir = 1, raf = 0, running = false, last = 0;
+
+    const fmt = (hoursFrom20) => {
+      const total = (20 + hoursFrom20) % 24;
+      const hh = Math.floor(total);
+      const mm = Math.floor((total - hh) * 60);
+      return String(hh).padStart(2, '0') + ':' + String(mm).padStart(2, '0');
+    };
+
+    function render() {
+      const { ctx, w, h } = fit(canvas);
+      const padL = 108, padR = 18, padT = 22, padB = 40;
+      const plotW = w - padL - padR;
+      const X = (hr) => padL + (hr / SPAN) * plotW;
+
+      ctx.clearRect(0, 0, w, h);
+      ctx.font = '11px ' + css('--mono');
+
+      const bandH = 34;
+      const yUTC = padT + 12;
+      const ySar = padT + 12 + bandH + 18;
+
+      // hour gridlines + labels
+      ctx.strokeStyle = css('--grid');
+      ctx.fillStyle = css('--ink-3');
+      ctx.textAlign = 'center';
+      for (let hr = 0; hr <= SPAN; hr += 1) {
+        ctx.beginPath();
+        ctx.moveTo(X(hr), padT); ctx.lineTo(X(hr), h - padB + 4);
+        ctx.stroke();
+        if (hr % 2 === 0) ctx.fillText(fmt(hr), X(hr), h - padB + 20);
+      }
+
+      // midnight
+      ctx.strokeStyle = css('--ink-3');
+      ctx.lineWidth = 1;
+      ctx.setLineDash([2, 3]);
+      ctx.beginPath();
+      ctx.moveTo(X(4), padT - 6); ctx.lineTo(X(4), h - padB + 4);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = css('--ink-2');
+      ctx.fillText('midnight', X(4), padT - 10);
+
+      function band(y, from, to, label, stroke, fill, dim) {
+        ctx.globalAlpha = dim ? 0.4 : 1;
+        ctx.fillStyle = fill;
+        ctx.strokeStyle = stroke;
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        const x0 = X(Math.max(0, from)), x1 = X(Math.min(SPAN, to));
+        if (ctx.roundRect) ctx.roundRect(x0, y, x1 - x0, bandH, 3);
+        else ctx.rect(x0, y, x1 - x0, bandH);
+        ctx.fill(); ctx.stroke();
+        ctx.fillStyle = stroke;
+        ctx.textAlign = 'center';
+        ctx.font = '11px ' + css('--mono');
+        if (x1 - x0 > 96) ctx.fillText(label, (x0 + x1) / 2, y + bandH / 2 + 4);
+        ctx.globalAlpha = 1;
+      }
+
+      ctx.textAlign = 'right';
+      ctx.fillStyle = css('--ink-2');
+      ctx.font = '12px ' + css('--mono');
+      ctx.fillText('UTC day', padL - 14, yUTC + bandH / 2 + 4);
+      ctx.fillText(fixed ? 'trading day' : 'the close asks for', padL - 14, ySar + bandH / 2 - 2);
+      if (!fixed) ctx.fillText('(Sarajevo date)', padL - 14, ySar + bandH / 2 + 13);
+
+      /*
+       * 00:00 UTC lands at 02:00 local in summer, i.e. hour 6 on this axis.
+       * That two-hour offset between the bands IS the bug.
+       */
+      const neutral = css('--ink-3');
+      const faint = css('--grid');
+      band(yUTC, 0, 6, '2 Aug (UTC)', neutral, faint, true);
+      band(yUTC, 6, SPAN, '3 Aug (UTC)', neutral, faint, true);
+
+      if (fixed) {
+        // local midnight to local midnight, on both sides
+        band(ySar, 0, 4, '2 Aug', css('--proven'), css('--proven-soft'), true);
+        band(ySar, 4, SPAN, '3 Aug — the trading day', css('--proven'), css('--proven-soft'), false);
+      } else {
+        // the close names the Sarajevo day but measures the UTC window
+        band(ySar, 6, SPAN, '3 Aug measured in UTC', css('--accent'), css('--accent-soft'), false);
+        // 00:00–02:00 local: inside the day being closed, outside the window it asks for
+        ctx.fillStyle = css('--alarm-soft');
+        ctx.strokeStyle = css('--alarm');
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([4, 3]);
+        ctx.beginPath();
+        if (ctx.roundRect) ctx.roundRect(X(4), ySar, X(6) - X(4), bandH, 3);
+        else ctx.rect(X(4), ySar, X(6) - X(4), bandH);
+        ctx.fill(); ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.fillStyle = css('--alarm');
+        ctx.textAlign = 'center';
+        ctx.font = '11px ' + css('--mono');
+        ctx.fillText('counted by nobody', (X(4) + X(6)) / 2, ySar + bandH / 2 + 4);
+      }
+
+      // the sale
+      const sx = X(pos);
+      const inDeadZone = !fixed && pos >= 4 && pos < 6;
+      ctx.strokeStyle = css(inDeadZone ? '--alarm' : '--ink');
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(sx, padT - 2); ctx.lineTo(sx, h - padB + 4);
+      ctx.stroke();
+      ctx.fillStyle = css(inDeadZone ? '--alarm' : '--ink');
+      ctx.beginPath();
+      ctx.arc(sx, h - padB - 6, 5, 0, Math.PI * 2);
+      ctx.fill();
+
+      // readouts
+      const filed = pos < 6 ? '2 Aug (UTC)' : '3 Aug (UTC)';
+      const el = document.getElementById('bdTime');
+      if (el) el.textContent = fmt(pos);
+      const f = document.getElementById('bdFiled');
+      if (f) f.textContent = fixed ? (pos < 4 ? '2 Aug' : '3 Aug') : filed;
+      const r = document.getElementById('bdRec');
+      if (r) {
+        if (fixed) {
+          r.textContent = pos < 4 ? 'the 2 Aug close' : 'the 3 Aug close';
+          r.className = 'v-proven';
+        } else if (inDeadZone) {
+          r.textContent = 'no close at all';
+          r.className = 'v-alarm';
+        } else {
+          r.textContent = pos < 4 ? 'the 2 Aug close' : 'the 3 Aug close';
+          r.className = '';
+        }
+        r.style.fontSize = '15px';
+      }
+    }
+
+    function loop(ts) {
+      if (!running) return;
+      if (!last) last = ts;
+      const dt = (ts - last) / 1000; last = ts;
+      pos += dir * dt * 0.85;
+      if (pos > SPAN - 0.4) { pos = SPAN - 0.4; dir = -1; }
+      if (pos < 0.4) { pos = 0.4; dir = 1; }
+      render();
+      raf = requestAnimationFrame(loop);
+    }
+    const start = () => { if (!running && !reduced) { running = true; last = 0; raf = requestAnimationFrame(loop); } };
+    const stop = () => { running = false; cancelAnimationFrame(raf); };
+
+    const cap = document.getElementById('bdCap');
+    toggle(
+      document.getElementById('bdBefore'),
+      document.getElementById('bdAfter'),
+      (before) => {
+        fixed = !before;
+        cap.innerHTML = before
+          ? 'The manager closes up at 01:15. Everything sold since midnight is missing from the expected cash, so <b>the drawer is over by exactly the late-night trade</b> — and the previous day was signed off hours before those orders existed.'
+          : 'One definition of the day, used on both sides of every comparison. Local midnight to local midnight — <b>23 hours in spring, 25 in autumn</b>, and every sale lands in the night that earned it.';
+        render();
+      }
+    );
+
+    onThemeChange(render);
+    window.addEventListener('resize', render);
+    whenVisible(canvas, start, stop);
+    render();
+  })();
+
+  /* ============================================================
+     5. The ranking pipeline
+     ============================================================ */
+  (() => {
+    const pipe = document.getElementById('pipe');
+    if (!pipe) return;
+    const chips = Array.from(pipe.querySelectorAll('.chip'));
+
+    function run() {
+      pipe.classList.remove('run');
+      chips.forEach((c) => { c.style.transitionDelay = '0ms'; });
+      // force a reflow so the removal takes effect before we re-add
+      void pipe.offsetWidth;
+      chips.forEach((c, i) => {
+        const stage = Number(c.parentElement.dataset.stage);
+        c.style.transitionDelay = (stage * 420 + (i % 6) * 70) + 'ms';
+      });
+      pipe.classList.add('run');
+    }
+
+    document.getElementById('pipeReplay').addEventListener('click', run);
+
+    if (reduced) { pipe.classList.add('run'); return; }
+    let done = false;
+    new IntersectionObserver((entries) => {
+      entries.forEach((e) => { if (e.isIntersecting && !done) { done = true; run(); } });
+    }, { threshold: 0.3 }).observe(pipe);
+  })();
+
+})();
+</script>
