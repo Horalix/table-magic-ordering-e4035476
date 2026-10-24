@@ -5,7 +5,8 @@ import { useCartStore } from '@/lib/cart-store';
 import { useT, useLanguageStore, getLocalizedName } from '@/lib/i18n';
 import SmartImage from '@/components/ui/SmartImage';
 import {
-  fetchRecommendations, fetchSuggestionEvidence, markSuggestionSeen, headlineKeyFor, type Placement,
+  fetchRecommendations, fetchSuggestionEvidence, markSuggestionSeen, headlineKeyFor,
+  impressionKey, pairingContextIds, useDismissedSuggestions, type Placement,
 } from '@/lib/recommendations';
 import { allergensToAvoid, useDietFilterStore } from '@/lib/dietary';
 import { track } from '@/lib/analytics';
@@ -15,15 +16,18 @@ interface Props {
   /** Suppress the suggestion entirely (e.g. the restaurant turned it off). */
   disabled?: boolean;
   /**
-   * Pair against these items instead of the cart.
+   * Pair against these items first.
    *
-   * Used by the dish page, where the question is "what goes with THIS?" — the
-   * guest is looking at one thing and has not decided to buy anything yet, so
-   * pairing against a cart they may not have started would suggest against the
-   * wrong context entirely.
+   * Used by the dish page, where the question is "what goes with THIS?". The
+   * cart is added after them on the `item` placement: pairing against the
+   * dish alone offered a second drink to a guest who already had one in the
+   * cart, which the coursing rules can only prevent if they can see it.
    */
   forItemIds?: string[];
 }
+
+/** Stable empty list, so a session with no dismissals does not re-render. */
+const NONE: string[] = [];
 
 /**
  * One relevant suggestion at a time — never a wall, never a modal.
@@ -31,7 +35,8 @@ interface Props {
  * The ethical constraints are structural rather than stylistic:
  *   - a single primary suggestion, with a visible, equally sized dismiss
  *   - nothing is preselected and nothing is added without a tap
- *   - dismissing hides it for the rest of the visit; it does not come back
+ *   - dismissing hides it for the rest of the visit, across pages and
+ *     remounts; it does not come back
  *   - the server never returns a sold-out item or something already in the cart
  *
  * A secondary row of alternatives is shown only after the primary is used or
@@ -44,25 +49,54 @@ const CartSuggestion = ({ placement, disabled, forItemIds }: Props) => {
   const { items, addItem } = useCartStore();
   const sessionId = useCartStore((st) => st.sessionId);
   const sessionToken = useCartStore((st) => st.sessionToken);
-  const [dismissed, setDismissed] = useState<string[]>([]);
+  /*
+   * "No thanks" is remembered per visit (session storage) and sent to the
+   * server as an exclusion, so the next suggestion is a fresh decision rather
+   * than the second row of an old one. Accepted items are only hidden
+   * locally: they are in the cart now, which the server already excludes.
+   */
+  const dismissed = useDismissedSuggestions((st) => (sessionId ? st.bySession[sessionId] : undefined)) ?? NONE;
+  const dismissSuggestion = useDismissedSuggestions((st) => st.dismiss);
+  const [accepted, setAccepted] = useState<string[]>([]);
   const activeDiets = useDietFilterStore((st) => st.activeDiets);
   const avoid = useMemo(() => allergensToAvoid(activeDiets), [activeDiets]);
+  const dietKey = useMemo(() => [...activeDiets].sort(), [activeDiets]);
 
-  const cartIds = useMemo(
-    () => forItemIds ?? items.map((i) => i.menuItemId ?? i.id).sort(),
-    [forItemIds, items],
-  );
+  const cartIds = useMemo(() => {
+    const inCart = items.map((i) => i.menuItemId ?? i.id).sort();
+    if (!forItemIds) return inCart;
+    return placement === 'item' ? pairingContextIds(forItemIds, inCart) : forItemIds;
+  }, [forItemIds, items, placement]);
 
-  const { data } = useQuery({
-    queryKey: ['recommendations', placement, locale, cartIds.join(','), sessionId, avoid.join(',')],
-    queryFn: () => fetchRecommendations(sessionId!, sessionToken!, cartIds, placement, locale, 4, avoid),
+  // Everything the suggestion depends on except the dismissals.
+  const contextKey = JSON.stringify([placement, locale, cartIds, sessionId, avoid, dietKey]);
+
+  const { data, isPlaceholderData } = useQuery({
+    queryKey: ['recommendations', contextKey, dismissed.join(',')],
+    queryFn: () => fetchRecommendations(sessionId!, sessionToken!, cartIds, placement, locale, 4, avoid, {
+      requireTags: dietKey,
+      excludeItemIds: dismissed,
+    }),
     staleTime: 5 * 60 * 1000,
     enabled: !disabled && !!sessionId && !!sessionToken,
+    // While the post-dismissal decision loads, keep showing the previous
+    // shortlist (minus what was dismissed) rather than collapsing the card.
+    // Only for a dismissal: after the cart changes, the old shortlist answers
+    // a question nobody is asking any more.
+    placeholderData: (previous, previousQuery) =>
+      previousQuery?.queryKey[1] === contextKey ? previous : undefined,
   });
 
-  const visible = (data?.items ?? []).filter((r) => !dismissed.includes(r.id));
+  const visible = (data?.items ?? []).filter((r) => !dismissed.includes(r.id) && !accepted.includes(r.id));
   const primary = visible[0];
   const decisionId = data?.decisionId ?? null;
+  /*
+   * The server's ledger records the FIRST row as what the decision chose.
+   * Only that row's sighting may be reported against the decision; anything
+   * else on screen (a placeholder after a dismissal, or the next row after an
+   * accept) is not what the ledger says was shown.
+   */
+  const isDecisionChoice = !isPlaceholderData && !!primary && data?.items[0]?.id === primary.id;
 
   /**
    * Report a sighting only when the card is genuinely on screen.
@@ -75,20 +109,23 @@ const CartSuggestion = ({ placement, disabled, forItemIds }: Props) => {
    * lie, even if the database throws it away.
    */
   const cardRef = useRef<HTMLDivElement | null>(null);
-  const reported = useRef<string | null>(null);
+  // Keyed by (decision, item): keyed by decision alone, the dish shown after
+  // a dismissal under the same decision was never counted as seen.
+  const reported = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     const node = cardRef.current;
-    if (!node || !primary || !decisionId || !sessionId || !sessionToken) return;
-    if (reported.current === decisionId) return;
+    if (!node || !primary || !decisionId || !sessionId || !sessionToken || isPlaceholderData) return;
+    const key = impressionKey(decisionId, primary.id);
+    if (reported.current.has(key)) return;
 
     let timer: ReturnType<typeof setTimeout> | undefined;
     const observer = new IntersectionObserver(([entry]) => {
       if (!entry.isIntersecting) { clearTimeout(timer); return; }
       timer = setTimeout(() => {
-        if (reported.current === decisionId) return;
-        reported.current = decisionId;
-        void markSuggestionSeen(decisionId, sessionId, sessionToken);
+        if (reported.current.has(key)) return;
+        reported.current.add(key);
+        if (isDecisionChoice) void markSuggestionSeen(decisionId, sessionId, sessionToken);
         track('suggestion_shown', {
           placement,
           decision_id: decisionId,
@@ -101,7 +138,7 @@ const CartSuggestion = ({ placement, disabled, forItemIds }: Props) => {
 
     observer.observe(node);
     return () => { clearTimeout(timer); observer.disconnect(); };
-  }, [decisionId, primary, placement, sessionId, sessionToken]);
+  }, [decisionId, primary, placement, sessionId, sessionToken, isPlaceholderData, isDecisionChoice]);
 
   /*
    * Social proof, but only what the data supports.
@@ -121,6 +158,12 @@ const CartSuggestion = ({ placement, disabled, forItemIds }: Props) => {
   if (disabled || !primary) return null;
 
   const name = getLocalizedName(primary, locale);
+  // The dish in the cart this goes with, so the card can say why it is here.
+  // A suggestion with a reason reads as a waiter's advice; one without reads
+  // as an advert.
+  const sourceLine = primary.source_item_id
+    ? items.find((line) => (line.menuItemId ?? line.id) === primary.source_item_id)
+    : undefined;
 
   const accept = () => {
     addItem({
@@ -143,7 +186,7 @@ const CartSuggestion = ({ placement, disabled, forItemIds }: Props) => {
       source_item_id: primary.source_item_id ?? null,
       type: primary.recommendation_type,
     });
-    setDismissed((prev) => [...prev, primary.id]);
+    setAccepted((prev) => [...prev, primary.id]);
     if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
       try { navigator.vibrate(8); } catch { /* not supported */ }
     }
@@ -157,7 +200,7 @@ const CartSuggestion = ({ placement, disabled, forItemIds }: Props) => {
       source_item_id: primary.source_item_id ?? null,
       type: primary.recommendation_type,
     });
-    setDismissed((prev) => [...prev, primary.id]);
+    if (sessionId) dismissSuggestion(sessionId, primary.id);
   };
 
   return (
@@ -190,6 +233,11 @@ const CartSuggestion = ({ placement, disabled, forItemIds }: Props) => {
           {evidence?.kind === 'qualitative' && (
             <p className="text-[11px] font-sans text-muted-foreground mt-0.5">
               {t('often_ordered_with')}
+            </p>
+          )}
+          {evidence?.kind !== 'quantified' && evidence?.kind !== 'qualitative' && sourceLine && (
+            <p className="text-xs font-sans text-muted-foreground mt-0.5 truncate">
+              {t('goes_with_your').replace('{name}', getLocalizedName(sourceLine, locale))}
             </p>
           )}
         </div>

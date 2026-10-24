@@ -25,6 +25,7 @@ const SALAD = 'cccccccc-cccc-cccc-cccc-cccccccc0002';    // kitchen, 5 min, vega
 const COFFEE = 'cccccccc-cccc-cccc-cccc-cccccccc0003';   // bar, 2 min
 const SOUP = 'cccccccc-cccc-cccc-cccc-cccccccc0004';     // kitchen, no prep_minutes
 const NUTCAKE = 'cccccccc-cccc-cccc-cccc-cccccccc0005';  // kitchen, contains nuts
+const LEMONADE = 'cccccccc-cccc-cccc-cccc-cccccccc0006'; // bar, cold — what goes WITH a meal
 const SESSION = 'eeeeeeee-eeee-eeee-eeee-eeeeeeee0001';
 const TOKEN = 'sess-token-7';
 
@@ -54,14 +55,18 @@ async function seed() {
       ('aaaaaaaa-0000-0000-0000-000000000002', 'Drinks', 2);
     INSERT INTO public.subcategories(id, category_id, name, sort_order) VALUES
       ('bbbbbbbb-0000-0000-0000-000000000001', 'aaaaaaaa-0000-0000-0000-000000000001', 'Mains', 1),
-      ('bbbbbbbb-0000-0000-0000-000000000002', 'aaaaaaaa-0000-0000-0000-000000000002', 'Hot Drinks', 2);
+      ('bbbbbbbb-0000-0000-0000-000000000002', 'aaaaaaaa-0000-0000-0000-000000000002', 'Hot Drinks', 2),
+      ('bbbbbbbb-0000-0000-0000-000000000003', 'aaaaaaaa-0000-0000-0000-000000000002', 'Lemonade', 3);
 
-    INSERT INTO public.menu_items(id, subcategory_id, name, price, is_available, station, prep_minutes, dietary_tags, allergens, margin_score) VALUES
-      ('${BURGER}',  'bbbbbbbb-0000-0000-0000-000000000001', 'Beef Burger',  20.00, true, 'kitchen', 20, '{}',                 '{gluten}', 50),
-      ('${SALAD}',   'bbbbbbbb-0000-0000-0000-000000000001', 'Garden Salad',  9.00, true, 'kitchen',  5, '{vegan,vegetarian}', '{}',       50),
-      ('${COFFEE}',  'bbbbbbbb-0000-0000-0000-000000000002', 'Espresso',      3.00, true, 'bar',      2, '{vegan,vegetarian}', '{}',       50),
-      ('${SOUP}',    'bbbbbbbb-0000-0000-0000-000000000001', 'Soup of Day',   7.00, true, 'kitchen', NULL, '{vegetarian}',     '{}',       50),
-      ('${NUTCAKE}', 'bbbbbbbb-0000-0000-0000-000000000001', 'Walnut Cake',   8.00, true, 'kitchen',  3, '{vegetarian}',       '{nuts}',   50);
+    -- Every item has a meal role: the coursing guardrails only suggest an
+    -- unclassified item on observed evidence, which these tests do not build.
+    INSERT INTO public.menu_items(id, subcategory_id, name, price, is_available, station, prep_minutes, dietary_tags, allergens, margin_score, meal_role) VALUES
+      ('${BURGER}',   'bbbbbbbb-0000-0000-0000-000000000001', 'Beef Burger',  20.00, true, 'kitchen', 20, '{}',                 '{gluten}', 50, 'main'),
+      ('${SALAD}',    'bbbbbbbb-0000-0000-0000-000000000001', 'Garden Salad',  9.00, true, 'kitchen',  5, '{vegan,vegetarian}', '{}',       50, 'starter'),
+      ('${COFFEE}',   'bbbbbbbb-0000-0000-0000-000000000002', 'Espresso',      3.00, true, 'bar',      2, '{vegan,vegetarian}', '{}',       50, 'hot_drink'),
+      ('${SOUP}',     'bbbbbbbb-0000-0000-0000-000000000001', 'Soup of Day',   7.00, true, 'kitchen', NULL, '{vegetarian}',     '{}',       50, 'starter'),
+      ('${NUTCAKE}',  'bbbbbbbb-0000-0000-0000-000000000001', 'Walnut Cake',   8.00, true, 'kitchen',  3, '{vegetarian}',       '{nuts}',   50, 'dessert'),
+      ('${LEMONADE}', 'bbbbbbbb-0000-0000-0000-000000000003', 'Lemonade',      4.00, true, 'bar',      1, '{vegan,vegetarian}', '{}',       50, 'cold_drink');
 
     INSERT INTO public.tables(id, table_number) VALUES ('dddddddd-0000-0000-0000-000000000001', 7);
     INSERT INTO public.table_sessions(id, table_id, token, is_active, guest_name, last_heartbeat_at)
@@ -295,9 +300,11 @@ describe('suggestions read the cart', () => {
   });
 
   it('still suggests something to a vegan cart', async () => {
+    // A cold drink: with food in the cart the espresso is only offered before
+    // 11:00, and this test must not depend on the clock.
     const results = await recommend([SALAD]);
     expect(results.length).toBeGreaterThan(0);
-    expect(results.map((r) => r.id)).toContain(COFFEE);
+    expect(results.map((r) => r.id)).toContain(LEMONADE);
   });
 
   it('reads a diet only when the whole cart agrees', async () => {
@@ -322,13 +329,13 @@ describe('suggestions read the cart', () => {
     // The affinity table can never notice something ABSENT — it only knows
     // which items appear together.
     const results = await recommend([BURGER]);
-    const drink = results.find((r) => r.id === COFFEE);
+    const drink = results.find((r) => r.id === LEMONADE);
     expect(drink).toBeTruthy();
   });
 
   it('stops pushing a drink once there is one', async () => {
     const results = await recommend([BURGER, COFFEE]);
-    expect(results.find((r) => r.id === COFFEE && r.recommendation_type === 'add_on')).toBeFalsy();
+    expect(results.find((r) => r.id === LEMONADE)).toBeFalsy();
   });
 
   it('never suggests something already in the cart', async () => {
@@ -342,13 +349,15 @@ describe('suggestions read the cart', () => {
 describe('suggestions read the kitchen', () => {
   it('prefers the quick dish when the kitchen is drowning', async () => {
     // Exploration off, so the only things separating these two candidates are
-    // the curated priority and the capacity penalty. The burger is curated
-    // HIGHER, so if it still loses under load, the penalty is what moved it.
+    // the curated priority, the price check and the capacity penalty. The
+    // burger is curated HIGHER — far enough to stay ahead of the cake on a
+    // quiet kitchen even though both cost more than the coffee in the cart —
+    // so if it still loses under load, the penalty is what moved it.
     await db.exec(`
       UPDATE public.restaurant_settings SET reco_exploration = 0 WHERE id = 1;
       INSERT INTO public.menu_item_recommendations(source_item_id, recommended_item_id, recommendation_type, priority)
-      VALUES ('${COFFEE}', '${BURGER}',  'pair_with', 90),
-             ('${COFFEE}', '${NUTCAKE}', 'pair_with', 80);
+      VALUES ('${COFFEE}', '${BURGER}',  'pair_with', 100),
+             ('${COFFEE}', '${NUTCAKE}', 'pair_with', 60);
     `);
 
     const quiet = (await recommend([COFFEE])).map((r) => r.id);
@@ -394,7 +403,7 @@ describe('suggestions read the kitchen', () => {
     // Pouring a drink does not compete with the pass, and under load it is
     // exactly the right thing to offer.
     const results = await recommend([SALAD]);
-    expect(results.map((r) => r.id)).toContain(COFFEE);
+    expect(results.map((r) => r.id)).toContain(LEMONADE);
   });
 });
 

@@ -51,7 +51,13 @@ RETURNS TABLE(
   running_total numeric,
   avg_line_price numeric,
   has_served_main boolean,
-  covers int
+  covers int,
+  /**
+   * How many lines `running_total` is the sum of. Exposed so a caller can
+   * fold lines that are not ordered yet (the cart) into the same average —
+   * an average cannot be combined with anything without its count.
+   */
+  line_count int
 )
 LANGUAGE sql
 STABLE
@@ -73,7 +79,8 @@ AS $$
     COALESCE(sum(l.unit_price), 0),
     round(avg(l.unit_price), 2),
     COALESCE(bool_or(l.meal_role = 'main' AND l.served_at IS NOT NULL), false),
-    (SELECT s.covers FROM public.table_sessions s WHERE s.id = _session_id)
+    (SELECT s.covers FROM public.table_sessions s WHERE s.id = _session_id),
+    count(l.menu_item_id)::int
   FROM lines l;
 $$;
 
@@ -146,7 +153,17 @@ BEGIN
       sc.ordered_item_ids,
       sc.served_item_ids,
       sc.minutes_since_served,
-      sc.avg_line_price,
+      /*
+       * The average line price includes what is in the cart right now, not
+       * only what was ordered earlier. On the first round there IS no earlier,
+       * so a session-only average was NULL and the price check below never
+       * ran — which is how a 15 KM drink ended up offered next to a 15 KM
+       * burger.
+       */
+      (SELECT round((COALESCE(sc.running_total, 0) + COALESCE(sum(cm.price), 0))
+                    / NULLIF(COALESCE(sc.line_count, 0) + count(cm.id), 0), 2)
+         FROM public.menu_items cm
+        WHERE cm.id = ANY(COALESCE(_cart_item_ids, ''{}''::uuid[]))) AS avg_line_price,
       -- Cart plus what the table already ordered. At the after-meal moment the
       -- cart is empty, so without this the best upsell of the night has no
       -- context to pair against.
@@ -218,9 +235,21 @@ BEGIN
        * Price proportionality. Only bites ABOVE the table''s own average line
        * price — suggesting something cheaper is never wrong — and caps out, so
        * an expensive item is pushed down rather than made unreachable.
+       *
+       * The yardstick depends on what is being suggested. Another main may
+       * reasonably cost half as much again as the average line. Something that
+       * goes WITH the meal — a drink, a side, a dessert — should cost clearly
+       * less than it: a 15 KM filter coffee next to a 16 KM burger doubles the
+       * bill for an afterthought, and reads as the machine not paying
+       * attention.
        */
       - CASE
           WHEN p.avg_line_price IS NULL OR p.avg_line_price <= 0 THEN 0
+          WHEN mi.meal_role IS NOT NULL AND mi.meal_role <> ''main'' THEN
+            CASE
+              WHEN mi.price <= p.avg_line_price * 0.75 THEN 0
+              ELSE LEAST(0.25, 0.30 * (mi.price / p.avg_line_price - 0.75))
+            END
           WHEN mi.price <= p.avg_line_price * 1.5 THEN 0
           ELSE LEAST(0.30, 0.15 * (mi.price / p.avg_line_price - 1.5))
         END
@@ -256,6 +285,12 @@ COMMENT ON COLUMN public.restaurant_settings.after_meal_prompt_minutes IS
  * Mains actually served, enough time passed to have eaten them, and nothing
  * ordered since. Previously the prompt appeared the instant anything was
  * served, which could mean offering dessert alongside the starters.
+ *
+ * And it happens once. A table that has already ordered a dessert or a coffee
+ * after its mains has answered the question; asking again eight minutes after
+ * the coffee lands is nagging, not hospitality. "After its mains" means in a
+ * later order than the most recent main — a coffee ordered in the same round
+ * as the burger was not the after-meal answer.
  */
 CREATE OR REPLACE FUNCTION public.after_meal_moment(_session_id uuid)
 RETURNS boolean
@@ -269,7 +304,24 @@ AS $$
        AND sc.minutes_since_served >= COALESCE(
              (SELECT after_meal_prompt_minutes FROM public.restaurant_settings WHERE id = 1), 8)
       FROM public.session_context(_session_id) sc
-  ), false);
+  ), false)
+  AND NOT EXISTS (
+    SELECT 1
+      FROM public.order_items oi
+      JOIN public.orders o ON o.id = oi.order_id
+      JOIN public.menu_items mi ON mi.id = oi.menu_item_id
+     WHERE o.table_session_id = _session_id
+       AND o.status NOT IN ('cancelled', 'awaiting_payment', 'payment_failed')
+       AND mi.meal_role IN ('dessert', 'hot_drink')
+       AND o.created_at > (
+         SELECT max(mo.created_at)
+           FROM public.orders mo
+           JOIN public.order_items moi ON moi.order_id = mo.id
+           JOIN public.menu_items mmi ON mmi.id = moi.menu_item_id
+          WHERE mo.table_session_id = _session_id
+            AND mo.status NOT IN ('cancelled', 'awaiting_payment', 'payment_failed')
+            AND mmi.meal_role = 'main')
+  );
 $$;
 
 REVOKE ALL ON FUNCTION public.after_meal_moment(uuid) FROM PUBLIC;

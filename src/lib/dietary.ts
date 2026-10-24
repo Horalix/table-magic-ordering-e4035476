@@ -30,6 +30,20 @@ export const getItemTags = (item: unknown): string[] => {
   return Array.isArray(raw) ? raw.filter((x): x is string => typeof x === 'string') : [];
 };
 
+/**
+ * Does an item pass the guest's diet filter?
+ *
+ * THE rule, in one place: every active tag must be on the item. The menu
+ * filter and the suggestion card both use it, so a suggestion can never offer
+ * something the menu itself is hiding from the guest — which is what happened
+ * while suggestions only knew about the two filters that map to an allergen.
+ */
+export const matchesDietFilter = (item: unknown, activeDiets: readonly string[]): boolean => {
+  if (activeDiets.length === 0) return true;
+  const tags = getItemTags(item);
+  return activeDiets.every((d) => tags.includes(d));
+};
+
 /* ---- The guest's active filter -------------------------------------- */
 
 /**

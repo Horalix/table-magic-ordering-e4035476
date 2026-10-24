@@ -233,6 +233,10 @@ END $$;
  * off, because "off" is a judgement about whether the thing is working and
  * that belongs to a person, not to a cron job that has just watched a quiet
  * week drop the counters.
+ *
+ * "Nightly" means the scheduler, which is not a staff member — so the guard
+ * is is_trusted_caller(), not is_staff_member(). With the staff-only check the
+ * nightly job could never flip the switch it exists to flip.
  */
 CREATE OR REPLACE FUNCTION public.maybe_enable_sampling()
 RETURNS jsonb
@@ -244,7 +248,7 @@ DECLARE
   v_enabled boolean;
   v_ready boolean;
 BEGIN
-  IF NOT public.is_staff_member() THEN
+  IF NOT public.is_trusted_caller() THEN
     RAISE EXCEPTION 'Only staff can change the ranking policy' USING ERRCODE = 'insufficient_privilege';
   END IF;
 
@@ -281,22 +285,30 @@ $$;
 REVOKE ALL ON FUNCTION public.maybe_enable_sampling() FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.maybe_enable_sampling() TO authenticated;
 
--- Fold it into the nightly job.
+-- Fold it into the nightly job. A rewrite that matches nothing raises: a
+-- silent miss here would leave sampling permanently off with nothing to say
+-- why.
 DO $$
-DECLARE v_def text;
+DECLARE v_def text; v_before text;
 BEGIN
   SELECT pg_get_functiondef(p.oid) INTO v_def
     FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
    WHERE n.nspname = 'public' AND p.proname = 'run_daily_maintenance';
 
-  IF v_def IS NULL THEN RETURN; END IF;
+  IF v_def IS NULL THEN
+    RAISE EXCEPTION 'run_daily_maintenance is missing — migrations are out of order';
+  END IF;
   v_def := replace(v_def, chr(13) || chr(10), chr(10));
 
   IF position('maybe_enable_sampling' in v_def) = 0 THEN
+    v_before := v_def;
     v_def := replace(v_def,
       'PERFORM public.refresh_guest_profiles();',
       'PERFORM public.refresh_guest_profiles();
     PERFORM public.maybe_enable_sampling();');
+    IF v_def = v_before THEN
+      RAISE EXCEPTION 'could not fold maybe_enable_sampling into the nightly job';
+    END IF;
     EXECUTE v_def;
   END IF;
 END $$;
@@ -331,7 +343,9 @@ DECLARE
   v_min_pairs constant int := 15;
   v_checks jsonb;
 BEGIN
-  IF NOT public.is_staff_member() THEN
+  -- Trusted rather than staff-only: maybe_enable_sampling() calls this from
+  -- the nightly job.
+  IF NOT public.is_trusted_caller() THEN
     RAISE EXCEPTION 'Only staff can read the readiness gate' USING ERRCODE = 'insufficient_privilege';
   END IF;
 

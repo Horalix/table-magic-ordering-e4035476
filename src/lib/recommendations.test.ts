@@ -1,0 +1,106 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+/**
+ * The client half of the suggestion guardrails.
+ *
+ * The server already filters by diet and dismissals; these pin the parts that
+ * live in the browser — the same diet rule as the menu, the fallback for a
+ * database that has not run the migration yet, dismissals that survive a
+ * remount, and the dish page seeing the cart.
+ */
+
+const rpc = vi.fn();
+vi.mock('@/integrations/supabase/client', () => ({ supabase: { rpc: (...args: unknown[]) => rpc(...args) } }));
+
+const breadcrumbs: unknown[] = [];
+vi.mock('@sentry/react', () => ({ addBreadcrumb: (b: unknown) => { breadcrumbs.push(b); } }));
+
+const {
+  fetchRecommendations, pairingContextIds, impressionKey, useDismissedSuggestions,
+} = await import('@/lib/recommendations');
+const { matchesDietFilter } = await import('@/lib/dietary');
+
+const row = (id: string, tags: string[] = []) => ({
+  decision_id: 'd1', id, name: id, name_bs: null, name_ar: null, price: '4.00', image_url: null,
+  dietary_tags: tags, recommendation_type: 'popular', source_item_id: null,
+});
+
+beforeEach(() => {
+  rpc.mockReset();
+  breadcrumbs.length = 0;
+  sessionStorage.clear();
+  useDismissedSuggestions.setState({ bySession: {} });
+});
+
+describe('the diet rule', () => {
+  it('is the menu filter: every active tag must be on the item', () => {
+    expect(matchesDietFilter({ dietary_tags: ['vegan', 'halal'] }, ['vegan', 'halal'])).toBe(true);
+    expect(matchesDietFilter({ dietary_tags: ['vegan'] }, ['vegan', 'halal'])).toBe(false);
+    expect(matchesDietFilter({ dietary_tags: [] }, [])).toBe(true);
+    expect(matchesDietFilter({}, ['vegetarian'])).toBe(false);
+  });
+});
+
+describe('fetchRecommendations', () => {
+  it('sends the diet filter and dismissals, and asks for the full shortlist', async () => {
+    rpc.mockResolvedValue({ data: [row('a', ['halal'])], error: null });
+    await fetchRecommendations('s', 't', ['x'], 'cart', 'en', 4, [], { requireTags: ['halal'], excludeItemIds: ['b'] });
+
+    const [, args] = rpc.mock.calls[0] as [string, Record<string, unknown>];
+    expect(args._require_tags).toEqual(['halal']);
+    expect(args._exclude_item_ids).toEqual(['b']);
+    expect(args._limit).toBe(8);
+  });
+
+  it('filters by the same rule even if the server did not', async () => {
+    rpc.mockResolvedValue({ data: [row('a', ['vegan']), row('b', ['vegan', 'halal']), row('c', ['halal'])], error: null });
+    const result = await fetchRecommendations('s', 't', [], 'cart', 'en', 4, [], {
+      requireTags: ['halal'], excludeItemIds: ['c'],
+    });
+    expect(result.items.map((r) => r.id)).toEqual(['b']);
+    expect(result.items[0].price).toBe(4);
+  });
+
+  it('falls back to the old signature on a database without the migration', async () => {
+    rpc
+      .mockResolvedValueOnce({ data: null, error: { code: 'PGRST202', message: 'not found' } })
+      .mockResolvedValueOnce({ data: [row('a')], error: null });
+    const result = await fetchRecommendations('s', 't', [], 'cart', 'en');
+
+    expect(rpc).toHaveBeenCalledTimes(2);
+    const [, retry] = rpc.mock.calls[1] as [string, Record<string, unknown>];
+    expect(retry).not.toHaveProperty('_require_tags');
+    expect(result.items.map((r) => r.id)).toEqual(['a']);
+  });
+
+  it('shows nothing on failure, but leaves a trail', async () => {
+    rpc.mockResolvedValue({ data: null, error: { code: '42501', message: 'denied' } });
+    const result = await fetchRecommendations('s', 't', [], 'cart', 'en');
+    expect(result.items).toEqual([]);
+    expect(breadcrumbs).toHaveLength(1);
+  });
+});
+
+describe('the dish page sees the cart', () => {
+  it('pairs against the dish first, then the cart, without repeats', () => {
+    expect(pairingContextIds(['burger'], ['cola', 'burger'])).toEqual(['burger', 'cola']);
+  });
+});
+
+describe('dismissals', () => {
+  it('are remembered per visit and only for the current one', () => {
+    const { dismiss } = useDismissedSuggestions.getState();
+    dismiss('visit-1', 'cake');
+    dismiss('visit-1', 'cake');
+    expect(useDismissedSuggestions.getState().bySession['visit-1']).toEqual(['cake']);
+
+    dismiss('visit-2', 'cola');
+    expect(useDismissedSuggestions.getState().bySession).toEqual({ 'visit-2': ['cola'] });
+    // Persisted to session storage, so a remount reads them back.
+    expect(sessionStorage.getItem('lasoul-dismissed-suggestions')).toContain('cola');
+  });
+
+  it('keys impressions by decision and item', () => {
+    expect(impressionKey('d1', 'a')).not.toBe(impressionKey('d1', 'b'));
+  });
+});

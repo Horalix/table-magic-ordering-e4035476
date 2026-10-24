@@ -46,7 +46,57 @@ CREATE POLICY "Staff read maintenance" ON public.maintenance_runs
   FOR SELECT TO authenticated USING (public.is_staff_member());
 
 -- ---------------------------------------------------------------------
--- 2. Pruning, with a floor it will not cross
+-- 2. Who may run scheduled work
+-- ---------------------------------------------------------------------
+
+/**
+ * Staff, or the scheduler.
+ *
+ * Every function below refused anyone who was not a signed-in staff member,
+ * which also refused the only caller that runs whether or not anybody has a
+ * screen open: a cron job has no JWT and no auth.uid(). So the "seam" the
+ * daily job was built around could not actually be used.
+ *
+ * Two non-staff callers are trusted:
+ *
+ *   * a request carrying the service_role JWT — the project's master key,
+ *     which an Edge Function or external scheduler would use;
+ *   * `run_scheduled_maintenance()`, below, which is what pg_cron runs. It
+ *     marks itself with a function-scoped setting, and the mark is only
+ *     honoured when the connection itself belongs to a database owner role.
+ *
+ * Deliberately NOT `current_user IN ('postgres', ...)`: inside a SECURITY
+ * DEFINER function current_user is the function's owner, which is postgres for
+ * every function here, so that test would wave through anonymous guests.
+ * `session_user` is the role the connection logged in as and is not changed
+ * by SECURITY DEFINER; through the API it is always `authenticator`. It is not
+ * enough on its own either — the SQL editor and the test harness also connect
+ * as postgres, and a bare session check would let any ad-hoc query skip the
+ * staff check — hence the explicit mark.
+ */
+CREATE OR REPLACE FUNCTION public.is_trusted_caller()
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  -- Every branch is COALESCEd to false: a NULL here would make the callers'
+  -- `IF NOT is_trusted_caller()` skip the RAISE, i.e. fail open.
+  SELECT COALESCE(public.is_staff_member(), false)
+      OR COALESCE(COALESCE(
+           NULLIF(current_setting('request.jwt.claim.role', true), ''),
+           NULLIF(current_setting('request.jwt.claims', true), '')::jsonb ->> 'role'
+         ) = 'service_role', false)
+      OR (session_user::text IN ('postgres', 'supabase_admin')
+          AND COALESCE(current_setting('lasoul.scheduled_job', true), '') = 'on');
+$$;
+
+REVOKE ALL ON FUNCTION public.is_trusted_caller() FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.is_trusted_caller() TO authenticated;
+
+-- ---------------------------------------------------------------------
+-- 3. Pruning, with a floor it will not cross
 -- ---------------------------------------------------------------------
 
 /**
@@ -72,7 +122,7 @@ DECLARE
   v_days int := GREATEST(120, COALESCE(_days, 400));
   v_rows int := 0;
 BEGIN
-  IF NOT public.is_staff_member() THEN
+  IF NOT public.is_trusted_caller() THEN
     RAISE EXCEPTION 'Only staff can prune analytics' USING ERRCODE = 'insufficient_privilege';
   END IF;
 
@@ -98,7 +148,7 @@ DECLARE
   v_days int := GREATEST(120, COALESCE(_days, 400));
   v_rows int := 0;
 BEGIN
-  IF NOT public.is_staff_member() THEN
+  IF NOT public.is_trusted_caller() THEN
     RAISE EXCEPTION 'Only staff can prune decisions' USING ERRCODE = 'insufficient_privilege';
   END IF;
 
@@ -117,7 +167,7 @@ REVOKE ALL ON FUNCTION public.prune_recommendation_decisions(int) FROM PUBLIC, a
 GRANT EXECUTE ON FUNCTION public.prune_recommendation_decisions(int) TO authenticated;
 
 -- ---------------------------------------------------------------------
--- 3. Once a day, whoever asks first
+-- 4. Once a day, whoever asks first
 -- ---------------------------------------------------------------------
 
 /**
@@ -141,6 +191,13 @@ GRANT EXECUTE ON FUNCTION public.prune_recommendation_decisions(int) TO authenti
  * This is the seam. Point a real scheduler at it — pg_cron, a Supabase
  * scheduled function, or an external cron hitting the RPC — and the guards
  * make that safe without any further change.
+ *
+ * It is also where the suggestion engine learns. `refresh_menu_intelligence`
+ * rebuilds the pair tables and acceptance stats every suggestion is ranked
+ * from; until it ran here, it only ran when a manager pressed a button, so
+ * in practice the engine never learned anything. A failure there is recorded
+ * in the result and does not undo the retention work — stale pairs for one
+ * more day are harmless, an analytics table that never shrinks is not.
  */
 CREATE OR REPLACE FUNCTION public.run_daily_maintenance()
 RETURNS jsonb
@@ -152,9 +209,10 @@ DECLARE
   v_last timestamptz;
   v_events int := 0;
   v_decisions int := 0;
+  v_intel jsonb;
   v_result jsonb;
 BEGIN
-  IF NOT public.is_staff_member() THEN
+  IF NOT public.is_trusted_caller() THEN
     RAISE EXCEPTION 'Only staff can run maintenance' USING ERRCODE = 'insufficient_privilege';
   END IF;
 
@@ -174,10 +232,17 @@ BEGIN
     v_events := public.prune_analytics_events();
     v_decisions := public.prune_recommendation_decisions();
 
+    BEGIN
+      v_intel := public.refresh_menu_intelligence();
+    EXCEPTION WHEN OTHERS THEN
+      v_intel := jsonb_build_object('error', SQLERRM);
+    END;
+
     v_result := jsonb_build_object(
       'ran', true,
       'analytics_events_pruned', v_events,
       'decisions_pruned', v_decisions,
+      'menu_intelligence', v_intel,
       'at', now());
 
     INSERT INTO public.maintenance_runs(job, last_run_at, last_result)
@@ -196,3 +261,24 @@ $$;
 
 REVOKE ALL ON FUNCTION public.run_daily_maintenance() FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.run_daily_maintenance() TO authenticated;
+
+/**
+ * What pg_cron runs.
+ *
+ * The function-scoped SET is the scheduler's mark (see is_trusted_caller): it
+ * exists only while this function executes and reverts the moment it returns,
+ * so nothing that runs afterwards in the same session inherits it. Executable
+ * by nobody but the owner — no API role can reach it.
+ */
+CREATE OR REPLACE FUNCTION public.run_scheduled_maintenance()
+RETURNS jsonb
+LANGUAGE plpgsql
+SET search_path = public
+SET lasoul.scheduled_job = 'on'
+AS $$
+BEGIN
+  RETURN public.run_daily_maintenance();
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.run_scheduled_maintenance() FROM PUBLIC, anon, authenticated;

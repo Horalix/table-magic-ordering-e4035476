@@ -144,23 +144,50 @@ REVOKE ALL ON FUNCTION public.refresh_session_affinity(int, int) FROM PUBLIC, an
 GRANT EXECUTE ON FUNCTION public.refresh_session_affinity(int, int) TO authenticated;
 
 -- Fold it into the one-button refresh so nobody has to remember it exists.
+--
+-- This block used to search for `refresh_menu_affinity();` with no arguments.
+-- The live function calls `refresh_menu_affinity(90, 3)`, so the replace
+-- matched nothing, the unchanged definition was re-executed, and visit-grain
+-- pairs were never computed by anything — silently, because the block did not
+-- check. Every rewrite now asserts that it changed the text.
 DO $$
-DECLARE v_def text;
+DECLARE v_def text; v_before text;
 BEGIN
   SELECT pg_get_functiondef(p.oid) INTO v_def
     FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
    WHERE n.nspname = 'public' AND p.proname = 'refresh_menu_intelligence';
+
+  IF v_def IS NULL THEN
+    RAISE EXCEPTION 'refresh_menu_intelligence is missing — migrations are out of order';
+  END IF;
+
   -- Line endings are not content. Git rewrites .sql to CRLF on Windows
   -- checkouts, which would make every search literal below miss silently.
   v_def := replace(v_def, chr(13) || chr(10), chr(10));
 
-
-  IF v_def IS NOT NULL AND position('refresh_session_affinity' in v_def) = 0 THEN
+  IF position('refresh_session_affinity' in v_def) = 0 THEN
+    v_before := v_def;
     v_def := replace(v_def,
-      'v_pairs := public.refresh_menu_affinity();',
-      'v_pairs := public.refresh_menu_affinity();
-  PERFORM public.refresh_session_affinity();');
+      '  v_pairs int;',
+      '  v_pairs int;
+  v_session_pairs int;');
+    IF v_def = v_before THEN RAISE EXCEPTION 'refresh_menu_intelligence: declaration did not match'; END IF;
+
+    v_before := v_def;
+    v_def := replace(v_def,
+      'v_pairs := public.refresh_menu_affinity(90, 3);',
+      'v_pairs := public.refresh_menu_affinity(90, 3);
+  v_session_pairs := public.refresh_session_affinity(90, 3);');
+    IF v_def = v_before THEN RAISE EXCEPTION 'refresh_menu_intelligence: affinity call did not match'; END IF;
+
+    v_before := v_def;
+    v_def := replace(v_def,
+      '''pairs'', v_pairs,',
+      '''pairs'', v_pairs, ''session_pairs'', v_session_pairs,');
+    IF v_def = v_before THEN RAISE EXCEPTION 'refresh_menu_intelligence: result did not match'; END IF;
+
     EXECUTE v_def;
+    RAISE NOTICE 'refresh_menu_intelligence now refreshes visit-grain pairs';
   END IF;
 END $$;
 
