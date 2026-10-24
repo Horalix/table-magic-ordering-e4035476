@@ -23,6 +23,17 @@ interface Props {
   amountLabel: string;
   /** Present once the order is with the kitchen. */
   released?: boolean;
+  /**
+   * The order was sent to be paid at the table (cash or terminal), so nothing
+   * has been paid yet. Saying "Payment received" here told guests they had
+   * paid when they had not, and some left without paying.
+   */
+  payLater?: boolean;
+  /**
+   * A pay-at-table order that waits for the waiter before it prints. Said as
+   * a normal step, never as a suspicion: nearly every one is a real guest.
+   */
+  held?: boolean;
   onRetryCard?: () => void;
   onPayAtTable?: () => void;
   onContinue?: () => void;
@@ -50,7 +61,7 @@ const OrderCode = ({ code }: { code: string | null }) => {
  * "still confirming — do not pay again", never as failure.
  */
 const PaymentStatus = ({
-  phase, orderCode, amountLabel, released, onRetryCard, onPayAtTable, onContinue, onTrackOrder, busy,
+  phase, orderCode, amountLabel, released, payLater, held, onRetryCard, onPayAtTable, onContinue, onTrackOrder, busy,
 }: Props) => {
   const t = useT();
   const reduced = prefersReducedMotion();
@@ -139,11 +150,17 @@ const PaymentStatus = ({
       <div className="w-16 h-16 mx-auto rounded-full bg-primary/10 grid place-items-center">
         <CheckCircle2 className="w-8 h-8 text-primary" aria-hidden />
       </div>
-      <h2 className="font-serif text-2xl font-bold text-foreground mt-5">{t('payment_received_title')}</h2>
-      <p className="text-muted-foreground font-sans mt-2 text-sm">
-        {released ? t('order_in_kitchen_now') : t('order_sent_kitchen')}
+      <h2 className="font-serif text-2xl font-bold text-foreground mt-5">
+        {payLater && held ? t('order_received_title') : payLater ? t('order_sent_title') : t('payment_received_title')}
+      </h2>
+      <p className="text-muted-foreground font-sans mt-2 text-sm leading-relaxed">
+        {payLater && held ? t('order_waiter_will_confirm')
+          : payLater ? t('pay_waiter_when_ready') : released ? t('order_in_kitchen_now') : t('order_sent_kitchen')}
       </p>
-      <p className="text-lg font-serif font-semibold text-foreground mt-3 tabular-nums">{amountLabel}</p>
+      <p className="text-lg font-serif font-semibold text-foreground mt-3 tabular-nums">
+        {payLater && <span className="text-sm font-sans font-normal text-muted-foreground me-2">{t('to_pay')}</span>}
+        {amountLabel}
+      </p>
       <OrderCode code={orderCode} />
       <div className="mt-6 space-y-2.5">
         {onTrackOrder && (

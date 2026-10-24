@@ -53,22 +53,23 @@ test.describe('scanning the venue QR', () => {
     await expect(page.getByText('Kitchen closed until 18:00')).toBeVisible();
   });
 
-  test('forgets a previously remembered table', async ({ page }) => {
+  test('forgets a previously remembered table once the guest picks another one', async ({ page }) => {
     await seedSession(page);
     await page.goto('/start?token=venue-token-current');
     await expect(page.getByRole('spinbutton')).toBeVisible();
 
-    // Scanning is the start of a NEW visit; the old table must not survive it.
-    // Polled because the store persists asynchronously after the effect runs.
-    await expect.poll(() => page.evaluate(() => {
+    // Opening the number pad alone must not end the visit: a guest who
+    // rescans their own table mid-meal used to lose an unsent cart here.
+    const sessionId = () => page.evaluate(() => {
       const raw = localStorage.getItem('lasoul-cart');
       return raw ? JSON.parse(raw).state?.sessionId ?? null : null;
-    })).toBeNull();
+    });
+    expect(await sessionId()).toBe('session-1');
 
-    await expect.poll(() => page.evaluate(() => {
-      const raw = localStorage.getItem('lasoul-cart');
-      return raw ? JSON.parse(raw).state?.tableNumber ?? null : null;
-    })).toBeNull();
+    // Choosing a DIFFERENT table is a new visit; the old table must not survive it.
+    await page.getByRole('spinbutton').fill('3');
+    await page.getByRole('spinbutton').press('Enter');
+    await expect.poll(sessionId).not.toBe('session-1');
   });
 });
 

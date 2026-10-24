@@ -16,6 +16,23 @@ test.describe('menu and discovery', () => {
     await expect(page.getByRole('searchbox')).toBeVisible();
   });
 
+  test('a category opens as one page, with each section headed', async ({ page }) => {
+    await page.goto('/menu');
+    await page.getByRole('heading', { level: 2, name: /Food|Hrana/ }).click();
+
+    await expect(page).toHaveURL(/\/menu\/food/);
+    await expect(page.getByRole('heading', { level: 2, name: /Burgers|Burgeri/ })).toBeVisible();
+    await expect(page.getByText('La Soul Burger').first()).toBeVisible();
+  });
+
+  // Printed QR codes and links from the old menu site land on a section.
+  test('a section link opens the category at that section', async ({ page }) => {
+    await page.goto('/menu/food?section=burgers');
+
+    await expect(page.locator('#section-burgers')).toBeVisible();
+    await expect(page.getByText('La Soul Burger').first()).toBeVisible();
+  });
+
   test('global search finds a dish by name from the landing page', async ({ page }) => {
     await page.goto('/menu');
 
@@ -102,18 +119,23 @@ test.describe('checkout', () => {
     await page.getByRole('button', { name: /Add to order|Dodaj/ }).first().click();
 
     await page.goto('/cart');
-    await page.getByRole('button', { name: /Checkout/ }).click();
+    await page.getByRole('button', { name: /Send order|Pošalji narudžbu/ }).click();
 
     // No tip is preselected — "No tip" must be a real, reachable choice.
     await expect(page.getByRole('button', { name: /No tip|Bez napojnice/ })).toBeVisible();
 
     await page.getByRole('button', { name: /^Cash|Gotovina/ }).click();
 
-    await expect(page.getByRole('heading', { name: /Payment received|Plaćanje primljeno/i })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /Order sent to the kitchen|Narudžba je poslana/i })).toBeVisible();
     // The confirmation must show the real amount, not a cleared cart's zero.
     await expect(page.getByText('18.00 KM')).toBeVisible();
     expect(state.placedOrders).toHaveLength(1);
     expect(state.placedOrders[0].payment_method).toBe('cash');
+    // Nothing has been paid yet, and the screen must not say otherwise.
+    await expect(page.getByText(/To pay|Za platiti/)).toBeVisible();
+    await expect(page.getByText(/Payment received|Plaćanje primljeno/i)).toHaveCount(0);
+    // Every checkout carries a key, so a retry after a lost response is not a second ticket.
+    expect(state.placedOrders[0].client_order_id).toMatch(/^[0-9a-f-]{36}$|^c_/);
   });
 
   test('card at the table is a distinct choice from cash', async ({ page, state }) => {
@@ -122,10 +144,10 @@ test.describe('checkout', () => {
     await page.getByRole('button', { name: /Add to order|Dodaj/ }).first().click();
 
     await page.goto('/cart');
-    await page.getByRole('button', { name: /Checkout/ }).click();
+    await page.getByRole('button', { name: /Send order|Pošalji narudžbu/ }).click();
     await page.getByRole('button', { name: /Card at the table|Kartica za stolom/ }).click();
 
-    await expect(page.getByRole('heading', { name: /Payment received|Plaćanje primljeno/i })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /Order sent to the kitchen|Narudžba je poslana/i })).toBeVisible();
     expect(state.placedOrders[0].payment_method).toBe('pos_terminal');
   });
 
@@ -135,7 +157,7 @@ test.describe('checkout', () => {
     await page.getByRole('button', { name: /Add to order|Dodaj/ }).first().click();
 
     await page.goto('/cart');
-    await page.getByRole('button', { name: /Checkout/ }).click();
+    await page.getByRole('button', { name: /Send order|Pošalji narudžbu/ }).click();
 
     await expect(page.getByRole('button', { name: /Pay now/i })).toHaveCount(0);
   });
@@ -233,7 +255,7 @@ test.describe('payment recovery', () => {
     await page.goto('/cart');
     await page.getByRole('button', { name: /Pay at the table instead|Radije plati/i }).click();
 
-    await expect(page.getByText(/Payment received|Plaćanje primljeno/i)).toBeVisible();
+    await expect(page.getByText(/Order sent to the kitchen|Narudžba je poslana/i)).toBeVisible();
   });
 });
 
@@ -251,6 +273,6 @@ test.describe('service availability', () => {
     await page.goto('/cart');
 
     await expect(page.getByText(/Ordering is paused|Naručivanje je pauzirano/i)).toBeVisible();
-    await expect(page.getByRole('button', { name: /Checkout/ })).toBeDisabled();
+    await expect(page.getByRole('button', { name: /Send order|Pošalji narudžbu/ })).toBeDisabled();
   });
 });

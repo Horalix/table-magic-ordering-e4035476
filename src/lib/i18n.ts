@@ -8,8 +8,27 @@ interface LanguageStore {
   setLocale: (locale: Locale) => void;
 }
 
+/**
+ * The language a guest sees before choosing one.
+ *
+ * A saved choice always wins. Otherwise a phone set to Bosnian, Croatian or
+ * Serbian gets Bosnian and one set to Arabic gets Arabic: most guests at a
+ * Sarajevo table never touch the language switch, so defaulting everyone to
+ * English made the first screen foreign to the majority of them.
+ */
+function initialLocale(): Locale {
+  try {
+    const saved = localStorage.getItem('lasoul-lang');
+    if (saved === 'en' || saved === 'bs' || saved === 'ar') return saved;
+  } catch { /* storage blocked: fall through to the device language */ }
+  const lang = (typeof navigator !== 'undefined' ? navigator.language : 'en').toLowerCase();
+  if (/^(bs|hr|sr|sh)(-|$)/.test(lang)) return 'bs';
+  if (lang.startsWith('ar')) return 'ar';
+  return 'en';
+}
+
 export const useLanguageStore = create<LanguageStore>((set) => ({
-  locale: (localStorage.getItem('lasoul-lang') as Locale) || 'en',
+  locale: initialLocale(),
   setLocale: (locale) => {
     localStorage.setItem('lasoul-lang', locale);
     document.documentElement.dir = locale === 'ar' ? 'rtl' : 'ltr';
@@ -24,7 +43,7 @@ export const useLanguageStore = create<LanguageStore>((set) => ({
 // pronunciation from it, and Bosnian read aloud in an English voice is close
 // to unintelligible. Previously it was only set for 'ar', so a Bosnian guest
 // got `lang="en"` on a fully Bosnian page.
-const savedLocale = (localStorage.getItem('lasoul-lang') as Locale) || 'en';
+const savedLocale = initialLocale();
 document.documentElement.lang = savedLocale;
 document.documentElement.dir = savedLocale === 'ar' ? 'rtl' : 'ltr';
 
@@ -37,12 +56,62 @@ const translations: Record<string, Record<Locale, string>> = {
   'back_to_menu': { en: 'Back to Menu', bs: 'Nazad na meni', ar: 'العودة إلى القائمة' },
   'browse_menu': { en: 'Browse Menu Without Ordering', bs: 'Pregledaj meni bez narudžbe', ar: 'تصفح القائمة بدون طلب' },
 
+  // Ordering safely
+  'send_order': { en: 'Send order', bs: 'Pošalji narudžbu', ar: 'أرسل الطلب' },
+  'order_sent_title': { en: 'Order sent to the kitchen', bs: 'Narudžba je poslana u kuhinju', ar: 'تم إرسال الطلب إلى المطبخ' },
+  'to_pay': { en: 'To pay', bs: 'Za platiti', ar: 'المبلغ المستحق' },
+  'pay_waiter_when_ready': { en: 'Pay your waiter whenever you’re ready — there’s no need to do it now.', bs: 'Platite konobaru kad god želite — ne morate odmah.', ar: 'ادفع للنادل متى شئت — لا داعي للدفع الآن.' },
+  'item_unavailable_now': { en: 'No longer available — remove it to send your order', bs: 'Više nije dostupno — uklonite da pošaljete narudžbu', ar: 'لم يعد متوفرًا — احذفه لإرسال طلبك' },
+  'some_items_unavailable': { en: 'Some items are no longer available. They’re marked below.', bs: 'Neke stavke više nisu dostupne. Označene su ispod.', ar: 'بعض الأصناف لم تعد متوفرة. تم تحديدها أدناه.' },
+  'prices_updated': { en: 'Prices were updated to today’s menu.', bs: 'Cijene su ažurirane prema današnjem meniju.', ar: 'تم تحديث الأسعار وفق قائمة اليوم.' },
+  'order_not_sent_retry': { en: 'Your order wasn’t sent and nothing was charged. Please try again.', bs: 'Narudžba nije poslana i ništa nije naplaćeno. Pokušajte ponovo.', ar: 'لم يُرسل طلبك ولم يتم خصم أي مبلغ. حاول مجددًا.' },
+  'slow_down': { en: 'Too many orders at once — please wait a moment.', bs: 'Previše narudžbi odjednom — sačekajte trenutak.', ar: 'طلبات كثيرة في وقت واحد — يرجى الانتظار قليلًا.' },
+  'order_too_large': { en: 'That’s a very big order — please send it in two parts, or ask your waiter.', bs: 'To je jako velika narudžba — pošaljite je u dva dijela ili se obratite konobaru.', ar: 'هذا طلب كبير جدًا — يرجى إرساله على دفعتين أو سؤال النادل.' },
+  // Held for staff (see order_abuse_guards). Never say why: the guest is almost always real.
+  'order_received_title': { en: 'Order received', bs: 'Narudžba je primljena', ar: 'تم استلام الطلب' },
+  'order_waiter_will_confirm': { en: 'Your waiter will confirm it in a moment, then it goes straight to the kitchen.', bs: 'Vaš konobar će je potvrditi za trenutak, a zatim ide pravo u kuhinju.', ar: 'سيؤكده النادل خلال لحظات، ثم يذهب مباشرة إلى المطبخ.' },
+  'waiting_for_waiter_confirm': { en: 'Waiting for your waiter to confirm', bs: 'Čeka potvrdu konobara', ar: 'بانتظار تأكيد النادل' },
+  'no_payment_options': { en: 'Ordering from your phone is paused right now — please ask your waiter.', bs: 'Naručivanje s telefona je trenutno pauzirano — obratite se konobaru.', ar: 'الطلب من الهاتف متوقف حاليًا — يرجى سؤال النادل.' },
+  'leave_table_q': { en: 'Leave this table?', bs: 'Napustiti ovaj sto?', ar: 'مغادرة هذه الطاولة؟' },
+  'leave_table_body': { en: 'Anything you haven’t sent yet will be cleared. Orders already sent stay on the table’s tab.', bs: 'Sve što još niste poslali bit će obrisano. Poslane narudžbe ostaju na računu stola.', ar: 'سيتم مسح كل ما لم ترسله بعد. الطلبات المرسلة تبقى على حساب الطاولة.' },
+  'leave': { en: 'Leave', bs: 'Napusti', ar: 'مغادرة' },
+  'stay': { en: 'Stay', bs: 'Ostani', ar: 'البقاء' },
+  'browse_scan_banner': { en: 'You’re browsing. Scan the QR code on your table to order.', bs: 'Pregledate meni. Skenirajte QR kod na stolu da naručite.', ar: 'أنت تتصفح القائمة. امسح رمز QR على طاولتك للطلب.' },
+  'load_failed': { en: 'Couldn’t load this. Check your connection.', bs: 'Učitavanje nije uspjelo. Provjerite vezu.', ar: 'تعذر التحميل. تحقق من اتصالك.' },
+  'subtotal': { en: 'Subtotal', bs: 'Međuzbir', ar: 'المجموع الفرعي' },
+  'orders_count_one': { en: 'order', bs: 'narudžba', ar: 'طلب' },
+  'orders_count_other': { en: 'orders', bs: 'narudžbe', ar: 'طلبات' },
+  'bill_request_failed': { en: 'Couldn’t ask for the bill. Please try again.', bs: 'Zahtjev za račun nije poslan. Pokušajte ponovo.', ar: 'تعذر طلب الفاتورة. حاول مجددًا.' },
+  'menu_item_fallback': { en: 'Item', bs: 'Stavka', ar: 'صنف' },
+  'available_from_time': { en: 'from', bs: 'od', ar: 'من' },
+  'available_until_time': { en: 'until', bs: 'do', ar: 'حتى' },
+  'badge_chef_pick': { en: 'Chef’s pick', bs: 'Preporuka kuhara', ar: 'اختيار الشيف' },
+  'badge_seasonal': { en: 'Seasonal', bs: 'Sezonsko', ar: 'موسمي' },
+  'badge_house_favourite': { en: 'House favourite', bs: 'Omiljeno u kući', ar: 'المفضل لدينا' },
+  'name_too_long': { en: 'Please use a shorter name.', bs: 'Molimo kraće ime.', ar: 'يرجى استخدام اسم أقصر.' },
+  'waiter_call_failed': { en: 'Couldn’t reach your waiter. Please try again.', bs: 'Konobar nije obaviješten. Pokušajte ponovo.', ar: 'تعذر إبلاغ النادل. حاول مجددًا.' },
+  'ready_in': { en: 'Ready in', bs: 'Gotovo za', ar: 'جاهز خلال' },
+  'rough_estimate': { en: 'rough estimate', bs: 'okvirna procjena', ar: 'تقدير تقريبي' },
+  'more_waiting': { en: 'more waiting', bs: 'još čeka', ar: 'آخرون بالانتظار' },
+  'fewer_people': { en: 'Fewer people', bs: 'Manje osoba', ar: 'أشخاص أقل' },
+  'more_people': { en: 'More people', bs: 'Više osoba', ar: 'أشخاص أكثر' },
+  'change_language': { en: 'Change language', bs: 'Promijeni jezik', ar: 'تغيير اللغة' },
+  'back': { en: 'Back', bs: 'Nazad', ar: 'رجوع' },
+  'goes_with_your': { en: 'Goes with your {name}', bs: 'Odlično uz {name}', ar: 'مثالي مع {name}' },
+  'search_in': { en: 'Search', bs: 'Pretraži', ar: 'ابحث في' },
+  'minutes_short': { en: 'min', bs: 'min', ar: 'د' },
+  'hours_short': { en: 'h', bs: 'h', ar: 'س' },
+
   // Categories
   'drinks': { en: 'Drinks', bs: 'Pića', ar: 'المشروبات' },
   'food': { en: 'Food', bs: 'Hrana', ar: 'الطعام' },
   'desserts': { en: 'Desserts', bs: 'Deserti', ar: 'الحلويات' },
-  'drinks_desc': { en: 'Cocktails, coffee, juices & more', bs: 'Kokteli, kafa, sokovi i više', ar: 'كوكتيلات، قهوة، عصائر والمزيد' },
-  'food_desc': { en: 'Starters, mains, burgers & more', bs: 'Predjela, glavna jela, burgeri i više', ar: 'مقبلات، أطباق رئيسية، برغر والمزيد' },
+  'drinks_desc': { en: 'Coffee, tea, mojitos & fresh juice', bs: 'Kafa, čaj, mojito i svježi sokovi', ar: 'قهوة، شاي، موهيتو وعصائر طازجة' },
+  'food_desc': { en: 'Breakfast, burgers, pasta & more', bs: 'Doručak, burgeri, paste i više', ar: 'فطور، برغر، باستا والمزيد' },
+  'jump_to': { en: 'Jump to', bs: 'Idi na', ar: 'انتقل إلى' },
+  'menu_sections': { en: 'Menu sections', bs: 'Dijelovi menija', ar: 'أقسام القائمة' },
+  'call_us': { en: 'Call us', bs: 'Pozovite nas', ar: 'اتصل بنا' },
+  'find_us': { en: 'Find us', bs: 'Pronađite nas', ar: 'موقعنا' },
   'desserts_desc': { en: 'Sweet endings', bs: 'Slatki završeci', ar: 'نهايات حلوة' },
 
   // Cart
@@ -70,7 +139,6 @@ const translations: Record<string, Record<Locale, string>> = {
 
   // Browse / status / dietary (added features)
   'order_again': { en: 'Order again', bs: 'Naruči ponovo', ar: 'اطلب مرة أخرى' },
-  'swipe_hint': { en: 'Swipe to switch categories', bs: 'Prevucite za promjenu', ar: 'اسحب لتغيير الفئة' },
   'got_it': { en: 'Got it', bs: 'U redu', ar: 'حسناً' },
   'order_progress': { en: 'Order progress', bs: 'Status narudžbe', ar: 'حالة الطلب' },
   'status_received': { en: 'Received', bs: 'Primljeno', ar: 'تم الاستلام' },
@@ -140,7 +208,7 @@ const translations: Record<string, Record<Locale, string>> = {
 
   // Contact
   'phone': { en: '033 877-779', bs: '033 877-779', ar: '033 877-779' },
-  'address': { en: 'Butmirska cesta, Sarajevo 71000', bs: 'Butmirska cesta, Sarajevo 71000', ar: 'بوتميرسكا جيستا، سراييفو 71000' },
+  'address': { en: 'Butmirska cesta 16A | 16B, Sarajevo', bs: 'Butmirska cesta 16A | 16B, Sarajevo', ar: 'بوتميرسكا جيستا 16A | 16B، سراييفو' },
 
   // No items
   'no_items_category': { en: 'No items available in this category yet.', bs: 'Još nema stavki u ovoj kategoriji.', ar: 'لا توجد عناصر متاحة في هذه الفئة بعد.' },
@@ -189,12 +257,12 @@ const translations: Record<string, Record<Locale, string>> = {
 
   // Shared table — join + approval
   'waiting_to_join': { en: 'Waiting for the table to let you in…', bs: 'Čekanje da vas sto prihvati…', ar: 'بانتظار أن تسمح لك الطاولة بالدخول…' },
-  'waiting_to_join_sub': { en: 'Someone at the table just needs to accept you. This happens automatically in a moment.', bs: 'Neko za stolom vas treba prihvatiti. Ovo se dešava automatski za trenutak.', ar: 'يحتاج شخص ما على الطاولة إلى قبولك. سيحدث هذا تلقائيًا بعد لحظة.' },
+  'waiting_to_join_sub': { en: 'Someone at the table just needs to accept you — ask them to check their phone.', bs: 'Neko za stolom vas treba prihvatiti — zamolite ih da pogledaju telefon.', ar: 'يحتاج شخص ما على الطاولة إلى قبولك — اطلب منه التحقق من هاتفه.' },
   'wants_to_join': { en: 'wants to join your table', bs: 'želi se pridružiti vašem stolu', ar: 'يريد الانضمام إلى طاولتك' },
   'someone_wants_to_join': { en: 'Someone wants to join your table', bs: 'Neko se želi pridružiti vašem stolu', ar: 'شخص ما يريد الانضمام إلى طاولتك' },
   'accept': { en: 'Accept', bs: 'Prihvati', ar: 'قبول' },
   'decline': { en: 'Decline', bs: 'Odbij', ar: 'رفض' },
-  'join_approved': { en: "You're in — welcome to the table!", bs: 'Ušli ste — dobrodošli za sto!', ar: 'تم قبولك — أهلاً بك على الطاولة!' },
+  'join_approved': { en: "You’re in — welcome to the table!", bs: 'Ušli ste — dobrodošli za sto!', ar: 'تم قبولك — أهلاً بك على الطاولة!' },
   'join_declined': { en: "The table didn't accept your request.", bs: 'Sto nije prihvatio vaš zahtjev.', ar: 'لم تقبل الطاولة طلبك.' },
   'joining_table': { en: 'Joining the table…', bs: 'Pridruživanje stolu…', ar: 'جارٍ الانضمام إلى الطاولة…' },
   'at_this_table': { en: 'At this table', bs: 'Za ovim stolom', ar: 'على هذه الطاولة' },

@@ -2,6 +2,8 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { toast } from 'sonner';
 import { touchSession } from '@/lib/guest-api';
+import { track } from '@/lib/analytics';
+import { t } from '@/lib/i18n';
 
 /** Where a cart line came from, when it came from a suggestion. */
 export interface SuggestionOrigin {
@@ -23,6 +25,9 @@ export interface CartItem {
   /** Stable menu item id used when writing order_items.menu_item_id. */
   menuItemId?: string;
   name: string;
+  /** Kept on the line so the cart reads in the guest's language, not English. */
+  name_bs?: string | null;
+  name_ar?: string | null;
   price: number;
   quantity: number;
   notes?: string;
@@ -58,6 +63,15 @@ interface CartStore {
   guestName: string | null;
   lastOrderTime: number | null;
   pendingPayment: PendingPayment | null;
+  /**
+   * Idempotency key for the checkout in progress. Created on the first attempt
+   * and reused by every retry of it, so a request that committed but whose
+   * response was lost cannot become a second ticket. Any change to the cart
+   * retires it: a different cart is a different order.
+   */
+  checkoutKey: string | null;
+  /** Lines the server refused because they sold out or are out of hours. */
+  unavailableIds: string[];
   /** Stable per-device id — identifies this phone across reloads (join flow). */
   clientId: string;
   /**
@@ -69,7 +83,13 @@ interface CartStore {
    */
   rotateClientId: () => void;
   addItem: (item: Omit<CartItem, 'quantity'>) => void;
-  removeItem: (id: string) => void;
+  /** `source` says which control removed it, for the cart-abandon metric. */
+  removeItem: (id: string, source?: string) => void;
+  beginCheckout: () => string;
+  finishCheckout: () => void;
+  setUnavailable: (menuItemIds: string[]) => void;
+  /** Refresh prices and names from the live menu; returns true if a price moved. */
+  reprice: (menu: { id: string; price: number; name: string; name_bs?: string | null; name_ar?: string | null }[]) => boolean;
   updateQuantity: (id: string, quantity: number) => void;
   updateNotes: (id: string, notes: string) => void;
   clearCart: () => void;
@@ -81,6 +101,12 @@ interface CartStore {
   setPendingPayment: (pending: PendingPayment | null) => void;
   /** Forget the table entirely — the visit is over. */
   endVisit: () => void;
+  /**
+   * Stop being at this table but keep what is in the cart. Used when a guest
+   * says they are at a different table: their unsent order is still what they
+   * want, and the cart page re-prices it against the live menu anyway.
+   */
+  leaveTable: () => void;
   total: () => number;
   itemCount: () => number;
   startHeartbeat: () => void;
@@ -117,6 +143,8 @@ export const useCartStore = create<CartStore>()(persist((set, get) => ({
   guestName: null,
   lastOrderTime: null,
   pendingPayment: null,
+  checkoutKey: null,
+  unavailableIds: [],
   clientId: genId(),
   rotateClientId: () => set({ clientId: genId() }),
 
@@ -128,17 +156,51 @@ export const useCartStore = create<CartStore>()(persist((set, get) => ({
       const existing = state.items.find((i) => getMenuItemId(i) === menuItemId && normalizeNotes(i.notes) === notes);
       if (existing) {
         return {
+          checkoutKey: null,
           items: state.items.map((i) =>
-            i.id === existing.id ? { ...i, quantity: i.quantity + 1 } : i
+            i.id === existing.id ? { ...i, quantity: Math.min(i.quantity + 1, 10) } : i
           ),
         };
       }
-      return { items: [...state.items, { ...item, id, menuItemId, notes, quantity: 1 }] };
+      return { checkoutKey: null, items: [...state.items, { ...item, id, menuItemId, notes, quantity: 1 }] };
     });
   },
 
-  removeItem: (id) => {
-    set((state) => ({ items: state.items.filter((i) => i.id !== id) }));
+  // Every way a line leaves the cart goes through here, so the removal is
+  // tracked once. Stepping a quantity down to zero used to vanish silently.
+  removeItem: (id, source = 'cart') => {
+    const line = get().items.find((i) => i.id === id);
+    if (line) track('cart_item_removed', { item_id: getMenuItemId(line), quantity: line.quantity, source });
+    set((state) => ({
+      checkoutKey: null,
+      items: state.items.filter((i) => i.id !== id),
+      unavailableIds: line ? state.unavailableIds.filter((u) => u !== getMenuItemId(line)) : state.unavailableIds,
+    }));
+  },
+
+  beginCheckout: () => {
+    const existing = get().checkoutKey;
+    if (existing) return existing;
+    const key = genId();
+    set({ checkoutKey: key });
+    return key;
+  },
+
+  finishCheckout: () => set({ checkoutKey: null, unavailableIds: [] }),
+
+  setUnavailable: (menuItemIds) => set({ unavailableIds: menuItemIds }),
+
+  reprice: (menu) => {
+    const byId = new Map(menu.map((m) => [m.id, m]));
+    let moved = false;
+    const items = get().items.map((line) => {
+      const live = byId.get(getMenuItemId(line));
+      if (!live) return line;
+      if (Number(live.price) !== line.price) moved = true;
+      return { ...line, price: Number(live.price), name: live.name, name_bs: live.name_bs ?? null, name_ar: live.name_ar ?? null };
+    });
+    set(moved ? { items, checkoutKey: null } : { items });
+    return moved;
   },
 
   updateQuantity: (id, quantity) => {
@@ -148,6 +210,7 @@ export const useCartStore = create<CartStore>()(persist((set, get) => ({
     }
     if (quantity > 10) return; // Max 10 per item
     set((state) => ({
+      checkoutKey: null,
       items: state.items.map((i) => (i.id === id ? { ...i, quantity } : i)),
     }));
   },
@@ -158,7 +221,7 @@ export const useCartStore = create<CartStore>()(persist((set, get) => ({
     }));
   },
 
-  clearCart: () => set({ items: [] }),
+  clearCart: () => set({ items: [], checkoutKey: null, unavailableIds: [] }),
 
   setTable: (tableNumber, token) => set({ tableNumber, qrToken: token, sessionId: null, sessionToken: null }),
 
@@ -191,7 +254,15 @@ export const useCartStore = create<CartStore>()(persist((set, get) => ({
       qrToken: null,
       guestName: null,
       pendingPayment: null,
+      checkoutKey: null,
+      unavailableIds: [],
     });
+  },
+
+  leaveTable: () => {
+    get().stopHeartbeat();
+    try { sessionStorage?.removeItem('lasoul-session-checked'); } catch { /* not available */ }
+    set({ sessionId: null, sessionToken: null, tableNumber: null, guestName: null, pendingPayment: null, checkoutKey: null });
   },
 
   total: () => get().items.reduce((sum, i) => sum + i.price * i.quantity, 0),
@@ -205,17 +276,25 @@ export const useCartStore = create<CartStore>()(persist((set, get) => ({
       const { sessionToken } = get();
       if (!sessionId || !sessionToken) return;
 
-      const isActive = await touchSession(sessionId, sessionToken).catch(() => false);
+      // A failed request is NOT an expired session. Restaurant Wi-Fi drops
+      // requests all evening, and treating every blip as "session over" wiped
+      // carts mid-order. Only the server saying "no" ends the visit.
+      let isActive: boolean;
+      try {
+        isActive = await touchSession(sessionId, sessionToken);
+      } catch {
+        return;
+      }
 
       if (!isActive) {
-        get().clearCart();
-        set({ sessionId: null, sessionToken: null, tableNumber: null, qrToken: null, guestName: null, pendingPayment: null });
-        toast.error('Your session has expired. Please scan the QR code again.');
+        // The cart stays: the guest may simply rescan and send it. Only the
+        // table identity is dropped, because the server no longer honours it.
+        set({ sessionId: null, sessionToken: null, tableNumber: null, qrToken: null, guestName: null, pendingPayment: null, checkoutKey: null });
+        toast.error(t('session_expired'));
         if (heartbeatInterval) {
           clearInterval(heartbeatInterval);
           heartbeatInterval = null;
         }
-        // Redirect to menu without session
         window.location.href = '/menu';
       }
     }, 60000);
@@ -240,6 +319,7 @@ export const useCartStore = create<CartStore>()(persist((set, get) => ({
     guestName: s.guestName,
     lastOrderTime: s.lastOrderTime,
     pendingPayment: s.pendingPayment,
+    checkoutKey: s.checkoutKey,
     clientId: s.clientId,
   }),
 }));

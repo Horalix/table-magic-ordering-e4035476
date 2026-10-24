@@ -22,6 +22,13 @@ export interface StubState {
   venueToken: Record<string, unknown>;
   /** The menu. Mutable so a spec can 86 something. */
   menuItems: Record<string, unknown>[];
+  /**
+   * Whether guest_place_order holds a pay-at-table order for the waiter to
+   * confirm instead of printing it (20261024190000_order_abuse_guards.sql).
+   */
+  holdOrders: boolean;
+  /** What guest_get_tab lists as the table's orders. */
+  tabOrders: Record<string, unknown>[];
 }
 
 const MENU_ITEM = {
@@ -65,6 +72,8 @@ export const defaultState = (): StubState => ({
   sessionResume: { status: 'active', session_id: 'session-1', table_number: 7, guest_name: 'Amina' },
   venueToken: { valid: true, ordering_enabled: true, paused_message: null, max_table_number: 12 },
   menuItems: [MENU_ITEM],
+  holdOrders: false,
+  tabOrders: [],
 });
 
 
@@ -130,6 +139,11 @@ export async function installSupabaseStubs(page: Page, state: StubState) {
           payment_method: body._payment_method,
           payment_status: card ? 'pending' : 'unpaid',
           awaiting_payment: card,
+          // Recorded so specs can assert a retry would be recognised.
+          client_order_id: body._client_order_id ?? null,
+          // The real function also says why. The guest screen must never show it.
+          held: !card && state.holdOrders,
+          held_reason: !card && state.holdOrders ? 'large_first_order' : null,
         };
         state.placedOrders.push(order);
         return jsonRoute(route, order);
@@ -155,7 +169,7 @@ export async function installSupabaseStubs(page: Page, state: StubState) {
         return jsonRoute(route, []);
 
       case 'guest_get_tab':
-        return jsonRoute(route, { orders: [], bill_request: null, members: ['Amina'] });
+        return jsonRoute(route, { orders: state.tabOrders, bill_request: null, members: ['Amina'] });
 
       case 'guest_get_waiter_for_review':
         return jsonRoute(route, null);

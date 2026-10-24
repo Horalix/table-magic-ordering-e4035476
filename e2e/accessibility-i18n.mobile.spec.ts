@@ -93,7 +93,7 @@ test.describe('accessibility basics', () => {
     await page.getByRole('button', { name: /Add to order|Dodaj/ }).first().click();
     await page.goto('/cart');
 
-    await page.getByRole('button', { name: /Checkout/ }).click();
+    await page.getByRole('button', { name: /Send order|Pošalji narudžbu/ }).click();
     const dialog = page.getByRole('dialog');
     await expect(dialog).toBeVisible();
 

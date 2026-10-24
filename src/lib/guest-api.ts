@@ -61,6 +61,13 @@ export interface GuestPlaceOrderResult {
   /** True when the order is held pending card payment (not in the kitchen). */
   awaiting_payment: boolean;
   ticket_id?: string;
+  /**
+   * True when a pay-at-table order is waiting for a member of staff to confirm
+   * it before it prints (20261024190000_order_abuse_guards.sql). The server
+   * also says why; the guest screen deliberately never shows it — nearly
+   * every held order is a real guest, and they must not feel accused.
+   */
+  held?: boolean;
 }
 
 export interface GuestOrderPayment {
@@ -107,6 +114,8 @@ export interface GuestTabOrder {
   payment_method: string | null;
   payment_status: string | null;
   created_at: string;
+  /** Waiting for the waiter to confirm before it goes to the kitchen. */
+  held?: boolean;
   order_items: GuestTabOrderItem[];
 }
 
@@ -212,15 +221,63 @@ export const placeGuestOrder = (
   paymentMethod: PaymentMethod,
   items: GuestOrderItemInput[],
   tip = 0,
-) =>
-  rpcJson<GuestPlaceOrderResult>('guest_place_order', {
+  /**
+   * Generated once per checkout and reused on every retry of it. If a request
+   * commits but its response is lost, the retry returns the order that already
+   * exists instead of sending the kitchen a second ticket.
+   */
+  clientOrderId?: string,
+) => {
+  const args = {
     _session_id: sessionId,
     _session_token: sessionToken,
     _guest_name: guestName,
     _payment_method: paymentMethod,
     _items: items as unknown as Json,
     _tip: tip,
-  });
+  };
+  if (!clientOrderId) return rpcJson<GuestPlaceOrderResult>('guest_place_order', args);
+  return rpcJson<GuestPlaceOrderResult>('guest_place_order', { ...args, _client_order_id: clientOrderId })
+    .catch((err: { code?: string }) => {
+      // The database has not been given the idempotent version yet
+      // (20261024160000). PostgREST refuses before running anything, so
+      // sending the order the old way cannot double it. Without this, a
+      // frontend deployed ahead of its migration could not take a single order.
+      if (err?.code === 'PGRST202') return rpcJson<GuestPlaceOrderResult>('guest_place_order', args);
+      throw err;
+    });
+};
+
+/**
+ * The menu items an order was refused for, when the server refused it because
+ * something sold out or is outside its serving hours. Empty for any other error.
+ */
+export const unavailableItemIds = (err: unknown): string[] => {
+  const e = err as { code?: string; details?: string | null } | null;
+  if (!e || e.code !== 'P0002' || !e.details) return [];
+  try {
+    const ids = JSON.parse(e.details);
+    return Array.isArray(ids) ? ids.filter((id): id is string => typeof id === 'string') : [];
+  } catch {
+    return [];
+  }
+};
+
+/**
+ * A guest-readable translation key for a failed order. Server messages are
+ * English and written for staff; the guest only needs to know what to do.
+ */
+export const orderErrorKey = (err: unknown): string => {
+  const e = err as { code?: string; message?: string } | null;
+  const message = e?.message ?? '';
+  if (unavailableItemIds(err).length > 0) return 'some_items_unavailable';
+  if (/paused/i.test(message)) return 'ordering_paused_title';
+  if (/too many orders|wait a moment|maximum orders/i.test(message)) return 'slow_down';
+  // Over twenty lines or sixty portions. Retrying the same cart cannot work.
+  if (/invalid order size/i.test(message)) return 'order_too_large';
+  if (/session/i.test(message)) return 'session_expired';
+  return 'order_not_sent_retry';
+};
 
 /**
  * Server truth for one order's payment. The browser's opinion of whether a

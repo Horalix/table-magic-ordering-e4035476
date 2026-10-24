@@ -57,7 +57,11 @@ const RunningTabPage = () => {
   const existingBillRequest = tab?.bill_request ?? null;
   const members = tab?.members ?? [];
 
-  const grandTotal = orders.reduce((sum, o) => sum + Number(o.total), 0);
+  // What the table actually owes. guest_get_tab returns cancelled orders (so
+  // the guest can see what happened to them) and abandoned card attempts;
+  // adding those in overcharged the running total and both ways of splitting.
+  const billable = orders.filter((o) => !['cancelled', 'awaiting_payment', 'payment_failed'].includes(o.status));
+  const grandTotal = billable.reduce((sum, o) => sum + Number(o.total), 0);
   const displayGrandTotal = useCountUp(grandTotal);
 
   // Most-recent still-in-progress order, for the live status tracker.
@@ -80,8 +84,8 @@ const RunningTabPage = () => {
     if (status === 'served' || status === 'cancelled') return null;
     const mins = Math.floor((Date.now() - new Date(createdAt).getTime()) / 60000);
     if (mins < 1) return t('just_now');
-    if (mins < 60) return `${mins} min`;
-    return `${Math.floor(mins / 60)}h ${mins % 60}m`;
+    if (mins < 60) return `${mins} ${t('minutes_short')}`;
+    return `${Math.floor(mins / 60)}${t('hours_short')} ${mins % 60}${t('minutes_short')}`;
   };
 
   const requestBill = async () => {
@@ -94,7 +98,7 @@ const RunningTabPage = () => {
       await refetch();
       setShowReview(true);
     } catch {
-      toast.error('Could not request bill. Please try again.');
+      toast.error(t('bill_request_failed'));
     } finally {
       billRequestRef.current = false;
       setRequestingBill(false);
@@ -125,13 +129,20 @@ const RunningTabPage = () => {
     staleTime: 30_000,
   });
 
-  React.useEffect(() => { track('tab_viewed', { orders: orders.length }); }, [orders.length]);
+  // Once per visit to the tab, after it has loaded: firing on every change of
+  // the order count counted an empty tab and then the real one.
+  const tabTracked = React.useRef(false);
+  React.useEffect(() => {
+    if (isLoading || tabTracked.current) return;
+    tabTracked.current = true;
+    track('tab_viewed', { orders: orders.length });
+  }, [isLoading, orders.length]);
 
   return (
     <div className="min-h-screen bg-background pb-32">
       <div className="sticky top-0 z-30 glass">
         <div className="flex items-center gap-3 px-4 py-4">
-          <button onClick={goBack} aria-label={t('back_to_menu')} className="p-2.5 -ml-2 rounded-full hover:bg-muted transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center">
+          <button onClick={goBack} aria-label={t('back_to_menu')} className="p-2.5 -ms-2 rounded-full hover:bg-muted transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center">
             <ArrowLeft className={`w-5 h-5 text-foreground ${locale === 'ar' ? 'rotate-180' : ''}`} />
           </button>
           <div className="flex items-center gap-2">
@@ -139,7 +150,7 @@ const RunningTabPage = () => {
             <h1 className="font-serif text-xl font-semibold text-foreground">{t('your_tab')}</h1>
           </div>
           {table && (
-            <span className="ml-auto text-xs font-sans px-3 py-1 rounded-full bg-primary/10 text-primary font-medium">
+            <span className="ms-auto text-xs font-sans px-3 py-1 rounded-full bg-primary/10 text-primary font-medium">
               {t('table')} {table}
             </span>
           )}
@@ -178,8 +189,8 @@ const RunningTabPage = () => {
                   <p className="text-[11px] font-sans text-white/60 uppercase tracking-wider">{t('running_total')}</p>
                   <p className="font-serif text-3xl font-bold text-white mt-1 tabular-nums">{displayGrandTotal.toFixed(2)} KM</p>
                 </div>
-                <div className="text-right">
-                  <p className="text-xs font-sans text-white/60">{orders.length} order{orders.length !== 1 ? 's' : ''}</p>
+                <div className="text-end">
+                  <p className="text-xs font-sans text-white/70">{billable.length} {billable.length === 1 ? t('orders_count_one') : t('orders_count_other')}</p>
                 </div>
               </div>
             </motion.div>
@@ -194,6 +205,11 @@ const RunningTabPage = () => {
                       an estimate — silence beats a number nobody can stand behind. */}
                   <OrderEta orderId={activeOrder.id} active={activeOrder.status !== 'served'} />
                 </div>
+                {activeOrder.held && (
+                  <p className="text-sm font-sans text-accent mb-2 flex items-center gap-1.5">
+                    <Clock className="w-3.5 h-3.5" aria-hidden /> {t('waiting_for_waiter_confirm')}
+                  </p>
+                )}
                 <OrderStatusTimeline status={activeOrder.status} />
               </motion.div>
             </div>
@@ -252,7 +268,11 @@ const RunningTabPage = () => {
             className="px-4 pt-4 space-y-4"
           >
             {orders.map((order) => {
-              const status = statusConfig[order.status] || statusConfig.pending;
+              // A held order is `pending` too, but "Pending" would suggest the
+              // kitchen has it. It is waiting for the waiter, and says so.
+              const status = order.held
+                ? { icon: <Clock className="w-3.5 h-3.5" />, label: t('waiting_for_waiter_confirm'), color: 'bg-accent/10 text-accent border-accent/20' }
+                : statusConfig[order.status] || statusConfig.pending;
               const items = order.order_items || [];
               const waitTime = getWaitTime(order.created_at, order.status);
 
@@ -260,7 +280,7 @@ const RunningTabPage = () => {
                 <motion.div
                   key={order.id}
                   variants={fadeUp}
-                  className="card-lux overflow-hidden"
+                  className={`card-lux overflow-hidden ${order.status === 'cancelled' ? 'opacity-60' : ''}`}
                 >
                   <div className="flex items-center justify-between px-4 py-3 border-b border-border/50">
                     <div className="flex items-center gap-2">
@@ -275,19 +295,19 @@ const RunningTabPage = () => {
                           {waitTime}
                         </span>
                       )}
-                      {order.payment_method === 'card' && (
+                      {order.payment_method === 'card_online' && (
                         <span className={`inline-flex items-center gap-1 text-[11px] font-sans font-medium px-2 py-0.5 rounded-full ${order.payment_status === 'paid' ? 'bg-primary/10 text-primary' : 'bg-accent/10 text-accent'}`}>
                           <CreditCard className="w-3 h-3" />
                           {order.payment_status === 'paid' ? t('paid') : t('card_pending')}
                         </span>
                       )}
                     </div>
-                    <span className="text-sm font-sans font-bold text-foreground">{Number(order.total).toFixed(2)} KM</span>
+                    <span className={`text-sm font-sans font-bold text-foreground tabular-nums ${order.status === 'cancelled' ? 'line-through' : ''}`}>{Number(order.total).toFixed(2)} KM</span>
                   </div>
                   <div className="px-4 py-3 space-y-2">
                     {items.map((oi) => (
                       <div key={oi.id} className="flex justify-between items-center">
-                        <span className="text-sm font-sans text-foreground">{oi.quantity}× {oi.menu_items ? getLocalizedName(oi.menu_items, locale) : 'Item'}</span>
+                        <span className="text-sm font-sans text-foreground">{oi.quantity}× {oi.menu_items ? getLocalizedName(oi.menu_items, locale) : t('menu_item_fallback')}</span>
                         <span className="text-xs font-sans text-muted-foreground">{(oi.quantity * Number(oi.unit_price)).toFixed(2)} KM</span>
                       </div>
                     ))}
@@ -314,7 +334,7 @@ const RunningTabPage = () => {
       <SplitBillSheet
         open={splitOpen}
         total={grandTotal}
-        orders={orders.map((o) => ({ guest_name: o.guest_name, total: Number(o.total) }))}
+        orders={billable.map((o) => ({ guest_name: o.guest_name, total: Number(o.total) }))}
         members={members}
         myName={guestName}
         billRequested={billRequested}

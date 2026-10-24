@@ -22,17 +22,19 @@ const TableNumberEntry = () => {
   const [params] = useSearchParams();
   const navigate = useNavigate();
   const t = useT();
-  const token = params.get('token');
-  const endVisit = useCartStore((s) => s.endVisit);
+  // An installed app (start_url /menu) or a reload has no query string, so
+  // "Change table" from there carries no token. The one this device scanned
+  // last is still the venue's code; fall back to it instead of declaring the
+  // QR expired.
+  const storedToken = useCartStore((s) => s.qrToken);
+  const token = params.get('token') ?? storedToken;
+  const storedTable = useCartStore((s) => s.tableNumber);
+  const leaveTable = useCartStore((s) => s.leaveTable);
 
   const [value, setValue] = useState('');
   const [check, setCheck] = useState<VenueTokenCheck | null>(null);
   const [phase, setPhase] = useState<'checking' | 'ready' | 'invalid'>('checking');
   const reduced = prefersReducedMotion();
-
-  // Scanning the QR starts a NEW visit: drop whatever this device remembered
-  // about a previous table before asking which one they are at now.
-  useEffect(() => { endVisit(); }, [endVisit]);
 
   useEffect(() => {
     if (!token) { setPhase('invalid'); return; }
@@ -55,6 +57,9 @@ const TableNumberEntry = () => {
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!canSubmit || !token) return;
+    // A different table is a new visit. The same table (a guest rescanning
+    // mid-meal) keeps the session, so an unsent cart is not wiped.
+    if (storedTable !== parsed) leaveTable();
     navigate(`/table/${parsed}?${new URLSearchParams({ token }).toString()}`);
   };
 

@@ -1,12 +1,14 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Minus, Plus, Trash2, CreditCard, ShoppingBag, UtensilsCrossed, Undo2, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, Minus, Plus, Trash2, Send, ShoppingBag, UtensilsCrossed, Undo2, AlertTriangle } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useCartStore, type CartItem } from '@/lib/cart-store';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
-import { useT, useLanguageStore } from '@/lib/i18n';
+import { useT, useLanguageStore, getLocalizedName } from '@/lib/i18n';
+import { supabase } from '@/integrations/supabase/client';
+import { unorderableReason } from '@/lib/availability';
 import { useSessionHeartbeat } from '@/hooks/useSessionHeartbeat';
 import SmartImage from '@/components/ui/SmartImage';
 import { staggerContainer, fadeUp, useCountUp } from '@/lib/motion';
@@ -16,11 +18,11 @@ import PaymentStatus, { type PaymentPhase } from '@/components/guest/PaymentStat
 import CartSuggestion from '@/components/guest/CartSuggestion';
 import { startCardPayment, waitForPaymentConfirmation, classifyPayment, cardPaymentEnabledInBuild } from '@/lib/payments';
 import {
-  callWaiter, placeGuestOrder, touchSession, getServiceStatus, getOrderPayment, switchToPayAtTable,
-  type PaymentMethod,
+  placeGuestOrder, touchSession, getServiceStatus, getOrderPayment, switchToPayAtTable,
+  unavailableItemIds, orderErrorKey, type PaymentMethod,
 } from '@/lib/guest-api';
 import { addRecentItems } from '@/lib/recent-items';
-import { track } from '@/lib/analytics';
+import { track, flushNow } from '@/lib/analytics';
 
 const LARGE_ORDER_THRESHOLD = 20;
 
@@ -32,6 +34,7 @@ const CartPage = () => {
     items, total, updateQuantity, removeItem, addItem, clearCart,
     sessionId, sessionToken, guestName, setLastOrderTime, itemCount,
     pendingPayment, setPendingPayment,
+    beginCheckout, finishCheckout, unavailableIds, setUnavailable, reprice,
   } = useCartStore();
 
   const [submitting, setSubmitting] = useState<PaymentMethod | null>(null);
@@ -44,7 +47,11 @@ const CartPage = () => {
    * the money resolves — reading the amount from it (or from the now-empty
    * cart) is how a confirmation ends up proudly displaying "0.00 KM".
    */
-  const [resolvedOrder, setResolvedOrder] = useState<{ code: string; total: number } | null>(null);
+  const [resolvedOrder, setResolvedOrder] = useState<{
+    code: string; total: number; payLater: boolean;
+    /** Waiting for the waiter to confirm before it prints. */
+    held?: boolean;
+  } | null>(null);
   const [recovering, setRecovering] = useState(false);
   const [cardSession, setCardSession] = useState<{ clientSecret: string; authenticityToken: string; environment: 'test' | 'production' } | null>(null);
   const [lastRemoved, setLastRemoved] = useState<CartItem | null>(null);
@@ -68,6 +75,32 @@ const CartPage = () => {
   const onlineCardEnabled = cardPaymentEnabledInBuild && service?.online_card_enabled === true;
   const payAtTableEnabled = service?.pay_at_table_enabled !== false;
   const orderingPaused = service?.ordering_enabled === false;
+  // Card disabled AND pay-at-table switched off leaves the checkout with no
+  // buttons at all; say so here instead of opening an empty sheet.
+  const noWayToPay = !!service && !onlineCardEnabled && !payAtTableEnabled;
+
+  // Prices are frozen when a line is added and the cart is persisted, so a
+  // guest whose visit spans a menu update would see one total and be charged
+  // another (the server always prices from the menu). Re-read the live menu
+  // once on arrival, and mark anything that sold out or is out of hours.
+  const cartIdsKey = items.map((i) => i.menuItemId ?? i.id).sort().join(',');
+  useEffect(() => {
+    if (!cartIdsKey) return;
+    let cancelled = false;
+    (async () => {
+      const { data, error } = await supabase
+        .from('menu_items')
+        .select('id, price, name, name_bs, name_ar, is_available, available_from, available_to')
+        .in('id', cartIdsKey.split(','));
+      if (cancelled || error || !data) return;
+      if (reprice(data.map((d) => ({ ...d, price: Number(d.price) })))) toast.info(t('prices_updated'));
+      setUnavailable(data.filter((d) => unorderableReason(d) !== null).map((d) => d.id));
+    })();
+    return () => { cancelled = true; };
+    // Once per distinct set of items, not per quantity change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cartIdsKey]);
+  const blockedLines = items.filter((i) => unavailableIds.includes(i.menuItemId ?? i.id));
 
   // Completes the funnel: menu_viewed → item_viewed → item_added → cart_viewed
   // → checkout_opened → order_placed. Without this step the drop-off between
@@ -104,7 +137,7 @@ const CartPage = () => {
       );
       if (cancelled) return;
 
-      setResolvedOrder({ code: pendingPayment.orderCode, total: pendingPayment.total });
+      setResolvedOrder({ code: pendingPayment.orderCode, total: pendingPayment.total, payLater: false });
 
       if (result.outcome === 'received') {
         clearCart();
@@ -121,9 +154,8 @@ const CartPage = () => {
   }, [pendingPayment?.orderId, sessionId, sessionToken]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const removeWithUndo = (item: CartItem) => {
-    removeItem(item.id);
+    removeItem(item.id, 'cart_trash');
     setLastRemoved(item);
-    track('cart_item_removed', { item_id: item.menuItemId ?? item.id, quantity: item.quantity });
     clearTimeout(undoTimer.current);
     undoTimer.current = setTimeout(() => setLastRemoved(null), 6000);
   };
@@ -135,18 +167,14 @@ const CartPage = () => {
         id: lastRemoved.menuItemId ?? lastRemoved.id,
         menuItemId: lastRemoved.menuItemId,
         name: lastRemoved.name,
+        name_bs: lastRemoved.name_bs,
+        name_ar: lastRemoved.name_ar,
         price: lastRemoved.price,
         notes: lastRemoved.notes,
         image_url: lastRemoved.image_url,
       });
     }
     setLastRemoved(null);
-  };
-
-  /** Best-effort waiter signal; a pending call already covers us. */
-  const pingWaiter = async (reason: 'assist' | 'pay' = 'pay') => {
-    if (!sessionId || !sessionToken) return;
-    await callWaiter(sessionId, sessionToken, reason).catch(() => { /* one is already on the way */ });
   };
 
   const openCardForm = useCallback(async (orderId: string) => {
@@ -172,6 +200,7 @@ const CartPage = () => {
     if (submittingRef.current) return;
     if (!sessionId || !sessionToken) { toast.error(t('scan_qr_again')); return; }
     if (items.length === 0) return;
+    if (blockedLines.length > 0) { toast.error(t('some_items_unavailable')); return; }
 
     if (typeof navigator !== 'undefined' && navigator.onLine === false) {
       toast.error(t('connection_lost_body'));
@@ -181,6 +210,8 @@ const CartPage = () => {
     submittingRef.current = true;
     setSubmitting(method);
     track('checkout_submitted', { method, item_count: itemCount(), tip_selected: tip > 0 });
+    // Same key for every retry of this checkout; see cart-store.
+    const clientOrderId = beginCheckout();
 
     try {
       const isActive = await touchSession(sessionId, sessionToken);
@@ -203,12 +234,16 @@ const CartPage = () => {
             : null,
         })),
         tip,
+        clientOrderId,
       );
 
+      finishCheckout();
       setLastOrderTime();
       addRecentItems(items.map((it) => ({ id: it.menuItemId ?? it.id, name: it.name, price: it.price, image_url: it.image_url })));
       setCheckoutOpen(false);
-      setResolvedOrder({ code: order.order_code, total: Number(order.total) });
+      setResolvedOrder({
+        code: order.order_code, total: Number(order.total), payLater: !order.awaiting_payment, held: order.held === true,
+      });
 
       if (order.awaiting_payment) {
         // The order exists but is NOT in the kitchen. Remember it so a reload
@@ -219,22 +254,30 @@ const CartPage = () => {
           total: Number(order.total),
           createdAt: Date.now(),
         });
-        track('payment_started', { order_code: order.order_code });
+        track('payment_started', { method });
+        // Before handing over to the card provider, which may navigate away.
+        flushNow();
         await openCardForm(order.order_id);
         return;
       }
 
       // Pay at the table: the order is with the kitchen, so the cart is done.
+      // No automatic "come and take payment" call: on a running tab that
+      // summoned the waiter after every round. The waiter sees what each table
+      // owes on their own screen, and the guest asks for the bill when ready.
       clearCart();
       setPendingPayment(null);
       setPhase('received');
-      track('order_placed', { method, order_code: order.order_code, total: Number(order.total) });
-      await pingWaiter('pay');
-      toast.success(t('order_confirmed'));
+      track('order_placed', { method, total: Number(order.total) });
+      // The step every funnel ends on; send it now rather than in eight
+      // seconds, by which time the phone is often back in a pocket.
+      flushNow();
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Failed to place order. Please try again.';
-      track('order_failed', { method, reason: message.slice(0, 80) });
-      toast.error(message);
+      const blocked = unavailableItemIds(err);
+      if (blocked.length > 0) setUnavailable(blocked);
+      const key = orderErrorKey(err);
+      track('order_failed', { method, reason: key });
+      toast.error(t(key));
     } finally {
       submittingRef.current = false;
       setSubmitting(null);
@@ -256,10 +299,13 @@ const CartPage = () => {
       clearCart();
       setPendingPayment(null);
       setPhase('received');
-      track('payment_confirmed', { order_code: pendingPayment.orderCode });
+      track('payment_confirmed', { method: 'card_online' });
+      // The funnel's last step. Card orders only reach it once the money has.
+      track('order_placed', { method: 'card_online', total: pendingPayment.total });
+      flushNow();
     } else {
       setPhase(result.outcome === 'failed' ? 'failed' : 'delayed');
-      track(result.outcome === 'failed' ? 'payment_failed' : 'payment_delayed', { order_code: pendingPayment.orderCode });
+      track(result.outcome === 'failed' ? 'payment_failed' : 'payment_delayed', { method: 'card_online' });
     }
   };
 
@@ -271,9 +317,9 @@ const CartPage = () => {
       if (res.status === 'released') {
         clearCart();
         setPendingPayment(null);
+        setResolvedOrder({ code: pendingPayment.orderCode, total: pendingPayment.total, payLater: true });
         setPhase('received');
-        track('payment_switched_to_table', { order_code: pendingPayment.orderCode });
-        await pingWaiter('pay');
+        track('payment_switched_to_table', { method: 'cash' });
         return;
       }
       if (res.status === 'payment_in_flight') {
@@ -293,7 +339,7 @@ const CartPage = () => {
         setPhase('delayed');
       }
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : t('something_wrong'));
+      toast.error(t('something_wrong'));
     } finally {
       setRecovering(false);
     }
@@ -311,6 +357,8 @@ const CartPage = () => {
         orderCode={resolvedOrder?.code ?? pendingPayment?.orderCode ?? null}
         amountLabel={amountLabel}
         released={phase === 'received'}
+        payLater={phase === 'received' && resolvedOrder?.payLater === true}
+        held={resolvedOrder?.held === true}
         busy={recovering}
         onRetryCard={phase === 'failed' && onlineCardEnabled && pendingPayment
           ? () => openCardForm(pendingPayment.orderId)
@@ -368,7 +416,7 @@ const CartPage = () => {
             onClick={undoRemove}
             className="w-full flex items-center justify-center gap-2 p-3 rounded-xl border border-dashed border-border text-sm font-sans text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors min-h-[44px]"
           >
-            <Undo2 className="w-4 h-4" aria-hidden /> {t('undo_remove')} — {lastRemoved.name}
+            <Undo2 className="w-4 h-4" aria-hidden /> {t('undo_remove')} — {getLocalizedName(lastRemoved, locale)}
           </button>
         </div>
       )}
@@ -386,9 +434,18 @@ const CartPage = () => {
         </div>
       ) : (
         <>
+          {blockedLines.length > 0 && (
+            <div className="mx-4 mt-4 p-3.5 rounded-xl border border-destructive/30 bg-destructive/5 flex items-start gap-2.5" role="alert">
+              <AlertTriangle className="w-4 h-4 text-destructive mt-0.5 shrink-0" aria-hidden />
+              <p className="text-sm font-sans text-foreground">{t('some_items_unavailable')}</p>
+            </div>
+          )}
           <motion.div variants={staggerContainer(0.04)} initial="hidden" animate="show" className="px-4 pt-4 space-y-3">
-            {items.map((item) => (
-              <motion.div key={item.id} variants={fadeUp} className="flex gap-4 p-4 card-lux">
+            {items.map((item) => {
+              const blocked = unavailableIds.includes(item.menuItemId ?? item.id);
+              const name = getLocalizedName(item, locale);
+              return (
+              <motion.div key={item.id} variants={fadeUp} className={`flex gap-4 p-4 card-lux ${blocked ? 'ring-1 ring-destructive/40' : ''}`}>
                 {item.image_url && (
                   <SmartImage
                     src={item.image_url}
@@ -396,12 +453,14 @@ const CartPage = () => {
                     alt=""
                     width={64}
                     height={64}
-                    wrapperClassName="w-16 h-16 rounded-lg flex-shrink-0"
+                    sizes="64px"
+                    wrapperClassName={`w-16 h-16 rounded-lg flex-shrink-0 ${blocked ? 'opacity-50 saturate-50' : ''}`}
                   />
                 )}
                 <div className="flex-1 min-w-0">
-                  <h3 className="font-serif text-base font-semibold text-foreground">{item.name}</h3>
-                  {item.notes && <p className="text-xs text-muted-foreground mt-0.5 italic">“{item.notes}”</p>}
+                  <h3 className="font-serif text-base font-semibold text-foreground">{name}</h3>
+                  {item.notes && <p className="text-sm text-muted-foreground mt-0.5">“{item.notes}”</p>}
+                  {blocked && <p className="text-sm font-sans font-medium text-destructive mt-1">{t('item_unavailable_now')}</p>}
                   <p className="text-sm font-sans font-bold text-primary mt-1 tabular-nums">
                     {(item.price * item.quantity).toFixed(2)} KM
                   </p>
@@ -410,30 +469,32 @@ const CartPage = () => {
                   <button
                     onClick={() => removeWithUndo(item)}
                     className="text-muted-foreground hover:text-destructive transition-colors p-1.5 min-w-[44px] min-h-[44px] flex items-center justify-center"
-                    aria-label={`${t('remove')} ${item.name}`}
+                    aria-label={`${t('remove')} ${name}`}
                   >
                     <Trash2 className="w-4 h-4" aria-hidden />
                   </button>
-                  <div className="flex items-center gap-2 bg-muted rounded-full px-1.5 py-0.5">
+                  <div className="flex items-center gap-1 bg-muted rounded-full p-0.5">
                     <button
-                      onClick={() => updateQuantity(item.id, item.quantity - 1)}
-                      aria-label={`${t('decrease')} ${item.name}`}
-                      className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-card transition-colors tap-sm"
+                      onClick={() => (item.quantity <= 1 ? removeWithUndo(item) : updateQuantity(item.id, item.quantity - 1))}
+                      aria-label={`${t('decrease')} ${name}`}
+                      className="w-11 h-11 rounded-full flex items-center justify-center hover:bg-card transition-colors tap-sm"
                     >
                       <Minus className="w-3.5 h-3.5" aria-hidden />
                     </button>
                     <span className="text-sm font-sans font-semibold w-5 text-center tabular-nums" aria-live="polite">{item.quantity}</span>
                     <button
                       onClick={() => updateQuantity(item.id, item.quantity + 1)}
-                      aria-label={`${t('increase')} ${item.name}`}
-                      className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-card transition-colors tap-sm"
+                      disabled={item.quantity >= 10 || blocked}
+                      aria-label={`${t('increase')} ${name}`}
+                      className="w-11 h-11 rounded-full flex items-center justify-center hover:bg-card transition-colors tap-sm disabled:opacity-40"
                     >
                       <Plus className="w-3.5 h-3.5" aria-hidden />
                     </button>
                   </div>
                 </div>
               </motion.div>
-            ))}
+              );
+            })}
           </motion.div>
 
           <div className="px-4 mt-6 space-y-3">
@@ -454,14 +515,17 @@ const CartPage = () => {
           {sessionId && sessionToken && <CartSuggestion placement="cart" />}
 
           <div className="fixed bottom-0 left-0 right-0 z-40 p-4 pb-safe bg-background/80 backdrop-blur-xl border-t border-border/50">
+            {noWayToPay && !orderingPaused && (
+              <p className="text-sm text-muted-foreground text-center mb-2 font-sans">{t('no_payment_options')}</p>
+            )}
             <Button
               onClick={() => { setCheckoutOpen(true); track('checkout_opened', { item_count: itemCount() }); }}
-              disabled={!sessionId || !sessionToken || orderingPaused}
+              disabled={!sessionId || !sessionToken || orderingPaused || noWayToPay || blockedLines.length > 0}
               className="w-full h-14 rounded-2xl bg-primary text-primary-foreground font-sans font-semibold text-base hover:bg-sage-dark hover:shadow-lg hover:shadow-primary/30 disabled:opacity-50 transition-all duration-200 tap"
             >
               <span className="flex items-center gap-2">
-                <CreditCard className="w-4 h-4" aria-hidden />
-                {t('checkout')} · {displayTotal.toFixed(2)} KM
+                <Send className="w-4 h-4 rtl:-scale-x-100" aria-hidden />
+                {t('send_order')} · {displayTotal.toFixed(2)} KM
               </span>
             </Button>
             {(!sessionId || !sessionToken) && (

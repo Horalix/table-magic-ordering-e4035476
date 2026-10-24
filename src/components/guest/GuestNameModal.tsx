@@ -5,25 +5,34 @@ import { Input } from '@/components/ui/input';
 import { useT } from '@/lib/i18n';
 
 interface Props {
-  onSubmit: (name: string) => void;
+  /** May be async; the button stays disabled until it settles. */
+  onSubmit: (name: string) => void | Promise<void>;
 }
 
 const GuestNameModal = ({ onSubmit }: Props) => {
   const [name, setName] = useState('');
   const [error, setError] = useState('');
+  // A double tap on Continue used to start two table sessions.
+  const [busy, setBusy] = useState(false);
   const t = useT();
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
+    if (busy) return;
     const trimmed = name.trim();
     if (!trimmed || trimmed.length < 1) {
       setError(t('name_required'));
       return;
     }
     if (trimmed.length > 50) {
-      setError('Name too long');
+      setError(t('name_too_long'));
       return;
     }
-    onSubmit(trimmed);
+    setBusy(true);
+    try {
+      await onSubmit(trimmed);
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (
@@ -50,7 +59,7 @@ const GuestNameModal = ({ onSubmit }: Props) => {
             placeholder={t('name_placeholder')}
             value={name}
             onChange={(e) => { setName(e.target.value); setError(''); }}
-            onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
+            onKeyDown={(e) => { if (e.key === 'Enter') void handleSubmit(); }}
             className="text-center text-lg h-12 rounded-xl"
             maxLength={50}
             autoFocus

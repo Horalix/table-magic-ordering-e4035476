@@ -109,7 +109,7 @@ const CheckoutSheet = ({ open, total, submitting, onlineCardEnabled, payAtTableE
                     key={p}
                     onClick={() => setPreset(p)}
                     aria-pressed={preset === p}
-                    className={`px-3.5 py-2 rounded-full text-sm font-sans font-medium transition-all tap-sm ${preset === p ? 'bg-primary text-primary-foreground' : 'bg-muted text-foreground hover:bg-muted/70'}`}
+                    className={`px-4 min-h-[44px] rounded-full text-sm font-sans font-medium transition-all tap-sm ${preset === p ? 'bg-primary text-primary-foreground' : 'bg-muted text-foreground hover:bg-muted/70'}`}
                   >
                     {p === 0 ? t('no_tip') : `${p}%`}
                   </button>
@@ -117,7 +117,7 @@ const CheckoutSheet = ({ open, total, submitting, onlineCardEnabled, payAtTableE
                 <button
                   onClick={() => setPreset('custom')}
                   aria-pressed={preset === 'custom'}
-                  className={`px-3.5 py-2 rounded-full text-sm font-sans font-medium transition-all tap-sm ${preset === 'custom' ? 'bg-primary text-primary-foreground' : 'bg-muted text-foreground hover:bg-muted/70'}`}
+                  className={`px-4 min-h-[44px] rounded-full text-sm font-sans font-medium transition-all tap-sm ${preset === 'custom' ? 'bg-primary text-primary-foreground' : 'bg-muted text-foreground hover:bg-muted/70'}`}
                 >
                   {t('custom')}
                 </button>
@@ -133,7 +133,7 @@ const CheckoutSheet = ({ open, total, submitting, onlineCardEnabled, payAtTableE
                     onChange={(e) => setCustom(e.target.value)}
                     placeholder="0.00"
                     aria-label={t('custom')}
-                    className="h-9 w-28 text-center"
+                    className="h-11 w-28 text-center"
                   />
                   <span className="text-sm text-muted-foreground font-sans">KM</span>
                 </div>
@@ -143,7 +143,7 @@ const CheckoutSheet = ({ open, total, submitting, onlineCardEnabled, payAtTableE
             {/* Totals — itemised so nothing is a surprise. */}
             <div className="mt-4 rounded-2xl bg-muted/50 p-3.5 space-y-1.5" aria-live="polite">
               <div className="flex justify-between text-sm font-sans text-muted-foreground tabular-nums">
-                <span>{t('total')}</span><span>{total.toFixed(2)} KM</span>
+                <span>{t('subtotal')}</span><span>{total.toFixed(2)} KM</span>
               </div>
               {tip > 0 && (
                 <div className="flex justify-between text-sm font-sans text-muted-foreground tabular-nums">
