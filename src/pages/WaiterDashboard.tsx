@@ -65,8 +65,9 @@ type WaiterOrderItem = {
 type WaiterOrder = Pick<
   Database['public']['Tables']['orders']['Row'],
   'id' | 'created_at' | 'status' | 'table_session_id' | 'payment_method' | 'payment_status' | 'total' | 'notes'
-  | 'refunded_amount' | 'released_to_kitchen_at' | 'held_reason'
+  | 'refunded_amount' | 'released_to_kitchen_at'
 > & {
+  held_reason?: string | null;
   table_sessions: { tables: { table_number: number } | null } | null;
   order_items: WaiterOrderItem[] | null;
 };
