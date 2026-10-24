@@ -89,7 +89,7 @@ const PaymentStatus = ({
         </div>
         <h2 className="font-serif text-2xl font-bold text-foreground mt-5">{t('payment_confirming_title')}</h2>
         <p className="text-muted-foreground font-sans mt-2 text-sm leading-relaxed">{t('payment_confirming_body')}</p>
-        <p className="text-lg font-serif font-semibold text-foreground mt-3 tabular-nums">{amountLabel}</p>
+        <p className="text-xl font-sans font-semibold text-foreground mt-3 tabular-nums">{amountLabel}</p>
         <OrderCode code={orderCode} />
       </>,
     );
@@ -157,7 +157,7 @@ const PaymentStatus = ({
         {payLater && held ? t('order_waiter_will_confirm')
           : payLater ? t('pay_waiter_when_ready') : released ? t('order_in_kitchen_now') : t('order_sent_kitchen')}
       </p>
-      <p className="text-lg font-serif font-semibold text-foreground mt-3 tabular-nums">
+      <p className="text-xl font-sans font-semibold text-foreground mt-3 tabular-nums">
         {payLater && <span className="text-sm font-sans font-normal text-muted-foreground me-2">{t('to_pay')}</span>}
         {amountLabel}
       </p>

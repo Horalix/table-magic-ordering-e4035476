@@ -126,6 +126,7 @@ const MenuSearch = ({ canOrder }: Props) => {
                       width={56}
                       height={56}
                       sizes="56px"
+                      square
                       wrapperClassName="w-14 h-14 rounded-xl shrink-0"
                       fallbackText={name}
                     />
@@ -137,7 +138,7 @@ const MenuSearch = ({ canOrder }: Props) => {
                       )}
                     </div>
                     <div className="text-end shrink-0">
-                      <p className="text-sm font-sans font-bold text-primary tabular-nums">{item.price.toFixed(2)} KM</p>
+                      <p className="text-sm font-sans font-semibold text-foreground tabular-nums">{item.price.toFixed(2)} KM</p>
                       {!item.is_available ? (
                         <span className="text-xs font-sans font-medium text-muted-foreground">{t('sold_out')}</span>
                       ) : canOrder ? (

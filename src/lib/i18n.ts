@@ -98,6 +98,7 @@ const translations: Record<string, Record<Locale, string>> = {
   'change_language': { en: 'Change language', bs: 'Promijeni jezik', ar: 'تغيير اللغة' },
   'back': { en: 'Back', bs: 'Nazad', ar: 'رجوع' },
   'goes_with_your': { en: 'Goes with your {name}', bs: 'Odlično uz {name}', ar: 'مثالي مع {name}' },
+  'add_more_items': { en: 'Add more items', bs: 'Dodaj još', ar: 'أضف المزيد' },
   'search_in': { en: 'Search', bs: 'Pretraži', ar: 'ابحث في' },
   'minutes_short': { en: 'min', bs: 'min', ar: 'د' },
   'hours_short': { en: 'h', bs: 'h', ar: 'س' },

@@ -381,7 +381,7 @@ const CartPage = () => {
           >
             <ArrowLeft className={`w-5 h-5 text-foreground ${locale === 'ar' ? 'rotate-180' : ''}`} aria-hidden />
           </button>
-          <h1 className="font-serif text-xl font-semibold text-foreground">{t('your_order')}</h1>
+          <h1 className="font-serif text-[22px] font-semibold text-foreground tracking-tight">{t('your_order')}</h1>
           {table && (
             <span className="ms-auto text-xs font-sans px-3 py-1 rounded-full bg-primary/10 text-primary font-medium">
               {t('table')} {table}
@@ -440,79 +440,89 @@ const CartPage = () => {
               <p className="text-sm font-sans text-foreground">{t('some_items_unavailable')}</p>
             </div>
           )}
-          <motion.div variants={staggerContainer(0.04)} initial="hidden" animate="show" className="px-4 pt-4 space-y-3">
+          {/* One panel, one row per dish: the order reads like a receipt, not
+              a stack of separate cards. */}
+          <motion.div
+            variants={staggerContainer(0.04)}
+            initial="hidden"
+            animate="show"
+            className="mx-4 mt-4 rounded-3xl bg-card border border-border/70 shadow-[0_1px_2px_rgba(20,30,25,0.04)] divide-y divide-border/70 overflow-hidden"
+          >
             {items.map((item) => {
               const blocked = unavailableIds.includes(item.menuItemId ?? item.id);
               const name = getLocalizedName(item, locale);
               return (
-              <motion.div key={item.id} variants={fadeUp} className={`flex gap-4 p-4 card-lux ${blocked ? 'ring-1 ring-destructive/40' : ''}`}>
-                {item.image_url && (
+              <motion.div key={item.id} variants={fadeUp} className={`flex items-center gap-3.5 px-4 py-3.5 ${blocked ? 'bg-destructive/5' : ''}`}>
+                {item.image_url ? (
                   <SmartImage
                     src={item.image_url}
                     id={item.menuItemId ?? item.id}
                     alt=""
-                    width={64}
-                    height={64}
-                    sizes="64px"
-                    wrapperClassName={`w-16 h-16 rounded-lg flex-shrink-0 ${blocked ? 'opacity-50 saturate-50' : ''}`}
+                    width={60}
+                    height={60}
+                    square
+                    sizes="60px"
+                    wrapperClassName={`w-[60px] h-[60px] rounded-xl flex-shrink-0 ${blocked ? 'opacity-50 saturate-50' : ''}`}
                   />
+                ) : (
+                  <div className="w-[60px] h-[60px] rounded-xl bg-muted flex-shrink-0" aria-hidden />
                 )}
                 <div className="flex-1 min-w-0">
-                  <h3 className="font-serif text-base font-semibold text-foreground">{name}</h3>
-                  {item.notes && <p className="text-sm text-muted-foreground mt-0.5">“{item.notes}”</p>}
-                  {blocked && <p className="text-sm font-sans font-medium text-destructive mt-1">{t('item_unavailable_now')}</p>}
-                  <p className="text-sm font-sans font-bold text-primary mt-1 tabular-nums">
-                    {(item.price * item.quantity).toFixed(2)} KM
-                  </p>
+                  <h3 className="font-serif text-base font-semibold text-foreground leading-snug">{name}</h3>
+                  {item.notes && <p className="text-[13px] text-muted-foreground mt-0.5 line-clamp-2">“{item.notes}”</p>}
+                  {blocked
+                    ? <p className="text-[13px] font-sans font-medium text-destructive mt-0.5">{t('item_unavailable_now')}</p>
+                    : (
+                      <p className="text-sm font-sans font-semibold text-foreground mt-1 tabular-nums">
+                        {(item.price * item.quantity).toFixed(2)} KM
+                        {item.quantity > 1 && <span className="ms-1.5 text-xs font-normal text-muted-foreground">{item.quantity} × {item.price.toFixed(2)}</span>}
+                      </p>
+                    )}
                 </div>
-                <div className="flex flex-col items-end gap-2">
+                {/* At one, the minus becomes a bin: removing is the same gesture
+                    as lowering, and Undo is right there if it was a slip. */}
+                <div className="flex items-center h-10 rounded-full border border-border bg-background shrink-0">
                   <button
-                    onClick={() => removeWithUndo(item)}
-                    className="text-muted-foreground hover:text-destructive transition-colors p-1.5 min-w-[44px] min-h-[44px] flex items-center justify-center"
-                    aria-label={`${t('remove')} ${name}`}
+                    onClick={() => (item.quantity <= 1 ? removeWithUndo(item) : updateQuantity(item.id, item.quantity - 1))}
+                    aria-label={item.quantity <= 1 ? `${t('remove')} ${name}` : `${t('decrease')} ${name}`}
+                    className="w-10 h-10 rounded-full flex items-center justify-center text-foreground active:scale-90 transition-transform"
                   >
-                    <Trash2 className="w-4 h-4" aria-hidden />
+                    {item.quantity <= 1 ? <Trash2 className="w-4 h-4 text-muted-foreground" aria-hidden /> : <Minus className="w-4 h-4" aria-hidden />}
                   </button>
-                  <div className="flex items-center gap-1 bg-muted rounded-full p-0.5">
-                    <button
-                      onClick={() => (item.quantity <= 1 ? removeWithUndo(item) : updateQuantity(item.id, item.quantity - 1))}
-                      aria-label={`${t('decrease')} ${name}`}
-                      className="w-11 h-11 rounded-full flex items-center justify-center hover:bg-card transition-colors tap-sm"
-                    >
-                      <Minus className="w-3.5 h-3.5" aria-hidden />
-                    </button>
-                    <span className="text-sm font-sans font-semibold w-5 text-center tabular-nums" aria-live="polite">{item.quantity}</span>
-                    <button
-                      onClick={() => updateQuantity(item.id, item.quantity + 1)}
-                      disabled={item.quantity >= 10 || blocked}
-                      aria-label={`${t('increase')} ${name}`}
-                      className="w-11 h-11 rounded-full flex items-center justify-center hover:bg-card transition-colors tap-sm disabled:opacity-40"
-                    >
-                      <Plus className="w-3.5 h-3.5" aria-hidden />
-                    </button>
-                  </div>
+                  <span className="min-w-[16px] text-[15px] font-sans font-semibold text-center tabular-nums" aria-live="polite">{item.quantity}</span>
+                  <button
+                    onClick={() => updateQuantity(item.id, item.quantity + 1)}
+                    disabled={item.quantity >= 10 || blocked}
+                    aria-label={`${t('increase')} ${name}`}
+                    className="w-10 h-10 rounded-full flex items-center justify-center text-primary active:scale-90 transition-transform disabled:opacity-40"
+                  >
+                    <Plus className="w-4 h-4" strokeWidth={2.5} aria-hidden />
+                  </button>
                 </div>
               </motion.div>
               );
             })}
+            <button
+              onClick={() => navigate(buildMenuUrl())}
+              className="w-full flex items-center gap-2 px-4 py-3.5 text-sm font-sans font-semibold text-primary hover:bg-muted/50 transition-colors"
+            >
+              <Plus className="w-4 h-4" strokeWidth={2.5} aria-hidden /> {t('add_more_items')}
+            </button>
           </motion.div>
 
-          <div className="px-4 mt-6 space-y-3">
-            {isLargeOrder && (
-              <div className="p-3 rounded-xl border border-accent/20 bg-accent/5 flex items-center gap-3">
-                <UtensilsCrossed className="w-4 h-4 text-accent flex-shrink-0" aria-hidden />
-                <p className="text-xs font-sans text-accent">{t('large_order_suggestion')}</p>
-              </div>
-            )}
-            <div className="p-4 card-lux">
-              <div className="flex justify-between items-center">
-                <span className="font-sans text-sm text-muted-foreground">{t('total')}</span>
-                <span className="font-serif text-xl font-bold text-foreground tabular-nums">{displayTotal.toFixed(2)} KM</span>
-              </div>
+          {isLargeOrder && (
+            <div className="mx-4 mt-3 p-3 rounded-xl border border-accent/20 bg-accent/5 flex items-center gap-3">
+              <UtensilsCrossed className="w-4 h-4 text-accent flex-shrink-0" aria-hidden />
+              <p className="text-xs font-sans text-accent">{t('large_order_suggestion')}</p>
             </div>
-          </div>
+          )}
 
           {sessionId && sessionToken && <CartSuggestion placement="cart" />}
+
+          <div className="mx-4 mt-5 px-1 flex justify-between items-baseline">
+            <span className="font-sans text-[15px] text-muted-foreground">{t('total')}</span>
+            <span className="font-sans text-2xl font-semibold text-foreground tabular-nums">{displayTotal.toFixed(2)} KM</span>
+          </div>
 
           <div className="fixed bottom-0 left-0 right-0 z-40 p-4 pb-safe bg-background/80 backdrop-blur-xl border-t border-border/50">
             {noWayToPay && !orderingPaused && (

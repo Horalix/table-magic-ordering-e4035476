@@ -85,6 +85,8 @@ const RecentOrdersRow = () => {
             id={usualLive.id}
             alt=""
             width={56}
+            square
+            sizes="56px"
             height={56}
             wrapperClassName="w-14 h-14 rounded-xl shrink-0"
             fallbackText={getLocalizedName(usualLive, locale)}

@@ -98,18 +98,19 @@ const CheckoutSheet = ({ open, total, submitting, onlineCardEnabled, payAtTableE
             className="relative w-full max-w-lg bg-card rounded-t-3xl sm:rounded-3xl p-6 pb-safe sm:pb-6 shadow-lux-lg outline-none max-h-[92vh] overflow-y-auto"
           >
             <div className="w-10 h-1.5 rounded-full bg-foreground/15 mx-auto mb-4 sm:hidden" />
-            <h2 className="font-serif text-xl font-bold text-foreground text-center">{t('choose_how_to_pay')}</h2>
+            <h2 className="font-serif text-[22px] font-semibold text-foreground">{t('choose_how_to_pay')}</h2>
 
             {/* Tip — nothing preselected, skipping is one tap. */}
             <div className="mt-4">
-              <p id="tip-label" className="text-xs uppercase tracking-wide text-muted-foreground font-sans mb-2 text-center">{t('add_a_tip')}</p>
-              <div className="flex flex-wrap gap-2 justify-center" role="group" aria-labelledby="tip-label">
+              <p id="tip-label" className="text-sm text-muted-foreground font-sans mb-2">{t('add_a_tip')}</p>
+              {/* One row; "No tip" gets the widest slot because in Bosnian it is the longest word. */}
+              <div className="grid grid-cols-[1.6fr_1fr_1fr_1fr_1.4fr] gap-1.5" role="group" aria-labelledby="tip-label">
                 {TIP_PRESETS.map((p) => (
                   <button
                     key={p}
                     onClick={() => setPreset(p)}
                     aria-pressed={preset === p}
-                    className={`px-4 min-h-[44px] rounded-full text-sm font-sans font-medium transition-all tap-sm ${preset === p ? 'bg-primary text-primary-foreground' : 'bg-muted text-foreground hover:bg-muted/70'}`}
+                    className={`min-h-[44px] px-1 leading-tight rounded-xl text-[13px] font-sans font-semibold transition-all tap-sm ${preset === p ? 'bg-foreground text-background' : 'bg-muted text-foreground hover:bg-muted/70'}`}
                   >
                     {p === 0 ? t('no_tip') : `${p}%`}
                   </button>
@@ -117,7 +118,7 @@ const CheckoutSheet = ({ open, total, submitting, onlineCardEnabled, payAtTableE
                 <button
                   onClick={() => setPreset('custom')}
                   aria-pressed={preset === 'custom'}
-                  className={`px-4 min-h-[44px] rounded-full text-sm font-sans font-medium transition-all tap-sm ${preset === 'custom' ? 'bg-primary text-primary-foreground' : 'bg-muted text-foreground hover:bg-muted/70'}`}
+                  className={`min-h-[44px] px-1 leading-tight rounded-xl text-[13px] font-sans font-semibold transition-all tap-sm ${preset === 'custom' ? 'bg-foreground text-background' : 'bg-muted text-foreground hover:bg-muted/70'}`}
                 >
                   {t('custom')}
                 </button>
@@ -152,7 +153,7 @@ const CheckoutSheet = ({ open, total, submitting, onlineCardEnabled, payAtTableE
               )}
               <div className="flex justify-between items-baseline pt-1.5 border-t border-border/60">
                 <span className="font-sans font-semibold text-foreground">{t('total')}</span>
-                <span className="text-2xl font-serif font-bold text-primary tabular-nums">{grand.toFixed(2)} KM</span>
+                <span className="text-2xl font-sans font-semibold text-foreground tabular-nums">{grand.toFixed(2)} KM</span>
               </div>
             </div>
 

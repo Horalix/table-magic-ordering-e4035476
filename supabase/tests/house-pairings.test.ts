@@ -114,7 +114,9 @@ describe('house pairings on the first night', () => {
     const offered = await suggest([ITEM.burger]);
     expect([ITEM.lemonade, ITEM.cola, ITEM.orange]).toContain(offered[0]);
     expect(offered.slice(0, 3)).toContain(ITEM.fries);
-    expect(offered).not.toContain(ITEM.cappuccino);
+    // No assertion about hot drinks here: before 11:00 Sarajevo time a coffee
+    // with a main is breakfast and allowed, so it would depend on the clock.
+    // The morning rule is tested at fixed times in suggestion-guardrails.
   });
 
   it('does not offer a second drink to a burger that already has a Coke', async () => {

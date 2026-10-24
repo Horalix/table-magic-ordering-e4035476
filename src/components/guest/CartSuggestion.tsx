@@ -215,13 +215,14 @@ const CartSuggestion = ({ placement, disabled, forItemIds }: Props) => {
           id={primary.id}
           alt=""
           width={64}
+          square
           height={64}
           wrapperClassName="w-16 h-16 rounded-xl shrink-0"
           fallbackText={name}
         />
         <div className="flex-1 min-w-0">
           <p className="font-serif text-base font-semibold text-foreground leading-tight truncate">{name}</p>
-          <p className="text-sm font-sans font-bold text-primary tabular-nums mt-0.5">
+          <p className="text-sm font-sans font-semibold text-foreground tabular-nums mt-0.5">
             {primary.price.toFixed(2)} KM
           </p>
           {/* Only what the data supports, and only when it supports it. */}

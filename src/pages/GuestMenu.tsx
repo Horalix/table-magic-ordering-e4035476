@@ -297,7 +297,7 @@ const GuestMenu = () => {
                           className="inline-flex items-center gap-2 ps-1 pe-3.5 py-1 min-h-[44px] rounded-full bg-card border border-border/70 text-sm font-sans font-medium text-foreground hover:border-primary/40 hover:bg-primary/5 active:scale-[0.97] transition-all"
                         >
                           {thumb?.image_url ? (
-                            <SmartImage src={thumb.image_url} id={thumb.id} alt="" width={36} height={36} sizes="36px" wrapperClassName="w-9 h-9 rounded-full shrink-0" fallbackText={name} />
+                            <SmartImage src={thumb.image_url} id={thumb.id} alt="" width={36} height={36} sizes="36px" square wrapperClassName="w-9 h-9 rounded-full shrink-0" fallbackText={name} />
                           ) : (
                             <span className="w-9 h-9 rounded-full bg-primary/10 shrink-0" aria-hidden />
                           )}

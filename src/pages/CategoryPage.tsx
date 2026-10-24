@@ -301,107 +301,164 @@ const CategoryPage = () => {
   };
 
   // ---- item rendering (shared by every section + search results) ----
-  const renderGridCard = (item: MenuItemRow, i: number) => {
-    const name = getLocalizedName(item, locale);
-    const tags = getItemTags(item);
+  /**
+   * The quantity control, shared by list rows and grid cards.
+   *
+   * A white pill sitting on the corner of the photo: "+" when the dish is not
+   * in the order yet, "− 2 +" once it is. Lives on the photo because that is
+   * where the eye already is, and it never covers the name or the price.
+   */
+  const renderStepper = (item: MenuItemRow, name: string, source: 'list' | 'grid') => {
+    const inCart = cartItems.find((c) => (c.menuItemId ?? c.id) === item.id && !c.notes);
+    const qty = inCart?.quantity ?? 0;
+    const shell = 'bg-card text-foreground shadow-[0_2px_10px_rgba(20,30,25,0.18)] ring-1 ring-black/5';
+    if (qty === 0) {
+      return (
+        <button
+          type="button"
+          aria-label={`${t('add_to_order')} ${name}`}
+          onClick={(e) => { stop(e); quickAdd(item, source); }}
+          className={`w-11 h-11 rounded-full ${shell} flex items-center justify-center active:scale-90 transition-transform focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring`}
+        >
+          <Plus className="w-5 h-5 text-primary" strokeWidth={2.5} aria-hidden />
+        </button>
+      );
+    }
+    return (
+      <div role="group" aria-label={name} onClick={stop} className={`flex items-center h-11 rounded-full ${shell}`}>
+        <button
+          type="button"
+          aria-label={`${t('decrease')} ${name}`}
+          onClick={() => { if (qty <= 1) removeItem(inCart!.id, 'menu_stepper'); else updateQuantity(inCart!.id, qty - 1); }}
+          className="w-10 h-11 rounded-full flex items-center justify-center active:scale-90 transition-transform"
+        >
+          <Minus className="w-4 h-4" aria-hidden />
+        </button>
+        <span className="min-w-[18px] text-center text-[15px] font-sans font-semibold tabular-nums" aria-live="polite">{qty}</span>
+        <button
+          type="button"
+          aria-label={`${t('increase')} ${name}`}
+          disabled={qty >= 10}
+          onClick={() => updateQuantity(inCart!.id, qty + 1)}
+          className="w-10 h-11 rounded-full flex items-center justify-center active:scale-90 transition-transform disabled:opacity-40"
+        >
+          <Plus className="w-4 h-4 text-primary" strokeWidth={2.5} aria-hidden />
+        </button>
+      </div>
+    );
+  };
+
+  const inCartQty = (item: MenuItemRow) =>
+    cartItems.find((c) => (c.menuItemId ?? c.id) === item.id && !c.notes)?.quantity ?? 0;
+
+  /** Small, quiet labels under the name. Never more than one marketing badge. */
+  const renderBadges = (item: MenuItemRow, isSearch: boolean) => {
     const blocked = blockedLabel(item);
     const badges = merchBadges(item);
-    const inCart = cartItems.find((c) => (c.menuItemId ?? c.id) === item.id && !c.notes);
+    const section = isSearch ? subNameById.get(item.subcategory_id || '') : undefined;
+    const popular = !blocked && badges.length === 0 && popularIds.has(item.id);
+    if (!blocked && badges.length === 0 && !popular && !section) return null;
     return (
-      <ImpressionCard key={item.id} itemId={item.id} onOpen={() => setSelectedItem(item)} className="relative card-lux card-lux-hover overflow-hidden cursor-pointer tap-sm">
-        <div className="block w-full text-start">
-          <span className="relative block">
-            <SmartImage src={item.image_url || undefined} id={item.id} alt={name} width={220} height={165} priority={i < 6} fallbackText={name} wrapperClassName={`w-full aspect-[4/3] ${blocked ? 'opacity-45 saturate-50' : ''}`} />
-            {popularIds.has(item.id) && !blocked && badges.length === 0 && (
-              <span className="absolute top-2 start-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gold/90 text-xs font-sans font-semibold text-white shadow"><Star className="w-3 h-3 fill-white" aria-hidden />{t('popular')}</span>
-            )}
-            {/* Why it cannot be ordered, in words. A greyed card with no reason
-                reads as a bug. */}
-            {blocked && (
-              <span className="absolute top-2 start-2 px-2 py-0.5 rounded-full bg-foreground/85 text-xs font-sans font-semibold text-background">{blocked}</span>
-            )}
+      <div className="flex items-center gap-1.5 flex-wrap mt-1">
+        {blocked && <span className="px-2 py-0.5 rounded-full bg-foreground/80 text-[11px] font-sans font-semibold text-background">{blocked}</span>}
+        {!blocked && badges.length > 0 && <span className="text-xs font-sans font-semibold text-primary">{badges[0]}</span>}
+        {popular && (
+          <span className="inline-flex items-center gap-1 text-xs font-sans font-semibold text-accent">
+            <Star className="w-3 h-3 fill-current" aria-hidden /> {t('popular')}
           </span>
-          <span className="block p-3">
-            <button type="button" className={`block text-start font-serif text-[15px] font-semibold leading-snug line-clamp-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded ${blocked ? 'text-muted-foreground' : 'text-foreground'}`}>{name}</button>
-            {badges.length > 0 && !blocked && (
-              <span className="block text-xs font-sans font-semibold text-primary mt-1">{badges[0]}</span>
-            )}
-            {tags.length > 0 && <span className="block text-sm mt-1" aria-hidden>{tags.slice(0, 3).map((k) => DIET_BY_KEY[k]?.emoji).filter(Boolean).join(' ')}</span>}
-            <span className={`block text-sm font-sans font-bold mt-1 pe-12 tabular-nums ${blocked ? 'text-muted-foreground' : 'text-primary'}`}>{Number(item.price).toFixed(2)} KM</span>
-          </span>
-        </div>
-        {hasSession && !blocked && (
-          <button
-            type="button"
-            aria-label={`${t('add_to_order')} ${name}`}
-            className="absolute bottom-2 end-2 min-w-11 h-11 px-3 rounded-full bg-primary text-primary-foreground flex items-center justify-center gap-1 shadow-md active:scale-90 transition-transform focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 font-sans text-sm font-bold tabular-nums"
-            onClick={(e) => { stop(e); quickAdd(item, 'grid'); }}
-          >
-            <Plus className="w-4 h-4" aria-hidden />{inCart ? inCart.quantity : null}
-          </button>
         )}
+        {section && <span className="text-xs text-muted-foreground font-sans">· {section}</span>}
+      </div>
+    );
+  };
+
+  const renderGridCard = (item: MenuItemRow, i: number, eager: boolean) => {
+    const name = getLocalizedName(item, locale);
+    const blocked = blockedLabel(item);
+    return (
+      <ImpressionCard key={item.id} itemId={item.id} onOpen={() => setSelectedItem(item)} className="relative cursor-pointer group">
+        <div className="relative">
+          <SmartImage
+            src={item.image_url || undefined}
+            id={item.id}
+            alt={name}
+            width={220}
+            height={220}
+            square
+            sizes="(max-width: 640px) 46vw, 220px"
+            priority={eager && i < 4}
+            fallbackText={name}
+            wrapperClassName={`w-full aspect-square rounded-2xl ${blocked ? 'opacity-45 saturate-50' : ''}`}
+          />
+          {hasSession && !blocked && <div className="absolute bottom-2 end-2">{renderStepper(item, name, 'grid')}</div>}
+        </div>
+        <div className="pt-2 pe-1">
+          <h3 className="leading-snug">
+            <button type="button" className={`text-start font-serif text-[15px] font-semibold line-clamp-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded ${blocked ? 'text-muted-foreground' : 'text-foreground'}`}>{name}</button>
+          </h3>
+          {renderBadges(item, false)}
+          <p className={`text-[15px] font-sans font-semibold mt-0.5 tabular-nums ${blocked ? 'text-muted-foreground' : 'text-foreground'}`}>{Number(item.price).toFixed(2)} KM</p>
+        </div>
       </ImpressionCard>
     );
   };
 
-  const renderListRow = (item: MenuItemRow, i: number, isSearch: boolean) => {
+  const renderListRow = (item: MenuItemRow, i: number, isSearch: boolean, eager: boolean) => {
     const localizedName = getLocalizedName(item, locale);
     const localizedDesc = getLocalizedDescription(item, locale);
-    const inCart = cartItems.find((c) => (c.menuItemId ?? c.id) === item.id && !c.notes);
-    const qty = inCart?.quantity ?? 0;
     const blocked = blockedLabel(item);
-    const badges = merchBadges(item);
+    const tags = getItemTags(item).slice(0, 3).filter((k) => DIET_BY_KEY[k]);
+    const meta = [
+      item.prep_minutes != null && !blocked ? `~${item.prep_minutes} ${t('minutes_short')}` : null,
+      item.portion_note,
+    ].filter(Boolean).join(' · ');
     return (
-      <ImpressionCard key={item.id} itemId={item.id} onOpen={() => setSelectedItem(item)} className="relative flex items-center gap-4 p-3 card-lux card-lux-hover cursor-pointer tap">
-        <SmartImage src={item.image_url || undefined} id={item.id} alt="" width={96} height={96} sizes="96px" priority={i < 8} fallbackText={localizedName} wrapperClassName={`w-24 h-24 rounded-xl flex-shrink-0 ${blocked ? 'opacity-45 saturate-50' : ''}`} />
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <h3 className="font-serif text-base font-semibold leading-snug">
-              <button type="button" className={`text-start focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded ${blocked ? 'text-muted-foreground' : 'text-foreground'}`}>{localizedName}</button>
-            </h3>
-            {getItemTags(item).slice(0, 3).map((k) => DIET_BY_KEY[k] && (
+      <ImpressionCard
+        key={item.id}
+        itemId={item.id}
+        onOpen={() => setSelectedItem(item)}
+        className="relative flex gap-4 px-4 py-4 cursor-pointer transition-colors active:bg-muted/50"
+      >
+        <div className="flex-1 min-w-0 py-0.5">
+          <h3 className="leading-snug">
+            <button type="button" className={`text-start font-serif text-[17px] font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded ${blocked ? 'text-muted-foreground' : 'text-foreground'}`}>
+              {localizedName}
+            </button>
+          </h3>
+          {renderBadges(item, isSearch)}
+          {localizedDesc && <p className="text-sm leading-relaxed text-muted-foreground font-sans mt-1 line-clamp-2">{localizedDesc}</p>}
+          <div className="flex items-center gap-2 mt-2 flex-wrap">
+            <p className={`text-[15px] font-sans font-semibold tabular-nums ${blocked ? 'text-muted-foreground' : 'text-foreground'}`}>{Number(item.price).toFixed(2)} KM</p>
+            {meta && <span className="text-xs font-sans text-muted-foreground">{meta}</span>}
+            {tags.map((k) => (
               <span key={k} className="text-sm leading-none" title={t(DIET_BY_KEY[k].labelKey)} aria-label={t(DIET_BY_KEY[k].labelKey)}>{DIET_BY_KEY[k].emoji}</span>
             ))}
           </div>
-          {(blocked || badges.length > 0 || popularIds.has(item.id) || (isSearch && subNameById.get(item.subcategory_id || ''))) && (
-            <div className="flex items-center gap-1.5 flex-wrap mt-1">
-              {blocked && (
-                <span className="px-2 py-0.5 rounded-full bg-muted text-xs font-sans font-semibold text-muted-foreground">{blocked}</span>
-              )}
-              {!blocked && badges.length > 0 && (
-                <span className="px-2 py-0.5 rounded-full bg-primary/10 text-xs font-sans font-semibold text-primary">{badges[0]}</span>
-              )}
-              {!blocked && badges.length === 0 && popularIds.has(item.id) && (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gold/15 text-xs font-sans font-semibold text-gold"><Star className="w-3 h-3 fill-gold" aria-hidden /> {t('popular')}</span>
-              )}
-              {isSearch && subNameById.get(item.subcategory_id || '') && (
-                <span className="text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground font-sans">{subNameById.get(item.subcategory_id || '')}</span>
-              )}
-            </div>
-          )}
-          {localizedDesc && <p className="text-sm text-muted-foreground font-sans mt-1 line-clamp-2">{localizedDesc}</p>}
-          <div className="flex items-baseline gap-2 mt-1.5 flex-wrap">
-            <p className={`text-[15px] font-sans font-bold tabular-nums ${blocked ? 'text-muted-foreground' : 'text-primary'}`}>{Number(item.price).toFixed(2)} KM</p>
-            {/* Prep time on the card, not just in the sheet. It is the
-                question a hungry table asks before it asks the price. */}
-            {item.prep_minutes != null && !blocked && (
-              <span className="text-xs font-sans text-muted-foreground">~{item.prep_minutes} {t('minutes_short')}</span>
-            )}
-            {item.portion_note && <span className="text-xs font-sans text-muted-foreground">{item.portion_note}</span>}
-          </div>
         </div>
-        {hasSession && !blocked && (
-          <div className="relative z-10 flex items-center self-center" onClick={stop}>
-            {qty > 0 ? (
-              <div role="group" aria-label={localizedName} className="flex flex-col items-center gap-0.5 bg-primary/10 rounded-full p-0.5">
-                <button type="button" aria-label={`${t('increase')} ${localizedName}`} disabled={qty >= 10} onClick={() => updateQuantity(inCart!.id, qty + 1)} className="w-11 h-11 rounded-full bg-primary text-primary-foreground flex items-center justify-center hover:bg-sage-dark active:scale-90 transition-all disabled:opacity-50"><Plus className="w-4 h-4" aria-hidden /></button>
-                <span className="min-w-[20px] text-center text-sm font-sans font-bold text-primary tabular-nums" aria-live="polite">{qty}</span>
-                <button type="button" aria-label={`${t('decrease')} ${localizedName}`} onClick={() => { if (qty <= 1) removeItem(inCart!.id, 'menu_stepper'); else updateQuantity(inCart!.id, qty - 1); }} className="w-11 h-11 rounded-full bg-card text-primary flex items-center justify-center hover:bg-muted active:scale-90 transition-all"><Minus className="w-4 h-4" aria-hidden /></button>
+        {item.image_url ? (
+          <div className="relative shrink-0 w-[108px] self-start">
+            <SmartImage
+              src={item.image_url}
+              id={item.id}
+              alt=""
+              width={108}
+              height={108}
+              square
+              sizes="108px"
+              priority={eager && i < 4}
+              fallbackText={localizedName}
+              wrapperClassName={`w-[108px] h-[108px] rounded-2xl ${blocked ? 'opacity-45 saturate-50' : ''}`}
+            />
+            {hasSession && !blocked && (
+              // "+" sits on the corner; once the dish is in the order the wider
+              // "− 2 +" pill centres under the photo instead of hanging off it.
+              <div className={inCartQty(item) > 0 ? 'absolute -bottom-3 inset-x-0 flex justify-center' : 'absolute -bottom-2 -end-2'}>
+                {renderStepper(item, localizedName, 'list')}
               </div>
-            ) : (
-              <button type="button" aria-label={`${t('add_to_order')} ${localizedName}`} onClick={() => quickAdd(item, 'list')} className="w-11 h-11 rounded-full bg-primary/10 text-primary flex items-center justify-center hover:bg-primary hover:text-primary-foreground active:scale-90 transition-all duration-150 tap-sm"><Plus className="w-5 h-5" aria-hidden /></button>
             )}
           </div>
+        ) : (
+          hasSession && !blocked && <div className="shrink-0 self-center">{renderStepper(item, localizedName, 'list')}</div>
         )}
       </ImpressionCard>
     );
@@ -420,13 +477,29 @@ const CategoryPage = () => {
     </div>
   );
 
-  const renderItems = (list: MenuItemRow[], isSearch: boolean) => {
+  /**
+   * `eager` marks the section the guest is actually looking at. Only its
+   * first few photos load ahead of everything else; marking the first eight
+   * of EVERY section eager queued ~100 downloads on open, and the section a
+   * guest had jumped to showed blurred placeholders for seconds on 4G.
+   */
+  const renderItems = (list: MenuItemRow[], isSearch: boolean, eager: boolean) => {
     if (list.length === 0) return renderEmpty(isSearch);
     if (deferredView === 'grid') {
-      return <div className="px-4 pt-3 grid grid-cols-2 gap-3">{list.map((it, i) => renderGridCard(it, i))}</div>;
+      return <div className="px-4 pt-3 grid grid-cols-2 gap-x-3 gap-y-5">{list.map((it, i) => renderGridCard(it, i, eager))}</div>;
     }
-    return <div className="px-4 pt-3 space-y-3">{list.map((it, i) => renderListRow(it, i, isSearch))}</div>;
+    return (
+      <div className="mx-4 mt-3 rounded-3xl bg-card border border-border/70 shadow-[0_1px_2px_rgba(20,30,25,0.04)] divide-y divide-border/70 overflow-hidden">
+        {list.map((it, i) => renderListRow(it, i, isSearch, eager))}
+      </div>
+    );
   };
+
+  // The section the page opened at: a deep link's target, else the first.
+  const eagerSectionId = useMemo(() => {
+    const target = sectionParam ? sections.find(({ sub }) => sectionSlug(sub.name) === sectionParam) : undefined;
+    return (target ?? sections[0])?.sub.id;
+  }, [sections, sectionParam]);
 
   // Memoized so the scroll spy moving the active pill never re-renders items.
   const sectionsView = useMemo(
@@ -436,20 +509,20 @@ const CategoryPage = () => {
         ref={(el) => { sectionRefs.current[sub.id] = el; }}
         id={`section-${sectionSlug(sub.name)}`}
         aria-labelledby={`section-title-${sub.id}`}
-        className={si === 0 ? 'pt-3' : 'pt-7'}
+        className={si === 0 ? 'pt-4' : 'pt-8'}
       >
-        <div className="px-4 flex items-baseline justify-between gap-3">
-          <h2 id={`section-title-${sub.id}`} className="font-serif text-xl font-semibold text-foreground">
+        <div className="px-5 flex items-baseline justify-between gap-3">
+          <h2 id={`section-title-${sub.id}`} className="font-serif text-[22px] font-semibold text-foreground tracking-tight">
             {getLocalizedName(sub as SubcategoryRow, locale)}
           </h2>
-          <span className="text-xs font-sans text-muted-foreground tabular-nums">{items.length}</span>
+          <span className="text-xs font-sans font-medium text-muted-foreground tabular-nums">{items.length}</span>
         </div>
-        {renderItems(items, false)}
+        {renderItems(items, false, sub.id === eagerSectionId)}
       </section>
     )),
     // renderItems is recreated each render; the value deps below fully determine its output.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [sections, deferredView, locale, popularIds, cartItems, hasSession, subNameById, t],
+    [sections, deferredView, locale, popularIds, cartItems, hasSession, subNameById, t, eagerSectionId],
   );
 
   const loadFailed = categoryFailed || subsFailed || itemsFailed;
@@ -610,7 +683,7 @@ const CategoryPage = () => {
           ))}
         </div>
       ) : searching ? (
-        <div className="pb-40">{renderItems(searchResults, true)}</div>
+        <div className="pb-40">{renderItems(searchResults, true, true)}</div>
       ) : sections.length === 0 ? (
         <div className="pb-40">{renderEmpty(false)}</div>
       ) : (

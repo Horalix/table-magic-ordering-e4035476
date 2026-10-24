@@ -187,7 +187,7 @@ const RunningTabPage = () => {
               <div className="relative z-10 flex justify-between items-center">
                 <div>
                   <p className="text-[11px] font-sans text-white/60 uppercase tracking-wider">{t('running_total')}</p>
-                  <p className="font-serif text-3xl font-bold text-white mt-1 tabular-nums">{displayGrandTotal.toFixed(2)} KM</p>
+                  <p className="font-sans text-3xl font-semibold text-white mt-1 tabular-nums">{displayGrandTotal.toFixed(2)} KM</p>
                 </div>
                 <div className="text-end">
                   <p className="text-xs font-sans text-white/70">{billable.length} {billable.length === 1 ? t('orders_count_one') : t('orders_count_other')}</p>

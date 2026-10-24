@@ -142,7 +142,7 @@ const MenuItemDetail = ({ item, onClose, canOrder = true, unavailableLabel = nul
 
           <div className="p-6 pb-4">
             <h2 id="item-detail-title" className="font-serif text-2xl font-bold text-foreground">{localizedName}</h2>
-            <p className="text-lg font-sans font-bold text-primary mt-1.5 tabular-nums">{item.price.toFixed(2)} KM</p>
+            <p className="text-lg font-sans font-semibold text-foreground mt-1.5 tabular-nums">{item.price.toFixed(2)} KM</p>
             {localizedDesc && (
               <p className="text-[15px] text-muted-foreground font-sans mt-3 leading-relaxed">{localizedDesc}</p>
             )}
