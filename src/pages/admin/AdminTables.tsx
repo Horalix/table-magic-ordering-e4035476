@@ -14,6 +14,8 @@ import { Plus, QrCode, PowerOff, Clock, Trash2, LayoutGrid } from 'lucide-react'
 import { toast } from 'sonner';
 import { QRCodeSVG } from 'qrcode.react';
 import { useElapsed, formatDuration } from '@/lib/timing';
+import { outstandingFor } from '@/lib/staff-api';
+import FreeTableDialog from '@/components/staff/FreeTableDialog';
 import type { Database } from '@/integrations/supabase/types';
 
 type Section = Pick<Database['public']['Tables']['sections']['Row'], 'id' | 'name' | 'color'>;
@@ -30,6 +32,8 @@ const AdminTables = () => {
   const [showQR, setShowQR] = useState<string | null>(null);
 
   const [loadError, setLoadError] = useState(false);
+  /** The table whose "Free" was tapped, with what it is believed to owe. */
+  const [freeing, setFreeing] = useState<{ sessionId: string; tableNumber: number; owed: number } | null>(null);
 
   const fetchTables = useCallback(async () => {
     const [{ data: t, error: tErr }, { data: s, error: sErr }] = await Promise.all([
@@ -95,10 +99,21 @@ const AdminTables = () => {
     if (error) { toast.error(error.message); void fetchTables(); }
   };
 
-  const closeSession = async (sessionId: string) => {
-    const { error } = await supabase.from('table_sessions').update({ is_active: false, closed_at: new Date().toISOString() }).eq('id', sessionId);
-    if (error) { toast.error('Failed to close session'); return; }
-    toast.success('Session closed — table is now free'); await fetchTables();
+  /**
+   * Open the free-table confirmation with the bill already on it.
+   *
+   * This used to be a bare UPDATE on one tap, with no look at the bill, so an
+   * unpaid order could vanish behind a closed session. The close itself now
+   * goes through `staff_close_session`, which refuses while money is owed; the
+   * amount is fetched here only so the manager sees it before tapping, not
+   * after being refused.
+   */
+  const askToFree = async (sessionId: string, tableNumber: number) => {
+    const { data } = await supabase
+      .from('orders')
+      .select('status, payment_status, total, refunded_amount')
+      .eq('table_session_id', sessionId);
+    setFreeing({ sessionId, tableNumber, owed: outstandingFor(data ?? []) });
   };
 
   const getQRUrl = (table: TableRow) => `${window.location.origin}/table/${table.table_number}?token=${table.qr_token}`;
@@ -203,10 +218,10 @@ const AdminTables = () => {
                   </Select>
 
                   <div className="flex gap-1 mt-2 justify-center">
-                    <Button variant="outline" size="icon" className="h-8 w-8" aria-label="Show QR" onClick={() => setShowQR(showQR === table.id ? null : table.id)}><QrCode className="w-3.5 h-3.5" /></Button>
+                    <Button variant="outline" size="icon" className="min-h-[44px] min-w-[44px]" aria-label="Show QR" onClick={() => setShowQR(showQR === table.id ? null : table.id)}><QrCode className="w-4 h-4" /></Button>
                     {activeSession && (
-                      <Button variant="outline" size="sm" className="h-8 text-xs gap-1" onClick={() => closeSession(activeSession.id)}>
-                        <PowerOff className="w-3 h-3 text-destructive" /> Free
+                      <Button variant="outline" size="sm" className="min-h-[44px] text-sm gap-1" onClick={() => { void askToFree(activeSession.id, table.table_number); }}>
+                        <PowerOff className="w-3.5 h-3.5 text-destructive" /> Free
                       </Button>
                     )}
                   </div>
@@ -223,6 +238,15 @@ const AdminTables = () => {
           })}
         </div>
       )}
+
+      <FreeTableDialog
+        open={freeing !== null}
+        onOpenChange={(open) => { if (!open) setFreeing(null); }}
+        sessionId={freeing?.sessionId ?? null}
+        tableNumber={freeing?.tableNumber ?? ''}
+        knownOwed={freeing?.owed ?? 0}
+        onFreed={() => { void fetchTables(); }}
+      />
 
       {sections.length === 0 && tables.length > 0 && (
         <p className="text-xs text-muted-foreground font-sans mt-4">

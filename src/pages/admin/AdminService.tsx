@@ -7,7 +7,11 @@ import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { AlertTriangle, Plus, Trash2, Sparkles, PauseCircle } from 'lucide-react';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { AlertTriangle, Plus, Trash2, Sparkles, PauseCircle, RefreshCw, ShieldAlert } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface Settings {
@@ -25,7 +29,29 @@ interface Settings {
   ordering_paused_message: string | null;
   kitchen_delay_minutes: number;
   last_order_time: string | null;
+  // Fake-order protection. NULL switches a rule off.
+  hold_first_order_km: number | null;
+  hold_first_order_items: number | null;
+  hold_unpaid_km: number | null;
+  hold_burst_sessions: number | null;
+  hold_auto_admitted: boolean | null;
+  hold_second_session: boolean | null;
+  service_open: string | null;
+  service_close: string | null;
 }
+
+/**
+ * A threshold box: empty means "rule off", anything else is at least 1.
+ * Portions and table counts are whole numbers in the database.
+ */
+const thresholdFrom = (raw: string, whole = false): number | null => {
+  const n = Number(raw.replace(',', '.'));
+  if (raw.trim() === '' || !Number.isFinite(n)) return null;
+  return Math.max(1, whole ? Math.round(n) : n);
+};
+
+/** `time` columns come back as "18:00:00"; the time input wants "18:00". */
+const hhmm = (t: string | null) => (t ? t.slice(0, 5) : '');
 
 interface Reco {
   id: string;
@@ -60,15 +86,27 @@ const AdminService = () => {
   const [recos, setRecos] = useState<Reco[]>([]);
   const [items, setItems] = useState<MenuOption[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  /** Turning ordering OFF stops every table ordering; it gets a confirmation. */
+  const [confirmPause, setConfirmPause] = useState(false);
   const [draft, setDraft] = useState({ source: '', target: '', type: 'pair_with', priority: 60 });
 
   const load = useCallback(async () => {
-    const [{ data: s }, { data: r }, { data: m }] = await Promise.all([
+    setLoadError(null);
+    const [{ data: s, error: sErr }, { data: r, error: rErr }, { data: m, error: mErr }] = await Promise.all([
       supabase.from('restaurant_settings').select('*').eq('id', 1).maybeSingle(),
       supabase.from('menu_item_recommendations').select('*').order('priority', { ascending: false }).limit(200),
       supabase.from('menu_items').select('id, name').order('name').limit(500),
     ]);
-    if (s) setSettings(s as unknown as Settings);
+    // A failed load used to leave the skeleton up forever, which on the page
+    // holding the "stop orders" switch is the worst place to be stuck.
+    const error = sErr ?? rErr ?? mErr;
+    if (error || !s) {
+      setLoadError(error?.message ?? 'The service settings row is missing');
+      setLoading(false);
+      return;
+    }
+    setSettings(s as unknown as Settings);
     setRecos((r ?? []) as unknown as Reco[]);
     setItems((m ?? []) as MenuOption[]);
     setLoading(false);
@@ -115,6 +153,28 @@ const AdminService = () => {
     void load();
   };
 
+  if (!loading && (loadError || !settings)) {
+    return (
+      <div className="space-y-6">
+        <h1 className="font-serif text-3xl font-bold text-foreground">Service &amp; merchandising</h1>
+        <Card className="border-destructive/30">
+          <CardContent className="py-10 text-center space-y-3">
+            <AlertTriangle className="w-8 h-8 mx-auto text-destructive/60" />
+            <p className="font-serif text-lg font-semibold text-foreground">Could not load the service settings</p>
+            <p className="text-sm font-sans text-muted-foreground">{loadError}</p>
+            <Button
+              variant="outline"
+              className="min-h-[44px] gap-1.5"
+              onClick={() => { setLoading(true); void load(); }}
+            >
+              <RefreshCw className="w-4 h-4" /> Try again
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   if (loading || !settings) {
     return <div className="space-y-4">{Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-40 rounded-xl" />)}</div>;
   }
@@ -138,7 +198,12 @@ const AdminService = () => {
                 the server refuses new orders, so nothing slips through.
               </p>
             </div>
-            <Switch id="ordering" checked={settings.ordering_enabled} onCheckedChange={(v) => patch({ ordering_enabled: v })} />
+            <Switch
+              id="ordering"
+              checked={settings.ordering_enabled}
+              // Switching on needs no ceremony; switching off stops every table.
+              onCheckedChange={(v) => { if (v) void patch({ ordering_enabled: true }); else setConfirmPause(true); }}
+            />
           </div>
 
           {!settings.ordering_enabled && (
@@ -203,6 +268,156 @@ const AdminService = () => {
                 defaultValue={settings.last_order_time ?? ''}
                 onBlur={(e) => patch({ last_order_time: e.target.value || null })}
               />
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <AlertDialog open={confirmPause} onOpenChange={setConfirmPause}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Stop accepting orders?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Every guest at every table will be told to ask a waiter instead, and the server will refuse
+              new orders until you switch this back on. Orders already placed are not affected.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="min-h-[44px]">Keep taking orders</AlertDialogCancel>
+            <AlertDialogAction
+              className="min-h-[44px] bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => { void patch({ ordering_enabled: false }); }}
+            >
+              Stop orders
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/*
+        The venue QR is one printed code; anyone with a photo of it can order
+        from outside. These rules decide which pay-at-table orders wait for a
+        member of staff instead of printing. Each is enforced in the database
+        (order_hold_reason), so this page only edits the numbers.
+      */}
+      <Card className="border-border">
+        <CardHeader>
+          <CardTitle className="font-serif text-lg flex items-center gap-2">
+            <ShieldAlert className="w-5 h-5 text-accent" /> Fake-order protection
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-5">
+          <p className="text-sm font-sans text-muted-foreground leading-relaxed">
+            An order that matches one of these rules does not print. It appears as{' '}
+            <strong>Needs confirming</strong> on the kitchen screen and the waiter phones, with a chime, until
+            someone confirms or rejects it. The guest just sees that their waiter will confirm it. Once any
+            member of staff has done something for a table — covers, a call, a bump, a payment, a confirm — nothing
+            from that table is held again. Leave a box empty to switch that rule off.
+          </p>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <Label htmlFor="hold-first-km" className="font-sans font-semibold text-sm">Large first order (KM)</Label>
+              <p className="text-xs text-muted-foreground font-sans mb-1.5">
+                A table&apos;s first order above this amount waits. Default 60.
+              </p>
+              <Input
+                id="hold-first-km" type="number" inputMode="decimal" min={1} step="1"
+                defaultValue={settings.hold_first_order_km ?? ''}
+                placeholder="Off"
+                onBlur={(e) => patch({ hold_first_order_km: thresholdFrom(e.target.value) })}
+              />
+            </div>
+            <div>
+              <Label htmlFor="hold-first-items" className="font-sans font-semibold text-sm">Large first order (portions)</Label>
+              <p className="text-xs text-muted-foreground font-sans mb-1.5">
+                …or with more portions than this. Default 10.
+              </p>
+              <Input
+                id="hold-first-items" type="number" inputMode="numeric" min={1} step="1"
+                defaultValue={settings.hold_first_order_items ?? ''}
+                placeholder="Off"
+                onBlur={(e) => patch({ hold_first_order_items: thresholdFrom(e.target.value, true) })}
+              />
+            </div>
+            <div>
+              <Label htmlFor="hold-unpaid" className="font-sans font-semibold text-sm">Unpaid limit per table (KM)</Label>
+              <p className="text-xs text-muted-foreground font-sans mb-1.5">
+                An order that would take a table&apos;s unpaid total past this waits. Default 150.
+              </p>
+              <Input
+                id="hold-unpaid" type="number" inputMode="decimal" min={1} step="1"
+                defaultValue={settings.hold_unpaid_km ?? ''}
+                placeholder="Off"
+                onBlur={(e) => patch({ hold_unpaid_km: thresholdFrom(e.target.value) })}
+              />
+            </div>
+            <div>
+              <Label htmlFor="hold-burst" className="font-sans font-semibold text-sm">New tables at once</Label>
+              <p className="text-xs text-muted-foreground font-sans mb-1.5">
+                More than this many tables opening within five minutes of each other, with no staff contact yet,
+                looks like a shared photo of the QR. Default 3. Raise it if you seat big groups at once.
+              </p>
+              <Input
+                id="hold-burst" type="number" inputMode="numeric" min={1} step="1"
+                defaultValue={settings.hold_burst_sessions ?? ''}
+                placeholder="Off"
+                onBlur={(e) => patch({ hold_burst_sessions: thresholdFrom(e.target.value, true) })}
+              />
+            </div>
+          </div>
+
+          <div className="flex items-start justify-between gap-4 pt-2 border-t border-border">
+            <div>
+              <Label htmlFor="hold-auto" className="font-sans font-semibold">Hold after an unanswered join</Label>
+              <p className="text-xs text-muted-foreground font-sans mt-0.5">
+                If someone joins a table because nobody there answered for two minutes, the table&apos;s next order waits.
+              </p>
+            </div>
+            <Switch
+              id="hold-auto"
+              checked={settings.hold_auto_admitted ?? false}
+              onCheckedChange={(v) => patch({ hold_auto_admitted: v })}
+            />
+          </div>
+
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <Label htmlFor="hold-second" className="font-sans font-semibold">Hold a second session on one table</Label>
+              <p className="text-xs text-muted-foreground font-sans mt-0.5">
+                Two separate groups ordering on the same table number usually means one of them is not there.
+              </p>
+            </div>
+            <Switch
+              id="hold-second"
+              checked={settings.hold_second_session ?? false}
+              onCheckedChange={(v) => patch({ hold_second_session: v })}
+            />
+          </div>
+
+          <div className="pt-2 border-t border-border space-y-1.5">
+            <p className="font-sans font-semibold text-sm">Service hours</p>
+            <p className="text-xs text-muted-foreground font-sans leading-relaxed">
+              Orders placed outside these hours (Sarajevo time) wait. Hours may run past midnight — 08:00 to
+              01:00 works. Leave either empty for no limit.
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label htmlFor="service-open" className="text-xs font-sans">Opens</Label>
+                <Input
+                  id="service-open" type="time" className="mt-1"
+                  defaultValue={hhmm(settings.service_open)}
+                  onBlur={(e) => patch({ service_open: e.target.value || null })}
+                />
+              </div>
+              <div>
+                <Label htmlFor="service-close" className="text-xs font-sans">Closes</Label>
+                <Input
+                  id="service-close" type="time" className="mt-1"
+                  defaultValue={hhmm(settings.service_close)}
+                  onBlur={(e) => patch({ service_close: e.target.value || null })}
+                />
+              </div>
             </div>
           </div>
         </CardContent>

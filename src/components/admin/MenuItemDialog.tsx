@@ -72,16 +72,77 @@ const MERCH_TAGS: { key: string; label: string }[] = [
   { key: 'house_favourite', label: 'House favourite' },
 ];
 
+/** Longest edge of a stored menu photo. A guest card never shows more. */
+const MAX_IMAGE_EDGE = 1200;
+/** A raw phone photo larger than this is almost certainly the wrong file. */
+const MAX_RAW_BYTES = 20 * 1024 * 1024;
+
+const canvasToBlob = (canvas: HTMLCanvasElement, type: string, quality: number) =>
+  new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, type, quality));
+
+/**
+ * Shrink a photo before it leaves the device.
+ *
+ * Managers upload straight from a phone camera: 4000px, 5–8 MB. Every guest
+ * then downloaded that original for an 80px thumbnail on a restaurant's wifi,
+ * and the menu grid took seconds to fill. 1200px WebP is a few hundred KB and
+ * still sharp on the largest card.
+ *
+ * WebP where the browser can encode it (Safari only recently could); JPEG
+ * otherwise. A browser that silently falls back to PNG for an unsupported type
+ * is detected by checking what actually came back. If decoding fails entirely
+ * the original is uploaded rather than blocking the save.
+ */
+async function shrinkImage(file: File): Promise<{ blob: Blob; ext: string; type: string }> {
+  if (file.type === 'image/gif' || file.type === 'image/svg+xml') {
+    // Animated or vector: re-encoding would destroy what makes them that.
+    return { blob: file, ext: (file.name.split('.').pop() || 'img').toLowerCase(), type: file.type };
+  }
+  try {
+    const bitmap = await createImageBitmap(file);
+    const scale = Math.min(1, MAX_IMAGE_EDGE / Math.max(bitmap.width, bitmap.height));
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+    canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+    const ctx = canvas.getContext('2d');
+    if (!ctx) throw new Error('No 2D canvas');
+    ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    bitmap.close?.();
+
+    const webp = await canvasToBlob(canvas, 'image/webp', 0.82);
+    if (webp && webp.type === 'image/webp') return { blob: webp, ext: 'webp', type: 'image/webp' };
+    const jpeg = await canvasToBlob(canvas, 'image/jpeg', 0.85);
+    if (jpeg) return { blob: jpeg, ext: 'jpg', type: 'image/jpeg' };
+  } catch {
+    // Fall through to the original; an unshrunk photo beats no photo.
+  }
+  return { blob: file, ext: (file.name.split('.').pop() || 'jpg').toLowerCase(), type: file.type };
+}
+
 /** Upload an image to the menu-images bucket and return its public URL. */
 async function uploadMenuImage(file: File): Promise<string> {
-  const ext = (file.name.split('.').pop() || 'jpg').toLowerCase();
+  const { blob, ext, type } = await shrinkImage(file);
   const path = `${crypto.randomUUID()}.${ext}`;
   const { error } = await supabase.storage
     .from('menu-images')
-    .upload(path, file, { upsert: true, cacheControl: '31536000', contentType: file.type });
+    .upload(path, blob, { upsert: true, cacheControl: '31536000', contentType: type });
   if (error) throw error;
   const { data } = supabase.storage.from('menu-images').getPublicUrl(path);
   return data.publicUrl;
+}
+
+/**
+ * A price as a manager types it.
+ *
+ * Bosnian keyboards and habits write "4,50". The old `type="number"` field
+ * silently rejected the comma (the value came back empty), and the form then
+ * refused to save with "enter a valid price" over a price that looked valid.
+ */
+function parsePrice(raw: string): number | null {
+  const cleaned = raw.trim().replace(/\s|KM/gi, '').replace(',', '.');
+  if (!/^\d+(\.\d{1,2})?$/.test(cleaned)) return null;
+  const n = Number.parseFloat(cleaned);
+  return Number.isFinite(n) && n > 0 ? n : null;
 }
 
 /**
@@ -185,7 +246,8 @@ const MenuItemDialog = ({ open, onOpenChange, subcategoryId, item, onSaved }: Pr
     e.target.value = ''; // allow re-selecting the same file
     if (!file) return;
     if (!file.type.startsWith('image/')) { toast.error('Please choose an image file'); return; }
-    if (file.size > 8 * 1024 * 1024) { toast.error('Image must be under 8 MB'); return; }
+    // Generous, because the photo is shrunk to ~1200px before upload.
+    if (file.size > MAX_RAW_BYTES) { toast.error('Image must be under 20 MB'); return; }
     setUploading(true);
     try {
       const url = await uploadMenuImage(file);
@@ -200,9 +262,9 @@ const MenuItemDialog = ({ open, onOpenChange, subcategoryId, item, onSaved }: Pr
 
   const save = async () => {
     const trimmedName = name.trim();
-    const priceNum = Number.parseFloat(price);
-    if (!trimmedName || !Number.isFinite(priceNum) || priceNum <= 0) {
-      toast.error('Enter an item name and a valid price');
+    const priceNum = parsePrice(price);
+    if (!trimmedName || priceNum === null) {
+      toast.error('Enter an item name and a valid price, e.g. 4.50 or 4,50');
       return;
     }
     const marginNum = Math.max(0, Math.min(100, Math.round(Number(margin) || 0)));
@@ -241,12 +303,31 @@ const MenuItemDialog = ({ open, onOpenChange, subcategoryId, item, onSaved }: Pr
       available_to: fromTimeInput(to),
     };
 
+    /*
+     * A new dish goes to the END of its subcategory.
+     *
+     * Every insert used sort_order 0, so each new item jumped to the top —
+     * above the dishes someone had carefully ordered — and several new items
+     * shared 0 and came out in whatever order the database liked that day.
+     */
+    let nextSort = 0;
+    if (!isEdit) {
+      const { data: last } = await supabase
+        .from('menu_items')
+        .select('sort_order')
+        .eq('subcategory_id', payload.subcategory_id)
+        .order('sort_order', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      nextSort = (last?.sort_order ?? -1) + 1;
+    }
+
     // One write, no silent fallback. The old form retried without
     // dietary_tags when the column was missing and still toasted success, so a
     // manager could set tags, be told it worked, and find them gone.
     const { error } = isEdit
       ? await supabase.from('menu_items').update(payload).eq('id', item!.id)
-      : await supabase.from('menu_items').insert({ ...payload, sort_order: 0 });
+      : await supabase.from('menu_items').insert({ ...payload, sort_order: nextSort });
 
     setSaving(false);
     if (error) { toast.error(error.message); return; }
@@ -318,7 +399,20 @@ const MenuItemDialog = ({ open, onOpenChange, subcategoryId, item, onSaved }: Pr
           <div className="grid grid-cols-2 gap-2">
             <div>
               <Label className="text-xs text-muted-foreground">Price (KM)</Label>
-              <Input placeholder="0.00" type="number" inputMode="decimal" min="0" step="0.01" value={price} onChange={(e) => setPrice(e.target.value)} className="mt-1" />
+              {/* Text, not number: a number field drops "4,50" without a word. */}
+              <Input
+                placeholder="4,50"
+                type="text"
+                inputMode="decimal"
+                autoComplete="off"
+                value={price}
+                onChange={(e) => setPrice(e.target.value)}
+                aria-invalid={price.trim() !== '' && parsePrice(price) === null}
+                className="mt-1"
+              />
+              {price.trim() !== '' && parsePrice(price) === null && (
+                <p className="text-[11px] text-destructive font-sans mt-1">Use a number like 4,50 or 4.50</p>
+              )}
             </div>
             <div>
               <Label className="text-xs text-muted-foreground">Portion note</Label>

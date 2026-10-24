@@ -28,6 +28,15 @@ export interface StaffState {
   itemWrites: { id: string; status: string }[];
   /** Ticket-claim calls, so double-print protection can be asserted. */
   printClaims: string[];
+  /** `has_role(_, 'admin')`. Staff who are not managers must not see admin links. */
+  isAdmin: boolean;
+  /**
+   * What `staff_close_session` says the table still owes. Zero frees the table;
+   * anything else is the server refusing, which the UI must show.
+   */
+  closeOutstanding: number;
+  /** Every RPC the UI called that touches tables, calls or money, in order. */
+  rpcCalls: { fn: string; body: Record<string, unknown> }[];
 }
 
 const iso = (minutesAgo: number) => new Date(Date.now() - minutesAgo * 60_000).toISOString();
@@ -67,6 +76,31 @@ export const anOrder = (over: Partial<Record<string, unknown>> = {}) => ({
   ...over,
 });
 
+/**
+ * An order the database held for staff to confirm: `pending`, never released,
+ * with a reason. The kitchen must not see it as work.
+ */
+export const aHeldOrder = (over: Partial<Record<string, unknown>> = {}) => anOrder({
+  id: 'order-held',
+  order_code: '090',
+  released_to_kitchen_at: null,
+  held_reason: 'large_first_order',
+  held_at: iso(1),
+  created_at: iso(1),
+  total: 72,
+  guest_name: 'Haris',
+  table_session_id: 'session-9',
+  table_sessions: {
+    tables: { table_number: 9, section_id: 'sec-1', sections: { name: 'Terrace', color: '#B0641F' } },
+  },
+  order_items: [{
+    id: 'oi-held', order_id: 'order-held', menu_item_id: 'item-burger', quantity: 4,
+    unit_price: 18, notes: null, status: 'pending', station: 'kitchen',
+    menu_items: { name: 'Cevapi Platter', name_bs: 'Ćevapi', prep_minutes: 12 },
+  }],
+  ...over,
+});
+
 export const defaultStaffState = (): StaffState => ({
   orders: [anOrder()],
   waiterCalls: [],
@@ -79,6 +113,9 @@ export const defaultStaffState = (): StaffState => ({
   statusWrites: [],
   itemWrites: [],
   printClaims: [],
+  isAdmin: true,
+  closeOutstanding: 0,
+  rpcCalls: [],
 });
 
 const json = (route: Route, body: unknown, status = 200) =>
@@ -123,7 +160,37 @@ export async function installStaffStubs(page: Page, state: StaffState) {
 
     switch (fn) {
       case 'has_role':
-        return json(route, state.signedIn);
+        return json(route, body._role === 'admin' ? state.signedIn && state.isAdmin : state.signedIn);
+
+      case 'staff_close_session': {
+        state.rpcCalls.push({ fn, body });
+        const owed = state.closeOutstanding;
+        return json(route, {
+          closed: owed <= 0, already_closed: false, outstanding: owed, unpaid_orders: owed > 0 ? 1 : 0,
+        });
+      }
+
+      case 'staff_resolve_bill_request': {
+        state.rpcCalls.push({ fn, body });
+        state.billRequests = state.billRequests.filter((b) => b.id !== body._request_id);
+        return json(route, { resolved: true, closed: false, outstanding: 0 });
+      }
+
+      case 'staff_resolve_waiter_call': {
+        state.rpcCalls.push({ fn, body });
+        state.waiterCalls = state.waiterCalls.filter((c) => c.id !== body._call_id);
+        return json(route, { resolved: true });
+      }
+
+      case 'record_table_payment': {
+        state.rpcCalls.push({ fn, body });
+        const order = state.orders.find((o) => o.id === body._order_id);
+        if (order?.payment_status === 'paid') {
+          return json(route, { status: 'already_paid', payment_method: order.payment_method });
+        }
+        if (order) { order.payment_status = 'paid'; order.payment_method = body._method; }
+        return json(route, { status: 'paid', payment_method: body._method, total: order?.total ?? 0 });
+      }
 
       case 'claim_ticket_print': {
         const id = String(body._order_id ?? '');
@@ -161,6 +228,33 @@ export async function installStaffStubs(page: Page, state: StaffState) {
       case 'kds_all_day':
         return json(route, []);
 
+      case 'staff_release_held_order': {
+        state.rpcCalls.push({ fn, body });
+        const order = state.orders.find((o) => o.id === body._order_id);
+        if (order && !order.released_to_kitchen_at) {
+          order.released_to_kitchen_at = new Date().toISOString();
+          order.held_reason = null;
+          return json(route, { status: 'released', order_id: order.id, ticket_id: 'ticket-1' });
+        }
+        return json(route, { status: 'already_released', order_id: body._order_id });
+      }
+
+      case 'cancel_order': {
+        state.rpcCalls.push({ fn, body });
+        const order = state.orders.find((o) => o.id === body._order_id);
+        if (order) { order.status = 'cancelled'; order.cancel_reason = body._reason; }
+        return json(route, { status: 'cancelled', requires_refund: false, total: order?.total ?? 0 });
+      }
+
+      case 'staff_block_session': {
+        state.rpcCalls.push({ fn, body });
+        let cancelled = 0;
+        for (const o of state.orders) {
+          if (o.table_session_id === body._session_id && o.status === 'pending') { o.status = 'cancelled'; cancelled += 1; }
+        }
+        return json(route, { status: 'blocked', cancelled_orders: cancelled, orders_left: 0 });
+      }
+
       default:
         return json(route, null);
     }
@@ -170,12 +264,22 @@ export async function installStaffStubs(page: Page, state: StaffState) {
   await page.route('**/rest/v1/orders**', (route) => {
     const url = new URL(route.request().url());
     const filter = url.searchParams.get('status') ?? '';
-    if (!filter) return json(route, state.orders);
+    /*
+     * Held orders (20261024190000_order_abuse_guards.sql): the "Needs
+     * confirming" card asks for exactly them, and the kitchen board asks to
+     * leave them out. Both filters are honoured so a spec can prove a held
+     * order is in the one place and not the other.
+     */
+    const held = (o: Record<string, unknown>) => !!o.held_reason && !o.released_to_kitchen_at;
+    let rows = state.orders;
+    if (url.searchParams.get('held_reason') === 'not.is.null') rows = rows.filter(held);
+    if ((url.searchParams.get('or') ?? '').includes('held_reason.is.null')) rows = rows.filter((o) => !held(o));
+    if (!filter) return json(route, rows);
     // `in.(a,b,c)` or `eq.x`
     const wanted = filter.startsWith('in.')
       ? filter.slice(4, -1).split(',').map((s) => s.replace(/"/g, ''))
       : [filter.replace('eq.', '')];
-    return json(route, state.orders.filter((o) => wanted.includes(String(o.status))));
+    return json(route, rows.filter((o) => wanted.includes(String(o.status))));
   });
 
   await page.route('**/rest/v1/sections**', (route) =>

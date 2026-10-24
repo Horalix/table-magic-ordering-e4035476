@@ -9,19 +9,30 @@ import { Textarea } from '@/components/ui/textarea';
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
-import { playOrderAlert, playWaiterCallAlert, playBillRequestAlert, unlockAudio, audioReady, playTestTone } from '@/lib/kitchen-sounds';
+import {
+  playOrderAlert, playWaiterCallAlert, playBillRequestAlert, unlockAudio, audioReady, playTestTone, useReminderChime,
+} from '@/lib/kitchen-sounds';
 import { buildKitchenTicketText, downloadKitchenTicketCsv, downloadKitchenTicketJson, printKitchenTicket, type KitchenPrintSettings } from '@/lib/ticket-export';
 import { isBluetoothConnected, tryReconnectBluetoothPrinter, printTextBluetooth, printerStatusCapable } from '@/lib/printer-connect';
 import { enqueuePrint, retryPrintQueue, usePrintQueue } from '@/lib/print-queue';
 import type { PrintOutcome } from '@/lib/print-outcome';
 import ConnectionPill from '@/components/staff/ConnectionPill';
-import KitchenOrderCard, { type KitchenOrder, type OrderItemStatus, type OrderStatus, type StationFilter } from '@/components/staff/KitchenOrderCard';
+import KitchenOrderCard, {
+  type KitchenOrder, type OrderItemStatus, type OrderStatus, type StationFilter,
+} from '@/components/staff/KitchenOrderCard';
+import { kitchenStart } from '@/components/staff/order-status';
 import AllDayPanel from '@/components/staff/AllDayPanel';
-import { useStaffRealtime, useStaffRealtimeEvent } from '@/lib/realtime';
+import FreeTableDialog from '@/components/staff/FreeTableDialog';
+import HeldOrdersCard from '@/components/staff/HeldOrdersCard';
+import { useStaffDocument } from '@/components/staff/useStaffDocument';
+import {
+  useCoalesced, useLatestRequest, useStaffRealtime, useStaffRealtimeEvent, useStaffRefresh,
+} from '@/lib/realtime';
 import { useElapsedMinutes, formatMinutes } from '@/lib/timing';
 import {
   bumpOrderItem, bumpOrderItems, cancelOrder, claimTicketPrint, deviceId, reportTicketPrint,
   kitchenLoad, requeueStaleTicketPrints, requeueTicketPrint, revertOrderStatus,
+  resolveBillRequest as rpcResolveBillRequest, resolveWaiterCall as rpcResolveWaiterCall,
   updateOrderStatus as rpcUpdateOrderStatus, type KitchenLoadRow, type TicketType,
 } from '@/lib/staff-api';
 import type { Database } from '@/integrations/supabase/types';
@@ -68,21 +79,37 @@ type BillRequestQueryRow = BillRequestRow & {
   table_sessions?: { tables?: { table_number?: number | null } | null } | null;
 };
 
-interface WaiterCall {
+/**
+ * An open call or bill request — pending OR claimed.
+ *
+ * Claimed ones used to vanish from this screen the moment a waiter tapped
+ * "I'll go", which read as "handled" while the guest was still waiting. They
+ * stay until resolved, and say who is on the way and for how long.
+ */
+interface FloorAlert {
   id: string;
   table_session_id: string;
   status: string;
   created_at: string;
   table_number: number;
+  acknowledged_by: string | null;
+  acknowledged_at: string | null;
 }
+type WaiterCall = FloorAlert;
+type BillRequest = FloorAlert;
 
-interface BillRequest {
-  id: string;
-  table_session_id: string;
-  status: string;
-  created_at: string;
-  table_number: number;
-}
+const toFloorAlert = (row: WaiterCallQueryRow | BillRequestQueryRow): FloorAlert => ({
+  id: row.id,
+  table_session_id: row.table_session_id,
+  status: row.status,
+  created_at: row.created_at,
+  table_number: row.table_sessions?.tables?.table_number || 0,
+  acknowledged_by: (row as { acknowledged_by?: string | null }).acknowledged_by ?? null,
+  acknowledged_at: (row as { acknowledged_at?: string | null }).acknowledged_at ?? null,
+});
+
+/** Only orders released this recently count as "new" for the chime. */
+const NEW_ORDER_WINDOW_MS = 2 * 60 * 1000;
 
 /**
  * How far back the board looks.
@@ -124,7 +151,14 @@ const Ago = ({ at }: { at: string }) => {
   return <>{ms < 60_000 ? 'just now' : `${formatMinutes(ms)} ago`}</>;
 };
 
+/** "Marko is going (3m)" — a claim, with how long it has been on the way. */
+const Going = ({ name, since }: { name: string; since: string | null }) => {
+  const ms = useElapsedMinutes(since);
+  return <>{name} is going{since ? ` (${Math.max(0, Math.floor(ms / 60_000))}m)` : ''}</>;
+};
+
 const KitchenDisplay = () => {
+  useStaffDocument();
   const [orders, setOrders] = useState<KitchenOrder[]>([]);
   const [waiterCalls, setWaiterCalls] = useState<WaiterCall[]>([]);
   const [billRequests, setBillRequests] = useState<BillRequest[]>([]);
@@ -203,23 +237,66 @@ const KitchenDisplay = () => {
   const [voidReason, setVoidReason] = useState('');
   const [voidBusy, setVoidBusy] = useState(false);
 
+  /** The bill request whose ✓ was tapped — freeing a table is confirmed, never one tap. */
+  const [freeing, setFreeing] = useState<BillRequest | null>(null);
+  /** Calls being cleared right now, so a double tap is one request. */
+  const [clearing, setClearing] = useState<Set<string>>(new Set());
+
+  /**
+   * Whether the gear may be shown.
+   *
+   * The printing settings live in the admin area, and the admin layout used to
+   * sign out anyone who was not a manager — so a cook tapping the gear on the
+   * kitchen tablet was logged out of the kitchen mid-service.
+   */
+  const [isAdmin, setIsAdmin] = useState(false);
+  /** auth user id → display name, for "Marko is going". */
+  const [staffNames, setStaffNames] = useState<Record<string, string>>({});
+
+  /** Orders already on the board, so a chime means "this is new", not "this refetched". */
+  const knownOrderIds = useRef<Set<string> | null>(null);
+  const beginOrders = useLatestRequest();
+  const beginPrintable = useLatestRequest();
+  const beginCalls = useLatestRequest();
+  const beginBills = useLatestRequest();
+
   // Silently reconnect a previously-paired Bluetooth printer on load.
   useEffect(() => { tryReconnectBluetoothPrinter().then((n) => { if (n) setBtName(n); }); }, []);
 
-  // Load print settings + keep them live.
-  useEffect(() => {
-    const load = () => supabase.from('restaurant_settings').select('*').eq('id', 1).maybeSingle()
+  // Load print settings + keep them live — through the shared channel, rather
+  // than a second socket of this screen's own.
+  const loadSettings = useCallback(() => {
+    void supabase.from('restaurant_settings').select('*').eq('id', 1).maybeSingle()
       .then(({ data }) => {
         if (!data) return;
         setPrintConfig({ ...DEFAULT_PRINT, ...(data as Partial<PrintConfig>) });
         const undo = (data as { kitchen_undo_seconds?: number | null }).kitchen_undo_seconds;
         if (typeof undo === 'number') setUndoSeconds(undo);
       });
-    load();
-    const ch = supabase.channel('settings')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'restaurant_settings' }, () => load())
-      .subscribe();
-    return () => { supabase.removeChannel(ch); };
+  }, []);
+  useEffect(() => { loadSettings(); }, [loadSettings]);
+  useStaffRealtimeEvent(useCallback((table: string) => {
+    if (table === 'restaurant_settings') loadSettings();
+  }, [loadSettings]));
+
+  // Who may see the admin gear, and the names behind "… is going".
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+      const { data: admin } = await supabase.rpc('has_role', { _user_id: session.user.id, _role: 'admin' });
+      if (!cancelled) setIsAdmin(admin === true);
+    })();
+    void supabase.from('waiters').select('user_id, display_name').then(({ data }) => {
+      if (cancelled || !Array.isArray(data)) return;
+      const names: Record<string, string> = {};
+      for (const w of data as { user_id: string | null; display_name: string }[]) {
+        if (w.user_id) names[w.user_id] = w.display_name;
+      }
+      setStaffNames(names);
+    });
+    return () => { cancelled = true; };
   }, []);
 
   /**
@@ -299,7 +376,10 @@ const KitchenDisplay = () => {
     for (const order of printable) {
       if (order.status !== 'pending' || printedRef.current.has(order.id)) continue;
       // Skip the backlog on first load — only print genuinely fresh orders.
-      if (now - new Date(order.created_at).getTime() > 60_000) {
+      // Fresh means freshly RELEASED: a card order created three minutes ago
+      // whose payment cleared just now is new to the kitchen, and measuring
+      // from created_at meant it never printed at all.
+      if (now - new Date(kitchenStart(order)).getTime() > 60_000) {
         printedRef.current.add(order.id);
         continue;
       }
@@ -408,6 +488,7 @@ const KitchenDisplay = () => {
     payment_status: o.payment_status ?? null,
     notes: o.notes,
     created_at: o.created_at,
+    released_to_kitchen_at: o.released_to_kitchen_at ?? null,
     confirmed_at: (o as { confirmed_at?: string | null }).confirmed_at ?? null,
     preparing_at: (o as { preparing_at?: string | null }).preparing_at ?? null,
     ready_at: (o as { ready_at?: string | null }).ready_at ?? null,
@@ -438,7 +519,8 @@ const KitchenDisplay = () => {
    * backlog this device should not spew on a reload.
    */
   const fetchPrintable = useCallback(async () => {
-    const { data } = await supabase
+    const isLatest = beginPrintable();
+    const { data, error } = await supabase
       .from('orders')
       .select(`
         *,
@@ -446,17 +528,21 @@ const KitchenDisplay = () => {
         order_items(*, menu_items(name, allergens))
       `)
       .eq('status', 'pending')
-      .gte('created_at', new Date(Date.now() - 5 * 60 * 1000).toISOString())
-      .order('created_at', { ascending: false })
+      // By release, not creation: a card order reaches the kitchen when its
+      // payment clears, which can be well over five minutes after it was placed.
+      .gte('released_to_kitchen_at', new Date(Date.now() - 5 * 60 * 1000).toISOString())
+      .order('released_to_kitchen_at', { ascending: false })
       .limit(50);
 
+    if (error || !isLatest()) return;
     setPrintable(((data || []) as KitchenOrderRow[]).map(mapOrderRow));
-  }, [mapOrderRow]);
+  }, [mapOrderRow, beginPrintable]);
 
   const historyView = view === 'history';
 
   const fetchOrders = useCallback(async () => {
-    const { data: ordersData, error } = await supabase
+    const isLatest = beginOrders();
+    let query = supabase
       .from('orders')
       .select(`
         *,
@@ -468,7 +554,12 @@ const KitchenDisplay = () => {
           menu_items(name, allergens)
         )
       `)
-      .in('status', historyView ? ['served', 'cancelled'] : ['pending', 'confirmed', 'preparing', 'ready'])
+      .in('status', historyView ? ['served', 'cancelled'] : ['pending', 'confirmed', 'preparing', 'ready']);
+    // A held order is `pending` but has not been released: it is a question
+    // for staff (the "Needs confirming" card), not kitchen work. Unpaid card
+    // orders never get here because their status is not in the list above.
+    if (!historyView) query = query.or('held_reason.is.null,released_to_kitchen_at.not.is.null');
+    const { data: ordersData, error } = await query
       // Bound by AGE, not by row count. The previous `.limit(50)` combined with
       // a descending sort silently dropped the OLDEST open orders — which are
       // precisely the late ones the kitchen most needs to see. An age bound
@@ -476,6 +567,9 @@ const KitchenDisplay = () => {
       .gte('created_at', new Date(Date.now() - ACTIVE_WINDOW_MS).toISOString())
       .order('created_at', { ascending: false })
       .limit(HARD_ROW_CAP);
+
+    // A slower, older response must not put a stale board back on screen.
+    if (!isLatest()) return;
 
     if (error) {
       console.error('Error fetching orders:', error);
@@ -486,46 +580,58 @@ const KitchenDisplay = () => {
 
     const mapped = ((ordersData || []) as KitchenOrderRow[]).map(mapOrderRow);
 
+    /*
+     * The new-order chime, decided from data rather than from an INSERT event.
+     *
+     * A card order is INSERTed as `awaiting_payment` — invisible to the kitchen
+     * — and reaches the board later by an UPDATE when the payment clears. The
+     * old INSERT chime therefore rang for food the kitchen could not see, and
+     * stayed silent when it actually arrived. A ticket is new when it appears
+     * on the active board for the first time, recently released.
+     */
+    if (!historyView) {
+      const known = knownOrderIds.current;
+      const now = Date.now();
+      const arrived = known !== null && mapped.some((o) =>
+        !known.has(o.id) && o.status === 'pending'
+        && now - new Date(kitchenStart(o)).getTime() < NEW_ORDER_WINDOW_MS);
+      if (arrived && soundEnabledRef.current) playOrderAlert();
+      knownOrderIds.current = new Set([...(known ?? []), ...mapped.map((o) => o.id)]);
+    }
+
     setOrders(mapped);
     setTruncated(mapped.length >= HARD_ROW_CAP);
-  }, [historyView, mapOrderRow]);
+  }, [historyView, mapOrderRow, beginOrders]);
 
   const fetchWaiterCalls = useCallback(async () => {
+    const isLatest = beginCalls();
     const { data, error } = await supabase
       .from('waiter_calls')
       .select(`*, table_sessions!inner(tables!inner(table_number))`)
-      .eq('status', 'pending')
+      // Open, not merely pending: a claimed call is still a guest waiting.
+      .neq('status', 'resolved')
       // Oldest first: the longest-waiting guest is the one to deal with next.
       .order('created_at', { ascending: true });
 
+    if (!isLatest()) return;
     if (error) { console.error('Error fetching waiter calls:', error); return; }
 
-    setWaiterCalls(((data || []) as WaiterCallQueryRow[]).map((c) => ({
-      id: c.id,
-      table_session_id: c.table_session_id,
-      status: c.status,
-      created_at: c.created_at,
-      table_number: c.table_sessions?.tables?.table_number || 0,
-    })));
-  }, []);
+    setWaiterCalls(((data || []) as WaiterCallQueryRow[]).map(toFloorAlert));
+  }, [beginCalls]);
 
   const fetchBillRequests = useCallback(async () => {
+    const isLatest = beginBills();
     const { data, error } = await supabase
       .from('bill_requests')
       .select(`*, table_sessions!inner(tables!inner(table_number))`)
-      .eq('status', 'pending')
+      .neq('status', 'resolved')
       .order('created_at', { ascending: true });
 
+    if (!isLatest()) return;
     if (error) { console.error('Error fetching bill requests:', error); return; }
 
-    setBillRequests(((data || []) as BillRequestQueryRow[]).map((b) => ({
-      id: b.id,
-      table_session_id: b.table_session_id,
-      status: b.status,
-      created_at: b.created_at,
-      table_number: b.table_sessions?.tables?.table_number || 0,
-    })));
-  }, []);
+    setBillRequests(((data || []) as BillRequestQueryRow[]).map(toFloorAlert));
+  }, [beginBills]);
 
   useEffect(() => {
     supabase.from('sections').select('id, name, color').order('sort_order').then(({ data }) => {
@@ -543,45 +649,104 @@ const KitchenDisplay = () => {
     // per tab, and polls whenever the socket is not subscribed.
   }, [fetchOrders, fetchPrintable, fetchWaiterCalls, fetchBillRequests]);
 
-  /**
-   * Refetch on live events.
+  /*
+   * Refetch on live events — coalesced.
    *
+   * A six-item order is seven events, and each used to start a full board
+   * refetch, so seven overlapping requests raced each other and whichever
+   * landed last won. Each feed now waits for the burst to end (~300ms) and
+   * runs once; `useLatestRequest` drops anything that still arrives late.
+   */
+  const refetchOrders = useCoalesced(useCallback(() => {
+    void fetchOrders(); void fetchPrintable();
+    void kitchenLoad().then(setLoad).catch(() => {});
+  }, [fetchOrders, fetchPrintable]));
+  const refetchCalls = useCoalesced(useCallback(() => { void fetchWaiterCalls(); }, [fetchWaiterCalls]));
+  const refetchBills = useCoalesced(useCallback(() => { void fetchBillRequests(); }, [fetchBillRequests]));
+
+  /*
    * Split from the sound effect below on purpose: alerts must not wait on a
    * refetch, and a refetch must not depend on whether sound is on.
    */
   useStaffRealtimeEvent(
     useCallback((table: string) => {
-      if (table === 'orders' || table === 'order_items') {
-        void fetchOrders(); void fetchPrintable();
-        void kitchenLoad().then(setLoad).catch(() => {});
-      }
-      if (table === 'waiter_calls') void fetchWaiterCalls();
-      if (table === 'bill_requests') void fetchBillRequests();
-    }, [fetchOrders, fetchPrintable, fetchWaiterCalls, fetchBillRequests]),
+      if (table === 'orders' || table === 'order_items') refetchOrders();
+      if (table === 'waiter_calls') refetchCalls();
+      if (table === 'bill_requests') refetchBills();
+    }, [refetchOrders, refetchCalls, refetchBills]),
   );
 
-  /** Alerts, fired straight off the event so they are never held up by data. */
+  /*
+   * And reload everything on the polling tick, on reconnect, when the tablet
+   * wakes, and on the slow safety heartbeat. Without this the board kept its
+   * data in plain state that only events refreshed, so with the socket down the
+   * pill promised "refreshing every 15s" over a board that never changed.
+   */
+  useStaffRefresh(useCallback(() => {
+    refetchOrders(); refetchCalls(); refetchBills();
+  }, [refetchOrders, refetchCalls, refetchBills]));
+
+  /**
+   * Call and bill alerts, fired straight off the event so they are never held
+   * up by data. The new-ORDER chime is decided in fetchOrders instead: an
+   * INSERT is the wrong moment for a card order (see there).
+   */
   useStaffRealtimeEvent(
     useCallback((table: string, eventType: string) => {
       if (!initialLoadDone.current || !soundEnabledRef.current || eventType !== 'INSERT') return;
-      if (table === 'orders') playOrderAlert();
-      else if (table === 'waiter_calls') playWaiterCallAlert();
+      if (table === 'waiter_calls') playWaiterCallAlert();
       else if (table === 'bill_requests') playBillRequestAlert();
+    }, []),
+  );
+
+  /*
+   * Chime again every ~75s while a table is still waiting. One chime over the
+   * extraction hood is easy to miss, and then nobody hears about that table
+   * again until a guest walks up to the pass.
+   */
+  const alertsRef = useRef({ calls: waiterCalls, bills: billRequests });
+  useEffect(() => { alertsRef.current = { calls: waiterCalls, bills: billRequests }; }, [waiterCalls, billRequests]);
+  useReminderChime(
+    soundEnabled && (waiterCalls.length > 0 || billRequests.length > 0),
+    useCallback(() => {
+      // Someone walking there right now is not a reason to chime; a claim
+      // older than the three-minute takeover window is.
+      const waiting = (a: FloorAlert) => a.status === 'pending'
+        || !a.acknowledged_at || Date.now() - new Date(a.acknowledged_at).getTime() > 3 * 60_000;
+      const { calls, bills } = alertsRef.current;
+      if (bills.some(waiting)) playBillRequestAlert();
+      else if (calls.some(waiting)) playWaiterCallAlert();
     }, []),
   );
 
   /* ---- Actions -------------------------------------------------------- */
 
+  /**
+   * Show a line's new state the moment it is tapped.
+   *
+   * On a laggy tablet the card used to sit unchanged until the refetch landed,
+   * and a cook who sees no change taps again. The refetch that follows puts
+   * the database's answer back either way, so a refused bump does not stick.
+   */
+  const patchItems = useCallback((ids: string[], status: OrderItemStatus) => {
+    const wanted = new Set(ids);
+    setOrders((prev) => prev.map((o) => (o.items.some((i) => wanted.has(i.id))
+      ? { ...o, items: o.items.map((i) => (wanted.has(i.id) ? { ...i, status } : i)) }
+      : o)));
+  }, []);
+
   const bumpItem = useCallback(async (itemId: string, status: OrderItemStatus) => {
+    patchItems([itemId], status);
     try {
       await bumpOrderItem(itemId, status);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Could not update that line');
     }
     await fetchOrders();
-  }, [fetchOrders]);
+  }, [fetchOrders, patchItems]);
 
   const bumpMany = useCallback(async (itemIds: string[], status: OrderItemStatus) => {
+    patchItems(itemIds, status);
     try {
       const result = await bumpOrderItems(itemIds, status);
       if (result.failed > 0) toast.warning(`${result.updated} updated, ${result.failed} could not be`);
@@ -589,7 +754,7 @@ const KitchenDisplay = () => {
       toast.error(error instanceof Error ? error.message : 'Could not update those lines');
     }
     await fetchOrders();
-  }, [fetchOrders]);
+  }, [fetchOrders, patchItems]);
 
   const advanceOrder = useCallback(async (orderId: string, status: OrderStatus) => {
     try {
@@ -644,25 +809,38 @@ const KitchenDisplay = () => {
     toast.success('Ticket CSV exported');
   };
 
+  /** Through the RPC, so the cleared call has a name attached to it. */
   const resolveWaiterCall = async (callId: string) => {
-    const { error } = await supabase.from('waiter_calls').update({ status: 'resolved', resolved_at: new Date().toISOString() }).eq('id', callId);
-    if (error) toast.error('Failed to resolve call');
-    else { toast.success('Waiter call resolved'); fetchWaiterCalls(); }
+    if (clearing.has(callId)) return;
+    setClearing((prev) => new Set(prev).add(callId));
+    // Gone from the strip at once; the refetch puts it back if the clear failed.
+    setWaiterCalls((prev) => prev.filter((c) => c.id !== callId));
+    try {
+      await rpcResolveWaiterCall(callId);
+      toast.success('Waiter call cleared');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to clear the call');
+    } finally {
+      setClearing((prev) => { const next = new Set(prev); next.delete(callId); return next; });
+      void fetchWaiterCalls();
+    }
   };
 
-  const resolveBillRequest = async (request: BillRequest) => {
-    const { error } = await supabase.from('bill_requests').update({ status: 'resolved', resolved_at: new Date().toISOString() }).eq('id', request.id);
-    if (error) { toast.error('Failed to resolve bill request'); return; }
-
-    // Auto-close the table session
-    await supabase
-      .from('table_sessions')
-      .update({ is_active: false, closed_at: new Date().toISOString() })
-      .eq('id', request.table_session_id);
-
-    toast.success('Bill resolved & table freed');
-    fetchBillRequests();
-    fetchOrders();
+  /**
+   * The ✓ on a bill request used to resolve it AND free the table in one tap
+   * on a 24px target, without looking at whether anything was paid. It now
+   * opens a confirmation that goes through staff_close_session, which refuses
+   * while money is owed — with "just clear the request" for when the bill has
+   * been brought but the guests are still sitting.
+   */
+  const clearBillRequestOnly = async (request: BillRequest) => {
+    try {
+      await rpcResolveBillRequest(request.id, false);
+      toast.success(`Bill request for table ${request.table_number} cleared — table stays open`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to clear the bill request');
+    }
+    void fetchBillRequests();
   };
 
   /**
@@ -671,10 +849,16 @@ const KitchenDisplay = () => {
    * An order with nothing for this station is not "empty", it is not this
    * screen's problem — showing it would invite the barman to bump food.
    */
-  const visible = useMemo(() => orders
-    .filter((o) => sectionFilter === 'all' || o.section_id === sectionFilter)
-    .filter((o) => station === 'all' || o.items.some((i) => i.station === station)),
-  [orders, sectionFilter, station]);
+  const visible = useMemo(() => {
+    const mine = orders
+      .filter((o) => sectionFilter === 'all' || o.section_id === sectionFilter)
+      .filter((o) => station === 'all' || o.items.some((i) => i.station === station));
+    // History reads newest-first, like any log. The live board is a queue:
+    // oldest at the top of each column, because that is the ticket to cook
+    // next — newest-first buried the late table under the one that just came in.
+    if (historyView) return mine;
+    return [...mine].sort((a, b) => new Date(kitchenStart(a)).getTime() - new Date(kitchenStart(b)).getTime());
+  }, [orders, sectionFilter, station, historyView]);
 
   const renderCard = (order: KitchenOrder, showStatus: boolean) => (
     <KitchenOrderCard
@@ -836,9 +1020,11 @@ const KitchenDisplay = () => {
             >
               <Printer className="w-5 h-5" />
             </Button>
-            <Button asChild variant="ghost" size="icon" className="rounded-full min-h-[44px] min-w-[44px]" title="Printing settings">
-              <Link to="/admin/printing" aria-label="Printing settings"><Settings className="w-5 h-5" /></Link>
-            </Button>
+            {isAdmin && (
+              <Button asChild variant="ghost" size="icon" className="rounded-full min-h-[44px] min-w-[44px]" title="Printing settings">
+                <Link to="/admin/printing" aria-label="Printing settings"><Settings className="w-5 h-5" /></Link>
+              </Button>
+            )}
             <Button
               variant="ghost"
               size="icon"
@@ -884,6 +1070,9 @@ const KitchenDisplay = () => {
         </div>
       </div>
 
+      {/* Above the calls: a held order is a guest waiting for food nobody is making. */}
+      <HeldOrdersCard soundEnabled={soundEnabled} className="mx-4 sm:mx-6 mt-3" onChanged={refetchOrders} />
+
       <AnimatePresence>
         {waiterCalls.length > 0 && (
           <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="bg-accent/10 border-b border-accent/20 overflow-hidden">
@@ -893,11 +1082,21 @@ const KitchenDisplay = () => {
               </p>
               <div className="flex flex-wrap gap-2">
                 {waiterCalls.map((call) => (
-                  <motion.div key={call.id} initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="flex items-center gap-2 px-3 py-2 rounded-full bg-accent/15 border border-accent/25 min-h-[44px]">
-                    <span className="text-sm font-sans font-semibold text-accent">Table {call.table_number}</span>
-                    <span className="text-xs text-accent/70 font-sans"><Ago at={call.created_at} /></span>
-                    <button onClick={() => resolveWaiterCall(call.id)} className="w-6 h-6 rounded-full bg-accent/20 flex items-center justify-center hover:bg-accent/40 transition-colors" aria-label="Resolve call">
-                      <X className="w-3 h-3 text-accent" />
+                  <motion.div key={call.id} initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="flex items-center gap-2 pl-4 pr-1 py-1 rounded-full bg-accent/15 border border-accent/25 min-h-[52px]">
+                    <span className="text-base font-sans font-bold text-accent">Table {call.table_number}</span>
+                    <span className="text-sm text-accent/80 font-sans">
+                      <Ago at={call.created_at} />
+                      {call.status === 'acknowledged' && (
+                        <> · <Going name={(call.acknowledged_by && staffNames[call.acknowledged_by]) || 'Someone'} since={call.acknowledged_at} /></>
+                      )}
+                    </span>
+                    <button
+                      onClick={() => resolveWaiterCall(call.id)}
+                      disabled={clearing.has(call.id)}
+                      className="w-11 h-11 rounded-full bg-accent/20 flex items-center justify-center hover:bg-accent/40 disabled:opacity-50 transition-colors"
+                      aria-label="Resolve call"
+                    >
+                      <X className="w-5 h-5 text-accent" />
                     </button>
                   </motion.div>
                 ))}
@@ -916,11 +1115,20 @@ const KitchenDisplay = () => {
               </p>
               <div className="flex flex-wrap gap-2">
                 {billRequests.map((req) => (
-                  <motion.div key={req.id} initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="flex items-center gap-2 px-3 py-2 rounded-full bg-primary/15 border border-primary/25 min-h-[44px]">
-                    <span className="text-sm font-sans font-semibold text-primary">Table {req.table_number}</span>
-                    <span className="text-xs text-primary/70 font-sans"><Ago at={req.created_at} /></span>
-                    <button onClick={() => resolveBillRequest(req)} className="w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center hover:bg-primary/40 transition-colors" aria-label="Resolve bill request">
-                      <Check className="w-3 h-3 text-primary" />
+                  <motion.div key={req.id} initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="flex items-center gap-2 pl-4 pr-1 py-1 rounded-full bg-primary/15 border border-primary/25 min-h-[52px]">
+                    <span className="text-base font-sans font-bold text-primary">Table {req.table_number}</span>
+                    <span className="text-sm text-primary/80 font-sans">
+                      <Ago at={req.created_at} />
+                      {req.status === 'acknowledged' && (
+                        <> · <Going name={(req.acknowledged_by && staffNames[req.acknowledged_by]) || 'Someone'} since={req.acknowledged_at} /></>
+                      )}
+                    </span>
+                    <button
+                      onClick={() => setFreeing(req)}
+                      className="w-11 h-11 rounded-full bg-primary/20 flex items-center justify-center hover:bg-primary/40 transition-colors"
+                      aria-label="Resolve bill request"
+                    >
+                      <Check className="w-5 h-5 text-primary" />
                     </button>
                   </motion.div>
                 ))}
@@ -971,6 +1179,18 @@ const KitchenDisplay = () => {
           })}
         </div>
       )}
+
+      <FreeTableDialog
+        open={freeing !== null}
+        onOpenChange={(open) => { if (!open) setFreeing(null); }}
+        sessionId={freeing?.table_session_id ?? null}
+        tableNumber={freeing?.table_number ?? ''}
+        onFreed={() => { void fetchBillRequests(); void fetchWaiterCalls(); void fetchOrders(); }}
+        extraAction={freeing ? {
+          label: 'Just clear the request',
+          run: () => clearBillRequestOnly(freeing),
+        } : undefined}
+      />
 
       <Dialog open={voiding !== null} onOpenChange={(open) => { if (!open) { setVoiding(null); setVoidReason(''); } }}>
         <DialogContent className="sm:max-w-md">

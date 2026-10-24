@@ -46,6 +46,20 @@
 -- `shift_closes` rows keep the snapshots they were written with; a closed day
 -- is a historical record and is not rewritten here.
 --
+-- AND THE DAY ENDS AT 05:00, NOT AT MIDNIGHT
+--
+-- The first version of this file moved the boundary from UTC midnight to
+-- Sarajevo midnight. That fixed the time zone and kept the real defect: a
+-- service that runs past midnight is still one night of trade. With a midnight
+-- boundary the rota lookup flipped to the next date at 00:00 local, found no
+-- waiter assigned for a shift that had not been planned yet, and every table
+-- opened after midnight arrived with nobody attached to it. The drawer counted
+-- at 01:15 was likewise split across two days.
+--
+-- So the trading day runs 05:00 to 05:00 Sarajevo time. Nobody is serving at
+-- 05:00, and it is clear of both DST switches (02:00 and 03:00), so the cutoff
+-- is never an ambiguous or skipped local time.
+--
 -- Deliberately NOT changed: `order_code_counters` still rolls on `CURRENT_DATE`.
 -- Order numbering has fiscalisation implications and neither boundary is
 -- obviously right for a service that runs past midnight. It should be decided
@@ -56,33 +70,35 @@
  * The trading day a moment belongs to.
  *
  * Every "today" in an operational query should come from here, so that the day
- * a report covers is the same day the restaurant worked.
+ * a report covers is the same day the restaurant worked. Half past midnight
+ * belongs to the evening before it; the next day starts at 05:00 local.
  */
 CREATE OR REPLACE FUNCTION public.business_day(_at timestamptz DEFAULT now())
 RETURNS date
 LANGUAGE sql
 STABLE
-AS $$ SELECT (_at AT TIME ZONE 'Europe/Sarajevo')::date $$;
+AS $$ SELECT ((_at AT TIME ZONE 'Europe/Sarajevo') - interval '5 hours')::date $$;
 
 /**
  * The half-open range of instants belonging to a trading day.
  *
- * Note the cast: `_day::timestamp AT TIME ZONE 'Europe/Sarajevo'` reads the
- * naive midnight AS Sarajevo local time and yields the correct instant. The
- * broken version was `_day::timestamptz`, which reads it as UTC. The two look
- * almost identical and differ by the whole bug.
+ * Note the cast: `(_day + 05:00)::timestamp AT TIME ZONE 'Europe/Sarajevo'`
+ * reads the naive 05:00 AS Sarajevo local time and yields the correct instant.
+ * The broken version was `_day::timestamptz`, which reads it as UTC. The two
+ * look almost identical and differ by the whole bug.
  *
- * DST-safe: local midnight is never the ambiguous or skipped hour in European
- * zones, so the short and long days of the year come out at 23 and 25 hours
- * without special handling.
+ * DST-safe: 05:00 is never the ambiguous or skipped hour in European zones, so
+ * the short and long trading days of the year (the ones that contain the
+ * switch, i.e. the Saturday before it) come out at 23 and 25 hours without
+ * special handling.
  */
 CREATE OR REPLACE FUNCTION public.business_day_range(_day date)
 RETURNS TABLE(starts_at timestamptz, ends_at timestamptz)
 LANGUAGE sql
 IMMUTABLE
 AS $$
-  SELECT (_day::timestamp AT TIME ZONE 'Europe/Sarajevo'),
-         ((_day + 1)::timestamp AT TIME ZONE 'Europe/Sarajevo');
+  SELECT ((_day + time '05:00')::timestamp AT TIME ZONE 'Europe/Sarajevo'),
+         (((_day + 1) + time '05:00')::timestamp AT TIME ZONE 'Europe/Sarajevo');
 $$;
 
 GRANT EXECUTE ON FUNCTION public.business_day(timestamptz) TO authenticated;
@@ -221,5 +237,36 @@ BEGIN
     END IF;
     EXECUTE v_new;
     RAISE NOTICE 'rota lookup in % now uses the trading day', r.proname;
+  END LOOP;
+END $$;
+
+-- ---------------------------------------------------------------------
+-- Closing the day and counting covers — the same day, chosen the same way
+-- ---------------------------------------------------------------------
+
+DO $$
+DECLARE r record; v_def text; v_new text;
+BEGIN
+  /*
+   * close_shift, shift_close_for and covers_summary each picked "today" with
+   * their own `(now() AT TIME ZONE 'Europe/Sarajevo')::date`. That agreed with
+   * business_day() only while the boundary was midnight; with the 05:00 cutoff
+   * a manager closing up at 01:15 would otherwise be handed TOMORROW's (empty)
+   * drawer to count. They must ask the one function instead.
+   */
+  FOR r IN
+    SELECT p.oid, p.proname
+      FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+     WHERE n.nspname = 'public'
+       AND p.proname IN ('close_shift', 'shift_close_for', 'covers_summary')
+  LOOP
+    v_def := replace(pg_get_functiondef(r.oid), chr(13) || chr(10), chr(10));
+    v_new := replace(v_def, '(now() AT TIME ZONE ''Europe/Sarajevo'')::date', 'public.business_day()');
+    v_new := replace(v_new, '(s.opened_at AT TIME ZONE ''Europe/Sarajevo'')::date', 'public.business_day(s.opened_at)');
+    IF v_new = v_def THEN
+      RAISE EXCEPTION 'trading-day rewrite did not match in %', r.proname;
+    END IF;
+    EXECUTE v_new;
+    RAISE NOTICE '% now picks its day with business_day()', r.proname;
   END LOOP;
 END $$;

@@ -6,8 +6,11 @@ import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   ChevronDown, ChevronRight, ChevronUp, EyeOff, Image as ImageIcon, Languages,
-  Loader2, Pencil, Plus, RefreshCw, Search, Trash2, UtensilsCrossed, X,
+  Loader2, MoreVertical, Pencil, Plus, RefreshCw, Search, Trash2, UtensilsCrossed, X,
 } from 'lucide-react';
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
@@ -67,6 +70,45 @@ const ConfirmDelete = ({ trigger, title, description, onConfirm }: {
 const sortByOrder = <T extends { sort_order: number }>(arr?: T[] | null): T[] =>
   [...(arr ?? [])].sort((a, b) => a.sort_order - b.sort_order);
 
+/**
+ * Is this a "still referenced elsewhere" refusal?
+ *
+ * A dish that has ever been ordered is referenced by `order_items`, and the
+ * database refuses to delete it so that past orders, receipts and the day's
+ * reconciliation keep their lines. The page used to answer that with a bare
+ * "Failed to delete", which reads as a glitch and invites retrying.
+ */
+const isStillReferenced = (error: { code?: string; message?: string } | null) =>
+  !!error && (error.code === '23503' || /foreign key/i.test(error.message ?? ''));
+
+/**
+ * Available / Sold out, as one labelled control big enough for a thumb.
+ *
+ * It was a 28px "On"/"Off" ghost button — the most-used live control on the
+ * page, small enough to miss and worded so that "Off" could mean either the
+ * state or the action.
+ */
+const AvailabilitySwitch = ({ item, onToggle }: { item: MenuItemRow; onToggle: (item: MenuItemRow) => void }) => (
+  <button
+    type="button"
+    role="switch"
+    aria-checked={item.is_available}
+    aria-label={`${item.name}: ${item.is_available ? 'available' : 'sold out'}`}
+    onClick={() => onToggle(item)}
+    className={`inline-flex items-center gap-2 min-h-[44px] px-2.5 rounded-lg text-xs font-sans font-semibold transition-colors ${
+      item.is_available ? 'text-primary hover:bg-primary/10' : 'text-destructive hover:bg-destructive/10'
+    }`}
+  >
+    <span
+      aria-hidden
+      className={`relative inline-flex h-5 w-9 shrink-0 rounded-full transition-colors ${item.is_available ? 'bg-primary' : 'bg-muted-foreground/30'}`}
+    >
+      <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-background shadow transition-transform ${item.is_available ? 'translate-x-4' : 'translate-x-0.5'}`} />
+    </span>
+    <span className="w-[54px] text-left">{item.is_available ? 'Available' : 'Sold out'}</span>
+  </button>
+);
+
 const AdminMenu = () => {
   const [categories, setCategories] = useState<AdminCategory[]>([]);
   const [loading, setLoading] = useState(true);
@@ -83,6 +125,13 @@ const AdminMenu = () => {
   const [isTranslating, setIsTranslating] = useState(false);
   const [isMigrating, setIsMigrating] = useState(false);
   const [migrateResult, setMigrateResult] = useState<string | null>(null);
+
+  /** "Re-translate All" overwrites hand-corrected names, so it asks first. */
+  const [confirmRetranslate, setConfirmRetranslate] = useState(false);
+  /** An item whose delete was asked for — one dialog, reachable from the inline button and the phone menu. */
+  const [pendingDelete, setPendingDelete] = useState<MenuItemRow | null>(null);
+  /** An item the database refused to delete because past orders point at it. */
+  const [undeletable, setUndeletable] = useState<MenuItemRow | null>(null);
 
   const fetchMenu = useCallback(async () => {
     const { data, error } = await supabase
@@ -155,23 +204,74 @@ const AdminMenu = () => {
   };
 
   // ---- Toggle / delete ----
+  /** Patch one item in the local tree, without a refetch. */
+  const patchItem = useCallback((id: string, changes: Partial<MenuItemRow>) => {
+    setCategories((prev) => prev.map((cat) => ({
+      ...cat,
+      subcategories: (cat.subcategories ?? []).map((sub) => ({
+        ...sub,
+        menu_items: (sub.menu_items ?? []).map((it) => (it.id === id ? { ...it, ...changes } : it)),
+      })),
+    })));
+  }, []);
+
+  /**
+   * Sold out / back on, applied on screen at once.
+   *
+   * It used to wait for the write and then refetch the whole three-level menu,
+   * so the switch sat unchanged for a second and got tapped again — which
+   * toggled it straight back. The write is now confirmed afterwards and undone
+   * on screen if the database refuses it.
+   */
   const toggleAvailability = async (item: MenuItemRow) => {
     const next = !item.is_available;
+    patchItem(item.id, { is_available: next });
     const { error } = await supabase.from('menu_items').update({ is_available: next }).eq('id', item.id);
-    if (error) { toast.error('Failed to update item'); return; }
+    if (error) {
+      patchItem(item.id, { is_available: item.is_available });
+      toast.error(`Could not update ${item.name}: ${error.message}`);
+      return;
+    }
     // Taking something off mid-service is a decision worth confirming out
     // loud — it is the single most common live menu action.
-    toast.success(next ? `${item.name} is back on` : `86'd — ${item.name} is off the menu`);
-    await fetchMenu();
+    toast.success(next ? `${item.name} is back on` : `86'd — ${item.name} is sold out`);
   };
+
   const remove = async (table: 'categories' | 'subcategories' | 'menu_items', id: string) => {
     const { error } = table === 'categories'
       ? await supabase.from('categories').delete().eq('id', id)
       : table === 'subcategories'
         ? await supabase.from('subcategories').delete().eq('id', id)
         : await supabase.from('menu_items').delete().eq('id', id);
-    if (error) { toast.error('Failed to delete'); return; }
+    if (error) {
+      if (isStillReferenced(error)) {
+        if (table === 'menu_items') {
+          setUndeletable(menuItemById(id));
+        } else {
+          toast.error('Some dishes in here are on past orders, so it cannot be deleted. Mark those dishes sold out instead.');
+        }
+        return;
+      }
+      toast.error(`Failed to delete: ${error.message}`);
+      return;
+    }
     toast.success('Deleted'); await fetchMenu();
+  };
+
+  const menuItemById = (id: string): MenuItemRow | null => {
+    for (const cat of categories) {
+      for (const sub of cat.subcategories ?? []) {
+        const hit = (sub.menu_items ?? []).find((it) => it.id === id);
+        if (hit) return hit;
+      }
+    }
+    return null;
+  };
+
+  const markSoldOutInstead = async (item: MenuItemRow) => {
+    setUndeletable(null);
+    if (!item.is_available) { toast.info(`${item.name} is already sold out`); return; }
+    await toggleAvailability(item);
   };
 
   /**
@@ -246,7 +346,7 @@ const AdminMenu = () => {
             {isTranslating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Languages className="w-4 h-4" />}
             {isTranslating ? 'Translating…' : 'Auto-Translate'}
           </Button>
-          <Button onClick={() => translateMenu(true)} disabled={isTranslating} variant="outline" size="sm" className="rounded-lg font-sans gap-1">
+          <Button onClick={() => setConfirmRetranslate(true)} disabled={isTranslating} variant="outline" size="sm" className="rounded-lg font-sans gap-1">
             <RefreshCw className="w-4 h-4" /> Re-translate All
           </Button>
           <Button onClick={migrateImages} disabled={isMigrating} variant="outline" size="sm" className="rounded-lg font-sans gap-1" title="Download all external images and self-host them">
@@ -329,11 +429,9 @@ const AdminMenu = () => {
                     <p className="text-xs text-muted-foreground truncate">{path} · {Number(item.price).toFixed(2)} KM</p>
                   </div>
                   <div className="flex items-center gap-0.5 shrink-0">
-                    <Button variant="ghost" size="sm" className="h-8 px-2 text-xs" onClick={() => toggleAvailability(item)}>
-                      {item.is_available ? 'On' : 'Off'}
-                    </Button>
-                    <Button variant="ghost" size="icon" className="h-8 w-8" aria-label={`Edit ${item.name}`} onClick={() => setItemDialog({ item })}>
-                      <Pencil className="w-3.5 h-3.5" />
+                    <AvailabilitySwitch item={item} onToggle={toggleAvailability} />
+                    <Button variant="ghost" size="icon" className="h-11 w-11" aria-label={`Edit ${item.name}`} onClick={() => setItemDialog({ item })}>
+                      <Pencil className="w-4 h-4" />
                     </Button>
                   </div>
                 </div>
@@ -437,7 +535,7 @@ const AdminMenu = () => {
                                 <p className="text-xs text-muted-foreground font-sans px-2 py-3 text-center">No items yet. Use + to add one.</p>
                               )}
                               {items.map((item, itemIdx) => (
-                                <div key={item.id} className="flex items-center justify-between py-2 px-2 rounded-lg hover:bg-muted/30">
+                                <div key={item.id} className="flex items-center justify-between gap-2 py-2 px-2 rounded-lg hover:bg-muted/30">
                                   <div className="min-w-0 flex items-center gap-3">
                                     {item.image_url
                                       ? <img src={item.image_url} alt={item.name} className="w-10 h-10 rounded-lg object-cover shrink-0" />
@@ -453,18 +551,38 @@ const AdminMenu = () => {
                                     </div>
                                   </div>
                                   <div className="flex items-center gap-0.5 shrink-0">
-                                    <Button variant="ghost" size="icon" className="h-7 w-7" disabled={itemIdx === 0} aria-label="Move up" onClick={() => move('menu_items', items, item.id, 'up')}><ChevronUp className="w-3.5 h-3.5" /></Button>
-                                    <Button variant="ghost" size="icon" className="h-7 w-7" disabled={itemIdx === items.length - 1} aria-label="Move down" onClick={() => move('menu_items', items, item.id, 'down')}><ChevronDown className="w-3.5 h-3.5" /></Button>
-                                    <Button variant="ghost" size="sm" className="h-7 px-2 text-xs gap-1" aria-label={`${item.is_available ? 'Hide' : 'Show'} ${item.name}`} onClick={() => toggleAvailability(item)}>
-                                      {item.is_available ? 'On' : 'Off'}
-                                    </Button>
-                                    <Button variant="ghost" size="icon" className="h-7 w-7" aria-label={`Edit ${item.name}`} onClick={() => setItemDialog({ item })}><Pencil className="w-3.5 h-3.5" /></Button>
-                                    <ConfirmDelete
-                                      trigger={<Button variant="ghost" size="icon" className="h-7 w-7" aria-label={`Delete ${item.name}`}><Trash2 className="w-3.5 h-3.5 text-destructive" /></Button>}
-                                      title={`Delete “${item.name}”?`}
-                                      description="This permanently removes the item from the menu."
-                                      onConfirm={() => remove('menu_items', item.id)}
-                                    />
+                                    <AvailabilitySwitch item={item} onToggle={toggleAvailability} />
+                                    {/* Inline on a wide screen; on a phone the four small
+                                        buttons crowded the switch off the row, so they live
+                                        behind one menu button instead. */}
+                                    <div className="hidden md:flex items-center gap-0.5">
+                                      <Button variant="ghost" size="icon" className="h-9 w-9" disabled={itemIdx === 0} aria-label="Move up" onClick={() => move('menu_items', items, item.id, 'up')}><ChevronUp className="w-4 h-4" /></Button>
+                                      <Button variant="ghost" size="icon" className="h-9 w-9" disabled={itemIdx === items.length - 1} aria-label="Move down" onClick={() => move('menu_items', items, item.id, 'down')}><ChevronDown className="w-4 h-4" /></Button>
+                                      <Button variant="ghost" size="icon" className="h-9 w-9" aria-label={`Edit ${item.name}`} onClick={() => setItemDialog({ item })}><Pencil className="w-4 h-4" /></Button>
+                                      <Button variant="ghost" size="icon" className="h-9 w-9" aria-label={`Delete ${item.name}`} onClick={() => setPendingDelete(item)}><Trash2 className="w-4 h-4 text-destructive" /></Button>
+                                    </div>
+                                    <DropdownMenu>
+                                      <DropdownMenuTrigger asChild>
+                                        <Button variant="ghost" size="icon" className="md:hidden h-11 w-11" aria-label={`More actions for ${item.name}`}>
+                                          <MoreVertical className="w-4 h-4" />
+                                        </Button>
+                                      </DropdownMenuTrigger>
+                                      <DropdownMenuContent align="end">
+                                        <DropdownMenuItem className="min-h-[44px]" onSelect={() => setItemDialog({ item })}>
+                                          <Pencil className="w-4 h-4 mr-2" /> Edit
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem className="min-h-[44px]" disabled={itemIdx === 0} onSelect={() => move('menu_items', items, item.id, 'up')}>
+                                          <ChevronUp className="w-4 h-4 mr-2" /> Move up
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem className="min-h-[44px]" disabled={itemIdx === items.length - 1} onSelect={() => move('menu_items', items, item.id, 'down')}>
+                                          <ChevronDown className="w-4 h-4 mr-2" /> Move down
+                                        </DropdownMenuItem>
+                                        <DropdownMenuSeparator />
+                                        <DropdownMenuItem className="min-h-[44px] text-destructive focus:text-destructive" onSelect={() => setPendingDelete(item)}>
+                                          <Trash2 className="w-4 h-4 mr-2" /> Delete
+                                        </DropdownMenuItem>
+                                      </DropdownMenuContent>
+                                    </DropdownMenu>
                                   </div>
                                 </div>
                               ))}
@@ -483,6 +601,69 @@ const AdminMenu = () => {
           })}
         </div>
       )}
+
+      <AlertDialog open={confirmRetranslate} onOpenChange={setConfirmRetranslate}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Re-translate the whole menu?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Every Bosnian and Arabic name and description is replaced with a fresh machine translation —
+              including any you corrected by hand. Use Auto-Translate instead to fill in only what is missing.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="min-h-[44px]">Keep my translations</AlertDialogCancel>
+            <AlertDialogAction
+              className="min-h-[44px] bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => { void translateMenu(true); }}
+            >
+              Overwrite all
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={pendingDelete !== null} onOpenChange={(open) => { if (!open) setPendingDelete(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete “{pendingDelete?.name}”?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This permanently removes the item from the menu. If it only needs to come off for tonight, mark it sold out instead.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="min-h-[44px]">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="min-h-[44px] bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => { if (pendingDelete) void remove('menu_items', pendingDelete.id); setPendingDelete(null); }}
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={undeletable !== null} onOpenChange={(open) => { if (!open) setUndeletable(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>“{undeletable?.name}” can't be deleted</AlertDialogTitle>
+            <AlertDialogDescription>
+              This dish is on past orders, so it can't be deleted without breaking those records — receipts, the
+              daily report and the reconciliation all point at it. Mark it sold out instead: guests stop seeing it,
+              and the history stays intact.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="min-h-[44px]">Leave it</AlertDialogCancel>
+            <AlertDialogAction
+              className="min-h-[44px]"
+              onClick={() => { if (undeletable) void markSoldOutInstead(undeletable); }}
+            >
+              Mark as sold out
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <MenuItemDialog
         open={!!itemDialog}

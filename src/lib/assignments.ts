@@ -1,5 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
-import { localDayISO } from '@/lib/reporting';
+import { businessDayISO } from '@/lib/reporting';
 
 export interface SectionAssignment {
   id: string;
@@ -19,7 +19,10 @@ export interface SectionAssignment {
  * in server time, so the client and server also disagreed about which shift a
  * new session belonged to.
  */
-export const todayISO = () => localDayISO();
+export const todayISO = () => businessDayISO();
+// The rota belongs to the trading day, which now ends at 05:00 (see
+// 20260805090000_business_day.sql). A manager assigning waiters at 00:30 is
+// still working tonight's service, not writing tomorrow's rota.
 
 /**
  * Assign (or clear) the single waiter covering a section for a shift date.

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import type { RealtimeChannel } from '@supabase/supabase-js';
@@ -71,11 +71,34 @@ const WATCHED_TABLES = Object.keys(TABLE_TO_KEYS);
 /** A caller that just wants to know an event happened — e.g. to play a sound. */
 export type EventListener = (table: string, eventType: string) => void;
 
+/**
+ * Why a screen is being asked to reload everything.
+ *
+ *  - `poll`       the socket is down; this is the 15-second fallback tick
+ *  - `subscribed` the socket (re)connected; catch up on what was missed
+ *  - `safety`     slow heartbeat while live, for the event a socket that says
+ *                 SUBSCRIBED has quietly dropped
+ *  - `visible`    the tab came back to the foreground (a phone in a pocket)
+ *  - `online`     the device got its network back
+ */
+export type RefreshReason = 'poll' | 'subscribed' | 'safety' | 'visible' | 'online';
+export type RefreshListener = (reason: RefreshReason) => void;
+
 const DEBOUNCE_MS = 250;
 /** Slower than the rest: it is a summary, and staleness there is invisible. */
 const SLOW_KEYS = new Set([staffKeys.allDay.join('|')]);
 const SLOW_DEBOUNCE_MS = 750;
 const POLL_MS = 15_000;
+/**
+ * Even a "live" socket is re-checked this often.
+ *
+ * Supabase realtime can report SUBSCRIBED while a server-side hiccup has
+ * dropped an event, and a kitchen board missing one ticket looks exactly like
+ * a quiet minute. A minute's worst-case staleness is the price of never
+ * trusting the socket completely. Only plain listeners hear this; the React
+ * Query keys already refetch on events.
+ */
+const SAFETY_MS = 60_000;
 
 class StaffRealtime {
   private channel: RealtimeChannel | null = null;
@@ -83,6 +106,9 @@ class StaffRealtime {
   private client: QueryClient | null = null;
   private timers = new Map<string, ReturnType<typeof setTimeout>>();
   private poll: ReturnType<typeof setInterval> | undefined;
+  private safety: ReturnType<typeof setInterval> | undefined;
+  private refreshListeners = new Set<RefreshListener>();
+  private detachWindow: (() => void) | null = null;
 
   private state: ConnectionState = 'connecting';
   private stateListeners = new Set<(s: ConnectionState) => void>();
@@ -98,6 +124,26 @@ class StaffRealtime {
   onEvent(listener: EventListener) {
     this.eventListeners.add(listener);
     return () => { this.eventListeners.delete(listener); };
+  }
+
+  /**
+   * Hear every moment a screen should reload from scratch.
+   *
+   * The polling fallback and the reconnect catch-up used to reach only React
+   * Query keys, and the kitchen board, the floor monitor and the waiter phone
+   * keep their data in plain state. So on restaurant wifi the pill said
+   * "refreshing every 15s" while those three screens refreshed never.
+   */
+  onRefresh(listener: RefreshListener) {
+    this.refreshListeners.add(listener);
+    return () => { this.refreshListeners.delete(listener); };
+  }
+
+  private refresh(reason: RefreshReason) {
+    this.refreshListeners.forEach((l) => {
+      // One broken screen must not stop the others hearing the tick.
+      try { l(reason); } catch { /* the screen reports its own failure */ }
+    });
   }
 
   private setState(next: ConnectionState) {
@@ -146,7 +192,10 @@ class StaffRealtime {
             : 'connecting',
       );
       // Catch up on anything missed while the socket was down.
-      if (status === 'SUBSCRIBED') this.invalidateAll();
+      if (status === 'SUBSCRIBED') {
+        this.invalidateAll();
+        this.refresh('subscribed');
+      }
     });
 
     this.channel = channel;
@@ -154,8 +203,32 @@ class StaffRealtime {
     // The fallback that makes a dropped socket "slightly stale" instead of
     // "silently frozen". Only runs while not live.
     this.poll = setInterval(() => {
-      if (this.state !== 'live') this.invalidateAll();
+      if (this.state !== 'live') {
+        this.invalidateAll();
+        this.refresh('poll');
+      }
     }, POLL_MS);
+
+    this.safety = setInterval(() => {
+      if (this.state === 'live') this.refresh('safety');
+    }, SAFETY_MS);
+
+    // A phone that was in a pocket, or a tablet whose wifi blinked, has missed
+    // events it will never be sent. Reload the moment it is looked at again.
+    if (typeof window !== 'undefined' && typeof document !== 'undefined') {
+      const onVisible = () => {
+        if (document.visibilityState !== 'visible') return;
+        this.invalidateAll();
+        this.refresh('visible');
+      };
+      const onOnline = () => { this.invalidateAll(); this.refresh('online'); };
+      document.addEventListener('visibilitychange', onVisible);
+      window.addEventListener('online', onOnline);
+      this.detachWindow = () => {
+        document.removeEventListener('visibilitychange', onVisible);
+        window.removeEventListener('online', onOnline);
+      };
+    }
   }
 
   release() {
@@ -166,6 +239,10 @@ class StaffRealtime {
     this.timers.clear();
     clearInterval(this.poll);
     this.poll = undefined;
+    clearInterval(this.safety);
+    this.safety = undefined;
+    this.detachWindow?.();
+    this.detachWindow = null;
 
     if (this.channel) {
       void supabase.removeChannel(this.channel);
@@ -200,6 +277,51 @@ export function useStaffRealtime(): ConnectionState {
 /** React to raw events — for sounds and notifications, not for data. */
 export function useStaffRealtimeEvent(listener: EventListener) {
   useEffect(() => realtime.onEvent(listener), [listener]);
+}
+
+/**
+ * Reload on every poll tick, reconnect, safety heartbeat, return to the
+ * foreground and network recovery. A screen that keeps its data in plain state
+ * must use this, or it freezes silently whenever the socket does.
+ */
+export function useStaffRefresh(listener: RefreshListener) {
+  useEffect(() => realtime.onRefresh(listener), [listener]);
+}
+
+/**
+ * A trailing-debounced version of `fn`.
+ *
+ * A six-item order is seven realtime events. Running a full refetch on each
+ * meant seven overlapping requests per device, finishing in any order. This
+ * turns the burst into one call ~300ms after it ends. The returned function is
+ * stable and always runs the latest `fn`.
+ */
+export function useCoalesced(fn: () => void, delayMs = 300): () => void {
+  const fnRef = useRef(fn);
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useEffect(() => { fnRef.current = fn; }, [fn]);
+  useEffect(() => () => clearTimeout(timer.current), []);
+  return useCallback(() => {
+    clearTimeout(timer.current);
+    timer.current = setTimeout(() => fnRef.current(), delayMs);
+  }, [delayMs]);
+}
+
+/**
+ * Drop out-of-order responses.
+ *
+ * Two refetches in flight can resolve in either order, and the older one
+ * landing last puts a stale board back on screen: a bumped ticket reappears, a
+ * cleared call comes back. `begin()` stamps a request, and the closure it
+ * returns says whether that request is still the newest when it lands.
+ */
+export function useLatestRequest(): () => () => boolean {
+  const seq = useRef(0);
+  return useCallback(() => {
+    seq.current += 1;
+    const mine = seq.current;
+    return () => mine === seq.current;
+  }, []);
 }
 
 export const __realtimeForTests = realtime;

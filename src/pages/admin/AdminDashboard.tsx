@@ -10,7 +10,8 @@ import {
   CheckCircle2, Circle, ArrowRight, Sparkles, X,
 } from 'lucide-react';
 import { staggerContainer, fadeUp, useCountUp } from '@/lib/motion';
-import { todayISO } from '@/lib/assignments';
+import { orderStatusLabel } from '@/components/staff/order-status';
+import { getSuggestionImpact, type SuggestionImpact } from '@/lib/menu-intelligence';
 
 const SETUP_DISMISS_KEY = 'admin:setupDismissed';
 
@@ -59,7 +60,7 @@ const SetupChecklist = ({ counts, onDismiss }: { counts: SetupCounts; onDismiss:
   );
 };
 import type { Database } from '@/integrations/supabase/types';
-import { localDayRange, onlySales, summarise, timeToAccept, timeToReady, timeToServe, openAgeMinutes } from '@/lib/reporting';
+import { businessDayISO, businessDayRange, onlySales, summarise, timeToAccept, timeToReady, timeToServe, openAgeMinutes } from '@/lib/reporting';
 
 type OrderStatus = Database['public']['Enums']['order_status'];
 type DashboardOrder = Pick<
@@ -102,19 +103,69 @@ const StatCard = ({
   return (
     <motion.div variants={fadeUp}>
       <Card className="border-border card-lux-hover">
-        <CardContent className="p-6">
-          <div className="flex items-center justify-between">
-            <div>
+        <CardContent className="p-4 sm:p-6">
+          <div className="flex items-center justify-between gap-2">
+            <div className="min-w-0">
               <p className="text-sm font-sans text-muted-foreground">{label}</p>
-              <p className="text-2xl font-serif font-bold text-foreground mt-1 tabular-nums">{format(n)}</p>
+              <p className="text-xl sm:text-2xl font-serif font-bold text-foreground mt-1 tabular-nums">{format(n)}</p>
             </div>
-            <div className={`w-10 h-10 rounded-lg bg-muted flex items-center justify-center ${color}`}>
+            <div className={`hidden sm:flex w-10 h-10 rounded-lg bg-muted items-center justify-center shrink-0 ${color}`}>
               <Icon className="w-5 h-5" />
             </div>
           </div>
         </CardContent>
       </Card>
     </motion.div>
+  );
+};
+
+/**
+ * Are suggestions earning anything? One line for the owner, on the page they
+ * open every day, with the detail one tap away. The figure is sales on lines
+ * a guest added from a suggestion — an upper bound, which is why the link goes
+ * to Menu Intelligence, where the holdout comparison says what was caused.
+ */
+const SuggestionsCard = () => {
+  const [impact, setImpact] = useState<SuggestionImpact | null>(null);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    getSuggestionImpact(7)
+      .then((data) => { if (!cancelled) setImpact(data); })
+      .catch(() => { if (!cancelled) setFailed(true); });
+    return () => { cancelled = true; };
+  }, []);
+
+  if (failed) return null;
+  const seen = impact?.seen ?? 0;
+  return (
+    <Card className="border-border mb-8">
+      <CardContent className="p-4 sm:p-6 flex flex-wrap items-center justify-between gap-4">
+        <div className="min-w-0">
+          <p className="text-sm font-sans text-muted-foreground flex items-center gap-1.5">
+            <Sparkles className="w-4 h-4 text-primary" aria-hidden /> Suggestions · last 7 days
+          </p>
+          {!impact ? (
+            <Skeleton className="h-7 w-48 mt-2 rounded" />
+          ) : seen === 0 ? (
+            <p className="text-sm font-sans text-foreground mt-1.5">
+              None shown yet. They start with the first orders, using the house pairings.
+            </p>
+          ) : (
+            <p className="mt-1 font-sans text-foreground">
+              <span className="font-serif text-2xl font-bold tabular-nums">{impact.attributed_revenue.toFixed(2)} KM</span>
+              <span className="text-sm text-muted-foreground ml-2">
+                from {impact.paid} added of {seen} shown
+                {impact.paid_acceptance_pct != null ? ` (${impact.paid_acceptance_pct}%)` : ''}
+              </span>
+            </p>
+          )}
+        </div>
+        <Button asChild variant="outline" className="rounded-xl min-h-[44px]">
+          <Link to="/admin/menu-intelligence">See what works</Link>
+        </Button>
+      </CardContent>
+    </Card>
   );
 };
 
@@ -139,16 +190,17 @@ const AdminDashboard = () => {
 
   useEffect(() => {
     const fetchStats = async () => {
-      // The restaurant's day, not UTC's. For a UTC+2 venue the old
-      // `toISOString()` boundary ran 02:00 to 02:00 local, so the Dashboard and
-      // the Performance page were reporting different windows.
-      const { start, end } = localDayRange();
+      // The restaurant's TRADING day, not UTC's and not the calendar's. For a
+      // UTC+2 venue the old `toISOString()` boundary ran 02:00 to 02:00 local;
+      // the calendar day then split a late service at midnight. This is the
+      // same 05:00-to-05:00 day `day_reconciliation()` and the Daily Report use.
+      const { start, end } = businessDayRange();
 
       const { data: orders } = await supabase
         .from('orders')
         .select('total, created_at, status, updated_at, guest_name, released_to_kitchen_at, confirmed_at, ready_at, served_at')
         .gte('created_at', start)
-        .lte('created_at', end);
+        .lt('created_at', end);
 
       // One shared definition of a sale. Excluding only `cancelled` counted
       // abandoned card checkouts that never reached the kitchen as takings,
@@ -176,7 +228,7 @@ const AdminDashboard = () => {
         .from('table_sessions')
         .select('*', { count: 'exact', head: true })
         .gte('opened_at', start)
-        .lte('opened_at', end);
+        .lt('opened_at', end);
 
       setStats({
         todayRevenue: revenue,
@@ -231,7 +283,9 @@ const AdminDashboard = () => {
         supabase.from('sections').select('*', { count: 'exact', head: true }),
         supabase.from('menu_items').select('*', { count: 'exact', head: true }),
         supabase.from('waiters').select('id', { count: 'exact', head: true }).eq('is_active', true),
-        supabase.from('section_assignments').select('*', { count: 'exact', head: true }).eq('shift_date', todayISO()),
+        // The rota is keyed by trading day (business_day()), so "assigned for
+        // tonight" at 00:30 means the shift that started yesterday evening.
+        supabase.from('section_assignments').select('*', { count: 'exact', head: true }).eq('shift_date', businessDayISO()),
       ]);
       setSetup({
         tables: tbl.count ?? 0,
@@ -283,7 +337,7 @@ const AdminDashboard = () => {
       )}
 
       {loading ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-8">
           {Array.from({ length: 7 }).map((_, i) => (
             <Skeleton key={i} className="h-[92px] rounded-xl" />
           ))}
@@ -293,13 +347,17 @@ const AdminDashboard = () => {
           variants={staggerContainer(0.05)}
           initial="hidden"
           animate="show"
-          className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8"
+          /* Two per row on a phone: one per row put seven tiles between the
+             manager and anything below them. */
+          className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-8"
         >
           {statCards.map((stat) => (
             <StatCard key={stat.label} {...stat} />
           ))}
         </motion.div>
       )}
+
+      <SuggestionsCard />
 
       <Card className="border-border mb-8">
         <CardHeader>
@@ -382,7 +440,7 @@ const AdminDashboard = () => {
                       order.status === 'served' ? 'bg-primary/10 text-primary' :
                       'bg-accent/10 text-accent'
                     }`}>
-                      {order.status}
+                      {orderStatusLabel(order.status)}
                     </span>
                   </div>
                 </div>

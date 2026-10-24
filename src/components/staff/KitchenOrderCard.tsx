@@ -1,11 +1,15 @@
 import React, { useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
-import { Ban, Check, ChefHat, CupSoda, FileJson, FileText, Printer, RotateCcw, Utensils } from 'lucide-react';
+import { Ban, Check, ChefHat, CupSoda, FileJson, FileText, MoreHorizontal, Printer, RotateCcw, Utensils } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import PaymentBadge from '@/components/PaymentBadge';
 import { useNow } from '@/lib/clock';
 import { formatMinutes, orderUrgency, urgencyMark, urgencyText, formatClock } from '@/lib/timing';
+import { kitchenStart, orderStatusLabel } from '@/components/staff/order-status';
 import type { Database } from '@/integrations/supabase/types';
 
 export type OrderStatus = Database['public']['Enums']['order_status'];
@@ -35,6 +39,15 @@ export interface KitchenOrder {
   payment_status: string | null;
   notes: string | null;
   created_at: string;
+  /**
+   * When the kitchen was actually given this order.
+   *
+   * For a cash order it is the moment it was placed; for a card order it is
+   * when the payment cleared, which can be minutes later. Everything the
+   * kitchen measures — ticket age, "is this new", auto-print — starts here, or
+   * a card order arrives on the board already looking late and never prints.
+   */
+  released_to_kitchen_at: string | null;
   confirmed_at: string | null;
   preparing_at: string | null;
   ready_at: string | null;
@@ -74,12 +87,13 @@ const statusColors: Partial<Record<OrderStatus, string>> = {
 
 /** The stamp for the stage an order is currently in — what per-stage aging measures from. */
 function stageStart(order: KitchenOrder): string {
+  const start = kitchenStart(order);
   switch (order.status) {
-    case 'confirmed': return order.confirmed_at ?? order.created_at;
-    case 'preparing': return order.preparing_at ?? order.created_at;
-    case 'ready': return order.ready_at ?? order.created_at;
-    case 'served': return order.served_at ?? order.created_at;
-    default: return order.created_at;
+    case 'confirmed': return order.confirmed_at ?? start;
+    case 'preparing': return order.preparing_at ?? start;
+    case 'ready': return order.ready_at ?? start;
+    case 'served': return order.served_at ?? start;
+    default: return start;
   }
 }
 
@@ -116,7 +130,7 @@ function UndoButton({
       type="button"
       disabled={busy}
       onClick={(e) => { e.stopPropagation(); setBusy(true); onUndo(); }}
-      className={`inline-flex items-center gap-1 rounded-full border border-border bg-card px-2.5 min-h-[36px] text-[11px] font-sans text-muted-foreground hover:text-foreground hover:border-foreground/30 disabled:opacity-50 transition-colors ${className}`}
+      className={`inline-flex items-center gap-1 rounded-full border border-border bg-card px-2.5 min-h-[44px] text-xs font-sans text-muted-foreground hover:text-foreground hover:border-foreground/30 disabled:opacity-50 transition-colors ${className}`}
       aria-label={`${label} — ${remaining} seconds left`}
     >
       <RotateCcw className="w-3 h-3" />
@@ -179,7 +193,7 @@ const KitchenOrderCard = ({
     [order.items, station],
   );
 
-  const ageMs = Math.max(0, now - new Date(order.created_at).getTime());
+  const ageMs = Math.max(0, now - new Date(kitchenStart(order)).getTime());
   const urgency = order.status === 'ready' || order.status === 'served' || order.status === 'cancelled'
     ? 'fresh'
     : orderUrgency(ageMs);
@@ -220,7 +234,9 @@ const KitchenOrderCard = ({
               {order.section_name}
             </span>
           )}
-          <span className="font-serif text-lg font-bold text-foreground">Table {order.table_number}</span>
+          {/* Read from across a kitchen, not from arm's length: the table
+              number is the one thing a runner must get right first time. */}
+          <span className="font-serif text-xl md:text-[28px] md:leading-8 font-bold text-foreground">Table {order.table_number}</span>
           {order.order_code && (
             <span className="text-xs font-sans font-semibold tabular-nums tracking-wider px-1.5 py-0.5 rounded bg-muted text-foreground">
               #{order.order_code}
@@ -234,7 +250,7 @@ const KitchenOrderCard = ({
             </span>
           )}
           {showStatus && (
-            <Badge className={`text-[11px] font-sans ${statusColors[order.status]}`}>{order.status}</Badge>
+            <Badge className={`text-xs font-sans ${statusColors[order.status]}`}>{orderStatusLabel(order.status)}</Badge>
           )}
           <PaymentBadge method={order.payment_method} status={order.payment_status} />
         </div>
@@ -242,13 +258,13 @@ const KitchenOrderCard = ({
         {/* Urgency is spelled out, not only coloured — colour alone fails for
             colour-blind staff and for anyone glancing across a room. */}
         <div className="text-right shrink-0">
-          <span className={`text-xs font-sans tabular-nums flex items-center justify-end gap-1 ${urgencyText(urgency)}`}>
+          <span className={`text-sm md:text-lg font-sans font-semibold tabular-nums flex items-center justify-end gap-1 ${urgencyText(urgency)}`}>
             {urgencyMark(urgency) && <span aria-hidden>{urgencyMark(urgency)}</span>}
             {formatMinutes(ageMs)}
             {urgency !== 'fresh' && <span className="sr-only"> — {urgency}</span>}
           </span>
-          <span className="block text-[10px] text-muted-foreground font-sans tabular-nums">
-            {STAGE_LABEL[order.status] ?? order.status} {formatMinutes(stageMs)} · {formatClock(order.created_at)}
+          <span className="block text-xs md:text-sm text-muted-foreground font-sans tabular-nums">
+            {STAGE_LABEL[order.status] ?? orderStatusLabel(order.status)} {formatMinutes(stageMs)} · {formatClock(kitchenStart(order))}
           </span>
         </div>
       </div>
@@ -268,26 +284,34 @@ const KitchenOrderCard = ({
                   : item.status === 'preparing' ? 'bg-accent/10' : 'bg-muted/40'
               }`}
             >
-              <button
-                type="button"
-                disabled={!next || inFlight}
-                onClick={() => next && run(item.id, () => onBumpItem(item.id, next))}
-                className="flex-1 min-w-0 text-left disabled:cursor-default"
-                aria-label={next ? `Mark ${item.menu_item_name} as ${next}` : `${item.menu_item_name} is ready`}
-              >
-                <p className={`text-sm font-sans font-medium ${item.status === 'ready' ? 'text-muted-foreground' : 'text-foreground'}`}>
+              {/*
+                Text, not a button. The whole row used to bump the line, so a
+                cook scrolling the board or steadying the tablet with a thumb
+                marked dishes as started or ready without meaning to — and the
+                note they were reading was exactly where they touched. Only the
+                labelled button on the right moves a line now.
+              */}
+              <div className="flex-1 min-w-0">
+                <p className={`text-base md:text-xl font-sans font-medium leading-snug ${item.status === 'ready' ? 'text-muted-foreground' : 'text-foreground'}`}>
                   <span className="tabular-nums font-bold">{item.quantity}×</span> {item.menu_item_name}
                   {station === 'all' && item.station === 'bar' && (
-                    <CupSoda className="inline w-3 h-3 ml-1 text-muted-foreground" aria-label="bar" />
+                    <CupSoda className="inline w-4 h-4 ml-1 text-muted-foreground" aria-label="bar" />
                   )}
                 </p>
-                {item.notes && <p className="text-xs text-accent italic mt-0.5">⚠ {item.notes}</p>}
+                {/* Notes and allergens are what get a dish sent back or a guest
+                    hurt. Small italic grey was the least legible text on the
+                    card; they are solid, bold blocks now. */}
+                {item.notes && (
+                  <p className="mt-1 inline-block rounded-md bg-amber-200 text-amber-950 dark:bg-amber-300 dark:text-black font-sans font-bold text-sm md:text-base px-2 py-0.5">
+                    ⚠ {item.notes}
+                  </p>
+                )}
                 {item.allergens && item.allergens.length > 0 && (
-                  <p className="text-[10px] uppercase tracking-wide text-destructive font-sans mt-0.5">
+                  <p className="mt-1 inline-block rounded-md bg-destructive text-destructive-foreground font-sans font-bold uppercase tracking-wide text-xs md:text-sm px-2 py-0.5">
                     Allergens: {item.allergens.join(', ')}
                   </p>
                 )}
-              </button>
+              </div>
 
               {prev && (
                 <UndoButton
@@ -304,12 +328,13 @@ const KitchenOrderCard = ({
                   variant={item.status === 'preparing' ? 'default' : 'outline'}
                   disabled={inFlight}
                   onClick={() => run(item.id, () => onBumpItem(item.id, next))}
-                  className="h-10 min-w-[68px] rounded-lg text-xs font-sans shrink-0 active:scale-95 transition-transform"
+                  aria-label={`Mark ${item.menu_item_name} as ${next}`}
+                  className="min-h-[44px] min-w-[76px] rounded-lg text-sm font-sans font-semibold shrink-0 active:scale-95 transition-transform"
                 >
                   {ITEM_ACTION[item.status]}
                 </Button>
               ) : (
-                <span className="inline-flex items-center gap-1 text-xs font-sans text-primary px-2 shrink-0">
+                <span className="inline-flex items-center gap-1 text-sm font-sans font-semibold text-primary px-2 shrink-0">
                   <Check className="w-4 h-4" /> Up
                 </span>
               )}
@@ -323,8 +348,10 @@ const KitchenOrderCard = ({
       </div>
 
       {order.notes && (
-        <div className="px-4 pb-2">
-          <p className="text-xs text-accent italic">Note: {order.notes}</p>
+        <div className="px-3 pb-2">
+          <p className="rounded-md bg-amber-200 text-amber-950 dark:bg-amber-300 dark:text-black font-sans font-bold text-sm md:text-base px-2.5 py-1.5">
+            Note: {order.notes}
+          </p>
         </div>
       )}
 
@@ -342,7 +369,7 @@ const KitchenOrderCard = ({
               size="sm"
               disabled={busy.has('start-all')}
               onClick={() => run('start-all', () => onBumpMany(pending.map((i) => i.id), 'preparing'))}
-              className="h-10 rounded-lg text-xs font-sans gap-1.5"
+              className="min-h-[44px] rounded-lg text-sm font-sans gap-1.5"
             >
               <ChefHat className="w-3.5 h-3.5" /> Start all ({pending.length})
             </Button>
@@ -352,7 +379,7 @@ const KitchenOrderCard = ({
               size="sm"
               disabled={busy.has('all-ready')}
               onClick={() => run('all-ready', () => onBumpMany(notReady.map((i) => i.id), 'ready'))}
-              className="h-10 flex-1 min-w-[140px] rounded-lg bg-primary text-primary-foreground text-sm font-sans active:scale-95 transition-transform"
+              className="min-h-[44px] flex-1 min-w-[140px] rounded-lg bg-primary text-primary-foreground text-sm font-sans active:scale-95 transition-transform"
             >
               All ready ({notReady.length})
             </Button>
@@ -362,7 +389,7 @@ const KitchenOrderCard = ({
               size="sm"
               disabled={busy.has('served')}
               onClick={() => run('served', () => onAdvanceOrder(order.id, 'served'))}
-              className="h-10 flex-1 min-w-[140px] rounded-lg bg-primary text-primary-foreground text-sm font-sans active:scale-95 transition-transform"
+              className="min-h-[44px] flex-1 min-w-[140px] rounded-lg bg-primary text-primary-foreground text-sm font-sans active:scale-95 transition-transform"
             >
               <Utensils className="w-4 h-4 mr-1.5" /> Mark served
             </Button>
@@ -373,15 +400,28 @@ const KitchenOrderCard = ({
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <Button variant="ghost" size="sm" className="h-9 rounded-lg gap-1.5 text-xs" onClick={() => onPrint(order)}>
-            <Printer className="w-3.5 h-3.5" /> {failedPrint ? 'Reprint' : 'Print'}
+          <Button variant="ghost" size="sm" className="min-h-[44px] rounded-lg gap-1.5 text-sm" onClick={() => onPrint(order)}>
+            <Printer className="w-4 h-4" /> {failedPrint ? 'Reprint' : 'Print'}
           </Button>
-          <Button variant="ghost" size="sm" className="h-9 rounded-lg gap-1.5 text-xs" onClick={() => onExport(order, 'json')}>
-            <FileJson className="w-3.5 h-3.5" /> JSON
-          </Button>
-          <Button variant="ghost" size="sm" className="h-9 rounded-lg gap-1.5 text-xs" onClick={() => onExport(order, 'csv')}>
-            <FileText className="w-3.5 h-3.5" /> CSV
-          </Button>
+
+          {/* Exports are an integration/debugging tool, not service. Two
+              always-visible buttons on every ticket were two more things to
+              mis-tap next to Print, so they live behind one overflow menu. */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" className="min-h-[44px] min-w-[44px] rounded-lg" aria-label="More ticket actions">
+                <MoreHorizontal className="w-4 h-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start">
+              <DropdownMenuItem onSelect={() => onExport(order, 'json')} className="min-h-[44px] gap-2">
+                <FileJson className="w-4 h-4" /> Export JSON
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => onExport(order, 'csv')} className="min-h-[44px] gap-2">
+                <FileText className="w-4 h-4" /> Export CSV
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
 
           {revertFrom && (
             <UndoButton
@@ -397,7 +437,7 @@ const KitchenOrderCard = ({
               variant="ghost"
               size="sm"
               onClick={() => onCancel(order)}
-              className="h-9 ml-auto rounded-lg gap-1.5 text-xs text-destructive hover:text-destructive hover:bg-destructive/10"
+              className="min-h-[44px] ml-auto rounded-lg gap-1.5 text-sm text-destructive hover:text-destructive hover:bg-destructive/10"
             >
               <Ban className="w-3.5 h-3.5" /> Void
             </Button>

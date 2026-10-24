@@ -61,6 +61,42 @@ export function localDayRange(day: string = localDayISO()): { start: string; end
   return { start: start.toISOString(), end: end.toISOString() };
 }
 
+/**
+ * Hour (local) at which one trading day ends and the next begins.
+ *
+ * Must match `business_day()` in
+ * `supabase/migrations/20260805090000_business_day.sql`. A service that runs
+ * past midnight is one night of trade: the 00:30 sale belongs with the 23:30
+ * one, the drawer counted at 01:15 is that night's drawer, and the waiter rota
+ * does not flip to an unplanned tomorrow while guests are still seated.
+ */
+export const BUSINESS_DAY_CUTOFF_HOUR = 5;
+
+/**
+ * The trading day a moment belongs to, as `YYYY-MM-DD`.
+ *
+ * Assumes the device clock is on Sarajevo time, which every device in the
+ * restaurant is. Computed on the local calendar rather than by subtracting
+ * five hours of milliseconds, so the two DST nights do not shift the cutoff.
+ */
+export function businessDayISO(date: Date = new Date()): string {
+  const d = new Date(date.getTime());
+  if (d.getHours() < BUSINESS_DAY_CUTOFF_HOUR) d.setDate(d.getDate() - 1);
+  return localDayISO(d);
+}
+
+/**
+ * The half-open range of a trading day: `start` inclusive, `end` exclusive.
+ *
+ * Use with `.gte(start).lt(end)` — the day ends exactly where the next starts.
+ */
+export function businessDayRange(day: string = businessDayISO()): { start: string; end: string } {
+  const [y, m, d] = day.split('-').map(Number);
+  const start = new Date(y, (m ?? 1) - 1, d ?? 1, BUSINESS_DAY_CUTOFF_HOUR, 0, 0, 0);
+  const end = new Date(y, (m ?? 1) - 1, (d ?? 1) + 1, BUSINESS_DAY_CUTOFF_HOUR, 0, 0, 0);
+  return { start: start.toISOString(), end: end.toISOString() };
+}
+
 /* ---- Service timings, from the stamps the schema already keeps -------- */
 
 export interface TimedOrder {

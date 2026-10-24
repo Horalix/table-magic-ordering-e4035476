@@ -5,18 +5,29 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { formatDuration, formatMinutes, useElapsed, useElapsedMinutes } from '@/lib/timing';
 import { useNow, useNowBucketed } from '@/lib/clock';
-import { useStaffRealtime, useStaffRealtimeEvent } from '@/lib/realtime';
+import {
+  useCoalesced, useLatestRequest, useStaffRealtime, useStaffRealtimeEvent, useStaffRefresh,
+} from '@/lib/realtime';
 import ConnectionPill from '@/components/staff/ConnectionPill';
 import TableActionSheet, { type SheetTable } from '@/components/monitor/TableActionSheet';
-import { localDayISO } from '@/lib/reporting';
+import { businessDayISO } from '@/lib/reporting';
 import { ArrowLeft, Bell, CheckCircle2, ChefHat, Clock, Grid3x3, Lock, LogIn, Receipt, Users, Volume2, VolumeX } from 'lucide-react';
 import PinPad from '@/components/monitor/PinPad';
 import { toast } from 'sonner';
-import { playOrderAlert, playWaiterCallAlert, playBillRequestAlert, unlockAudio } from '@/lib/kitchen-sounds';
+import {
+  playOrderAlert, playWaiterCallAlert, playBillRequestAlert, useAudioUnlock, useReminderChime,
+} from '@/lib/kitchen-sounds';
+import { useStaffDocument } from '@/components/staff/useStaffDocument';
+import { isHeld, isInKitchen, kitchenStart } from '@/components/staff/order-status';
+import HeldOrdersCard from '@/components/staff/HeldOrdersCard';
 import type { Database } from '@/integrations/supabase/types';
 
 type Section = Pick<Database['public']['Tables']['sections']['Row'], 'id' | 'name' | 'color'>;
-type Waiter = Pick<Database['public']['Tables']['waiters']['Row'], 'id' | 'display_name' | 'is_active'> & { has_pin?: boolean | null };
+type Waiter = Pick<Database['public']['Tables']['waiters']['Row'], 'id' | 'display_name' | 'is_active'> & {
+  has_pin?: boolean | null;
+  /** The auth user — what `acknowledged_by` on a call holds, NOT the waiter id. */
+  user_id?: string | null;
+};
 type TableRow = Pick<Database['public']['Tables']['tables']['Row'], 'id' | 'table_number' | 'section_id'> & {
   sections?: Section | null;
 };
@@ -28,15 +39,22 @@ type Order = Pick<
   Database['public']['Tables']['orders']['Row'],
   'id' | 'table_session_id' | 'status' | 'created_at' | 'assigned_waiter_id'
   | 'order_code' | 'total' | 'payment_status' | 'payment_method' | 'notes'
+  | 'refunded_amount' | 'released_to_kitchen_at' | 'held_reason'
 >;
 type Call = Pick<
   Database['public']['Tables']['waiter_calls']['Row'],
   'id' | 'table_session_id' | 'status' | 'created_at' | 'acknowledged_by'
->;
+> & { acknowledged_at?: string | null };
 type BillReq = Pick<
   Database['public']['Tables']['bill_requests']['Row'],
   'id' | 'table_session_id' | 'status' | 'created_at' | 'acknowledged_by'
->;
+> & { acknowledged_at?: string | null };
+
+/**
+ * In the kitchen and not yet on the table — what "orders" and "oldest wait" mean on this screen.
+ * A held order is not in the kitchen: it sits in the "Needs confirming" card instead.
+ */
+const isOpenKitchenOrder = (o: Order) => isInKitchen(o.status) && !isHeld(o) && o.status !== 'served';
 type Assignment = Pick<Database['public']['Tables']['section_assignments']['Row'], 'section_id' | 'waiter_id' | 'shift_date'>;
 type WaiterStats = { total: number; occupied: number; calls: number; bills: number; ready: number };
 type TableState = 'free' | 'occupied' | 'ready' | 'call' | 'bill';
@@ -45,6 +63,7 @@ const LAST_WAITER_KEY = 'monitor:lastWaiterId';
 const IDLE_MS = 5 * 60 * 1000;
 
 const WaiterMonitor = () => {
+  useStaffDocument();
   const [tables, setTables] = useState<TableRow[]>([]);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
@@ -87,38 +106,44 @@ const WaiterMonitor = () => {
     void supabase.auth.getUser().then(({ data }) => setMeId(data.user?.id ?? null));
   }, []);
 
-  // Unlock audio on the first tap so event-driven alerts can play.
-  useEffect(() => {
-    const unlock = () => unlockAudio();
-    window.addEventListener('pointerdown', unlock, { once: true });
-    return () => window.removeEventListener('pointerdown', unlock);
-  }, []);
+  // One shared audio context, unlocked on the first tap anywhere, with an
+  // honest flag the header can show. This screen used to unlock on
+  // pointerdown with no way to tell whether it had worked.
+  const { unlocked: audioUnlocked, unlock: unlockSound } = useAudioUnlock();
+  /** Shown instead of a toast storm: the board says it is stale until a fetch succeeds. */
+  const [stale, setStale] = useState(false);
+  const beginFetch = useLatestRequest();
 
   const fetchAll = useCallback(async () => {
-    // Local date. The UTC one rolled the whole floor plan back to yesterday
-    // every night after midnight Sarajevo time.
-    const today = localDayISO();
+    const isLatest = beginFetch();
+    // The TRADING day, which runs to 05:00. The calendar day rolled the floor
+    // plan over at midnight, mid-service, and every section lost its waiter.
+    const today = businessDayISO();
     const [t, s, o, c, b, w, a] = await Promise.all([
       supabase.from('tables').select('id, table_number, section_id, sections(id, name, color)').order('table_number'),
       supabase.from('table_sessions').select('id, table_id, is_active, opened_at, guest_name, assigned_waiter_id, covers').eq('is_active', true),
       supabase.from('orders')
-        .select('id, table_session_id, status, created_at, assigned_waiter_id, order_code, total, payment_status, payment_method, notes')
+        .select('id, table_session_id, status, created_at, assigned_waiter_id, order_code, total, payment_status, payment_method, notes, refunded_amount, released_to_kitchen_at, held_reason')
         .not('status', 'in', '("cancelled")')
         .gte('created_at', new Date(Date.now() - 18 * 60 * 60 * 1000).toISOString()),
       // Open, not merely pending: a claimed call is still someone's problem
       // until it is resolved, and hiding it makes the claim look like a fix.
-      supabase.from('waiter_calls').select('id, table_session_id, status, created_at, acknowledged_by')
+      supabase.from('waiter_calls').select('id, table_session_id, status, created_at, acknowledged_by, acknowledged_at')
         .neq('status', 'resolved').order('created_at', { ascending: true }),
-      supabase.from('bill_requests').select('id, table_session_id, status, created_at, acknowledged_by')
+      supabase.from('bill_requests').select('id, table_session_id, status, created_at, acknowledged_by, acknowledged_at')
         .neq('status', 'resolved').order('created_at', { ascending: true }),
-      supabase.from('waiters').select('id, display_name, is_active, has_pin').eq('is_active', true).order('display_name'),
+      supabase.from('waiters').select('id, user_id, display_name, is_active, has_pin').eq('is_active', true).order('display_name'),
       supabase.from('section_assignments').select('section_id, waiter_id, shift_date').eq('shift_date', today),
     ]);
 
+    // An older refresh finishing after a newer one must not roll the floor back.
+    if (!isLatest()) return;
+
     if (t.error || s.error || o.error || c.error || b.error || w.error || a.error) {
-      toast.error('Failed to refresh floor monitor');
+      setStale(true);
       return;
     }
+    setStale(false);
 
     // Chime on newly-arrived alerts (one sound per refresh, highest priority).
     const callIds = new Set((c.data ?? []).map((x) => x.id));
@@ -142,7 +167,7 @@ const WaiterMonitor = () => {
     setBills((b.data ?? []) as BillReq[]);
     setWaiters((w.data ?? []) as Waiter[]);
     setAssignments((a.data ?? []) as Assignment[]);
-  }, []);
+  }, [beginFetch]);
 
   useEffect(() => { void fetchAll(); }, [fetchAll]);
 
@@ -152,10 +177,31 @@ const WaiterMonitor = () => {
    * This screen used to subscribe to six tables and run all seven of its
    * queries on every single event, so a six-item order cost 49 queries on this
    * device alone — and the cost scaled with floor activity times the number of
-   * screens open. The shared module coalesces the burst into one call.
+   * screens open. The shared channel delivers the events; `useCoalesced` turns
+   * the burst into one refetch ~300ms after it ends.
    */
   const connection = useStaffRealtime();
-  useStaffRealtimeEvent(useCallback(() => { void fetchAll(); }, [fetchAll]));
+  const refetch = useCoalesced(useCallback(() => { void fetchAll(); }, [fetchAll]));
+  useStaffRealtimeEvent(useCallback(() => { refetch(); }, [refetch]));
+  // Polling while the socket is down, catch-up on reconnect, and a reload when
+  // the screen wakes — none of which reached this screen's plain state before.
+  useStaffRefresh(useCallback(() => { refetch(); }, [refetch]));
+
+  /*
+   * Chime again every ~75s while a table is waiting and nobody has claimed it
+   * (or the claim is past the three-minute takeover window).
+   */
+  const alertsRef = useRef({ calls, bills });
+  useEffect(() => { alertsRef.current = { calls, bills }; }, [calls, bills]);
+  useReminderChime(
+    soundOn && (calls.length > 0 || bills.length > 0),
+    useCallback(() => {
+      const waiting = (a: Call | BillReq) => a.status === 'pending'
+        || !a.acknowledged_at || Date.now() - new Date(a.acknowledged_at).getTime() > 3 * 60_000;
+      if (alertsRef.current.bills.some(waiting)) playBillRequestAlert();
+      else if (alertsRef.current.calls.some(waiting)) playWaiterCallAlert();
+    }, []),
+  );
 
   const sectionWaiter = useMemo(() => {
     const m = new Map<string, string>();
@@ -180,9 +226,9 @@ const WaiterMonitor = () => {
     if (!sess) return -1;
     if (bills.some((bill) => bill.table_session_id === sess.id)) return 100;
     if (calls.some((call) => call.table_session_id === sess.id)) return 80;
-    const tOrders = orders.filter((order) => order.table_session_id === sess.id);
+    const tOrders = orders.filter((order) => order.table_session_id === sess.id && isOpenKitchenOrder(order));
     if (tOrders.some((order) => order.status === 'ready')) return 60;
-    const oldestMs = tOrders.reduce((acc, order) => Math.max(acc, sortNow - new Date(order.created_at).getTime()), 0);
+    const oldestMs = tOrders.reduce((acc, order) => Math.max(acc, sortNow - new Date(kitchenStart(order)).getTime()), 0);
     if (oldestMs > 15 * 60_000) return 40 + oldestMs / 60_000;
     return 20 + oldestMs / 60_000;
   }, [bills, calls, sortNow, orders, sessions]);
@@ -205,12 +251,14 @@ const WaiterMonitor = () => {
 
   const occupied = sessions.length;
   const pendingAlerts = calls.length + bills.length;
-  const openOrders = useMemo(
-    () => orders.filter((o) => o.status !== 'served'),
-    [orders],
-  );
+  /*
+   * Orders in the kitchen. A card order still waiting for its payment is not
+   * one — it was counted here and set "oldest wait" ticking for food nobody
+   * had been asked to cook.
+   */
+  const openOrders = useMemo(() => orders.filter(isOpenKitchenOrder), [orders]);
   const oldestOrderMs = openOrders.reduce(
-    (acc, order) => Math.max(acc, now - new Date(order.created_at).getTime()), 0);
+    (acc, order) => Math.max(acc, now - new Date(kitchenStart(order)).getTime()), 0);
   /** The longest-waiting guest, not the newest — the list is oldest-first. */
   const oldestAlertMs = [...calls, ...bills].reduce(
     (acc, alert) => Math.max(acc, now - new Date(alert.created_at).getTime()), 0);
@@ -297,8 +345,14 @@ const WaiterMonitor = () => {
     const bill = session ? bills.find((b) => b.table_session_id === session.id) : undefined;
     const waiterId = tableWaiter(table);
     const nameOf = (id: string | null | undefined) => (id ? waiterById[id]?.display_name ?? null : null);
+    // Claims are recorded against the auth user, not the waiter row, so they
+    // need their own lookup — the waiter-id one never matched and every claim
+    // read "Someone is going".
+    const nameOfUser = (uid: string | null | undefined) =>
+      (uid ? waiters.find((w) => w.user_id === uid)?.display_name ?? null : null);
 
     return {
+      tableId: table.id,
       tableNumber: table.table_number,
       sectionName: table.sections?.name ?? null,
       sessionId: session?.id ?? null,
@@ -308,10 +362,12 @@ const WaiterMonitor = () => {
       waiterName: nameOf(waiterId),
       callId: call?.id ?? null,
       callHeldBy: call?.acknowledged_by ?? null,
-      callHeldByName: nameOf(call?.acknowledged_by),
+      callHeldByName: nameOfUser(call?.acknowledged_by),
+      callHeldSince: call?.acknowledged_at ?? null,
       billId: bill?.id ?? null,
       billHeldBy: bill?.acknowledged_by ?? null,
-      billHeldByName: nameOf(bill?.acknowledged_by),
+      billHeldByName: nameOfUser(bill?.acknowledged_by),
+      billHeldSince: bill?.acknowledged_at ?? null,
       orders: session
         ? orders
             .filter((o) => o.table_session_id === session.id)
@@ -322,12 +378,15 @@ const WaiterMonitor = () => {
               total: Number(o.total ?? 0),
               payment_status: o.payment_status ?? null,
               payment_method: o.payment_method ?? null,
+              refunded_amount: o.refunded_amount ?? null,
               notes: o.notes ?? null,
               created_at: o.created_at,
+              released_to_kitchen_at: o.released_to_kitchen_at ?? null,
+              held_reason: o.held_reason ?? null,
             }))
         : [],
     };
-  }, [bills, calls, openTableId, orders, sessions, tableWaiter, tables, waiterById]);
+  }, [bills, calls, openTableId, orders, sessions, tableWaiter, tables, waiterById, waiters]);
 
   const activeWaiter = activeWaiterId ? waiterById[activeWaiterId] : null;
   const myTables = activeWaiterId
@@ -341,7 +400,7 @@ const WaiterMonitor = () => {
         <div className="px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             {mode !== 'rail' && (
-              <Button variant="ghost" size="sm" onClick={() => { setMode('rail'); setActiveWaiterId(null); }} className="gap-1.5">
+              <Button variant="ghost" size="sm" onClick={() => { setMode('rail'); setActiveWaiterId(null); }} className="gap-1.5 min-h-[44px] text-sm">
                 <ArrowLeft className="w-4 h-4" /> Back
               </Button>
             )}
@@ -373,21 +432,39 @@ const WaiterMonitor = () => {
               value={oldestOrderMs ? formatMinutes(oldestOrderMs) : '-'}
               tone={oldestOrderMs > 20 * 60_000 ? 'urgent' : oldestOrderMs > 10 * 60_000 ? 'warn' : 'idle'}
             />
+            {/* Never an unmuted speaker over a context the browser has suspended. */}
+            {soundOn && !audioUnlocked && (
+              <button
+                onClick={() => { void unlockSound(); }}
+                className="inline-flex items-center gap-1.5 min-h-[44px] px-3 rounded-md text-sm font-sans font-medium bg-destructive/10 text-destructive hover:bg-destructive/20"
+              >
+                <VolumeX className="w-4 h-4" /> Sound blocked — tap to enable
+              </button>
+            )}
             <button
-              onClick={() => { const next = !soundOn; setSoundOn(next); localStorage.setItem('monitor:sound', String(next)); if (next) unlockAudio(); }}
+              onClick={() => { const next = !soundOn; setSoundOn(next); localStorage.setItem('monitor:sound', String(next)); if (next) void unlockSound(); }}
               aria-label={soundOn ? 'Mute alerts' : 'Enable alerts'}
-              className="inline-flex items-center justify-center w-9 h-9 rounded-md border border-border hover:bg-accent/10"
+              className="inline-flex items-center justify-center w-11 h-11 rounded-md border border-border hover:bg-accent/10"
             >
-              {soundOn ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4 text-muted-foreground" />}
+              {soundOn ? <Volume2 className="w-5 h-5" /> : <VolumeX className="w-5 h-5 text-muted-foreground" />}
             </button>
-            <Link to="/waiter/login" className="inline-flex items-center gap-1.5 text-xs font-sans px-3 py-1.5 rounded-md border border-border hover:bg-accent/10">
-              <LogIn className="w-3.5 h-3.5" /> Sign in
+            <Link to="/waiter/login" className="inline-flex items-center gap-1.5 text-sm font-sans px-3 min-h-[44px] rounded-md border border-border hover:bg-accent/10">
+              <LogIn className="w-4 h-4" /> Sign in
             </Link>
           </div>
         </div>
+        {/* Persistent, not a toast: a toast is gone in four seconds and the
+            board stays wrong until the next successful refresh. */}
+        {stale && (
+          <div role="alert" className="px-4 sm:px-6 py-2 bg-destructive text-destructive-foreground text-sm font-sans font-semibold">
+            Could not refresh — this floor may be out of date. Retrying automatically.
+          </div>
+        )}
       </header>
 
       <main className="p-4 sm:p-6">
+        {/* Pinned above every mode: the floor monitor is often the screen nearest the door. */}
+        <HeldOrdersCard soundEnabled={soundOn} className="mb-4" onChanged={refetch} />
         {mode === 'rail' && (
           <RailView
             waiters={waiters}
@@ -436,7 +513,10 @@ const WaiterMonitor = () => {
         )}
       </main>
 
+      {/* Keyed on the table: a confirmation armed on one table must never
+          survive into another table's sheet. */}
       <TableActionSheet
+        key={openTableId ?? 'none'}
         table={openTable}
         meId={meId}
         onClose={() => setOpenTableId(null)}
@@ -584,12 +664,15 @@ const TablesGrid = ({
       {tables.map((table) => {
         const sess = sessions.find((session) => session.table_id === table.id);
         const tOrders = sess
-          ? orders.filter((order) => order.table_session_id === sess.id && order.status !== 'served')
+          ? orders.filter((order) => order.table_session_id === sess.id && isOpenKitchenOrder(order))
           : [];
+        const awaitingPayment = sess
+          ? orders.filter((order) => order.table_session_id === sess.id && order.status === 'awaiting_payment').length
+          : 0;
         const hasCall = sess ? calls.some((call) => call.table_session_id === sess.id) : false;
         const hasBill = sess ? bills.some((bill) => bill.table_session_id === sess.id) : false;
         const readyOrders = tOrders.filter((order) => order.status === 'ready').length;
-        const oldestMs = tOrders.reduce((acc, order) => Math.max(acc, now - new Date(order.created_at).getTime()), 0);
+        const oldestMs = tOrders.reduce((acc, order) => Math.max(acc, now - new Date(kitchenStart(order)).getTime()), 0);
         const waiterId = tableWaiter(table);
         const waiterName = waiterId ? waiterById[waiterId]?.display_name : null;
         return (
@@ -599,6 +682,7 @@ const TablesGrid = ({
             session={sess}
             ordersCount={tOrders.length}
             readyCount={readyOrders}
+            awaitingPayment={awaitingPayment}
             oldestMs={oldestMs}
             hasCall={hasCall}
             hasBill={hasBill}
@@ -642,6 +726,7 @@ const TableCard = ({
   session,
   ordersCount,
   readyCount,
+  awaitingPayment,
   oldestMs,
   hasCall,
   hasBill,
@@ -652,6 +737,8 @@ const TableCard = ({
   session?: Session;
   ordersCount: number;
   readyCount: number;
+  /** Card orders not yet paid, so not in the kitchen. Said in words, never counted as cooking. */
+  awaitingPayment: number;
   oldestMs: number;
   hasCall: boolean;
   hasBill: boolean;
@@ -704,9 +791,9 @@ const TableCard = ({
         {occupied && session ? (
           <>
             {session.guest_name && (
-              <p className="text-xs font-sans text-foreground truncate">{session.guest_name}</p>
+              <p className="text-sm font-sans text-foreground truncate">{session.guest_name}</p>
             )}
-            <p className="text-[11px] text-muted-foreground font-sans flex items-center gap-1 mt-0.5">
+            <p className="text-sm text-muted-foreground font-sans flex items-center gap-1 mt-0.5">
               <Clock className="w-3 h-3" /> {formatDuration(elapsed)}
             </p>
             <div className="flex items-center gap-2 mt-2 text-[11px] font-sans flex-wrap">
@@ -731,8 +818,13 @@ const TableCard = ({
                 </span>
               )}
             </div>
+            {awaitingPayment > 0 && (
+              <p className="text-[11px] text-accent font-sans mt-1">
+                {awaitingPayment} not in kitchen — payment pending
+              </p>
+            )}
             {oldestMs > 0 && (
-              <p className="text-[10px] text-muted-foreground font-sans mt-1">
+              <p className="text-[11px] text-muted-foreground font-sans mt-1">
                 oldest order: {formatMinutes(oldestMs)}
               </p>
             )}

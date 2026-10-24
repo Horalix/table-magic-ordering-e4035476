@@ -11,6 +11,11 @@
  *
  * The one that matters is `counts a half-past-midnight sale in the night that
  * earned it`. Everything else is scaffolding around that.
+ *
+ * The trading day runs 05:00 to 05:00 Sarajevo time. The first version used
+ * local midnight, which fixed the time zone but still split one late service
+ * across two days and flipped the waiter rota at 00:00 - so every table opened
+ * after midnight got no waiter.
  */
 import { beforeAll, afterAll, beforeEach, describe, expect, it } from 'vitest';
 // @ts-expect-error -- plain JS harness, no types needed
@@ -85,15 +90,15 @@ beforeEach(seed);
 describe('the boundary', () => {
   it('counts a half-past-midnight sale in the night that earned it', async () => {
     /*
-     * THE BUG. 00:30 Sarajevo on 3 August is 22:30 UTC on 2 August, so the old
-     * UTC window filed this sale under the 2nd — a day whose drawer had already
-     * been counted and signed off hours earlier. The takings existed in the
-     * orders table and appeared in no reconciliation at all.
+     * THE BUG. 00:30 Sarajevo on 3 August is part of the service that started
+     * on the evening of the 2nd. The UTC window filed it under the 2nd only by
+     * accident of the offset; the midnight window filed it under the 3rd — a
+     * day whose drawer nobody had opened yet. It belongs to the 2nd.
      */
     await saleAt('2026-08-03 00:30:00');
 
-    expect(await cashFor('2026-08-03')).toBe(20);
-    expect(await cashFor('2026-08-02')).toBe(0);
+    expect(await cashFor('2026-08-02')).toBe(20);
+    expect(await cashFor('2026-08-03')).toBe(0);
   });
 
   it('keeps a late evening on its own day', async () => {
@@ -111,8 +116,26 @@ describe('the boundary', () => {
     await saleAt('2026-08-03 00:15:00', 15);
     await saleAt('2026-08-03 00:55:00', 10);
 
-    expect(await cashFor('2026-08-02')).toBe(55);
-    expect(await cashFor('2026-08-03')).toBe(25);
+    expect(await cashFor('2026-08-02')).toBe(80);
+    expect(await cashFor('2026-08-03')).toBe(0);
+  });
+
+  it('starts the next trading day at five in the morning', async () => {
+    await saleAt('2026-08-03 04:59:00', 7);
+    await saleAt('2026-08-03 05:00:00', 11);
+
+    expect(await cashFor('2026-08-02')).toBe(7);
+    expect(await cashFor('2026-08-03')).toBe(11);
+  });
+
+  it('puts a moment in the same day its range does', async () => {
+    const { rows } = await db.query<{ late: string; early: string; morning: string }>(`
+      SELECT public.business_day('2026-08-03 00:30'::timestamp AT TIME ZONE 'Europe/Sarajevo')::text AS late,
+             public.business_day('2026-08-03 04:59'::timestamp AT TIME ZONE 'Europe/Sarajevo')::text AS early,
+             public.business_day('2026-08-03 05:00'::timestamp AT TIME ZONE 'Europe/Sarajevo')::text AS morning`);
+    expect(rows[0].late).toBe('2026-08-02');
+    expect(rows[0].early).toBe('2026-08-02');
+    expect(rows[0].morning).toBe('2026-08-03');
   });
 
   it('spans exactly one day, with no gap and no overlap', async () => {
@@ -123,43 +146,53 @@ describe('the boundary', () => {
   });
 
   it('handles the short and long days of the year', async () => {
-    // Spring forward is 23 hours, autumn back is 25. Getting this wrong would
-    // drop or double an hour of trade twice a year.
-    const { rows } = await db.query<{ spring: string; autumn: string; ordinary: string }>(`
-      SELECT EXTRACT(EPOCH FROM (
-               (SELECT ends_at FROM public.business_day_range('2026-03-29'))
-             - (SELECT starts_at FROM public.business_day_range('2026-03-29')))) / 3600 AS spring,
-             EXTRACT(EPOCH FROM (
-               (SELECT ends_at FROM public.business_day_range('2026-10-25'))
-             - (SELECT starts_at FROM public.business_day_range('2026-10-25')))) / 3600 AS autumn,
-             EXTRACT(EPOCH FROM (
-               (SELECT ends_at FROM public.business_day_range('2026-08-03'))
-             - (SELECT starts_at FROM public.business_day_range('2026-08-03')))) / 3600 AS ordinary`);
+    // Spring forward is 23 hours, autumn back is 25. With a 05:00 cutoff the
+    // switch (02:00/03:00 on the Sunday) falls inside the SATURDAY's trading
+    // day. Getting this wrong would drop or double an hour of trade twice a year.
+    const span = (day: string) => `EXTRACT(EPOCH FROM (
+               (SELECT ends_at FROM public.business_day_range('${day}'))
+             - (SELECT starts_at FROM public.business_day_range('${day}')))) / 3600`;
+    const { rows } = await db.query<{ spring: string; autumn: string; ordinary: string; after: string }>(`
+      SELECT ${span('2026-03-28')} AS spring,
+             ${span('2026-10-24')} AS autumn,
+             ${span('2026-08-03')} AS ordinary,
+             ${span('2026-10-25')} AS after`);
     expect(Number(rows[0].spring)).toBe(23);
     expect(Number(rows[0].autumn)).toBe(25);
     expect(Number(rows[0].ordinary)).toBe(24);
+    expect(Number(rows[0].after)).toBe(24);
   });
 
   it('agrees with the day close_shift picks', async () => {
     // The original defect in one assertion: the day chosen and the day measured
     // were computed by two different rules.
     const { rows } = await db.query<{ same: boolean }>(`
-      SELECT public.business_day() = (now() AT TIME ZONE 'Europe/Sarajevo')::date AS same`);
+      SELECT public.business_day()
+           = ((now() AT TIME ZONE 'Europe/Sarajevo') - interval '5 hours')::date AS same`);
     expect(rows[0].same).toBe(true);
+
+    // And the functions that pick "today" on their own now ask the same question.
+    await actAs(db, STAFF);
+    const { rows: picked } = await db.query<{ r: { day: string } }>(
+      `SELECT public.covers_summary() AS r`);
+    const { rows: today } = await db.query<{ d: string }>(`SELECT public.business_day()::text AS d`);
+    await actAs(db, null);
+    expect(String(picked[0].r.day)).toBe(today[0].d);
   });
 });
 
 describe('closing the day', () => {
   it('expects the cash that was actually taken after midnight', async () => {
-    // What the manager sees at 01:15 with the drawer open.
+    // What the manager sees at 01:15 with the drawer open: one night's takings.
+    await saleAt('2026-08-02 22:00:00', 80);
     await saleAt('2026-08-03 00:30:00', 120);
 
     await actAs(db, ADMIN);
     const { rows } = await db.query<{ r: { expected_cash: string; cash_difference: string } }>(
-      `SELECT public.close_shift('2026-08-03'::date, 120) AS r`);
+      `SELECT public.close_shift('2026-08-02'::date, 200) AS r`);
     await actAs(db, null);
 
-    expect(Number(rows[0].r.expected_cash)).toBe(120);
+    expect(Number(rows[0].r.expected_cash)).toBe(200);
     expect(Number(rows[0].r.cash_difference)).toBe(0);
   });
 
@@ -172,7 +205,7 @@ describe('closing the day', () => {
 
     await actAs(db, ADMIN);
     const { rows } = await db.query<{ r: { cash_difference: string } }>(
-      `SELECT public.close_shift('2026-08-03'::date, 120) AS r`);
+      `SELECT public.close_shift('2026-08-02'::date, 120) AS r`);
     await actAs(db, null);
 
     expect(Number(rows[0].r.cash_difference)).not.toBe(120);
@@ -185,12 +218,12 @@ describe('reporting', () => {
 
     await actAs(db, STAFF);
     const { rows } = await db.query<{ r: { totals: { revenue: string } } }>(
-      `SELECT public.sales_analytics('2026-08-03'::date, '2026-08-03'::date) AS r`);
-    const { rows: prev } = await db.query<{ r: { totals: { revenue: string } } }>(
       `SELECT public.sales_analytics('2026-08-02'::date, '2026-08-02'::date) AS r`);
+    const { rows: next } = await db.query<{ r: { totals: { revenue: string } } }>(
+      `SELECT public.sales_analytics('2026-08-03'::date, '2026-08-03'::date) AS r`);
     await actAs(db, null);
 
     expect(Number(rows[0].r.totals.revenue)).toBe(40);
-    expect(Number(prev[0].r.totals.revenue)).toBe(0);
+    expect(Number(next[0].r.totals.revenue)).toBe(0);
   });
 });

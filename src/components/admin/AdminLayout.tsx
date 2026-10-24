@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { springPill } from '@/lib/motion';
+import { useStaffDocument } from '@/components/staff/useStaffDocument';
 import type { User } from '@supabase/supabase-js';
 
 // Grouped so the sidebar reads as a hierarchy, not a flat list.
@@ -55,6 +56,9 @@ const AdminLayout = () => {
   const [user, setUser] = useState<User | null>(null);
   const [authChecked, setAuthChecked] = useState(false);
 
+  // English, left-to-right, whatever a guest last picked on this device.
+  useStaffDocument();
+
   useEffect(() => {
     let cancelled = false;
 
@@ -72,6 +76,31 @@ const AdminLayout = () => {
       });
 
       if (!hasAdminRole) {
+        /*
+         * Send staff back to their own screen instead of signing them out.
+         *
+         * The kitchen's printer gear and a mistyped URL both land a cook or a
+         * waiter here. Signing them out used to log the kitchen tablet out
+         * mid-service — and it then sat on a login screen that nobody on the
+         * line knows the password for. Only a session with no staff role at
+         * all is signed out, because it has no business being signed in.
+         */
+        const { data: isStaff } = await supabase.rpc('has_role', {
+          _user_id: session.user.id,
+          _role: 'staff',
+        });
+        if (cancelled) return;
+
+        if (isStaff) {
+          const { data: waiterRow } = await supabase
+            .from('waiters').select('id').eq('user_id', session.user.id).maybeSingle();
+          if (cancelled) return;
+          setAuthChecked(true);
+          toast.error('The admin area is for managers');
+          navigate(waiterRow ? '/waiter' : '/kitchen', { replace: true });
+          return;
+        }
+
         await supabase.auth.signOut();
         if (!cancelled) setAuthChecked(true);
         navigate('/admin/login');

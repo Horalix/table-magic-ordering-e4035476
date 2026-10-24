@@ -1,4 +1,4 @@
-import { test, expect, anOrder, clearStaffSession } from './staff-fixtures';
+import { test, expect, anOrder, aHeldOrder, clearStaffSession } from './staff-fixtures';
 
 /**
  * The kitchen board and the floor screens.
@@ -70,6 +70,40 @@ test.describe('the kitchen board', () => {
     await expect(page.locator('body')).toBeVisible();
     await expect(page.getByText('047')).toHaveCount(0);
   });
+
+  test('puts the oldest ticket at the top of its column', async ({ staff, page }) => {
+    /*
+     * The board is a queue. Newest-first buried the late table under the one
+     * that had just come in, which is exactly backwards for a cook choosing
+     * what to make next. "Oldest" means oldest IN THE KITCHEN — a card order
+     * counts from when its payment released it, not from when it was placed.
+     */
+    const minutesAgo = (m: number) => new Date(Date.now() - m * 60_000).toISOString();
+    staff.orders = [
+      anOrder({ id: 'order-new', order_code: '201', created_at: minutesAgo(3), released_to_kitchen_at: minutesAgo(3) }),
+      anOrder({ id: 'order-old', order_code: '200', created_at: minutesAgo(12), released_to_kitchen_at: minutesAgo(12) }),
+    ];
+    await page.goto('/kitchen');
+    const oldTop = (await page.getByText('#200').boundingBox())?.y ?? 0;
+    const newTop = (await page.getByText('#201').boundingBox())?.y ?? 0;
+    expect(oldTop).toBeLessThan(newTop);
+  });
+
+  test('a cook reading a note cannot bump the line by touching it', async ({ staff, page }) => {
+    // The whole row used to be a bump button, so steadying the tablet on the
+    // note ("no sugar") marked the coffee as started.
+    await page.goto('/kitchen');
+    await page.getByText('no sugar').click();
+    await page.waitForTimeout(500);
+    expect(staff.itemWrites).toHaveLength(0);
+  });
+
+  test('keeps the ticket exports out of the way', async ({ page }) => {
+    await page.goto('/kitchen');
+    await expect(page.getByText('047')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'JSON' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'More ticket actions' }).first()).toBeVisible();
+  });
 });
 
 test.describe('advancing work', () => {
@@ -127,6 +161,15 @@ test.describe('printing', () => {
     await page.goto('/kitchen');
     await expect(page.getByLabel('Printing settings')).toBeVisible();
   });
+
+  test('a cook who is not a manager is not offered the admin gear', async ({ staff, page }) => {
+    // The gear leads into the admin area, which used to sign non-managers out
+    // — so a cook tapping it was logged out of the kitchen mid-service.
+    staff.isAdmin = false;
+    await page.goto('/kitchen');
+    await expect(page.getByText('047')).toBeVisible();
+    await expect(page.getByLabel('Printing settings')).toHaveCount(0);
+  });
 });
 
 test.describe('the screen is honest about itself', () => {
@@ -150,6 +193,31 @@ test.describe('the screen is honest about itself', () => {
     const before = await toggle.getAttribute('aria-label');
     await toggle.click();
     await expect(page.getByLabel(/Mute alerts|Enable alerts/)).not.toHaveAttribute('aria-label', before ?? '');
+  });
+
+  test('keeps refreshing while the live connection is down', async ({ staff, page }) => {
+    /*
+     * Realtime is refused in these fixtures. The pill has always said
+     * "refreshing every 15s" in that state — and the board, which keeps its
+     * data in plain state rather than React Query, never refreshed at all. A
+     * ticket arriving after load must appear on the next poll tick.
+     */
+    test.slow();
+    await page.goto('/kitchen');
+    await expect(page.getByText('047')).toBeVisible();
+
+    staff.orders = [...staff.orders, anOrder({ id: 'order-late', order_code: '312' })];
+    await expect(page.getByText('#312')).toBeVisible({ timeout: 25_000 });
+  });
+
+  test('stays LTR and English after a guest chose Arabic on this device', async ({ page }) => {
+    await page.addInitScript(() => {
+      localStorage.setItem('lasoul-lang', 'ar');
+      document.documentElement.dir = 'rtl';
+    });
+    await page.goto('/kitchen');
+    await expect(page.getByText('047')).toBeVisible();
+    await expect(page.locator('html')).toHaveAttribute('dir', 'ltr');
   });
 
   test('sends a signed-out device to the login screen', async ({ staff, page }) => {
@@ -192,5 +260,144 @@ test.describe('the floor', () => {
     }];
     await page.goto('/kitchen');
     await expect(page.getByLabel('Resolve bill request')).toBeVisible({ timeout: 10_000 });
+  });
+
+  test('a claimed call stays on the kitchen screen and says who is going', async ({ staff, page }) => {
+    // Claimed calls used to vanish the moment someone tapped "I'll go", which
+    // read as "handled" while the guest was still waiting.
+    staff.waiterCalls = [{
+      id: 'call-2', status: 'acknowledged', created_at: new Date().toISOString(),
+      acknowledged_by: 'someone-else', acknowledged_at: new Date().toISOString(),
+      table_session_id: 'session-1',
+      table_sessions: { tables: { table_number: 7 } },
+    }];
+    await page.goto('/kitchen');
+    await expect(page.getByText(/is going/)).toBeVisible({ timeout: 10_000 });
+  });
+
+  test('ticking a bill request asks first, and will not free a table that owes', async ({ staff, page }) => {
+    /*
+     * The ✓ used to resolve the request AND free the table in one tap on a
+     * 24px target, without looking at the bill. Now it confirms, asks the
+     * server, and shows the refusal with the amount.
+     */
+    staff.closeOutstanding = 38;
+    staff.billRequests = [{
+      id: 'bill-2', status: 'pending', created_at: new Date().toISOString(),
+      table_session_id: 'session-1',
+      table_sessions: { tables: { table_number: 7 } },
+    }];
+    await page.goto('/kitchen');
+    await page.getByLabel('Resolve bill request').click();
+    await expect(page.getByRole('dialog')).toContainText('Free table 7?');
+    expect(staff.rpcCalls.filter((c) => c.fn === 'staff_close_session')).toHaveLength(0);
+
+    await page.getByRole('button', { name: 'Free table', exact: true }).click();
+    await expect(page.getByRole('dialog')).toContainText('still owes 38.00 KM');
+    expect(staff.rpcCalls.map((c) => c.fn)).toContain('staff_close_session');
+  });
+
+  test('a bill request can be cleared without freeing the table', async ({ staff, page }) => {
+    staff.billRequests = [{
+      id: 'bill-3', status: 'pending', created_at: new Date().toISOString(),
+      table_session_id: 'session-1',
+      table_sessions: { tables: { table_number: 7 } },
+    }];
+    await page.goto('/kitchen');
+    await page.getByLabel('Resolve bill request').click();
+    await page.getByRole('button', { name: 'Just clear the request' }).click();
+    await expect.poll(() => staff.rpcCalls.map((c) => c.fn)).toContain('staff_resolve_bill_request');
+    expect(staff.rpcCalls.map((c) => c.fn)).not.toContain('staff_close_session');
+  });
+});
+
+test.describe('orders waiting for staff', () => {
+  /*
+   * The database holds a pay-at-table order that might not come from anyone at
+   * the table (20261024190000_order_abuse_guards.sql). It must not look like
+   * kitchen work, and whoever is nearest must be able to confirm, reject or
+   * block it in one or two taps.
+   */
+  test('a held order is on the Needs confirming card, not the board', async ({ staff, page }) => {
+    staff.orders = [anOrder(), aHeldOrder()];
+    await page.goto('/kitchen');
+    const card = page.getByRole('region', { name: 'Needs confirming' });
+    await expect(card).toBeVisible();
+    await expect(card.getByText('Table 9')).toBeVisible();
+    await expect(card.getByText('Large first order')).toBeVisible();
+    await expect(card.getByText('72.00 KM')).toBeVisible();
+    // On the card once, and nowhere on the board.
+    await expect(page.getByText('Cevapi Platter')).toHaveCount(1);
+    await expect(page.getByText('La Soul Burger')).toBeVisible();
+  });
+
+  test('confirming sends it to the kitchen', async ({ staff, page }) => {
+    staff.orders = [aHeldOrder()];
+    await page.goto('/kitchen');
+    const confirm = page.getByRole('button', { name: 'Confirm order for table 9' });
+    await expect(confirm).toBeVisible();
+    // Tapped by someone carrying plates.
+    expect((await confirm.boundingBox())?.height ?? 0).toBeGreaterThanOrEqual(44);
+    await confirm.click();
+
+    await expect.poll(() => staff.rpcCalls.filter((c) => c.fn === 'staff_release_held_order').map((c) => c.body._order_id))
+      .toEqual(['order-held']);
+    await expect(page.getByRole('region', { name: 'Needs confirming' })).toHaveCount(0);
+    // Released, so now it is ordinary kitchen work.
+    await expect(page.getByText('Cevapi Platter')).toBeVisible();
+  });
+
+  test('rejecting asks for a reason first', async ({ staff, page }) => {
+    staff.orders = [aHeldOrder()];
+    await page.goto('/kitchen');
+    await page.getByRole('button', { name: 'Reject order for table 9' }).click();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toContainText('Reject order #090');
+    const reject = dialog.getByRole('button', { name: 'Reject order' });
+    await expect(reject).toBeDisabled();
+    expect(staff.rpcCalls.filter((c) => c.fn === 'cancel_order')).toHaveLength(0);
+
+    await dialog.getByLabel('Reason for rejecting').fill('Nobody at table 9');
+    await reject.click();
+    await expect.poll(() => staff.rpcCalls.find((c) => c.fn === 'cancel_order')?.body)
+      .toEqual({ _order_id: 'order-held', _reason: 'Nobody at table 9' });
+    await expect(page.getByRole('region', { name: 'Needs confirming' })).toHaveCount(0);
+  });
+
+  test('a big first order cannot be blocked, only confirmed or rejected', async ({ staff, page }) => {
+    staff.orders = [aHeldOrder()];
+    await page.goto('/kitchen');
+    await expect(page.getByRole('button', { name: 'Confirm order for table 9' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Block table 9' })).toHaveCount(0);
+  });
+
+  test('a suspicious one can block the table, after asking', async ({ staff, page }) => {
+    staff.orders = [aHeldOrder({ held_reason: 'venue_burst' })];
+    await page.goto('/kitchen');
+    await expect(page.getByText('Many new tables at once')).toBeVisible();
+    await page.getByRole('button', { name: 'Block table 9' }).click();
+    await expect(page.getByRole('alertdialog')).toContainText('Block table 9?');
+    expect(staff.rpcCalls.filter((c) => c.fn === 'staff_block_session')).toHaveLength(0);
+
+    await page.getByRole('alertdialog').getByRole('button', { name: 'Block table' }).click();
+    await expect.poll(() => staff.rpcCalls.find((c) => c.fn === 'staff_block_session')?.body._session_id)
+      .toBe('session-9');
+  });
+
+  test('the waiter phone and the floor monitor show it too', async ({ staff, page }) => {
+    staff.orders = [aHeldOrder({ held_reason: 'second_session' })];
+    // The waiter phone needs a waiter profile behind the signed-in user; the
+    // shared stub has none. Registered last, so it wins (see staff-fixtures).
+    await page.route('**/rest/v1/waiters**', (route) => route.fulfill({
+      status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' },
+      body: JSON.stringify([{ id: 'waiter-1', user_id: 'staff-user-1', display_name: 'Marko' }]),
+    }));
+    await page.goto('/waiter');
+    await expect(page.getByRole('region', { name: 'Needs confirming' })).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText('Second session on table 9')).toBeVisible();
+
+    await page.goto('/waiter/monitor');
+    await expect(page.getByRole('region', { name: 'Needs confirming' })).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByRole('button', { name: 'Confirm order for table 9' })).toBeVisible();
   });
 });

@@ -11,6 +11,8 @@
  * silence. Every consumer must therefore be able to ask `audioReady()` and show
  * the truth, and must call `unlockAudio()` from a real gesture.
  */
+import { useCallback, useEffect, useRef, useState } from 'react';
+
 type WindowWithWebAudioFallback = Window & {
   webkitAudioContext?: typeof window.AudioContext;
 };
@@ -157,4 +159,86 @@ export function playTestTone(): boolean {
     osc.start(ctx.currentTime);
     osc.stop(ctx.currentTime + 0.35);
   });
+}
+
+/**
+ * Buzz the phone, where the browser allows it.
+ *
+ * A waiter's phone is in an apron pocket on silent far more often than it is
+ * in a hand with the volume up. Vibration is the alert that actually arrives.
+ * iOS Safari has no Vibration API; this is then a silent no-op, which is why
+ * it is never the only signal.
+ */
+export function vibrate(pattern: number | number[] = [200, 100, 200]): boolean {
+  try {
+    if (typeof navigator === 'undefined' || typeof navigator.vibrate !== 'function') return false;
+    return navigator.vibrate(pattern);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Track whether alerts can be heard, and unlock them on the first tap.
+ *
+ * The same contract the kitchen board has always had, shared so the waiter
+ * phone and the floor monitor stop each inventing their own: one audio context
+ * for the whole tab, resumed from a real gesture, and an honest `unlocked`
+ * flag the screen can show as "tap to enable sound".
+ *
+ * `click`, not `pointerdown`: unlocking hides the "tap to enable" chip, and on
+ * pointerdown that layout shift happened between press and release, so the
+ * first tap on the toolbar landed on nothing (see KitchenDisplay).
+ */
+export function useAudioUnlock(): { unlocked: boolean; unlock: () => Promise<boolean> } {
+  const [unlocked, setUnlocked] = useState(() => audioReady());
+
+  const unlock = useCallback(async () => {
+    const ok = await unlockAudio();
+    setUnlocked(ok);
+    return ok;
+  }, []);
+
+  useEffect(() => {
+    if (audioReady()) { setUnlocked(true); return; }
+    const onGesture = () => {
+      void unlockAudio().then((ok) => {
+        setUnlocked(ok);
+        if (ok) {
+          window.removeEventListener('click', onGesture);
+          window.removeEventListener('keyup', onGesture);
+        }
+      });
+    };
+    window.addEventListener('click', onGesture);
+    window.addEventListener('keyup', onGesture);
+    return () => {
+      window.removeEventListener('click', onGesture);
+      window.removeEventListener('keyup', onGesture);
+    };
+  }, []);
+
+  return { unlocked, unlock };
+}
+
+/** How often an unanswered call or bill request chimes again. */
+export const REMINDER_MS = 75_000;
+
+/**
+ * Chime again while something is still waiting.
+ *
+ * One chime per new call is easy to miss over a coffee grinder, and then the
+ * table waits in silence until somebody happens to look. While anything stays
+ * unresolved this repeats the alert every ~75 seconds — often enough that it
+ * cannot be lost for long, rare enough not to become noise people tune out.
+ */
+export function useReminderChime(active: boolean, play: () => void, intervalMs = REMINDER_MS) {
+  const playRef = useRef(play);
+  useEffect(() => { playRef.current = play; }, [play]);
+
+  useEffect(() => {
+    if (!active) return;
+    const id = setInterval(() => playRef.current(), intervalMs);
+    return () => clearInterval(id);
+  }, [active, intervalMs]);
 }

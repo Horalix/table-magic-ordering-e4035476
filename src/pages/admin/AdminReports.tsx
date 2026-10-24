@@ -8,6 +8,7 @@ import { Download, Printer, CalendarDays, DollarSign, ShoppingBag, CreditCard, B
 import { useCountUp } from '@/lib/motion';
 import { dayReconciliation, type DayReconciliation } from '@/lib/staff-api';
 import ShiftClosePanel from '@/components/admin/ShiftClosePanel';
+import { businessDayISO, businessDayRange } from '@/lib/reporting';
 
 interface DayOrder {
   id: string;
@@ -24,7 +25,17 @@ interface DayOrder {
 /** Orders that never became a sale must never be counted as one. */
 const NON_SALE_STATUSES = ['awaiting_payment', 'payment_failed', 'cancelled'];
 
-const todayISO = () => new Date().toISOString().slice(0, 10);
+/**
+ * Today's TRADING day, not today's UTC date.
+ *
+ * `toISOString()` is UTC, so between local midnight and 01:00/02:00 this page
+ * opened on yesterday, and its order window ran 02:00 to 02:00 local while the
+ * reconciliation beside it ran on Sarajevo days. Both now use the business day
+ * (05:00 to 05:00 local), the same one `day_reconciliation()` and
+ * `close_shift()` use, so the hourly chart and the money figures describe one
+ * night.
+ */
+const todayISO = () => businessDayISO();
 const km = (n: number) => `${n.toFixed(2)} KM`;
 
 const Stat = ({ icon: Icon, label, value, sub, color = 'text-primary' }: { icon: React.ElementType; label: string; value: string; sub?: string; color?: string }) => (
@@ -50,12 +61,12 @@ const AdminReports = () => {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const start = `${date}T00:00:00`;
-    const end = `${date}T23:59:59.999`;
+    // Half-open: the day ends exactly where the next one starts.
+    const { start, end } = businessDayRange(date);
     const { data } = await supabase
       .from('orders')
       .select('id, total, tip_amount, payment_method, payment_status, status, created_at, fiscalized, fiscalization_status')
-      .gte('created_at', start).lte('created_at', end)
+      .gte('created_at', start).lt('created_at', end)
       .order('created_at', { ascending: true });
     // The hourly chart uses real sales only; the money figures come from the
     // server so the dashboard and the reconciliation cannot disagree.
@@ -141,7 +152,7 @@ const AdminReports = () => {
       </div>
 
       {loading ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-[92px] rounded-xl" />)}
         </div>
       ) : (
@@ -158,7 +169,7 @@ const AdminReports = () => {
               </div>
             )
           )}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
             <Stat icon={DollarSign} label="Gross sales" value={km(grossAnim)} sub={`${s.count} orders`} />
             <Stat icon={Coins} label="Tips" value={km(s.tips)} color="text-accent" />
             <Stat icon={TrendingUp} label="Average order" value={km(s.avg)} color="text-accent" />

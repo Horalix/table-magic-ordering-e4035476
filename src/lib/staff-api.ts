@@ -114,18 +114,103 @@ export interface AllDayRow {
 export const allDay = (station?: Station) =>
   rpcList<AllDayRow>('kds_all_day', { _station: station ?? null });
 
+export interface TablePaymentResult {
+  /**
+   * `already_paid` is NOT a success. It means the money arrived some other way
+   * — usually online — and the waiter must not take it again at the table.
+   */
+  status: 'paid' | 'already_paid';
+  payment_method: string | null;
+  total?: number;
+}
+
 /**
  * Record that the guest settled in person.
  *
  * Cash and the physical POS terminal are recorded separately because they
- * reconcile against different things at close of day.
+ * reconcile against different things at close of day. The database refuses a
+ * refunded order outright (see 20261024140000_staff_safety.sql).
  */
 export const recordTablePayment = (orderId: string, method: TablePaymentMethod, note?: string) =>
-  rpc<{ status: string; payment_method: string; total: number }>('record_table_payment', {
+  rpc<TablePaymentResult>('record_table_payment', {
     _order_id: orderId,
     _method: method,
     _note: note ?? null,
   });
+
+/**
+ * What to tell the person holding the money.
+ *
+ * Every screen used to say "Recorded as paid in cash" whatever came back — so
+ * an order the guest had already paid online read as freshly paid, and the
+ * waiter took the money a second time.
+ */
+export function describePaymentResult(
+  result: TablePaymentResult,
+  method: TablePaymentMethod,
+): { ok: boolean; message: string } {
+  if (result.status === 'already_paid') {
+    const how = result.payment_method === 'card_online' ? 'online'
+      : result.payment_method === 'pos_terminal' ? 'on the terminal'
+        : result.payment_method === 'cash' ? 'in cash' : 'already';
+    return { ok: false, message: `Already paid ${how} — don't take money for this order` };
+  }
+  return { ok: true, message: method === 'cash' ? 'Recorded as paid in cash' : 'Recorded as paid on the terminal' };
+}
+
+/** Statuses that never reached the kitchen, or never will. Nothing to collect. */
+const NOT_BILLABLE_STATUSES = ['cancelled', 'awaiting_payment', 'payment_failed'];
+/** Settled one way or another — paid, or paid and given back. */
+const SETTLED_PAYMENT_STATUSES = ['paid', 'refunded', 'partially_refunded'];
+
+export interface PayableLike {
+  status: string;
+  payment_status: string | null;
+  total: number | string | null;
+  refunded_amount?: number | string | null;
+}
+
+/**
+ * Whether staff may record an in-room payment for this order.
+ *
+ * Mirrors `session_outstanding()` in the database, so a Paid button is only
+ * offered where the server would count the order as owed. A refunded order is
+ * excluded on purpose: offering Paid there is how the same money got recorded
+ * twice.
+ */
+export function canTakePayment(order: PayableLike): boolean {
+  if (NOT_BILLABLE_STATUSES.includes(order.status)) return false;
+  if (SETTLED_PAYMENT_STATUSES.includes(order.payment_status ?? '')) return false;
+  if (Number(order.refunded_amount ?? 0) > 0) return false;
+  return Number(order.total ?? 0) > 0;
+}
+
+/** What a set of orders still owes, by the same rule the server uses to refuse a close. */
+export const outstandingFor = (orders: PayableLike[]) =>
+  orders.filter(canTakePayment).reduce((sum, o) => sum + Number(o.total ?? 0), 0);
+
+export interface CloseSessionResult {
+  closed: boolean;
+  already_closed: boolean;
+  /** What the table still owes when the close was refused. */
+  outstanding: number;
+  unpaid_orders: number;
+}
+
+/**
+ * Free a table — the one way to do it.
+ *
+ * Refuses, with the amount, while the table owes money. Three screens used to
+ * free tables with a bare UPDATE and none of them looked at the bill, so an
+ * unpaid order could vanish behind a closed session that nobody looks at again.
+ */
+export const closeTableSession = async (sessionId: string): Promise<CloseSessionResult> => {
+  const result = await rpc<CloseSessionResult>('staff_close_session', { _session_id: sessionId });
+  return { ...result, outstanding: Number(result?.outstanding ?? 0) };
+};
+
+/** "24.00 KM" — one formatting for money on every staff screen. */
+export const km = (amount: number | string | null | undefined) => `${Number(amount ?? 0).toFixed(2)} KM`;
 
 export interface AlertClaim {
   status: 'acknowledged' | 'resolved';
@@ -200,6 +285,30 @@ export const cancelOrder = (orderId: string, reason: string) =>
     _order_id: orderId,
     _reason: reason,
   });
+
+/**
+ * Confirm an order the database held back (see 20261024190000_order_abuse_guards.sql).
+ *
+ * It prints from here exactly as if it had never been held. Safe to call twice:
+ * two waiters tapping Confirm on two screens get one ticket, and the second is
+ * told `already_released`. Rejecting is `cancelOrder` with a reason.
+ */
+export const releaseHeldOrder = (orderId: string) =>
+  rpc<{ status: 'released' | 'already_released'; order_id: string; ticket_id?: string | null }>(
+    'staff_release_held_order', { _order_id: orderId });
+
+/**
+ * This table is fake. Voids whatever has not printed, ends the session, and
+ * makes every guest call for it fail. Printed or paid orders are left for a
+ * person to deal with, and `orders_left` says how many.
+ */
+export const blockSession = (sessionId: string, reason?: string) =>
+  rpc<{ status: 'blocked' | 'already_blocked'; cancelled_orders: number; orders_left?: number }>(
+    'staff_block_session', { _session_id: sessionId, _reason: reason ?? null });
+
+/** "I can see people at this table" — nothing more from it is held. */
+export const markSessionSeen = (sessionId: string) =>
+  rpc<{ seen: boolean }>('staff_mark_session_seen', { _session_id: sessionId });
 
 /** Manager-only. `markCompleted` false records the intent without moving money. */
 export const recordRefund = (

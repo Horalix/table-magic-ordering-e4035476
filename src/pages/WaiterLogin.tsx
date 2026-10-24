@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 import { User, Lock, Loader2, Eye, EyeOff } from 'lucide-react';
+import { useStaffDocument } from '@/components/staff/useStaffDocument';
 
 const synthEmail = (u: string) => `${u}@waiter.lasoul.local`;
 const normalizeUsername = (value: string) =>
@@ -36,6 +37,8 @@ const WaiterLogin = () => {
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const navigate = useNavigate();
+  // A guest's Arabic choice must not mirror the staff sign-in on a shared device.
+  useStaffDocument();
 
   const setWaiterSessionFromFunction = async (u: string) => {
     const { data, error } = await supabase.functions.invoke<WaiterLoginResponse>('waiter-login', {

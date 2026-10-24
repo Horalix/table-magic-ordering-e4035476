@@ -7,43 +7,46 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import PaymentBadge from '@/components/PaymentBadge';
 import { Skeleton } from '@/components/ui/skeleton';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from '@/components/ui/alert-dialog';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import {
   Banknote,
   Bell,
   Check,
   CheckCircle2,
   ChefHat,
+  ChevronDown,
   Clock,
   CreditCard,
-  Flame,
-  Smartphone,
   Hand,
   LogOut,
   Monitor,
   PowerOff,
   Sparkles,
+  UserX,
   Users,
   Utensils,
   Volume2,
   VolumeX,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { formatDuration, useElapsed, waitBg, seatedBg } from '@/lib/timing';
+import { formatDuration, formatMinutes, useElapsed, useElapsedMinutes, waitBg, seatedBg } from '@/lib/timing';
 import {
-  recordTablePayment, resolveWaiterCall as rpcResolveWaiterCall,
-  updateOrderStatus as rpcUpdateOrderStatus, type TablePaymentMethod,
+  canTakePayment, describePaymentResult, km, recordTablePayment,
+  resolveBillRequest as rpcResolveBillRequest, resolveWaiterCall as rpcResolveWaiterCall,
+  updateOrderStatus as rpcUpdateOrderStatus, type TablePaymentMethod, type TablePaymentResult,
 } from '@/lib/staff-api';
+import {
+  useCoalesced, useLatestRequest, useStaffRealtime, useStaffRealtimeEvent, useStaffRefresh,
+} from '@/lib/realtime';
+import {
+  playBillRequestAlert, playWaiterCallAlert, useAudioUnlock, useReminderChime, vibrate,
+} from '@/lib/kitchen-sounds';
+import ConnectionPill from '@/components/staff/ConnectionPill';
+import PaymentConfirm from '@/components/staff/PaymentConfirm';
+import FreeTableDialog from '@/components/staff/FreeTableDialog';
+import { useStaffDocument } from '@/components/staff/useStaffDocument';
+import { isHeld, isInKitchen, kitchenStart, orderStatusLabel } from '@/components/staff/order-status';
+import HeldOrdersCard from '@/components/staff/HeldOrdersCard';
 import type { Database } from '@/integrations/supabase/types';
 
 type OrderStatus = Database['public']['Enums']['order_status'];
@@ -62,106 +65,148 @@ type WaiterOrderItem = {
 type WaiterOrder = Pick<
   Database['public']['Tables']['orders']['Row'],
   'id' | 'created_at' | 'status' | 'table_session_id' | 'payment_method' | 'payment_status' | 'total' | 'notes'
+  | 'refunded_amount' | 'released_to_kitchen_at' | 'held_reason'
 > & {
   table_sessions: { tables: { table_number: number } | null } | null;
   order_items: WaiterOrderItem[] | null;
 };
-type WaiterCall = Pick<Database['public']['Tables']['waiter_calls']['Row'], 'id' | 'created_at' | 'table_session_id'> & {
+/** An open call or bill request: pending, or claimed and still not done. */
+type FloorAlert = {
+  id: string;
+  created_at: string;
+  table_session_id: string;
+  status: string;
+  acknowledged_by: string | null;
+  acknowledged_at: string | null;
   table_sessions: { tables: { table_number: number } | null } | null;
-};
-type BillRequest = Pick<Database['public']['Tables']['bill_requests']['Row'], 'id' | 'created_at' | 'table_session_id'> & {
-  table_sessions: { tables: { table_number: number } | null } | null;
-};
-type WindowWithWebAudioFallback = Window & typeof globalThis & {
-  webkitAudioContext?: typeof AudioContext;
 };
 
 const SOUND_KEY = 'waiter-sound-on';
 
-const playBeep = () => {
-  try {
-    const AudioContextCtor = window.AudioContext ?? (window as WindowWithWebAudioFallback).webkitAudioContext;
-    if (!AudioContextCtor) return;
+/** A per-table settle-up that is waiting for its second tap. */
+interface PendingSettle {
+  sessionId: string;
+  tableNumber: number | string;
+  method: TablePaymentMethod;
+  /** Captured at the first tap: an order arriving in between is not swept in unseen. */
+  orderIds: string[];
+  amount: number;
+}
 
-    const ctx = new AudioContextCtor();
-    const oscillator = ctx.createOscillator();
-    const gain = ctx.createGain();
-    oscillator.connect(gain);
-    gain.connect(ctx.destination);
-    oscillator.frequency.value = 880;
-    oscillator.type = 'sine';
-    gain.gain.setValueAtTime(0.0001, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.18, ctx.currentTime + 0.02);
-    gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.45);
-    oscillator.start();
-    oscillator.stop(ctx.currentTime + 0.5);
-  } catch (error) {
-    console.warn('Unable to play waiter alert sound', error);
-  }
-};
+const tableOf = (row: { table_sessions: { tables: { table_number: number } | null } | null }) =>
+  row.table_sessions?.tables?.table_number ?? '?';
 
 const WaiterDashboard = () => {
+  useStaffDocument();
   const navigate = useNavigate();
   const [waiter, setWaiter] = useState<WaiterInfo | null>(null);
   const [tables, setTables] = useState<WaiterSession[]>([]);
+  const [unassigned, setUnassigned] = useState<WaiterSession[]>([]);
   const [orders, setOrders] = useState<WaiterOrder[]>([]);
-  const [waiterCalls, setWaiterCalls] = useState<WaiterCall[]>([]);
-  const [billRequests, setBillRequests] = useState<BillRequest[]>([]);
+  const [waiterCalls, setWaiterCalls] = useState<FloorAlert[]>([]);
+  const [billRequests, setBillRequests] = useState<FloorAlert[]>([]);
+  const [staffNames, setStaffNames] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
+  /**
+   * The last refresh failed. Persistent, not a toast: a toast is gone in four
+   * seconds and the screen stays wrong until the next successful refresh — the
+   * waiter has to be able to see that at a glance, any time they look.
+   */
+  const [stale, setStale] = useState(false);
   const [soundOn, setSoundOn] = useState<boolean>(() => localStorage.getItem(SOUND_KEY) !== 'false');
-  const prevAlertIds = useRef<Set<string>>(new Set());
+  const { unlocked: audioUnlocked, unlock: unlockSound } = useAudioUnlock();
+  /** null until the first load: alerts that were already open then are not "new". */
+  const prevAlertIds = useRef<Set<string> | null>(null);
 
-  const fetchAll = useCallback(async (waiterId: string) => {
-    const { data: sessions, error: sessionsError } = await supabase
-      .from('table_sessions')
-      .select('id, opened_at, guest_name, table_id, tables!inner(table_number, section_id)')
-      .eq('is_active', true)
-      .eq('assigned_waiter_id', waiterId);
+  /** Taps in flight, so a double tap is one request. */
+  const [busy, setBusy] = useState<Set<string>>(new Set());
+  const [settle, setSettle] = useState<PendingSettle | null>(null);
+  const [freeing, setFreeing] = useState<WaiterSession | null>(null);
 
-    if (sessionsError) {
-      toast.error('Failed to load tables');
+  const waiterIdRef = useRef<string | null>(null);
+  const beginFetch = useLatestRequest();
+
+  // Live-data health from the shared channel: one socket per tab, with the
+  // polling fallback and reconnect catch-up the old private channel lacked.
+  const connection = useStaffRealtime();
+
+  const fetchAll = useCallback(async () => {
+    const waiterId = waiterIdRef.current;
+    if (!waiterId) return;
+    const isLatest = beginFetch();
+
+    const [mine, free, names] = await Promise.all([
+      supabase
+        .from('table_sessions')
+        .select('id, opened_at, guest_name, table_id, tables!inner(table_number, section_id)')
+        .eq('is_active', true)
+        .eq('assigned_waiter_id', waiterId),
+      // Seated tables nobody has. These used to be invisible to every waiter —
+      // and after midnight, before the trading-day fix, that was every table.
+      supabase
+        .from('table_sessions')
+        .select('id, opened_at, guest_name, table_id, tables!inner(table_number, section_id)')
+        .eq('is_active', true)
+        .is('assigned_waiter_id', null),
+      supabase.from('waiters').select('user_id, display_name'),
+    ]);
+
+    if (mine.error || free.error) {
+      if (isLatest()) setStale(true);
       return;
     }
 
-    const activeSessions = (sessions ?? []) as WaiterSession[];
+    const activeSessions = (mine.data ?? []) as WaiterSession[];
     const sessionIds = activeSessions.map((session) => session.id);
 
-    const { data: ord, error: ordersError } = sessionIds.length > 0
-      ? await supabase
-          .from('orders')
-          .select('*, table_sessions!inner(tables!inner(table_number)), order_items(quantity, status, notes, menu_items(name))')
-          .in('table_session_id', sessionIds)
-          .neq('status', 'served')
-          .neq('status', 'cancelled')
-          .order('created_at', { ascending: true })
-      : { data: [], error: null };
+    const empty = { data: [], error: null };
+    const [ord, calls, bills] = sessionIds.length > 0
+      ? await Promise.all([
+          // Every order still on the table's bill, served or not: a served
+          // order that has not been paid is exactly the one the waiter must
+          // collect, and filtering it out removed the only Paid button for it.
+          supabase
+            .from('orders')
+            .select('*, table_sessions!inner(tables!inner(table_number)), order_items(quantity, status, notes, menu_items(name))')
+            .in('table_session_id', sessionIds)
+            .neq('status', 'cancelled')
+            .order('created_at', { ascending: true }),
+          // Open, not merely pending: a claimed call is still a guest waiting.
+          supabase
+            .from('waiter_calls')
+            .select('*, table_sessions!inner(tables!inner(table_number))')
+            .in('table_session_id', sessionIds)
+            .neq('status', 'resolved')
+            .order('created_at', { ascending: true }),
+          supabase
+            .from('bill_requests')
+            .select('*, table_sessions!inner(tables!inner(table_number))')
+            .in('table_session_id', sessionIds)
+            .neq('status', 'resolved')
+            .order('created_at', { ascending: true }),
+        ])
+      : [empty, empty, empty];
 
-    const { data: calls, error: callsError } = sessionIds.length > 0
-      ? await supabase
-          .from('waiter_calls')
-          .select('*, table_sessions!inner(tables!inner(table_number))')
-          .in('table_session_id', sessionIds)
-          .eq('status', 'pending')
-      : { data: [], error: null };
-
-    const { data: bills, error: billsError } = sessionIds.length > 0
-      ? await supabase
-          .from('bill_requests')
-          .select('*, table_sessions!inner(tables!inner(table_number))')
-          .in('table_session_id', sessionIds)
-          .eq('status', 'pending')
-      : { data: [], error: null };
-
-    if (ordersError || callsError || billsError) {
-      toast.error('Failed to load live service queue');
+    if (!isLatest()) return;
+    if (ord.error || calls.error || bills.error) {
+      setStale(true);
       return;
     }
 
+    setStale(false);
     setTables(activeSessions);
-    setOrders((ord ?? []) as WaiterOrder[]);
-    setWaiterCalls((calls ?? []) as WaiterCall[]);
-    setBillRequests((bills ?? []) as BillRequest[]);
-  }, []);
+    setUnassigned((free.data ?? []) as WaiterSession[]);
+    setOrders((ord.data ?? []) as WaiterOrder[]);
+    setWaiterCalls((calls.data ?? []) as FloorAlert[]);
+    setBillRequests((bills.data ?? []) as FloorAlert[]);
+    if (Array.isArray(names.data)) {
+      const map: Record<string, string> = {};
+      for (const w of names.data as { user_id: string | null; display_name: string }[]) {
+        if (w.user_id) map[w.user_id] = w.display_name;
+      }
+      setStaffNames(map);
+    }
+  }, [beginFetch]);
 
   useEffect(() => {
     let mounted = true;
@@ -187,93 +232,150 @@ const WaiterDashboard = () => {
 
       if (!mounted) return;
       setWaiter(waiterProfile);
-      await fetchAll(waiterProfile.id);
+      waiterIdRef.current = waiterProfile.id;
+      await fetchAll();
       if (mounted) setLoading(false);
-
-      const ch = supabase
-        .channel(`waiter-${waiterProfile.id}`)
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => { void fetchAll(waiterProfile.id); })
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'waiter_calls' }, () => { void fetchAll(waiterProfile.id); })
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'bill_requests' }, () => { void fetchAll(waiterProfile.id); })
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'table_sessions' }, () => { void fetchAll(waiterProfile.id); })
-        .subscribe();
-
-      return () => {
-        supabase.removeChannel(ch);
-      };
     };
 
-    const cleanupPromise = init();
-
-    return () => {
-      mounted = false;
-      void cleanupPromise.then((cleanup) => cleanup?.());
-    };
+    void init();
+    return () => { mounted = false; };
   }, [fetchAll, navigate]);
 
-  const updateOrderStatus = async (id: string, status: OrderStatus) => {
+  /*
+   * Refetch on the events that can change this screen — coalesced, so a
+   * six-item order is one refetch rather than seven racing ones — and on every
+   * poll tick, reconnect, return to the foreground and network recovery. A
+   * phone spends most of the shift in a pocket; the moment it comes out is the
+   * moment it must be right.
+   */
+  const refetch = useCoalesced(useCallback(() => { void fetchAll(); }, [fetchAll]));
+  useStaffRealtimeEvent(useCallback((table: string) => {
+    if (['orders', 'waiter_calls', 'bill_requests', 'table_sessions'].includes(table)) refetch();
+  }, [refetch]));
+  useStaffRefresh(useCallback(() => { refetch(); }, [refetch]));
+
+  /*
+   * In-flight taps. The ref is the gate — two taps inside one frame both see
+   * the same render, so state alone lets the second through — and the state
+   * mirrors it so the buttons can show they are disabled.
+   */
+  const inFlight = useRef<Set<string>>(new Set());
+  const mark = (key: string, on: boolean) => {
+    if (on) inFlight.current.add(key); else inFlight.current.delete(key);
+    setBusy(new Set(inFlight.current));
+  };
+
+  /** One tap, one request: anything already in flight is ignored. */
+  const once = async (key: string, fn: () => Promise<void>) => {
+    if (inFlight.current.has(key)) return;
+    mark(key, true);
+    try { await fn(); } finally { mark(key, false); refetch(); }
+  };
+
+  const updateOrderStatus = (id: string, status: OrderStatus) => once(`order:${id}`, async () => {
+    // Shown at once; the refetch puts the database's answer back either way.
+    setOrders((prev) => prev.map((o) => (o.id === id ? { ...o, status } : o)));
     try {
       // Validated server-side; an illegal move is refused rather than applied.
       await rpcUpdateOrderStatus(id, status);
-      toast.success('Updated');
+      toast.success(status === 'served' ? 'Marked served' : 'Accepted');
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Could not update the order');
     }
-  };
+  });
+
+  const resolveCall = (id: string) => once(`call:${id}`, async () => {
+    setWaiterCalls((prev) => prev.filter((c) => c.id !== id));
+    try {
+      // Through the RPC, so the cleared call has a name attached to it.
+      await rpcResolveWaiterCall(id);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Could not clear the call');
+    }
+  });
+
+  const resolveBill = (id: string) => once(`bill:${id}`, async () => {
+    setBillRequests((prev) => prev.filter((b) => b.id !== id));
+    try {
+      await rpcResolveBillRequest(id, false);
+      toast.success('Bill request cleared — the table stays open');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Could not clear the bill request');
+    }
+  });
 
   /**
-   * The guest paid in the room. Cash and the physical POS terminal are
-   * recorded separately — they reconcile against the drawer and the terminal
-   * batch respectively, and collapsing them makes the day impossible to close.
+   * Settle a whole table, cash or terminal.
+   *
+   * Records each order captured at the first tap. Any the server reports as
+   * already paid (typically online) are called out loudly — that is money the
+   * waiter must NOT take — instead of being announced as "recorded".
    */
-  const markPaid = async (id: string, method: TablePaymentMethod) => {
-    try {
-      await recordTablePayment(id, method);
-      toast.success(method === 'cash' ? 'Recorded as paid in cash' : 'Recorded as paid on the terminal');
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Could not record the payment');
+  const confirmSettle = () => settle && once(`settle:${settle.sessionId}`, async () => {
+    const { orderIds, method, tableNumber } = settle;
+    const results: { id: string; result: TablePaymentResult }[] = [];
+    let failed = 0;
+    for (const id of orderIds) {
+      try {
+        results.push({ id, result: await recordTablePayment(id, method) });
+      } catch (error) {
+        failed += 1;
+        toast.error(error instanceof Error ? error.message : 'Could not record the payment');
+      }
     }
-  };
+    const done = new Set(results.map((r) => r.id));
+    setOrders((prev) => prev.map((o) => (done.has(o.id) ? { ...o, payment_status: 'paid', payment_method: o.payment_method ?? method } : o)));
+    setSettle(null);
 
-  const resolveCall = async (id: string) => {
-    // Through the RPC, so the cleared call has a name attached to it.
-    const error = await rpcResolveWaiterCall(id).then(() => null, (e: unknown) => e);
-    if (error) toast.error(error.message);
-  };
-
-  const resolveBill = async (id: string) => {
-    const { error } = await supabase
-      .from('bill_requests')
-      .update({ status: 'resolved', resolved_at: new Date().toISOString() })
-      .eq('id', id);
-    if (error) toast.error(error.message);
-  };
-
-  const closeSession = async (id: string) => {
-    const { error } = await supabase
-      .from('table_sessions')
-      .update({ is_active: false, closed_at: new Date().toISOString() })
-      .eq('id', id);
-    if (error) {
-      toast.error(error.message);
-      return;
+    const already = results.filter((r) => !describePaymentResult(r.result, method).ok);
+    const recorded = results.length - already.length;
+    if (already.length > 0) {
+      toast.warning(
+        `Table ${tableNumber}: ${describePaymentResult(already[0].result, method).message}`
+        + (already.length > 1 ? ` (${already.length} orders)` : ''),
+        { duration: 10_000 },
+      );
     }
-    toast.success('Table freed');
-  };
+    if (recorded > 0 && failed === 0) {
+      toast.success(`Table ${tableNumber}: ${describePaymentResult({ status: 'paid', payment_method: method }, method).message}`);
+    }
+  });
 
   const logout = async () => {
     await supabase.auth.signOut();
     navigate('/waiter/login');
   };
 
-  const ordersByTable = useMemo(() => {
-    const map: Record<string, number> = {};
-    orders.forEach((order) => {
-      const tableNumber = order.table_sessions?.tables?.table_number;
-      if (tableNumber != null) map[tableNumber] = (map[tableNumber] ?? 0) + 1;
-    });
+  /* ---- Derived ------------------------------------------------------- */
+
+  const bySession = useMemo(() => {
+    const map: Record<string, WaiterOrder[]> = {};
+    for (const o of orders) (map[o.table_session_id] ??= []).push(o);
     return map;
   }, [orders]);
+
+  const owedFor = useCallback((sessionId: string) => {
+    const due = (bySession[sessionId] ?? []).filter(canTakePayment);
+    return { due, amount: due.reduce((sum, o) => sum + Number(o.total ?? 0), 0) };
+  }, [bySession]);
+
+  /** Ready plates are the most time-critical thing a waiter does; they lead. */
+  const readyToRun = orders.filter((o) => o.status === 'ready');
+  /** In the kitchen, not yet up. */
+  const cooking = orders.filter((o) => isInKitchen(o.status) && !isHeld(o) && !['ready', 'served'].includes(o.status));
+  /**
+   * Card orders whose payment has not cleared, and orders held for staff to
+   * confirm — said in words, never counted as cooking.
+   */
+  const notInKitchen = orders.filter((o) => !isInKitchen(o.status) || isHeld(o));
+
+  const attentionCount = waiterCalls.length + billRequests.length + readyToRun.length;
+  const ordersWaiting = cooking.length + readyToRun.length;
+  const oldestOrderMs = [...cooking, ...readyToRun].reduce((max, order) => {
+    const ms = Date.now() - new Date(kitchenStart(order)).getTime();
+    return ms > max ? ms : max;
+  }, 0);
+  const totalOwed = tables.reduce((sum, t) => sum + owedFor(t.id).amount, 0);
 
   const initials = (waiter?.display_name || '?')
     .split(' ')
@@ -281,33 +383,86 @@ const WaiterDashboard = () => {
     .join('')
     .slice(0, 2)
     .toUpperCase();
-  const attentionCount = waiterCalls.length + billRequests.length;
-  const ordersWaiting = orders.filter((order) => order.status !== 'served' && order.status !== 'cancelled').length;
-  const oldestOrderMs = orders.reduce((max, order) => {
-    const ms = Date.now() - new Date(order.created_at).getTime();
-    return ms > max ? ms : max;
-  }, 0);
 
+  /*
+   * Chime and buzz on a NEW call or bill request.
+   *
+   * The old check only fired when the previous set was non-empty — so on a
+   * quiet floor, the first call of the evening (the one most likely to be
+   * missed) made no sound at all. The baseline is now "after the first load",
+   * not "after the first alert". And it uses the shared, gesture-unlocked
+   * audio context: a fresh AudioContext per beep is born suspended on phones,
+   * so it was silent there regardless.
+   */
   useEffect(() => {
+    if (loading) return;
     const ids = new Set<string>([
       ...waiterCalls.map((call) => `c:${call.id}`),
       ...billRequests.map((bill) => `b:${bill.id}`),
     ]);
-    if (prevAlertIds.current.size > 0) {
-      let isNew = false;
-      ids.forEach((id) => {
-        if (!prevAlertIds.current.has(id)) isNew = true;
-      });
-      if (isNew && soundOn) playBeep();
-    }
+    const prev = prevAlertIds.current;
     prevAlertIds.current = ids;
-  }, [waiterCalls, billRequests, soundOn]);
+    if (prev === null || !soundOn) return;
+    const newBill = billRequests.some((b) => !prev.has(`b:${b.id}`));
+    const newCall = waiterCalls.some((c) => !prev.has(`c:${c.id}`));
+    if (!newBill && !newCall) return;
+    vibrate();
+    if (newBill) playBillRequestAlert(); else playWaiterCallAlert();
+  }, [waiterCalls, billRequests, soundOn, loading]);
 
-  const toggleSound = () => {
+  /* Again every ~75s while a table is waiting and nobody is on the way. */
+  const alertsRef = useRef({ calls: waiterCalls, bills: billRequests });
+  useEffect(() => { alertsRef.current = { calls: waiterCalls, bills: billRequests }; }, [waiterCalls, billRequests]);
+  useReminderChime(
+    soundOn && (waiterCalls.length > 0 || billRequests.length > 0),
+    useCallback(() => {
+      const waiting = (a: FloorAlert) => a.status === 'pending'
+        || !a.acknowledged_at || Date.now() - new Date(a.acknowledged_at).getTime() > 3 * 60_000;
+      const { calls, bills } = alertsRef.current;
+      if (!calls.some(waiting) && !bills.some(waiting)) return;
+      vibrate();
+      if (bills.some(waiting)) playBillRequestAlert(); else playWaiterCallAlert();
+    }, []),
+  );
+
+  const toggleSound = async () => {
     const next = !soundOn;
     setSoundOn(next);
     localStorage.setItem(SOUND_KEY, String(next));
-    if (next) playBeep();
+    if (next && (await unlockSound())) playWaiterCallAlert();
+  };
+
+  const startSettle = (sessionId: string, tableNumber: number | string, method: TablePaymentMethod) => {
+    const { due, amount } = owedFor(sessionId);
+    if (due.length === 0) return;
+    setSettle({ sessionId, tableNumber, method, orderIds: due.map((o) => o.id), amount });
+  };
+
+  const settleRow = (sessionId: string, tableNumber: number | string) => {
+    const { due, amount } = owedFor(sessionId);
+    if (settle?.sessionId === sessionId) {
+      return (
+        <PaymentConfirm
+          tableNumber={tableNumber}
+          amount={settle.amount}
+          method={settle.method}
+          busy={busy.has(`settle:${sessionId}`)}
+          detail={settle.orderIds.length > 1 ? `${settle.orderIds.length} orders` : undefined}
+          onCancel={() => setSettle(null)}
+          onConfirm={() => { void confirmSettle(); }}
+        />
+      );
+    }
+    if (due.length === 0) return null;
+    return (
+      <OwesRow
+        amount={amount}
+        orders={due.length}
+        disabled={busy.has(`settle:${sessionId}`)}
+        onCash={() => startSettle(sessionId, tableNumber, 'cash')}
+        onTerminal={() => startSettle(sessionId, tableNumber, 'pos_terminal')}
+      />
+    );
   };
 
   if (loading) {
@@ -324,43 +479,60 @@ const WaiterDashboard = () => {
   return (
     <div className="min-h-screen bg-background pb-[env(safe-area-inset-bottom)]">
       <header className="sticky top-0 z-40 border-b border-border/60 bg-background/80 backdrop-blur-md">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-primary to-accent text-primary-foreground grid place-items-center font-serif font-bold text-sm">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-10 h-10 shrink-0 rounded-full bg-gradient-to-br from-primary to-accent text-primary-foreground grid place-items-center font-serif font-bold text-sm">
               {initials}
             </div>
-            <div>
-              <h1 className="font-serif text-lg sm:text-xl font-bold leading-tight">{waiter?.display_name}</h1>
-              <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                <span className="relative flex w-2 h-2">
-                  <span className="absolute inline-flex h-full w-full rounded-full bg-emerald-500 opacity-75 animate-ping" />
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
-                </span>
-                On shift | {tables.length} table{tables.length !== 1 ? 's' : ''}
+            <div className="min-w-0">
+              <h1 className="font-serif text-lg sm:text-xl font-bold leading-tight truncate">{waiter?.display_name}</h1>
+              <div className="flex items-center gap-1.5 text-sm text-muted-foreground flex-wrap">
+                <ConnectionPill state={connection} />
+                <span>{tables.length} table{tables.length !== 1 ? 's' : ''}</span>
               </div>
             </div>
           </div>
-          <div className="flex items-center gap-1">
-            <Button variant="ghost" size="sm" asChild className="tap-sm">
-              <Link to="/waiter/monitor"><Monitor className="w-4 h-4 sm:mr-1" /><span className="hidden sm:inline">Floor</span></Link>
+          <div className="flex items-center gap-1 shrink-0">
+            <Button variant="ghost" asChild className="tap-sm min-h-[44px] min-w-[44px] px-2">
+              <Link to="/waiter/monitor" aria-label="Floor monitor"><Monitor className="w-5 h-5 sm:mr-1" /><span className="hidden sm:inline text-sm">Floor</span></Link>
             </Button>
             <Button
               variant="ghost"
-              size="sm"
-              onClick={toggleSound}
-              className="tap-sm"
+              onClick={() => { void toggleSound(); }}
+              className="tap-sm min-h-[44px] min-w-[44px] px-2"
               aria-label={soundOn ? 'Mute waiter alert sound' : 'Enable waiter alert sound'}
             >
-              {soundOn ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4 text-muted-foreground" />}
+              {soundOn ? <Volume2 className="w-5 h-5" /> : <VolumeX className="w-5 h-5 text-muted-foreground" />}
             </Button>
-            <Button variant="ghost" size="sm" onClick={logout} className="tap-sm">
-              <LogOut className="w-4 h-4 sm:mr-1" /><span className="hidden sm:inline">Sign out</span>
+            <Button variant="ghost" onClick={logout} className="tap-sm min-h-[44px] min-w-[44px] px-2" aria-label="Sign out">
+              <LogOut className="w-5 h-5 sm:mr-1" /><span className="hidden sm:inline text-sm">Sign out</span>
             </Button>
           </div>
         </div>
+
+        {/* Phones suspend audio until a tap. Saying so is the difference
+            between a waiter who knows to tap once and one who trusts a
+            silent phone all evening. */}
+        {soundOn && !audioUnlocked && (
+          <div className="max-w-6xl mx-auto px-4 sm:px-6 pb-2">
+            <button
+              onClick={() => { void unlockSound().then((ok) => { if (ok) playWaiterCallAlert(); }); }}
+              className="w-full min-h-[44px] rounded-lg bg-destructive/10 text-destructive text-sm font-sans font-semibold flex items-center justify-center gap-2"
+            >
+              <VolumeX className="w-4 h-4" /> Sound is off on this phone — tap to enable alerts
+            </button>
+          </div>
+        )}
+
+        {stale && (
+          <div role="alert" className="bg-destructive text-destructive-foreground text-sm font-sans font-semibold px-4 sm:px-6 py-2 text-center">
+            Could not refresh — this screen may be out of date. Retrying automatically.
+          </div>
+        )}
+
         <div className="max-w-6xl mx-auto px-4 sm:px-6 pb-3 grid grid-cols-3 gap-2 text-center">
-          <StatChip label="Tables" value={tables.length} />
-          <StatChip label="Orders" value={ordersWaiting} tone={ordersWaiting > 0 ? 'active' : 'idle'} />
+          <StatChip label="Owed" value={totalOwed > 0 ? km(totalOwed) : '-'} tone={totalOwed > 0 ? 'warn' : 'idle'} />
+          <StatChip label="In kitchen" value={ordersWaiting} tone={ordersWaiting > 0 ? 'active' : 'idle'} />
           <StatChip
             label="Oldest wait"
             value={oldestOrderMs > 0 ? formatDuration(oldestOrderMs) : '-'}
@@ -370,6 +542,9 @@ const WaiterDashboard = () => {
       </header>
 
       <main className="max-w-6xl mx-auto px-4 sm:px-6 py-5 space-y-7">
+        {/* Every held order in the venue, not just this waiter's tables: whoever
+            is nearest the table is the one who can tell if anyone is there. */}
+        <HeldOrdersCard soundEnabled={soundOn} onChanged={refetch} />
         <section>
           <SectionTitle icon={<Bell className="w-4 h-4" />} title="Attention needed" count={attentionCount} />
           {attentionCount === 0 ? (
@@ -379,81 +554,132 @@ const WaiterDashboard = () => {
           ) : (
             <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
               <AnimatePresence mode="popLayout">
+                {billRequests.map((bill) => (
+                  <AlertCard
+                    key={bill.id}
+                    color="primary"
+                    icon={<CreditCard className="w-5 h-5" />}
+                    title={`Table ${tableOf(bill)}`}
+                    label="Wants the bill"
+                    alert={bill}
+                    claimedBy={bill.acknowledged_by ? staffNames[bill.acknowledged_by] ?? 'Someone' : null}
+                    doneLabel="Bill given"
+                    busy={busy.has(`bill:${bill.id}`)}
+                    onDone={() => { void resolveBill(bill.id); }}
+                  >
+                    {settleRow(bill.table_session_id, tableOf(bill))}
+                  </AlertCard>
+                ))}
                 {waiterCalls.map((call) => (
-                  <AlertPill
+                  <AlertCard
                     key={call.id}
                     color="amber"
-                    icon={<Hand className="w-4 h-4" />}
-                    title={`Table ${call.table_sessions?.tables?.table_number ?? '?'}`}
+                    icon={<Hand className="w-5 h-5" />}
+                    title={`Table ${tableOf(call)}`}
                     label="Needs you"
-                    since={call.created_at}
+                    alert={call}
+                    claimedBy={call.acknowledged_by ? staffNames[call.acknowledged_by] ?? 'Someone' : null}
+                    doneLabel="Done"
+                    busy={busy.has(`call:${call.id}`)}
                     onDone={() => { void resolveCall(call.id); }}
                   />
                 ))}
-                {billRequests.map((bill) => (
-                  <AlertPill
-                    key={bill.id}
-                    color="primary"
-                    icon={<CreditCard className="w-4 h-4" />}
-                    title={`Table ${bill.table_sessions?.tables?.table_number ?? '?'}`}
-                    label="Wants the bill"
-                    since={bill.created_at}
-                    onDone={() => { void resolveBill(bill.id); }}
-                  />
-                ))}
-              </AnimatePresence>
-            </div>
-          )}
-        </section>
-
-        <section>
-          <SectionTitle icon={<Users className="w-4 h-4" />} title="My tables" count={tables.length} />
-          {tables.length === 0 ? (
-            <EmptyState icon={<Users className="w-5 h-5" />} text="No tables yet. Tables appear here once your manager assigns your section for today and a guest sits down." />
-          ) : (
-            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {tables.map((session, index) => (
-                <motion.div
-                  key={session.id}
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: index * 0.04, duration: 0.2 }}
-                >
-                  <TableCard
-                    session={session}
-                    activeOrders={ordersByTable[String(session.tables?.table_number ?? '')] ?? 0}
-                    onClose={() => { void closeSession(session.id); }}
-                  />
-                </motion.div>
-              ))}
-            </div>
-          )}
-        </section>
-
-        <section>
-          <SectionTitle icon={<ChefHat className="w-4 h-4" />} title="Live orders" count={orders.length} />
-          {orders.length === 0 ? (
-            <EmptyState icon={<Utensils className="w-5 h-5" />} text="No active orders right now." />
-          ) : (
-            <div className="grid sm:grid-cols-2 gap-3">
-              <AnimatePresence mode="popLayout">
-                {orders.map((order, index) => (
-                  <motion.div
-                    key={order.id}
-                    layout
-                    initial={{ opacity: 0, y: 8 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, scale: 0.96 }}
-                    transition={{ delay: index * 0.03, duration: 0.2 }}
-                  >
-                    <OrderCard order={order} onUpdate={updateOrderStatus} onMarkPaid={markPaid} />
+                {readyToRun.map((order) => (
+                  <motion.div key={order.id} layout initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.96 }}>
+                    <OrderCard
+                      order={order}
+                      busy={busy.has(`order:${order.id}`)}
+                      onUpdate={updateOrderStatus}
+                      highlight
+                    />
                   </motion.div>
                 ))}
               </AnimatePresence>
             </div>
           )}
         </section>
+
+        <section>
+          <SectionTitle icon={<ChefHat className="w-4 h-4" />} title="In the kitchen" count={cooking.length + notInKitchen.length} />
+          {cooking.length + notInKitchen.length === 0 ? (
+            <EmptyState icon={<Utensils className="w-5 h-5" />} text="Nothing cooking for your tables." />
+          ) : (
+            <div className="grid sm:grid-cols-2 gap-3">
+              <AnimatePresence mode="popLayout">
+                {[...cooking, ...notInKitchen].map((order) => (
+                  <motion.div
+                    key={order.id}
+                    layout
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.96 }}
+                    transition={{ duration: 0.2 }}
+                  >
+                    <OrderCard order={order} busy={busy.has(`order:${order.id}`)} onUpdate={updateOrderStatus} />
+                  </motion.div>
+                ))}
+              </AnimatePresence>
+            </div>
+          )}
+        </section>
+
+        {/* Collapsed by default: during service the table list is reference,
+            not a to-do list, and it used to push the alerts off the screen. */}
+        <Collapsible>
+          <CollapsibleTrigger asChild>
+            <button className="group w-full flex items-center gap-2 min-h-[44px] text-left">
+              <span className="text-muted-foreground"><Users className="w-4 h-4" /></span>
+              <h2 className="font-serif text-base sm:text-lg font-bold">My tables</h2>
+              <span className="text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground tabular-nums">{tables.length}</span>
+              {totalOwed > 0 && (
+                <span className="text-sm font-sans font-semibold text-amber-700 dark:text-amber-400 tabular-nums">
+                  {km(totalOwed)} owed
+                </span>
+              )}
+              <ChevronDown className="w-5 h-5 ml-auto text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
+            </button>
+          </CollapsibleTrigger>
+          <CollapsibleContent className="mt-3">
+            {tables.length === 0 ? (
+              <EmptyState icon={<Users className="w-5 h-5" />} text="No tables yet. Tables appear here once your manager assigns your section for today and a guest sits down." />
+            ) : (
+              <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {tables.map((session) => (
+                  <TableCard
+                    key={session.id}
+                    session={session}
+                    activeOrders={(bySession[session.id] ?? []).filter((o) => isInKitchen(o.status) && !isHeld(o) && o.status !== 'served').length}
+                    onClose={() => setFreeing(session)}
+                  >
+                    {settleRow(session.id, session.tables?.table_number ?? '?')}
+                  </TableCard>
+                ))}
+              </div>
+            )}
+          </CollapsibleContent>
+        </Collapsible>
+
+        {unassigned.length > 0 && (
+          <section>
+            <SectionTitle icon={<UserX className="w-4 h-4" />} title="Unassigned tables" count={unassigned.length} />
+            <p className="text-sm text-muted-foreground font-sans mb-2">
+              Seated, but no waiter has them. Tell your manager, or look after them.
+            </p>
+            <ul className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2">
+              {unassigned.map((session) => <UnassignedRow key={session.id} session={session} />)}
+            </ul>
+          </section>
+        )}
       </main>
+
+      <FreeTableDialog
+        open={freeing !== null}
+        onOpenChange={(open) => { if (!open) setFreeing(null); }}
+        sessionId={freeing?.id ?? null}
+        tableNumber={freeing?.tables?.table_number ?? '?'}
+        knownOwed={freeing ? owedFor(freeing.id).amount : 0}
+        onFreed={refetch}
+      />
     </div>
   );
 };
@@ -475,7 +701,7 @@ const StatChip = ({
   }[tone];
   return (
     <div className={`rounded-lg ${toneCls} px-2 py-1.5`}>
-      <p className="text-[10px] uppercase tracking-wide opacity-70 leading-none">{label}</p>
+      <p className="text-[11px] uppercase tracking-wide opacity-70 leading-none">{label}</p>
       <p className="font-serif font-bold text-base leading-tight tabular-nums mt-0.5">{value}</p>
     </div>
   );
@@ -501,20 +727,61 @@ const Elapsed = ({ since }: { since: string }) => {
   return <>{formatDuration(ms)}</>;
 };
 
-const AlertPill = ({
+/** "Marko is going (3m)". */
+const Going = ({ name, since }: { name: string; since: string | null }) => {
+  const ms = useElapsedMinutes(since);
+  return <>{name} is going{since ? ` (${formatMinutes(ms)})` : ''}</>;
+};
+
+/** What a table owes, with the two ways to settle it in the room. */
+const OwesRow = ({
+  amount, orders, disabled, onCash, onTerminal,
+}: {
+  amount: number;
+  orders: number;
+  disabled: boolean;
+  onCash: () => void;
+  onTerminal: () => void;
+}) => (
+  <div className="rounded-lg border border-amber-500/40 bg-amber-500/5 p-2.5">
+    <p className="text-sm font-sans font-semibold text-foreground">
+      Owes <span className="tabular-nums">{km(amount)}</span>
+      {orders > 1 && <span className="font-normal text-muted-foreground"> · {orders} orders</span>}
+    </p>
+    <div className="flex gap-2 mt-2">
+      <Button variant="outline" className="flex-1 min-h-[44px] tap text-sm gap-1.5" disabled={disabled} onClick={onCash}>
+        <Banknote className="w-4 h-4" /> Cash
+      </Button>
+      <Button variant="outline" className="flex-1 min-h-[44px] tap text-sm gap-1.5" disabled={disabled} onClick={onTerminal}>
+        <CreditCard className="w-4 h-4" /> Terminal
+      </Button>
+    </div>
+  </div>
+);
+
+const AlertCard = ({
   color,
   icon,
   title,
   label,
-  since,
+  alert,
+  claimedBy,
+  doneLabel,
+  busy,
   onDone,
+  children,
 }: {
   color: 'amber' | 'primary';
   icon: React.ReactNode;
   title: string;
   label: string;
-  since: string;
+  alert: FloorAlert;
+  /** Who said they are going — the call stays here until it is actually done. */
+  claimedBy: string | null;
+  doneLabel: string;
+  busy: boolean;
   onDone: () => void;
+  children?: React.ReactNode;
 }) => {
   const accent = color === 'amber' ? 'bg-amber-500' : 'bg-primary';
   const tint = color === 'amber' ? 'bg-amber-500/5 border-amber-500/30' : 'bg-primary/5 border-primary/30';
@@ -526,75 +793,89 @@ const AlertPill = ({
       exit={{ opacity: 0, scale: 0.95 }}
       transition={{ duration: 0.18 }}
     >
-      <div className={`relative overflow-hidden rounded-xl border ${tint} pl-3 pr-2 py-2.5 flex items-center gap-3`}>
+      <div className={`relative overflow-hidden rounded-xl border ${tint} pl-3 pr-2 py-2.5 space-y-2`}>
         <div className={`absolute left-0 top-0 bottom-0 w-1 ${accent}`} />
-        <div className={`w-9 h-9 rounded-lg ${accent} text-white grid place-items-center shrink-0`}>
-          {icon}
+        <div className="flex items-center gap-3">
+          <div className={`w-10 h-10 rounded-lg ${accent} text-white grid place-items-center shrink-0`}>
+            {icon}
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="font-sans font-bold text-base truncate">{title}</p>
+            <p className="text-sm text-muted-foreground truncate">
+              {label} | <Elapsed since={alert.created_at} />
+            </p>
+            {alert.status === 'acknowledged' && claimedBy && (
+              <p className="text-sm font-medium text-foreground truncate"><Going name={claimedBy} since={alert.acknowledged_at} /></p>
+            )}
+          </div>
+          <Button variant="ghost" className="tap-sm shrink-0 min-h-[44px] text-sm" disabled={busy} onClick={onDone}>
+            <CheckCircle2 className="w-4 h-4 mr-1" /> {doneLabel}
+          </Button>
         </div>
-        <div className="min-w-0 flex-1">
-          <p className="font-sans font-semibold text-sm truncate">{title}</p>
-          <p className="text-xs text-muted-foreground truncate">{label} | <Elapsed since={since} /></p>
-        </div>
-        <Button size="sm" variant="ghost" className="tap-sm shrink-0" onClick={onDone}>
-          <CheckCircle2 className="w-4 h-4 mr-1" /> Done
-        </Button>
+        {children}
       </div>
     </motion.div>
   );
 };
 
-const TableCard = ({ session, activeOrders, onClose }: { session: WaiterSession; activeOrders: number; onClose: () => void }) => {
+const TableCard = ({
+  session, activeOrders, onClose, children,
+}: {
+  session: WaiterSession;
+  activeOrders: number;
+  onClose: () => void;
+  /** The owes row, when there is anything to collect. */
+  children?: React.ReactNode;
+}) => {
   const ms = useElapsed(session.opened_at);
   const tableNumber = session.tables?.table_number ?? '?';
   return (
     <Card className="overflow-hidden card-lux-hover">
-      <CardContent className="p-4">
-        <div className="flex items-start justify-between mb-2">
+      <CardContent className="p-4 space-y-3">
+        <div className="flex items-start justify-between">
           <div>
             <p className="font-serif text-2xl font-bold leading-none">T{tableNumber}</p>
-            {session.guest_name && <p className="text-xs text-muted-foreground mt-1 truncate max-w-[160px]">{session.guest_name}</p>}
+            {session.guest_name && <p className="text-sm text-muted-foreground mt-1 truncate max-w-[160px]">{session.guest_name}</p>}
           </div>
           {/* Seated duration, on the seated scale. Colouring it with the
               ORDER scale turned every table twenty minutes into a normal
               dinner destructive-red, and the colour stopped meaning anything. */}
-          <span className={`text-[11px] px-2 py-0.5 rounded-full border tabular-nums ${seatedBg(ms)}`}>
+          <span className={`text-xs px-2 py-0.5 rounded-full border tabular-nums ${seatedBg(ms)}`}>
             <Clock className="w-3 h-3 inline -mt-0.5 mr-1" />{formatDuration(ms)}
           </span>
         </div>
-        <div className="flex items-center justify-between text-xs text-muted-foreground mb-3">
-          <span>{activeOrders > 0 ? `${activeOrders} active order${activeOrders !== 1 ? 's' : ''}` : 'No active orders'}</span>
-        </div>
-        <div className="border-t border-border/60 pt-3">
-          <AlertDialog>
-            <AlertDialogTrigger asChild>
-              <Button size="sm" variant="ghost" className="w-full tap-sm text-muted-foreground hover:text-destructive">
-                <PowerOff className="w-3.5 h-3.5 mr-1.5" /> Free table
-              </Button>
-            </AlertDialogTrigger>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>Free table T{tableNumber}?</AlertDialogTitle>
-                <AlertDialogDescription>
-                  This closes the session. The guest will need a new QR scan to order again.
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                <AlertDialogAction onClick={onClose}>Free table</AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
+        <p className="text-sm text-muted-foreground">
+          {activeOrders > 0 ? `${activeOrders} order${activeOrders !== 1 ? 's' : ''} in the kitchen` : 'Nothing in the kitchen'}
+        </p>
+        {children}
+        <div className="border-t border-border/60 pt-2">
+          <Button variant="ghost" className="w-full tap-sm min-h-[44px] text-sm text-muted-foreground hover:text-destructive" onClick={onClose}>
+            <PowerOff className="w-4 h-4 mr-1.5" /> Free table
+          </Button>
         </div>
       </CardContent>
     </Card>
   );
 };
 
-const STATUS_META: Partial<Record<OrderStatus, { dot: string; label: string }>> = {
-  pending: { dot: 'bg-muted-foreground', label: 'Pending' },
-  confirmed: { dot: 'bg-blue-500', label: 'Confirmed' },
-  preparing: { dot: 'bg-amber-500', label: 'Preparing' },
-  ready: { dot: 'bg-emerald-500', label: 'Ready' },
+const UnassignedRow = ({ session }: { session: WaiterSession }) => {
+  const ms = useElapsed(session.opened_at);
+  return (
+    <li className="rounded-lg border border-border px-3 min-h-[44px] flex items-center justify-between gap-2 text-sm">
+      <span className="font-serif text-lg font-bold">T{session.tables?.table_number ?? '?'}</span>
+      <span className="text-muted-foreground truncate">{session.guest_name ?? ''}</span>
+      <span className={`text-xs px-2 py-0.5 rounded-full border tabular-nums ${seatedBg(ms)}`}>{formatDuration(ms)}</span>
+    </li>
+  );
+};
+
+const STATUS_META: Partial<Record<OrderStatus, { dot: string }>> = {
+  pending: { dot: 'bg-muted-foreground' },
+  confirmed: { dot: 'bg-blue-500' },
+  preparing: { dot: 'bg-amber-500' },
+  ready: { dot: 'bg-emerald-500' },
+  awaiting_payment: { dot: 'bg-accent' },
+  payment_failed: { dot: 'bg-destructive' },
 };
 
 /**
@@ -612,39 +893,50 @@ const NEXT_META: Partial<Record<OrderStatus, { status: OrderStatus; label: strin
   ready: { status: 'served', label: 'Mark served', icon: <Utensils className="w-4 h-4 mr-1.5" /> },
 };
 
-const OrderCard = ({ order, onUpdate, onMarkPaid }: {
+const OrderCard = ({ order, busy, onUpdate, highlight = false }: {
   order: WaiterOrder;
+  busy: boolean;
   onUpdate: (id: string, status: OrderStatus) => void;
-  onMarkPaid: (id: string, method: TablePaymentMethod) => void;
+  highlight?: boolean;
 }) => {
-  const ms = useElapsed(order.created_at);
-  const [confirming, setConfirming] = useState<TablePaymentMethod | null>(null);
-  const next = NEXT_META[order.status];
+  const held = isHeld(order);
+  const inKitchen = isInKitchen(order.status) && !held;
+  const ms = useElapsed(kitchenStart(order));
+  const next = inKitchen ? NEXT_META[order.status] : undefined;
   const meta = STATUS_META[order.status] ?? STATUS_META.pending;
-  const tableNumber = order.table_sessions?.tables?.table_number ?? '?';
-  const owes = order.payment_status !== 'paid' && order.payment_status !== 'refunded';
+  const tableNumber = tableOf(order);
 
   return (
-    <Card className="card-lux-hover">
+    <Card className={`card-lux-hover ${highlight ? 'border-emerald-500/50 bg-emerald-500/5' : ''}`}>
       <CardContent className="p-4">
-        <div className="flex items-center justify-between mb-2.5">
-          <div className="flex items-center gap-2 min-w-0">
+        <div className="flex items-center justify-between mb-2.5 gap-2">
+          <div className="flex items-center gap-2 min-w-0 flex-wrap">
             <p className="font-serif text-lg font-bold shrink-0">T{tableNumber}</p>
-            <Badge variant="outline" className="text-[11px] gap-1.5">
+            <Badge variant="outline" className="text-xs gap-1.5">
               <span className={`w-1.5 h-1.5 rounded-full ${meta?.dot ?? ''}`} />
-              {meta?.label ?? order.status}
+              {highlight ? 'Ready to run' : held ? 'Needs confirming' : orderStatusLabel(order.status)}
             </Badge>
             <PaymentBadge method={order.payment_method} status={order.payment_status} />
           </div>
-          <span className={`text-[11px] px-2 py-0.5 rounded-full border tabular-nums ${waitBg(ms)}`}>{formatDuration(ms)}</span>
+          {inKitchen && (
+            <span className={`text-xs px-2 py-0.5 rounded-full border tabular-nums ${waitBg(ms)}`}>{formatDuration(ms)}</span>
+          )}
         </div>
+        {/* A card order whose payment has not cleared looked exactly like a
+            new "Pending" one, and the waiter chased the kitchen for food it had
+            never been sent. */}
+        {!inKitchen && (
+          <p className="text-sm font-sans font-semibold text-accent mb-2">
+            {held ? 'Not in kitchen — confirm it above' : 'Not in kitchen — payment pending'}
+          </p>
+        )}
         <ul className="text-sm font-sans space-y-0.5 mb-3 text-foreground/90">
           {(order.order_items ?? []).map((item, index) => (
             <li key={`${item.menu_items?.name ?? 'item'}-${index}`} className="flex gap-2">
               <span className="tabular-nums text-muted-foreground w-6">{item.quantity}x</span>
               <span>
                 {item.menu_items?.name ?? 'Menu item'}
-                {item.notes && <span className="block text-xs text-accent italic">! {item.notes}</span>}
+                {item.notes && <span className="block text-sm text-accent font-semibold">! {item.notes}</span>}
               </span>
             </li>
           ))}
@@ -652,52 +944,12 @@ const OrderCard = ({ order, onUpdate, onMarkPaid }: {
         {/* The kitchen has always printed this. The person actually carrying
             the plate to the guest could not see it. */}
         {order.notes && (
-          <p className="text-xs text-accent italic mb-3 -mt-2">Note: {order.notes}</p>
+          <p className="text-sm text-accent font-semibold mb-3 -mt-2">Note: {order.notes}</p>
         )}
         {next && (
-          <Button size="sm" className="w-full tap" onClick={() => onUpdate(order.id, next.status)}>
+          <Button className="w-full tap min-h-[44px] text-sm" disabled={busy} onClick={() => onUpdate(order.id, next.status)}>
             {next.icon}{next.label}
           </Button>
-        )}
-
-        {owes && !confirming && (
-          <div className="flex gap-2 mt-2">
-            <Button size="sm" variant="outline" className="flex-1 tap text-xs gap-1.5" onClick={() => setConfirming('cash')}>
-              <Banknote className="w-3.5 h-3.5" /> Paid cash
-            </Button>
-            <Button size="sm" variant="outline" className="flex-1 tap text-xs gap-1.5" onClick={() => setConfirming('pos_terminal')}>
-              <Smartphone className="w-3.5 h-3.5" /> Paid terminal
-            </Button>
-          </div>
-        )}
-
-        {/*
-          A single tap next to a status button, on a phone, in a busy room, is
-          not a safe way to move money. There is no undo on a recorded payment
-          — reversing one is a refund and a manager's decision — so the guard
-          has to come before the fact.
-        */}
-        {owes && confirming && (
-          <div className="mt-2 rounded-lg border-2 border-destructive/40 bg-destructive/5 p-2.5">
-            <p className="text-xs font-sans font-semibold text-foreground">
-              Take {Number(order.total ?? 0).toFixed(2)} KM {confirming === 'cash' ? 'in cash' : 'on the terminal'}?
-            </p>
-            <p className="text-[11px] text-muted-foreground font-sans mt-0.5">
-              This goes into the end-of-day count and cannot be undone here.
-            </p>
-            <div className="flex gap-2 mt-2">
-              <Button size="sm" variant="outline" className="flex-1 tap text-xs" onClick={() => setConfirming(null)}>
-                Cancel
-              </Button>
-              <Button
-                size="sm"
-                className="flex-1 tap text-xs"
-                onClick={() => { onMarkPaid(order.id, confirming); setConfirming(null); }}
-              >
-                Yes, record it
-              </Button>
-            </div>
-          </div>
         )}
       </CardContent>
     </Card>
