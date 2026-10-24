@@ -17,8 +17,10 @@ import {
 
 type Phase = 'loading' | 'error' | 'name' | 'waiting' | 'declined';
 
-// If nobody at the table responds in this window, the joiner is let in
-// automatically so a sleeping host phone never leaves them stuck.
+// How often to ask the server to let the joiner in on their own. It only says
+// yes once nobody at the table has had the menu open for two minutes (a
+// sleeping host phone), so this keeps asking rather than asking once: a host
+// who is actively ignoring a stranger is no longer overruled after 30 seconds.
 const AUTO_APPROVE_MS = 30000;
 
 const TableEntry = () => {
@@ -183,7 +185,7 @@ const TableEntry = () => {
     poll();
     const pollTimer = setInterval(poll, 2000);
 
-    const timer = setTimeout(async () => {
+    const timer = setInterval(async () => {
       if (done) return;
       if (!tableNumber || !token) return;
       try {
@@ -194,7 +196,7 @@ const TableEntry = () => {
       }
     }, AUTO_APPROVE_MS);
 
-    return () => { done = true; clearInterval(pollTimer); clearTimeout(timer); };
+    return () => { done = true; clearInterval(pollTimer); clearInterval(timer); };
   }, [clientId, enterMenu, phase, requestId, sessionId, t, tableNumber, token]);
 
   if (phase === 'loading') {

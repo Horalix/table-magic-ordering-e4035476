@@ -667,6 +667,8 @@ export type Database = {
           fiscalized_at: string | null
           fiscalized_by: string | null
           guest_name: string | null
+          held_at: string | null
+          held_reason: string | null
           id: string
           notes: string | null
           order_code: string | null
@@ -702,6 +704,8 @@ export type Database = {
           fiscalized_at?: string | null
           fiscalized_by?: string | null
           guest_name?: string | null
+          held_at?: string | null
+          held_reason?: string | null
           id?: string
           notes?: string | null
           order_code?: string | null
@@ -737,6 +741,8 @@ export type Database = {
           fiscalized_at?: string | null
           fiscalized_by?: string | null
           guest_name?: string | null
+          held_at?: string | null
+          held_reason?: string | null
           id?: string
           notes?: string | null
           order_code?: string | null
@@ -1063,6 +1069,12 @@ export type Database = {
       restaurant_settings: {
         Row: {
           id: number
+          hold_auto_admitted: boolean | null
+          hold_burst_sessions: number | null
+          hold_first_order_items: number | null
+          hold_first_order_km: number | null
+          hold_second_session: boolean | null
+          hold_unpaid_km: number | null
           kitchen_capacity_minutes: number
           kitchen_delay_minutes: number
           kitchen_undo_seconds: number
@@ -1088,12 +1100,20 @@ export type Database = {
           reco_weight_observed: number
           recommendations_enabled: boolean
           session_idle_timeout_minutes: number
+          service_close: string | null
+          service_open: string | null
           updated_at: string
           venue_qr_rotated_at: string
           venue_qr_token: string
         }
         Insert: {
           id?: number
+          hold_auto_admitted?: boolean | null
+          hold_burst_sessions?: number | null
+          hold_first_order_items?: number | null
+          hold_first_order_km?: number | null
+          hold_second_session?: boolean | null
+          hold_unpaid_km?: number | null
           kitchen_capacity_minutes?: number
           kitchen_delay_minutes?: number
           kitchen_undo_seconds?: number
@@ -1119,12 +1139,20 @@ export type Database = {
           reco_weight_observed?: number
           recommendations_enabled?: boolean
           session_idle_timeout_minutes?: number
+          service_close?: string | null
+          service_open?: string | null
           updated_at?: string
           venue_qr_rotated_at?: string
           venue_qr_token?: string
         }
         Update: {
           id?: number
+          hold_auto_admitted?: boolean | null
+          hold_burst_sessions?: number | null
+          hold_first_order_items?: number | null
+          hold_first_order_km?: number | null
+          hold_second_session?: boolean | null
+          hold_unpaid_km?: number | null
           kitchen_capacity_minutes?: number
           kitchen_delay_minutes?: number
           kitchen_undo_seconds?: number
@@ -1150,6 +1178,8 @@ export type Database = {
           reco_weight_observed?: number
           recommendations_enabled?: boolean
           session_idle_timeout_minutes?: number
+          service_close?: string | null
+          service_open?: string | null
           updated_at?: string
           venue_qr_rotated_at?: string
           venue_qr_token?: string
@@ -1577,6 +1607,8 @@ export type Database = {
       table_sessions: {
         Row: {
           assigned_waiter_id: string | null
+          auto_admitted_at: string | null
+          blocked_at: string | null
           closed_at: string | null
           covers: number | null
           first_order_at: string | null
@@ -1587,11 +1619,14 @@ export type Database = {
           last_heartbeat_at: string
           last_served_at: string | null
           opened_at: string
+          staff_seen_at: string | null
           table_id: string
           token: string
         }
         Insert: {
           assigned_waiter_id?: string | null
+          auto_admitted_at?: string | null
+          blocked_at?: string | null
           closed_at?: string | null
           covers?: number | null
           first_order_at?: string | null
@@ -1602,11 +1637,14 @@ export type Database = {
           last_heartbeat_at?: string
           last_served_at?: string | null
           opened_at?: string
+          staff_seen_at?: string | null
           table_id: string
           token?: string
         }
         Update: {
           assigned_waiter_id?: string | null
+          auto_admitted_at?: string | null
+          blocked_at?: string | null
           closed_at?: string | null
           covers?: number | null
           first_order_at?: string | null
@@ -1617,6 +1655,7 @@ export type Database = {
           last_heartbeat_at?: string
           last_served_at?: string | null
           opened_at?: string
+          staff_seen_at?: string | null
           table_id?: string
           token?: string
         }
