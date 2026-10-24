@@ -10,6 +10,9 @@
  *   public/menu/<id>/<width>.webp     — responsive WebP ladder, plus the
  *                                       source's own width when it falls
  *                                       between two rungs (never above 1152)
+ *   public/menu/<id>/sq-<size>.webp   — square crops for list thumbnails,
+ *                                       cut around the dish (sharp's
+ *                                       attention strategy) and sharpened
  *   public/menu/<id>/.hash            — source hash sidecar (idempotency)
  *   src/lib/image-manifest.json       — { [id]: { widths, blur, ext } }
  *
@@ -45,6 +48,14 @@ const MANIFEST_PATH = resolve(ROOT, 'src/lib/image-manifest.json');
 // through the full-width detail sheet (~512px @2x → 1152). Each is capped
 // at the source width so we never upscale.
 const WIDTHS = [96, 192, 384, 768, 1152];
+// Square thumbnails. A landscape photo object-cover'd into a square box only
+// uses its middle, so a 192px-wide variant in a 96px box on a 2x phone was
+// really 153px tall and stretched; these are cut square at the size a phone
+// actually draws (80-112px boxes at 2x and 3x).
+const SQUARES = [160, 240, 360];
+// Downscaling softens edges; a light unsharp mask on the small sizes keeps a
+// burger looking like a burger at thumbnail size.
+const SHARPEN = { sigma: 0.6, m1: 0.5, m2: 2.5 };
 const QUALITY = 80;
 // The largest variant ever written. A 3x phone showing a full-width dish
 // needs ~1125px, which the 1152 rung already covers; anything wider is
@@ -127,6 +138,7 @@ async function processRow(row, manifest, counters) {
 
     const meta = await sharp(input).rotate().metadata();
     const srcW = meta.width || Math.max(...WIDTHS);
+    const srcH = meta.height || srcW;
 
     await rm(dir, { recursive: true, force: true });
     await mkdir(dir, { recursive: true });
@@ -139,12 +151,24 @@ async function processRow(row, manifest, counters) {
     if (!widths.includes(top) && top > (widths[widths.length - 1] ?? 0)) widths.push(top);
 
     await Promise.all(
-      widths.map((w) =>
+      widths.map((w) => {
+        let img = sharp(input).rotate().resize(w, null, { withoutEnlargement: true });
+        if (w <= 384) img = img.sharpen(SHARPEN);
+        return img.webp({ quality: w <= 384 ? 82 : QUALITY }).toFile(resolve(dir, `${w}.webp`));
+      }),
+    );
+
+    const side = Math.min(srcW, srcH);
+    const squares = SQUARES.filter((sq) => sq <= side);
+    if (squares.length === 0) squares.push(side);
+    await Promise.all(
+      squares.map((sq) =>
         sharp(input)
           .rotate()
-          .resize(w, null, { withoutEnlargement: true })
-          .webp({ quality: QUALITY })
-          .toFile(resolve(dir, `${w}.webp`)),
+          .resize(sq, sq, { fit: 'cover', position: sharp.strategy.attention })
+          .sharpen(SHARPEN)
+          .webp({ quality: 82 })
+          .toFile(resolve(dir, `sq-${sq}.webp`)),
       ),
     );
 
@@ -157,7 +181,7 @@ async function processRow(row, manifest, counters) {
 
     await writeFile(resolve(dir, '.hash'), hash, 'utf8');
 
-    manifest[id] = { widths, blur, ext: 'webp' };
+    manifest[id] = { widths, squares, blur, ext: 'webp' };
     counters.downloaded++;
     process.stdout.write('.');
   } catch (e) {

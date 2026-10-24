@@ -22,10 +22,19 @@ interface SmartImageProps extends Omit<React.ImgHTMLAttributes<HTMLImageElement>
   fallbackText?: string;
   /** Override the responsive `sizes` hint (defaults to the intrinsic width). */
   sizes?: string;
+  /**
+   * The box is square (list thumbnails, chips). Uses the pre-cut square crops
+   * when the manifest has them: a landscape photo cover-cropped into a square
+   * only uses its middle, so the regular ladder delivered fewer pixels than
+   * the box needed and the thumbnail looked soft.
+   */
+  square?: boolean;
 }
 
 interface ManifestEntry {
   widths: number[];
+  /** Square crops (sq-<n>.webp), cut around the dish. Absent on old builds. */
+  squares?: number[];
   blur: string;
   ext: string;
 }
@@ -46,6 +55,9 @@ const WSRV = 'https://wsrv.nl/?';
 
 const buildUrl = (src: string, w: number, h: number, dpr = 1) => {
   if (src.startsWith('data:') || src.startsWith('blob:')) return src;
+  // Same-origin paths (/img/…, /covers/…) are already ours; sending them to an
+  // external resizer fails, because it cannot reach a relative URL.
+  if (src.startsWith('/') && !src.startsWith('//')) return src;
   if (typeof window !== 'undefined' && src.startsWith(window.location.origin)) return src;
 
   const supaMatch = src.match(/^(https?:\/\/[^/]+)\/storage\/v1\/object\/public\/(.+)$/);
@@ -73,7 +85,7 @@ const buildUrl = (src: string, w: number, h: number, dpr = 1) => {
 };
 
 const SmartImage = ({
-  src, id, layoutId, alt, width, height, priority = false, wrapperClassName, fallbackText, className, sizes, ...rest
+  src, id, layoutId, alt, width, height, priority = false, wrapperClassName, fallbackText, className, sizes, square = false, ...rest
 }: SmartImageProps) => {
   const [loaded, setLoaded] = useState(false);
   const [errored, setErrored] = useState(false);
@@ -106,7 +118,12 @@ const SmartImage = ({
   let srcSet: string;
   let blur: string | undefined;
 
-  if (local) {
+  if (local && square && local.squares?.length) {
+    const base = `/menu/${id}`;
+    blur = local.blur;
+    srcSet = local.squares.map((w) => `${base}/sq-${w}.webp ${w}w`).join(', ');
+    url1x = `${base}/sq-${local.squares[local.squares.length - 1]}.webp`;
+  } else if (local) {
     const base = `/menu/${id}`;
     blur = local.blur;
     srcSet = local.widths.map((w) => `${base}/${w}.webp ${w}w`).join(', ');
@@ -126,7 +143,7 @@ const SmartImage = ({
    * that genuinely are fixed-size pass their own.
    */
   const resolvedSizes = sizes
-    ?? (local ? `(max-width: 640px) 50vw, ${width}px` : undefined);
+    ?? (local ? (square ? `${width}px` : `(max-width: 640px) 50vw, ${width}px`) : undefined);
   const fetchPriorityAttributes: FetchPriorityAttributes = {
     fetchpriority: priority ? 'high' : 'auto',
   };
