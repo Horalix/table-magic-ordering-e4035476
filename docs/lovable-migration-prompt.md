@@ -18,9 +18,29 @@ Last updated: **24 October 2026**, for seventeen migrations from
 > still the old version, but the staff screens call `staff_close_session()`,
 > `funnel_summary()` and `staff_performance()`, which only exist afterwards.
 
+> **First attempt, 24 October 2026 (evening).** Lovable stopped at the first
+> file with `rewrite (d) diet filter did not match`; nothing was applied. The
+> live copy of `rank_recommendations` does not contain the SQL comments the
+> repository version has, and that one search literal included them. The
+> rewrite now matches the code itself, with or without those comments, and a
+> read-only preflight (step 1 below) checks every other search literal against
+> the live database before anything is changed.
+
 ---
 
-## The prompt
+## Step 1 — the preflight (read-only, changes nothing)
+
+> **Task: run one read-only query and paste the full result. Do not apply any
+> migration yet, and do not write or change any SQL.**
+>
+> Run the contents of `docs/migration-preflight.sql` exactly as written. It only
+> calls `pg_get_functiondef()` and compares text; it changes nothing. Paste
+> every row of the result.
+
+Every row should say `found = true`. A `false` row names the migration and line
+whose search text is not in the live function — send it back before going on.
+
+## Step 2 — the prompt
 
 > **Task: apply seventeen existing migration files to Supabase, in order. Do not
 > write any new SQL.**

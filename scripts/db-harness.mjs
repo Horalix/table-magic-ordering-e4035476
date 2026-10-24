@@ -24,7 +24,9 @@ export function migrationFiles() {
 }
 
 /**
- * @param {{ quiet?: boolean }} [opts]
+ * @param {{ quiet?: boolean, until?: string }} [opts]  `until`: stop before this
+ *   migration file name (exclusive) — builds the schema production had at
+ *   that point, which is what the migration preflight is checked against.
  * @returns {Promise<import('@electric-sql/pglite').PGlite>}
  */
 export async function createTestDatabase(opts = {}) {
@@ -34,6 +36,7 @@ export async function createTestDatabase(opts = {}) {
   await db.exec(readFileSync(SHIM, 'utf8'));
 
   for (const file of migrationFiles()) {
+    if (opts.until && file >= opts.until) break;
     const sql = readFileSync(path.join(MIGRATIONS_DIR, file), 'utf8');
     if (!sql.trim()) continue;
     try {

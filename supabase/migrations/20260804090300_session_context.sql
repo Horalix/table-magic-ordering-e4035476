@@ -199,22 +199,28 @@ BEGIN
   IF v_def = v_before THEN RAISE EXCEPTION 'rewrite (c) repeat rule did not match'; END IF;
 
   -- (d) Diet stops hiding food from a shared table.
+  --
+  -- Matched on the code, not on the comment above it: the live database's
+  -- copy of this function was created by a runner that does not keep SQL
+  -- comments, so a search literal that included them never matched there
+  -- (it did in the test harness, which is how this reached production).
+  -- Comment lines before the filter, and the spacing inside it, are optional.
   v_before := v_def;
-  v_def := replace(v_def,
-    '      -- Never suggest meat into an all-vegetarian cart. A hard filter, not a
-      -- penalty: for a guest who has shown what they eat, being offered a
-      -- steak reads as not being listened to.
-      AND (p.diet IS NULL
-           OR (p.diet = ''vegan'' AND ''vegan'' = ANY(mi.dietary_tags))
-           OR (p.diet = ''vegetarian'' AND (''vegetarian'' = ANY(mi.dietary_tags) OR ''vegan'' = ANY(mi.dietary_tags))))
-',
-    '      -- Diet inferred from the cart is a PREFERENCE, not a restriction, and
+  v_def := regexp_replace(v_def,
+    '(\n[[:blank:]]*--[^\n]*)*\n[[:blank:]]*AND \(p\.diet IS NULL[[:space:]]+OR \(p\.diet = ''vegan'' AND ''vegan'' = ANY\(mi\.dietary_tags\)\)[[:space:]]+OR \(p\.diet = ''vegetarian'' AND \(''vegetarian'' = ANY\(mi\.dietary_tags\) OR ''vegan'' = ANY\(mi\.dietary_tags\)\)\)\)',
+    '
+      -- Diet inferred from the cart is a PREFERENCE, not a restriction, and
       -- it is applied as a score penalty below rather than as a filter. One
       -- phone at a table of four ordering a salad must not hide every meat
       -- dish from the other three. Explicit allergen filters, which the guest
-      -- set deliberately, remain hard.
-');
-  IF v_def = v_before THEN RAISE EXCEPTION 'rewrite (d) diet filter did not match'; END IF;
+      -- set deliberately, remain hard.');
+  IF v_def = v_before THEN
+    -- Nothing to remove is fine; the filter in some other shape is not.
+    IF position('p.diet = ''vegan''' in v_def) > 0 OR position('p.diet IS NULL' in v_def) > 0 THEN
+      RAISE EXCEPTION 'rewrite (d) diet filter is present but in an unexpected form';
+    END IF;
+    RAISE NOTICE 'rewrite (d): no hard diet filter in the live ranker; nothing to remove';
+  END IF;
 
   -- (e) Two new penalties on the score: inferred diet, and price distance.
   v_before := v_def;
