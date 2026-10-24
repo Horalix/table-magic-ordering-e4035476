@@ -39,8 +39,8 @@ type Order = Pick<
   Database['public']['Tables']['orders']['Row'],
   'id' | 'table_session_id' | 'status' | 'created_at' | 'assigned_waiter_id'
   | 'order_code' | 'total' | 'payment_status' | 'payment_method' | 'notes'
-  | 'refunded_amount' | 'released_to_kitchen_at' | 'held_reason'
->;
+  | 'refunded_amount' | 'released_to_kitchen_at'
+> & { held_reason?: string | null };
 type Call = Pick<
   Database['public']['Tables']['waiter_calls']['Row'],
   'id' | 'table_session_id' | 'status' | 'created_at' | 'acknowledged_by'
@@ -123,7 +123,7 @@ const WaiterMonitor = () => {
       supabase.from('tables').select('id, table_number, section_id, sections(id, name, color)').order('table_number'),
       supabase.from('table_sessions').select('id, table_id, is_active, opened_at, guest_name, assigned_waiter_id, covers').eq('is_active', true),
       supabase.from('orders')
-        .select('id, table_session_id, status, created_at, assigned_waiter_id, order_code, total, payment_status, payment_method, notes, refunded_amount, released_to_kitchen_at, held_reason')
+        .select('*')
         .not('status', 'in', '("cancelled")')
         .gte('created_at', new Date(Date.now() - 18 * 60 * 60 * 1000).toISOString()),
       // Open, not merely pending: a claimed call is still someone's problem

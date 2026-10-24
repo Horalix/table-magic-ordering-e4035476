@@ -28,6 +28,7 @@ import type { Database } from '@/integrations/supabase/types';
 type OrderStatus = Database['public']['Enums']['order_status'];
 type OrderFilter = OrderStatus | 'all';
 type AdminOrder = Database['public']['Tables']['orders']['Row'] & {
+  held_reason?: string | null;
   fiscalized?: boolean | null;
   fiscalization_status?: string | null;
   fiscal_receipt_number?: string | null;
