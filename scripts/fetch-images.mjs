@@ -7,12 +7,20 @@
  * external CDN on every view.
  *
  * Output:
- *   public/menu/<id>/<width>.webp     — responsive WebP ladder
+ *   public/menu/<id>/<width>.webp     — responsive WebP ladder, plus the
+ *                                       source's own width when it falls
+ *                                       between two rungs (never above 1152)
  *   public/menu/<id>/.hash            — source hash sidecar (idempotency)
  *   src/lib/image-manifest.json       — { [id]: { widths, blur, ext } }
  *
- * Run:  npm run images
+ * Run:  npm run images            (only rows whose image changed)
+ *       npm run images -- --force (rebuild every row)
  * Requires .env with VITE_SUPABASE_URL + VITE_SUPABASE_PUBLISHABLE_KEY.
+ *
+ * Better originals: a file at scripts/image-sources/<row id>.<jpg|jpeg|png|webp>
+ * is used instead of the row's image_url. Several photos in storage are
+ * ~190px thumbnails of pictures the old menu site still had at 400-900px;
+ * those originals live there until someone re-uploads them in Admin -> Menu.
  *
  * Re-running is cheap: rows whose source URL is unchanged are skipped.
  * Items NOT present in the manifest still render at runtime via SmartImage's
@@ -29,6 +37,8 @@ import { dirname, resolve } from 'node:path';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, '..');
 const OUT_DIR = resolve(ROOT, 'public/menu');
+const SOURCES_DIR = resolve(ROOT, 'scripts/image-sources');
+const FORCE = process.argv.includes('--force');
 const MANIFEST_PATH = resolve(ROOT, 'src/lib/image-manifest.json');
 
 // Responsive width ladder. Covers list thumbnails (80px @1x/2x → 96/192)
@@ -36,6 +46,10 @@ const MANIFEST_PATH = resolve(ROOT, 'src/lib/image-manifest.json');
 // at the source width so we never upscale.
 const WIDTHS = [96, 192, 384, 768, 1152];
 const QUALITY = 80;
+// The largest variant ever written. A 3x phone showing a full-width dish
+// needs ~1125px, which the 1152 rung already covers; anything wider is
+// bytes nobody sees.
+const MAX_WIDTH = 1152;
 const CONCURRENCY = 6;
 
 /* ---- env -------------------------------------------------------------- */
@@ -77,37 +91,57 @@ async function readHash(id) {
   }
 }
 
+/** A hand-supplied original for this row, if there is one. */
+function localSource(id) {
+  for (const ext of ['jpg', 'jpeg', 'png', 'webp']) {
+    const file = resolve(SOURCES_DIR, `${id}.${ext}`);
+    if (existsSync(file)) return file;
+  }
+  return null;
+}
+
 /** Process a single row → writes assets, returns manifest entry or null. */
 async function processRow(row, manifest, counters) {
   const { id, image_url } = row;
   if (!image_url) return;
 
-  const hash = sha1(image_url);
+  const override = localSource(id);
+  const hash = override ? sha1(`file:${sha1(readFileSync(override).toString('base64'))}`) : sha1(image_url);
   const dir = resolve(OUT_DIR, id);
 
   // Skip if unchanged AND assets already present.
-  if (manifest[id] && (await readHash(id)) === hash && existsSync(dir)) {
+  if (!FORCE && manifest[id] && (await readHash(id)) === hash && existsSync(dir)) {
     counters.skipped++;
     return;
   }
 
   try {
-    const res = await fetch(image_url, { redirect: 'follow' });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const input = Buffer.from(await res.arrayBuffer());
+    let input;
+    if (override) {
+      input = readFileSync(override);
+    } else {
+      const res = await fetch(image_url, { redirect: 'follow' });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      input = Buffer.from(await res.arrayBuffer());
+    }
 
-    const meta = await sharp(input).metadata();
+    const meta = await sharp(input).rotate().metadata();
     const srcW = meta.width || Math.max(...WIDTHS);
 
     await rm(dir, { recursive: true, force: true });
     await mkdir(dir, { recursive: true });
 
     const widths = WIDTHS.filter((w) => w <= srcW);
-    if (widths.length === 0) widths.push(srcW); // tiny source → at least one
+    // The source's own width when it sits between two rungs. Without it a
+    // 1000px photo topped out at 768 and a 660px one at 384 — half its
+    // detail thrown away before any phone asked for it.
+    const top = Math.min(srcW, MAX_WIDTH);
+    if (!widths.includes(top) && top > (widths[widths.length - 1] ?? 0)) widths.push(top);
 
     await Promise.all(
       widths.map((w) =>
         sharp(input)
+          .rotate()
           .resize(w, null, { withoutEnlargement: true })
           .webp({ quality: QUALITY })
           .toFile(resolve(dir, `${w}.webp`)),
@@ -155,7 +189,7 @@ async function main() {
   if (e2) throw e2;
 
   const rows = [...(items ?? []), ...(cats ?? [])];
-  console.log(`  ${rows.length} images referenced in Supabase\n`);
+  console.log(`  ${rows.length} images referenced in Supabase${FORCE ? ' (rebuilding all)' : ''}\n`);
 
   const counters = { downloaded: 0, skipped: 0, failed: 0, errors: [] };
 
