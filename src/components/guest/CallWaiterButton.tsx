@@ -34,7 +34,7 @@ const CallWaiterButton = ({ variant = 'default' }: Props) => {
       setTimeout(() => setCalled(false), 30000);
     } catch (err) {
       console.error('Call waiter error:', err);
-      toast.error('Could not notify waiter. Please try again.');
+      toast.error(t('waiter_call_failed'));
     } finally {
       callingRef.current = false;
       setLoading(false);

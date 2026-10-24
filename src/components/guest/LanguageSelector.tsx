@@ -1,6 +1,6 @@
 import React from 'react';
 import { Globe } from 'lucide-react';
-import { useLanguageStore, Locale, localeLabels, localeFlags } from '@/lib/i18n';
+import { useLanguageStore, useT, Locale, localeLabels, localeFlags } from '@/lib/i18n';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -13,6 +13,7 @@ interface Props {
 }
 
 const LanguageSelector = ({ variant = 'default' }: Props) => {
+  const t = useT();
   const { locale, setLocale } = useLanguageStore();
   const isHero = variant === 'hero';
 
@@ -22,7 +23,7 @@ const LanguageSelector = ({ variant = 'default' }: Props) => {
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <button
-          aria-label={`Change language, current language ${localeLabels[locale]}`}
+          aria-label={`${t('change_language')}: ${localeLabels[locale]}`}
           className={`flex items-center gap-1.5 px-3 py-2 rounded-full font-sans text-sm font-medium transition-all duration-300 min-h-[44px] ${
             isHero
               ? 'bg-white/10 text-white border border-white/20 hover:bg-white/20'

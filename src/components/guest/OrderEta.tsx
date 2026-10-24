@@ -1,4 +1,5 @@
 import React from 'react';
+import { useT } from '@/lib/i18n';
 import { useQuery } from '@tanstack/react-query';
 import { Clock } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
@@ -30,6 +31,7 @@ interface Props {
 }
 
 const OrderEta = ({ orderId, active = true }: Props) => {
+  const t = useT();
   const { data } = useQuery({
     queryKey: ['order-eta', orderId],
     queryFn: async (): Promise<Eta | null> => {
@@ -56,11 +58,11 @@ const OrderEta = ({ orderId, active = true }: Props) => {
     >
       <Clock className="w-3.5 h-3.5" aria-hidden />
       <span>
-        Ready in <span className="font-semibold text-foreground tabular-nums">{low}–{high} min</span>
+        {t('ready_in')} <span className="font-semibold text-foreground tabular-nums">{low}–{high} {t('minutes_short')}</span>
       </span>
       {/* Say when the estimate is shakier than usual rather than presenting
           every forecast with the same confidence. */}
-      {confidence === 'low' && <span className="text-xs">· rough estimate</span>}
+      {confidence === 'low' && <span className="text-xs">· {t('rough_estimate')}</span>}
     </p>
   );
 };

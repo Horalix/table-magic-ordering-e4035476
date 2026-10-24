@@ -1,1 +1,30 @@
+# The old static menu that used to live at menu.lasoul.net. Printed QR codes,
+# Google results and saved home-screen icons still point at these pages.
+/menu.html                    /menu                               301
+/drink.html                   /menu/drinks                        301
+/food.html                    /menu/food                          301
+/dessert.html                 /menu/desserts                      301
+/drinks/coffee.html           /menu/drinks?section=coffee         301
+/drinks/filter.html           /menu/drinks?section=filter-coffee  301
+/drinks/icedCoffee.html       /menu/drinks?section=iced-coffee    301
+/drinks/hotDrink.html         /menu/drinks?section=hot-drinks     301
+/drinks/specialDrink.html     /menu/drinks?section=special-drinks 301
+/drinks/tea.html              /menu/drinks?section=tea            301
+/drinks/icedTea.html          /menu/drinks?section=iced-tea       301
+/drinks/freshJuice.html       /menu/drinks?section=fresh-juice    301
+/drinks/mojito.html           /menu/drinks?section=mojito         301
+/drinks/frape.html            /menu/drinks?section=frappe         301
+/drinks/lemonade.html         /menu/drinks?section=lemonade       301
+/drinks/other.html            /menu/drinks?section=other          301
+/food/breakfast.html          /menu/food?section=breakfast        301
+/food/appetizers.html         /menu/food?section=appetizer        301
+/food/pasta.html              /menu/food?section=pasta            301
+/food/soups.html              /menu/food?section=soups            301
+/food/salad.html              /menu/food?section=salads           301
+/food/burgers.html            /menu/food?section=burgers          301
+/food/slider.html             /menu/food?section=sliders          301
+/food/rizoto.html             /menu/food?section=risotto          301
+/food/fries.html              /menu/food?section=fries            301
+/food/kidsMenu.html           /menu/food?section=kids-menu        301
+
 /* /index.html 200

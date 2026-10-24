@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useMemo, useRef, useDeferredValue, useCallback } from 'react';
-import { motion, AnimatePresence, type Variants } from 'framer-motion';
-import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, Plus, Minus, Search, X, Star, LayoutGrid, List } from 'lucide-react';
+import React, { useState, useEffect, useLayoutEffect, useMemo, useRef, useDeferredValue, useCallback } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { useParams, useNavigate, useSearchParams, useLocation } from 'react-router-dom';
+import { ArrowLeft, Plus, Minus, Search, X, Star, LayoutGrid, List, SlidersHorizontal, RefreshCw } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { track } from '@/lib/analytics';
@@ -11,14 +11,14 @@ import { useCartStore } from '@/lib/cart-store';
 import { Skeleton } from '@/components/ui/skeleton';
 import SmartImage from '@/components/ui/SmartImage';
 import CartBar from '@/components/guest/CartBar';
-import MenuPager from '@/components/guest/MenuPager';
 import MenuItemDetail from '@/components/guest/MenuItemDetail';
 import LanguageSelector from '@/components/guest/LanguageSelector';
 import { useT, useLanguageStore, getLocalizedName, getLocalizedDescription } from '@/lib/i18n';
 import { useSessionHeartbeat } from '@/hooks/useSessionHeartbeat';
 import { springPill } from '@/lib/motion';
-import { DIET_TAGS, DIET_BY_KEY, getItemTags, useDietFilterStore } from '@/lib/dietary';
+import { DIET_TAGS, DIET_BY_KEY, getItemTags, matchesDietFilter, useDietFilterStore } from '@/lib/dietary';
 import { merchBadges, unorderableReason, windowLabel } from '@/lib/availability';
+import { sectionSlug } from '@/lib/menu-sections';
 import type { Database } from '@/integrations/supabase/types';
 
 type CategoryRow = Database['public']['Tables']['categories']['Row'];
@@ -32,40 +32,57 @@ const categoryNameMap: Record<string, string> = {
   dessert: 'Desserts',
 };
 
-// Staggered "grow-in" used when the layout (list/grid) mounts.
-const gridContainer: Variants = { hidden: {}, show: { transition: { staggerChildren: 0.02 } } };
-const gridItem: Variants = { hidden: { opacity: 0, scale: 0.84 }, show: { opacity: 1, scale: 1, transition: { type: 'spring', stiffness: 430, damping: 30 } } };
-const listContainer: Variants = { hidden: {}, show: { transition: { staggerChildren: 0.022 } } };
-const listItem: Variants = { hidden: { opacity: 0, y: 12, scale: 0.97 }, show: { opacity: 1, y: 0, scale: 1, transition: { duration: 0.32, ease: [0.16, 1, 0.3, 1] } } };
-
 /**
  * A menu card that reports being looked at.
  *
- * Wrapping rather than calling the hook inline because the hook owns an
- * IntersectionObserver per card, and hooks cannot live inside the render
- * helpers below (they run in loops).
+ * Tapping anywhere on the card opens the dish; for keyboards and screen
+ * readers the dish name itself is the button. The quantity controls are
+ * siblings that stop the tap from also opening the sheet. The card used to be
+ * a button with buttons inside, which is invalid HTML: screen readers read the
+ * whole card, price and all, as the name of the + button.
  */
 const ImpressionCard = ({
-  itemId, children, ...props
-}: { itemId: string } & React.ComponentProps<typeof motion.button>) => {
+  itemId, children, className, onOpen,
+}: { itemId: string; children: React.ReactNode; className?: string; onOpen: () => void }) => {
   const ref = useItemImpression(itemId);
-  return <motion.button ref={ref} {...props}>{children}</motion.button>;
+  return (
+    <div ref={ref as React.Ref<HTMLDivElement>} className={className} onClick={onOpen}>
+      {children}
+    </div>
+  );
+};
+
+const stop = (e: React.SyntheticEvent) => e.stopPropagation();
+
+const vibrate = (ms: number) => {
+  if (typeof navigator !== 'undefined' && 'vibrate' in navigator) { try { navigator.vibrate(ms); } catch { /* gesture-gated */ } }
 };
 
 const CategoryPage = () => {
   const { type } = useParams<{ type: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   useSessionHeartbeat();
   const [searchParams] = useSearchParams();
-  const [selectedSubcategory, setSelectedSubcategory] = useState<string | null>(null);
+  const [spySubId, setSpySubId] = useState<string | null>(null);
   const [selectedItem, setSelectedItem] = useState<MenuItemRow | null>(null);
   const [search, setSearch] = useState('');
-  const [view, setView] = useState<'list' | 'grid'>(() => (typeof localStorage !== 'undefined' && localStorage.getItem('lasoul-menu-view') === 'grid' ? 'grid' : 'list'));
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [view, setView] = useState<'list' | 'grid'>(() => {
+    try { return localStorage.getItem('lasoul-menu-view') === 'grid' ? 'grid' : 'list'; } catch { return 'list'; }
+  });
   // Shared, so the cart can avoid suggesting around a filter set here.
   const activeDiets = useDietFilterStore((st) => st.activeDiets);
   const setActiveDiets = useDietFilterStore((st) => st.setActiveDiets);
-  const [showHint, setShowHint] = useState(false);
   const pillRefs = useRef<Record<string, HTMLButtonElement | null>>({});
+  const sectionRefs = useRef<Record<string, HTMLElement | null>>({});
+  const headerRef = useRef<HTMLDivElement | null>(null);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
+  // While a tap-to-section scroll is in flight the spy would light up every
+  // pill it passes on the way; it stays quiet until this time.
+  const spyPausedUntil = useRef(0);
+  const deepLinked = useRef(false);
   const deferredSearch = useDeferredValue(search);
   const { addItem, removeItem, updateQuantity, items: cartItems } = useCartStore();
   const storeSessionId = useCartStore((s) => s.sessionId);
@@ -82,16 +99,17 @@ const CategoryPage = () => {
 
   const categoryName = categoryNameMap[type || ''] || type;
 
-  const { data: category } = useQuery({
+  const { data: category, isError: categoryFailed, refetch: refetchCategory } = useQuery({
     queryKey: ['category', categoryName],
     queryFn: async () => {
       const { data, error } = await supabase.from('categories').select('*').eq('name', categoryName).single();
       if (error) throw error;
       return data;
     },
+    retry: 1,
   });
 
-  const { data: subcategories = [] } = useQuery({
+  const { data: subcategories = [], isError: subsFailed } = useQuery({
     queryKey: ['subcategories', category?.id],
     queryFn: async () => {
       const { data, error } = await supabase.from('subcategories').select('*').eq('category_id', category!.id).order('sort_order');
@@ -101,12 +119,10 @@ const CategoryPage = () => {
     enabled: !!category?.id,
   });
 
-  const activeSubId = selectedSubcategory || subcategories[0]?.id;
   const subIds = subcategories.map((s) => s.id);
 
-  // Load every available item in this category once, then slice per subcategory
-  // in memory — so each swipe page is ready instantly (no refetch / flicker).
-  const { data: allItems = [], isLoading: allLoading } = useQuery({
+  // Every item in this category, once, sliced per section in memory.
+  const { data: allItems = [], isLoading: allLoading, isError: itemsFailed, refetch: refetchItems } = useQuery({
     queryKey: ['menu_items_all', category?.id],
     queryFn: async () => {
       // Everything, including what is currently off.
@@ -142,10 +158,18 @@ const CategoryPage = () => {
   );
 
   const filterDiet = useCallback(
-    (arr: MenuItemRow[]) => (activeDiets.length ? arr.filter((it) => { const tags = getItemTags(it); return activeDiets.every((d) => tags.includes(d)); }) : arr),
+    // The same rule the suggestion engine applies, so a dish the menu hides is never suggested.
+    (arr: MenuItemRow[]) => (activeDiets.length ? arr.filter((it) => matchesDietFilter(it, activeDiets)) : arr),
     [activeDiets],
   );
-  const presentTags = DIET_TAGS.filter((d) => allItems.some((it) => getItemTags(it).includes(d.key)));
+  // Active filters are always offered, even when this category has nothing
+  // tagged with them: a filter set on another page that empties this one must
+  // still be visible to be switched off.
+  //
+  // "Contains nuts" is a warning shown on the card, never a filter: as a chip
+  // it showed an allergic guest ONLY the nut dishes.
+  const presentTags = DIET_TAGS.filter((d) => (d.key !== 'contains_nuts' || activeDiets.includes(d.key))
+    && (activeDiets.includes(d.key) || allItems.some((it) => getItemTags(it).includes(d.key))));
   const toggleDiet = (key: string) => setActiveDiets((prev) => (prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]));
 
   const q = deferredSearch.trim().toLowerCase();
@@ -160,75 +184,162 @@ const CategoryPage = () => {
   // ---- effects ----
   useEffect(() => { try { localStorage.setItem('lasoul-menu-view', view); } catch { /* ignore */ } }, [view]);
 
+  // Which page brought the guest here. Printed QR codes and the old site's
+  // links land here directly, never passing the home screen, so the funnel's
+  // first two steps are recorded here too or those visits start at step three.
+  const sectionParam = searchParams.get('section');
   useEffect(() => {
-    if (subcategories.length > 1 && typeof localStorage !== 'undefined' && !localStorage.getItem('lasoul-swipe-hint')) setShowHint(true);
-  }, [subcategories.length]);
-  const dismissHint = useCallback(() => { setShowHint(false); try { localStorage.setItem('lasoul-swipe-hint', '1'); } catch { /* ignore */ } }, []);
+    if (!category) return;
+    const fromHome = (location.state as { from?: string } | null)?.from === 'home';
+    track('category_viewed', {
+      category: category.name,
+      ...(sectionParam ? { section: sectionParam } : {}),
+      entry: fromHome ? 'home' : 'link',
+    });
+    if (!fromHome) {
+      try {
+        if (!sessionStorage.getItem('lasoul-menu-viewed')) {
+          sessionStorage.setItem('lasoul-menu-viewed', '1');
+          track('menu_viewed', { has_session: hasSession, entry: 'deeplink' });
+        }
+      } catch { /* storage blocked */ }
+    }
+    // Once per category page, not per render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [category?.id]);
 
-  // Keep the active subcategory pill scrolled into view.
+  // One continuous page per category, sections in menu order. Sections a diet
+  // filter has emptied are left out, along with their pill.
+  const sections = useMemo(
+    () => subcategories
+      .map((sub) => ({ sub, items: filterDiet(allItems.filter((it) => it.subcategory_id === sub.id)) }))
+      .filter((s) => s.items.length > 0),
+    [subcategories, allItems, filterDiet],
+  );
+  const activeSubId = spySubId && sections.some((s) => s.sub.id === spySubId) ? spySubId : sections[0]?.sub.id;
+
+  const headerHeight = () => headerRef.current?.getBoundingClientRect().height ?? 0;
+
+  // Scroll spy: the active section is the last one whose heading has reached
+  // the bottom edge of the sticky header.
+  useEffect(() => {
+    if (searching || sections.length === 0) return;
+    let frame = 0;
+    const update = () => {
+      frame = 0;
+      if (Date.now() < spyPausedUntil.current) return;
+      const line = headerHeight() + 24;
+      const atBottom = window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 4;
+      let current = sections[0].sub.id;
+      for (const { sub } of sections) {
+        const el = sectionRefs.current[sub.id];
+        if (el && el.getBoundingClientRect().top <= line) current = sub.id;
+      }
+      if (atBottom) current = sections[sections.length - 1].sub.id;
+      setSpySubId((prev) => (prev === current ? prev : current));
+    };
+    const onScroll = () => { if (!frame) frame = requestAnimationFrame(update); };
+    window.addEventListener('scroll', onScroll, { passive: true });
+    update();
+    return () => { window.removeEventListener('scroll', onScroll); if (frame) cancelAnimationFrame(frame); };
+  }, [sections, searching]);
+
+  // Keep the active pill in view inside its own row. scrollIntoView rather
+  // than offsetLeft arithmetic, which is mirrored (and wrong) in Arabic.
   useEffect(() => {
     const el = activeSubId ? pillRefs.current[activeSubId] : null;
     el?.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
   }, [activeSubId]);
 
-  const activeIndex = Math.max(0, subcategories.findIndex((s) => s.id === activeSubId));
+  const scrollToSub = useCallback((id: string, smooth = true) => {
+    const el = sectionRefs.current[id];
+    if (!el) return;
+    setSpySubId(id);
+    spyPausedUntil.current = Date.now() + (smooth ? 800 : 50);
+    const top = el.getBoundingClientRect().top + window.scrollY - headerHeight() + 1;
+    window.scrollTo({ top: Math.max(0, top), behavior: smooth ? 'smooth' : 'auto' });
+  }, []);
 
   const selectSub = (id: string) => {
-    setSelectedSubcategory(id);
-    if (showHint) dismissHint();
-    if (typeof navigator !== 'undefined' && 'vibrate' in navigator) { try { navigator.vibrate(4); } catch { /* gesture-gated */ } }
+    scrollToSub(id);
+    vibrate(4);
   };
+
+  // ?section=burgers opens the page at that section — used by the home
+  // screen's "Jump to" row and by the redirects from the old menu site.
+  useLayoutEffect(() => {
+    if (deepLinked.current || !sectionParam || sections.length === 0) return;
+    const match = sections.find(({ sub }) => sectionSlug(sub.name) === sectionParam);
+    deepLinked.current = true;
+    if (match) scrollToSub(match.sub.id, false);
+  }, [sectionParam, sections, scrollToSub]);
+
+  useEffect(() => { if (searchOpen) searchInputRef.current?.focus(); }, [searchOpen]);
 
   const goBack = () => {
     const params = new URLSearchParams();
     if (table) params.set('table', table);
     if (token) params.set('token', token);
-    navigate(`/menu?${params.toString()}`);
+    const qs = params.toString();
+    navigate(qs ? `/menu?${qs}` : '/menu');
   };
 
-  // ---- item rendering (shared by every page + search results) ----
+  const closeSearch = () => { setSearch(''); setSearchOpen(false); };
+
+  const quickAdd = (item: MenuItemRow, source: 'list' | 'grid') => {
+    const name = getLocalizedName(item, locale);
+    addItem({ id: item.id, name: item.name, name_bs: item.name_bs, name_ar: item.name_ar, price: Number(item.price), image_url: item.image_url || undefined });
+    track('item_added', { item_id: item.id, source });
+    toast.success(t('added_to_order'), { description: name, duration: 1400 });
+    vibrate(8);
+  };
+
+  const blockedLabel = (item: MenuItemRow) => {
+    const blocked = unorderableReason(item);
+    if (!blocked) return null;
+    return blocked === 'sold_out' ? t('sold_out') : windowLabel(item);
+  };
+
+  // ---- item rendering (shared by every section + search results) ----
   const renderGridCard = (item: MenuItemRow, i: number) => {
     const name = getLocalizedName(item, locale);
     const tags = getItemTags(item);
-    const blocked = unorderableReason(item);
+    const blocked = blockedLabel(item);
     const badges = merchBadges(item);
+    const inCart = cartItems.find((c) => (c.menuItemId ?? c.id) === item.id && !c.notes);
     return (
-      <ImpressionCard key={item.id} itemId={item.id} variants={gridItem} onClick={() => setSelectedItem(item)} className="text-left tap-sm card-lux card-lux-hover overflow-hidden">
-        <div className="relative">
-          <SmartImage src={item.image_url || undefined} id={item.id} alt={name} width={220} height={165} priority={i < 6} fallbackText={name} wrapperClassName={`w-full aspect-[4/3] ${blocked ? 'opacity-45 saturate-50' : ''}`} />
-          {popularIds.has(item.id) && !blocked && (
-            <span className="absolute top-1.5 left-1.5 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-gold/90 text-[10px] font-sans font-semibold text-white shadow"><Star className="w-2.5 h-2.5 fill-white" /></span>
-          )}
-          {/* Why it cannot be ordered, in words. A greyed card with no reason
-              reads as a bug. */}
-          {blocked && (
-            <span className="absolute top-1.5 left-1.5 px-2 py-0.5 rounded-full bg-foreground/85 text-[10px] font-sans font-semibold text-background">
-              {blocked === 'sold_out' ? t('sold_out') : windowLabel(item)}
-            </span>
-          )}
-          {hasSession && !blocked && (
-            <button
-              type="button"
-              aria-label={`${t('add_to_order')} ${name}`}
-              className="absolute bottom-1.5 right-1.5 w-9 h-9 rounded-full bg-primary text-primary-foreground flex items-center justify-center shadow-md active:scale-90 transition-transform focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
-              onClick={(e) => {
-                e.stopPropagation();
-                addItem({ id: item.id, name: item.name, price: Number(item.price), image_url: item.image_url || undefined });
-                track('item_added', { item_id: item.id, source: 'grid' });
-                toast.success(t('added_to_order'), { description: name, duration: 1400 });
-                if (typeof navigator !== 'undefined' && 'vibrate' in navigator) { try { navigator.vibrate(8); } catch { /* gesture-gated */ } }
-              }}
-            ><Plus className="w-4 h-4" /></button>
-          )}
+      <ImpressionCard key={item.id} itemId={item.id} onOpen={() => setSelectedItem(item)} className="relative card-lux card-lux-hover overflow-hidden cursor-pointer tap-sm">
+        <div className="block w-full text-start">
+          <span className="relative block">
+            <SmartImage src={item.image_url || undefined} id={item.id} alt={name} width={220} height={165} priority={i < 6} fallbackText={name} wrapperClassName={`w-full aspect-[4/3] ${blocked ? 'opacity-45 saturate-50' : ''}`} />
+            {popularIds.has(item.id) && !blocked && badges.length === 0 && (
+              <span className="absolute top-2 start-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gold/90 text-xs font-sans font-semibold text-white shadow"><Star className="w-3 h-3 fill-white" aria-hidden />{t('popular')}</span>
+            )}
+            {/* Why it cannot be ordered, in words. A greyed card with no reason
+                reads as a bug. */}
+            {blocked && (
+              <span className="absolute top-2 start-2 px-2 py-0.5 rounded-full bg-foreground/85 text-xs font-sans font-semibold text-background">{blocked}</span>
+            )}
+          </span>
+          <span className="block p-3">
+            <button type="button" className={`block text-start font-serif text-[15px] font-semibold leading-snug line-clamp-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded ${blocked ? 'text-muted-foreground' : 'text-foreground'}`}>{name}</button>
+            {badges.length > 0 && !blocked && (
+              <span className="block text-xs font-sans font-semibold text-primary mt-1">{badges[0]}</span>
+            )}
+            {tags.length > 0 && <span className="block text-sm mt-1" aria-hidden>{tags.slice(0, 3).map((k) => DIET_BY_KEY[k]?.emoji).filter(Boolean).join(' ')}</span>}
+            <span className={`block text-sm font-sans font-bold mt-1 pe-12 tabular-nums ${blocked ? 'text-muted-foreground' : 'text-primary'}`}>{Number(item.price).toFixed(2)} KM</span>
+          </span>
         </div>
-        <div className="p-2.5">
-          <h3 className={`font-serif text-sm font-semibold line-clamp-1 ${blocked ? 'text-muted-foreground' : 'text-foreground'}`}>{name}</h3>
-          {badges.length > 0 && !blocked && (
-            <span className="block text-[10px] font-sans font-semibold uppercase tracking-wide text-primary mt-0.5">{badges[0]}</span>
-          )}
-          {tags.length > 0 && <span className="block text-xs mt-0.5">{tags.slice(0, 3).map((k) => DIET_BY_KEY[k]?.emoji).filter(Boolean).join(' ')}</span>}
-          <p className={`text-sm font-sans font-bold mt-1 tabular-nums ${blocked ? 'text-muted-foreground' : 'text-primary'}`}>{Number(item.price).toFixed(2)} KM</p>
-        </div>
+        {hasSession && !blocked && (
+          <button
+            type="button"
+            aria-label={`${t('add_to_order')} ${name}`}
+            className="absolute bottom-2 end-2 min-w-11 h-11 px-3 rounded-full bg-primary text-primary-foreground flex items-center justify-center gap-1 shadow-md active:scale-90 transition-transform focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 font-sans text-sm font-bold tabular-nums"
+            onClick={(e) => { stop(e); quickAdd(item, 'grid'); }}
+          >
+            <Plus className="w-4 h-4" aria-hidden />{inCart ? inCart.quantity : null}
+          </button>
+        )}
       </ImpressionCard>
     );
   };
@@ -238,200 +349,272 @@ const CategoryPage = () => {
     const localizedDesc = getLocalizedDescription(item, locale);
     const inCart = cartItems.find((c) => (c.menuItemId ?? c.id) === item.id && !c.notes);
     const qty = inCart?.quantity ?? 0;
-    const blocked = unorderableReason(item);
+    const blocked = blockedLabel(item);
     const badges = merchBadges(item);
     return (
-      <ImpressionCard key={item.id} itemId={item.id} variants={listItem} onClick={() => setSelectedItem(item)} className="w-full text-left tap">
-        <div className="group flex gap-4 p-4 card-lux card-lux-hover">
-          <SmartImage src={item.image_url || undefined} id={item.id} alt={localizedName} width={80} height={80} priority={i < 8} fallbackText={localizedName} wrapperClassName={`w-20 h-20 rounded-lg flex-shrink-0 ${blocked ? 'opacity-45 saturate-50' : ''}`} className="group-hover:scale-105 transition-transform duration-300" />
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 flex-wrap">
-              <h3 className={`font-serif text-base font-semibold ${blocked ? 'text-muted-foreground' : 'text-foreground'}`}>{localizedName}</h3>
-              {blocked && (
-                <span className="px-1.5 py-0.5 rounded-full bg-muted text-[10px] font-sans font-semibold text-muted-foreground uppercase tracking-wide">
-                  {blocked === 'sold_out' ? t('sold_out') : windowLabel(item)}
-                </span>
-              )}
-              {badges.length > 0 && !blocked && (
-                <span className="px-1.5 py-0.5 rounded-full bg-primary/10 text-[10px] font-sans font-semibold text-primary uppercase tracking-wide">
-                  {badges[0]}
-                </span>
-              )}
-              {popularIds.has(item.id) && !blocked && (
-                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-gold/15 text-[10px] font-sans font-semibold text-gold"><Star className="w-2.5 h-2.5 fill-gold" /> {t('popular')}</span>
-              )}
-              {getItemTags(item).slice(0, 3).map((k) => DIET_BY_KEY[k] && (
-                <span key={k} className="text-sm leading-none" title={t(DIET_BY_KEY[k].labelKey)} aria-label={t(DIET_BY_KEY[k].labelKey)}>{DIET_BY_KEY[k].emoji}</span>
-              ))}
-              {isSearch && subNameById.get(item.subcategory_id || '') && (
-                <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground font-sans">{subNameById.get(item.subcategory_id || '')}</span>
-              )}
-            </div>
-            {localizedDesc && <p className="text-sm text-muted-foreground font-sans mt-0.5 line-clamp-2">{localizedDesc}</p>}
-            <div className="flex items-baseline gap-2 mt-2 flex-wrap">
-              <p className={`text-sm font-sans font-bold tabular-nums ${blocked ? 'text-muted-foreground' : 'text-primary'}`}>{Number(item.price).toFixed(2)} KM</p>
-              {/* Prep time on the card, not just in the sheet. It is the
-                  question a hungry table asks before it asks the price. */}
-              {item.prep_minutes != null && !blocked && (
-                <span className="text-xs font-sans text-muted-foreground">~{item.prep_minutes} min</span>
-              )}
-              {item.portion_note && <span className="text-xs font-sans text-muted-foreground">{item.portion_note}</span>}
-            </div>
+      <ImpressionCard key={item.id} itemId={item.id} onOpen={() => setSelectedItem(item)} className="relative flex items-center gap-4 p-3 card-lux card-lux-hover cursor-pointer tap">
+        <SmartImage src={item.image_url || undefined} id={item.id} alt="" width={96} height={96} sizes="96px" priority={i < 8} fallbackText={localizedName} wrapperClassName={`w-24 h-24 rounded-xl flex-shrink-0 ${blocked ? 'opacity-45 saturate-50' : ''}`} />
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <h3 className="font-serif text-base font-semibold leading-snug">
+              <button type="button" className={`text-start focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded ${blocked ? 'text-muted-foreground' : 'text-foreground'}`}>{localizedName}</button>
+            </h3>
+            {getItemTags(item).slice(0, 3).map((k) => DIET_BY_KEY[k] && (
+              <span key={k} className="text-sm leading-none" title={t(DIET_BY_KEY[k].labelKey)} aria-label={t(DIET_BY_KEY[k].labelKey)}>{DIET_BY_KEY[k].emoji}</span>
+            ))}
           </div>
-          {hasSession && !blocked && (
-            <div className="flex items-center" onClick={(e) => e.stopPropagation()}>
-              {qty > 0 ? (
-                <div role="group" aria-label={`${localizedName} quantity`} className="flex items-center gap-1 bg-primary/10 rounded-full p-1">
-                  <button type="button" aria-label={`Decrease ${localizedName} quantity`} onClick={(e) => { e.stopPropagation(); if (qty <= 1) removeItem(item.id); else updateQuantity(item.id, qty - 1); }} className="w-9 h-9 rounded-full bg-card text-primary flex items-center justify-center hover:bg-muted active:scale-90 transition-all min-w-[36px] min-h-[36px]"><Minus className="w-3.5 h-3.5" /></button>
-                  <span className="min-w-[20px] text-center text-sm font-sans font-bold text-primary tabular-nums">{qty}</span>
-                  <button type="button" aria-label={`Increase ${localizedName} quantity`} disabled={qty >= 10} onClick={(e) => { e.stopPropagation(); updateQuantity(item.id, qty + 1); }} className="w-9 h-9 rounded-full bg-primary text-primary-foreground flex items-center justify-center hover:bg-sage-dark active:scale-90 transition-all min-w-[36px] min-h-[36px] disabled:opacity-50"><Plus className="w-3.5 h-3.5" /></button>
-                </div>
-              ) : (
-                <button type="button" aria-label={`${t('add_to_order')} ${localizedName}`} onClick={(e) => {
-                  e.stopPropagation();
-                  addItem({ id: item.id, name: item.name, price: Number(item.price), image_url: item.image_url || undefined });
-                  track('item_added', { item_id: item.id, source: 'list' });
-                  toast.success(t('added_to_order'), { description: localizedName, duration: 1600 });
-                  if (typeof navigator !== 'undefined' && 'vibrate' in navigator) { try { navigator.vibrate(8); } catch { /* gesture-gated */ } }
-                }} className="w-10 h-10 rounded-full bg-primary/10 text-primary flex items-center justify-center hover:bg-primary hover:text-primary-foreground active:scale-90 transition-all duration-150 min-w-[44px] min-h-[44px] tap-sm"><Plus className="w-4 h-4" /></button>
+          {(blocked || badges.length > 0 || popularIds.has(item.id) || (isSearch && subNameById.get(item.subcategory_id || ''))) && (
+            <div className="flex items-center gap-1.5 flex-wrap mt-1">
+              {blocked && (
+                <span className="px-2 py-0.5 rounded-full bg-muted text-xs font-sans font-semibold text-muted-foreground">{blocked}</span>
+              )}
+              {!blocked && badges.length > 0 && (
+                <span className="px-2 py-0.5 rounded-full bg-primary/10 text-xs font-sans font-semibold text-primary">{badges[0]}</span>
+              )}
+              {!blocked && badges.length === 0 && popularIds.has(item.id) && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gold/15 text-xs font-sans font-semibold text-gold"><Star className="w-3 h-3 fill-gold" aria-hidden /> {t('popular')}</span>
+              )}
+              {isSearch && subNameById.get(item.subcategory_id || '') && (
+                <span className="text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground font-sans">{subNameById.get(item.subcategory_id || '')}</span>
               )}
             </div>
           )}
+          {localizedDesc && <p className="text-sm text-muted-foreground font-sans mt-1 line-clamp-2">{localizedDesc}</p>}
+          <div className="flex items-baseline gap-2 mt-1.5 flex-wrap">
+            <p className={`text-[15px] font-sans font-bold tabular-nums ${blocked ? 'text-muted-foreground' : 'text-primary'}`}>{Number(item.price).toFixed(2)} KM</p>
+            {/* Prep time on the card, not just in the sheet. It is the
+                question a hungry table asks before it asks the price. */}
+            {item.prep_minutes != null && !blocked && (
+              <span className="text-xs font-sans text-muted-foreground">~{item.prep_minutes} {t('minutes_short')}</span>
+            )}
+            {item.portion_note && <span className="text-xs font-sans text-muted-foreground">{item.portion_note}</span>}
+          </div>
         </div>
+        {hasSession && !blocked && (
+          <div className="relative z-10 flex items-center self-center" onClick={stop}>
+            {qty > 0 ? (
+              <div role="group" aria-label={localizedName} className="flex flex-col items-center gap-0.5 bg-primary/10 rounded-full p-0.5">
+                <button type="button" aria-label={`${t('increase')} ${localizedName}`} disabled={qty >= 10} onClick={() => updateQuantity(inCart!.id, qty + 1)} className="w-11 h-11 rounded-full bg-primary text-primary-foreground flex items-center justify-center hover:bg-sage-dark active:scale-90 transition-all disabled:opacity-50"><Plus className="w-4 h-4" aria-hidden /></button>
+                <span className="min-w-[20px] text-center text-sm font-sans font-bold text-primary tabular-nums" aria-live="polite">{qty}</span>
+                <button type="button" aria-label={`${t('decrease')} ${localizedName}`} onClick={() => { if (qty <= 1) removeItem(inCart!.id, 'menu_stepper'); else updateQuantity(inCart!.id, qty - 1); }} className="w-11 h-11 rounded-full bg-card text-primary flex items-center justify-center hover:bg-muted active:scale-90 transition-all"><Minus className="w-4 h-4" aria-hidden /></button>
+              </div>
+            ) : (
+              <button type="button" aria-label={`${t('add_to_order')} ${localizedName}`} onClick={() => quickAdd(item, 'list')} className="w-11 h-11 rounded-full bg-primary/10 text-primary flex items-center justify-center hover:bg-primary hover:text-primary-foreground active:scale-90 transition-all duration-150 tap-sm"><Plus className="w-5 h-5" aria-hidden /></button>
+            )}
+          </div>
+        )}
       </ImpressionCard>
     );
   };
 
-  const renderItems = (list: MenuItemRow[], isSearch: boolean, animate = true) => {
-    if (list.length === 0) {
-      return (
-        <div className="flex flex-col items-center justify-center py-20 px-6 text-center">
-          <div className="w-14 h-14 rounded-full bg-muted flex items-center justify-center mb-4"><Search className="w-5 h-5 text-muted-foreground" /></div>
-          <p className="font-serif text-base font-semibold text-foreground">{isSearch ? t('no_results_title') : t('no_items_category')}</p>
-          {isSearch && <p className="text-sm text-muted-foreground font-sans mt-1.5">{t('no_results_hint')}</p>}
-        </div>
-      );
-    }
+  const renderEmpty = (isSearch: boolean) => (
+    <div className="flex flex-col items-center justify-center py-20 px-6 text-center">
+      <div className="w-14 h-14 rounded-full bg-muted flex items-center justify-center mb-4"><Search className="w-5 h-5 text-muted-foreground" aria-hidden /></div>
+      <p className="font-serif text-base font-semibold text-foreground">{isSearch ? t('no_results_title') : t('no_items_category')}</p>
+      {isSearch && <p className="text-sm text-muted-foreground font-sans mt-1.5">{t('no_results_hint')}</p>}
+      {activeDiets.length > 0 && (
+        <button onClick={() => setActiveDiets([])} className="mt-4 inline-flex items-center gap-1.5 px-4 min-h-[44px] rounded-full border border-border text-sm font-sans font-medium text-foreground hover:bg-muted">
+          <X className="w-4 h-4" aria-hidden />{t('clear_filters')}
+        </button>
+      )}
+    </div>
+  );
+
+  const renderItems = (list: MenuItemRow[], isSearch: boolean) => {
+    if (list.length === 0) return renderEmpty(isSearch);
     if (deferredView === 'grid') {
-      return (
-        <motion.div key="grid" variants={gridContainer} initial={animate ? 'hidden' : false} animate="show" className="px-4 pt-4 grid grid-cols-2 gap-3">
-          {list.map((it, i) => renderGridCard(it, i))}
-        </motion.div>
-      );
+      return <div className="px-4 pt-3 grid grid-cols-2 gap-3">{list.map((it, i) => renderGridCard(it, i))}</div>;
     }
-    return (
-      <motion.div key="list" variants={listContainer} initial={animate ? 'hidden' : false} animate="show" className="px-4 pt-4 space-y-3">
-        {list.map((it, i) => renderListRow(it, i, isSearch))}
-      </motion.div>
-    );
+    return <div className="px-4 pt-3 space-y-3">{list.map((it, i) => renderListRow(it, i, isSearch))}</div>;
   };
 
-  // Memoize the pages so swiping between subcategories never re-renders items
-  // (only the pager transform + active pill move) — keeps the transition smooth.
-  const pages = useMemo(
-    () => subcategories.map((sub) => (
-      <div key={sub.id} dir={rtl ? 'rtl' : 'ltr'} className="pb-36">
-        {renderItems(filterDiet(allItems.filter((it) => it.subcategory_id === sub.id)), false)}
-      </div>
+  // Memoized so the scroll spy moving the active pill never re-renders items.
+  const sectionsView = useMemo(
+    () => sections.map(({ sub, items }, si) => (
+      <section
+        key={sub.id}
+        ref={(el) => { sectionRefs.current[sub.id] = el; }}
+        id={`section-${sectionSlug(sub.name)}`}
+        aria-labelledby={`section-title-${sub.id}`}
+        className={si === 0 ? 'pt-3' : 'pt-7'}
+      >
+        <div className="px-4 flex items-baseline justify-between gap-3">
+          <h2 id={`section-title-${sub.id}`} className="font-serif text-xl font-semibold text-foreground">
+            {getLocalizedName(sub as SubcategoryRow, locale)}
+          </h2>
+          <span className="text-xs font-sans text-muted-foreground tabular-nums">{items.length}</span>
+        </div>
+        {renderItems(items, false)}
+      </section>
     )),
     // renderItems is recreated each render; the value deps below fully determine its output.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [subcategories, allItems, deferredView, activeDiets, locale, popularIds, cartItems, hasSession, subNameById, t, rtl],
+    [sections, deferredView, locale, popularIds, cartItems, hasSession, subNameById, t],
   );
 
-  if (!category) {
+  const loadFailed = categoryFailed || subsFailed || itemsFailed;
+
+  if (loadFailed) {
     return (
-      <div className="min-h-screen bg-background">
-        <div className="px-4 py-4 flex items-center gap-3">
-          <Skeleton className="w-8 h-8 rounded-full" />
-          <Skeleton className="w-32 h-6 rounded" />
-        </div>
-        <div className="px-4 space-y-3 mt-4">
-          {[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-20 w-full rounded-xl" />)}
+      <div className="min-h-screen bg-background flex flex-col items-center justify-center px-6 text-center" role="alert">
+        <p className="font-serif text-lg font-semibold text-foreground">{t('load_failed')}</p>
+        <div className="mt-5 flex gap-2">
+          <button onClick={goBack} className="px-4 min-h-[44px] rounded-full border border-border text-sm font-sans font-medium">{t('back_to_menu')}</button>
+          <button
+            onClick={() => { void refetchCategory(); void refetchItems(); }}
+            className="inline-flex items-center gap-2 px-4 min-h-[44px] rounded-full bg-primary text-primary-foreground text-sm font-sans font-medium"
+          >
+            <RefreshCw className="w-4 h-4" aria-hidden />{t('try_again')}
+          </button>
         </div>
       </div>
     );
   }
 
-  return (
-    <div className="flex flex-col h-[100dvh] bg-background">
-      <div className="shrink-0 z-30 glass">
-        <div className="flex items-center gap-3 px-4 py-4">
-          <button onClick={goBack} aria-label={t('back_to_menu')} className="p-2.5 -ml-2 rounded-full hover:bg-muted transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center">
-            <ArrowLeft className={`w-5 h-5 text-foreground ${rtl ? 'rotate-180' : ''}`} />
-          </button>
-          <h1 className="font-serif text-xl font-semibold text-foreground">{getLocalizedName(category as CategoryRow, locale)}</h1>
-          <div className="ml-auto flex items-center gap-2">
-            {table && <span className="text-xs font-sans px-3 py-1 rounded-full bg-primary/10 text-primary font-medium">{t('table')} {table}</span>}
-            <button onClick={() => setView((v) => (v === 'list' ? 'grid' : 'list'))} aria-label={view === 'list' ? t('grid_view') : t('list_view')} className="p-2 rounded-full hover:bg-muted transition-colors min-w-[40px] min-h-[40px] flex items-center justify-center text-muted-foreground">
-              {view === 'list' ? <LayoutGrid className="w-5 h-5" /> : <List className="w-5 h-5" />}
-            </button>
-            <LanguageSelector />
-          </div>
+  if (!category) {
+    return (
+      <div className="min-h-screen bg-background">
+        <div className="px-4 py-3 flex items-center gap-3">
+          <Skeleton className="w-10 h-10 rounded-full" />
+          <Skeleton className="w-32 h-6 rounded" />
         </div>
-        <div className="h-px bg-gradient-to-r from-transparent via-primary/20 to-transparent" />
+        <div className="px-4 space-y-3 mt-4">
+          {[1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-28 w-full rounded-xl" />)}
+        </div>
+      </div>
+    );
+  }
 
-        {subcategories.length > 0 && (
-          <div className="flex gap-1.5 px-4 py-3 overflow-x-auto scrollbar-hide">
-            {subcategories.map((sub) => {
+  const localizedCategory = getLocalizedName(category as CategoryRow, locale);
+  const iconButton = 'w-11 h-11 rounded-full flex items-center justify-center text-foreground hover:bg-muted transition-colors shrink-0';
+
+  return (
+    <div className="min-h-screen bg-background">
+      {/* About 100px at rest instead of the ~240px the first redesign used:
+          title row plus section pills. Search and diet filters sit behind
+          icons because most guests never use them, and on a phone with the
+          browser toolbar showing every pixel of header is a pixel of menu. */}
+      <div ref={headerRef} className="sticky top-0 z-30 glass">
+        <div className="flex items-center gap-1 ps-2 pe-3 h-14">
+          <button onClick={goBack} aria-label={t('back_to_menu')} className={iconButton}>
+            <ArrowLeft className="w-5 h-5 rtl:rotate-180" aria-hidden />
+          </button>
+          {searchOpen ? (
+            <div className="relative flex-1 min-w-0">
+              <Search className="absolute start-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" aria-hidden />
+              <input
+                ref={searchInputRef}
+                type="search"
+                inputMode="search"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Escape') closeSearch(); }}
+                placeholder={`${t('search_in')} ${localizedCategory}…`}
+                aria-label={`${t('search_in')} ${localizedCategory}`}
+                className="w-full h-11 ps-9 pe-11 rounded-full bg-muted/70 border border-border/60 text-base font-sans text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
+              />
+              <button onClick={closeSearch} aria-label={t('clear_search')} className="absolute end-0 top-1/2 -translate-y-1/2 w-11 h-11 rounded-full flex items-center justify-center text-muted-foreground">
+                <X className="w-4 h-4" aria-hidden />
+              </button>
+            </div>
+          ) : (
+            <>
+              <h1 className="flex-1 min-w-0 truncate font-serif text-xl font-semibold text-foreground ps-1">{localizedCategory}</h1>
+              <button onClick={() => setSearchOpen(true)} aria-label={`${t('search_in')} ${localizedCategory}`} className={iconButton}>
+                <Search className="w-5 h-5" aria-hidden />
+              </button>
+              <button
+                onClick={() => setFiltersOpen((o) => !o)}
+                aria-label={t('filters')}
+                aria-expanded={filtersOpen}
+                className={`${iconButton} relative ${filtersOpen ? 'bg-muted' : ''}`}
+              >
+                <SlidersHorizontal className="w-5 h-5" aria-hidden />
+                {activeDiets.length > 0 && (
+                  <span className="absolute top-1.5 end-1.5 min-w-4 h-4 px-1 rounded-full bg-primary text-primary-foreground text-[10px] font-bold flex items-center justify-center">{activeDiets.length}</span>
+                )}
+              </button>
+              <LanguageSelector />
+            </>
+          )}
+        </div>
+
+        <AnimatePresence initial={false}>
+          {filtersOpen && !searchOpen && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              className="overflow-hidden"
+            >
+              <div className="px-4 pb-3 space-y-3">
+                <div className="flex items-center gap-2" role="group" aria-label={t('list_view')}>
+                  <button onClick={() => setView('list')} aria-pressed={view === 'list'} className={`inline-flex items-center gap-1.5 px-3.5 min-h-[40px] rounded-full text-sm font-sans font-medium border ${view === 'list' ? 'bg-foreground text-background border-foreground' : 'bg-card text-foreground border-border'}`}>
+                    <List className="w-4 h-4" aria-hidden />{t('list_view')}
+                  </button>
+                  <button onClick={() => setView('grid')} aria-pressed={view === 'grid'} className={`inline-flex items-center gap-1.5 px-3.5 min-h-[40px] rounded-full text-sm font-sans font-medium border ${view === 'grid' ? 'bg-foreground text-background border-foreground' : 'bg-card text-foreground border-border'}`}>
+                    <LayoutGrid className="w-4 h-4" aria-hidden />{t('grid_view')}
+                  </button>
+                </div>
+                {presentTags.length > 0 && (
+                  <div className="flex flex-wrap items-center gap-2">
+                    {presentTags.map((d) => {
+                      const on = activeDiets.includes(d.key);
+                      return (
+                        <button key={d.key} onClick={() => toggleDiet(d.key)} aria-pressed={on} className={`inline-flex items-center gap-1.5 px-3.5 min-h-[40px] rounded-full text-sm font-sans font-medium border transition-colors ${on ? 'bg-primary text-primary-foreground border-primary' : 'bg-card text-foreground border-border hover:bg-muted'}`}>
+                          <span aria-hidden>{d.emoji}</span>{t(d.labelKey)}
+                        </button>
+                      );
+                    })}
+                    {activeDiets.length > 0 && (
+                      <button onClick={() => setActiveDiets([])} className="inline-flex items-center gap-1 px-3 min-h-[40px] rounded-full text-sm font-sans text-muted-foreground hover:text-foreground">
+                        <X className="w-4 h-4" aria-hidden />{t('clear_filters')}
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {sections.length > 1 && !searching && (
+          <nav className="flex gap-1.5 px-3 pb-2 overflow-x-auto scrollbar-hide" aria-label={t('menu_sections')}>
+            {sections.map(({ sub }) => {
               const isActive = activeSubId === sub.id;
               return (
-                <button key={sub.id} ref={(el) => { pillRefs.current[sub.id] = el; }} onClick={() => selectSub(sub.id)}
-                  className={`relative px-4 py-2.5 rounded-full text-sm font-sans font-medium whitespace-nowrap min-h-[44px] tap ${isActive ? 'text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}`}>
+                <button
+                  key={sub.id}
+                  ref={(el) => { pillRefs.current[sub.id] = el; }}
+                  onClick={() => selectSub(sub.id)}
+                  aria-current={isActive ? 'true' : undefined}
+                  className={`relative px-4 h-10 rounded-full text-sm font-sans font-medium whitespace-nowrap tap ${isActive ? 'text-primary-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+                >
                   {isActive && <motion.span layoutId="active-sub-pill" transition={springPill} className="absolute inset-0 rounded-full bg-primary shadow-sm" />}
                   <span className="relative z-10">{getLocalizedName(sub as SubcategoryRow, locale)}</span>
                 </button>
               );
             })}
-          </div>
+          </nav>
         )}
-
-        <div className="px-4 pb-3">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
-            <input type="search" inputMode="search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t('search_placeholder')} aria-label={t('search_placeholder')}
-              className="w-full h-11 pl-10 pr-10 rounded-full bg-muted/60 border border-border/60 text-sm font-sans text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/40 transition-all" />
-            {search && <button onClick={() => setSearch('')} aria-label={t('clear_search')} className="absolute right-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full flex items-center justify-center text-muted-foreground hover:bg-muted transition-colors"><X className="w-3.5 h-3.5" /></button>}
-          </div>
-        </div>
-
-        {presentTags.length > 0 && (
-          <div className="flex items-center gap-1.5 px-4 pb-3 overflow-x-auto scrollbar-hide">
-            {presentTags.map((d) => {
-              const on = activeDiets.includes(d.key);
-              return (
-                <button key={d.key} onClick={() => toggleDiet(d.key)} className={`shrink-0 inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-sans font-medium border transition-colors ${on ? 'bg-primary text-primary-foreground border-primary' : 'bg-card text-muted-foreground border-border hover:text-foreground'}`}>
-                  <span aria-hidden>{d.emoji}</span>{t(d.labelKey)}
-                </button>
-              );
-            })}
-            {activeDiets.length > 0 && <button onClick={() => setActiveDiets([])} className="shrink-0 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-full text-xs font-sans text-muted-foreground hover:text-foreground"><X className="w-3 h-3" />{t('clear_filters')}</button>}
-          </div>
-        )}
+        <div className="h-px bg-gradient-to-r from-transparent via-primary/20 to-transparent" />
       </div>
 
-      {showHint && (
-        <motion.div initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} className="shrink-0 mx-4 mt-3 px-3.5 py-2.5 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-between gap-3">
-          <span className="text-xs font-sans text-primary flex items-center gap-2">👈👉 {t('swipe_hint')}</span>
-          <button onClick={dismissHint} className="text-xs font-sans font-semibold text-primary px-2.5 py-1 rounded-lg hover:bg-primary/15">{t('got_it')}</button>
-        </motion.div>
-      )}
-
       {allLoading ? (
-        <div className="flex-1 overflow-y-auto px-4 pt-4 space-y-3">
+        <div className="px-4 pt-4 space-y-3">
           {[1, 2, 3, 4].map((i) => (
-            <div key={i} className="flex gap-4 p-4 rounded-xl border border-border bg-card">
-              <Skeleton className="w-20 h-20 rounded-lg flex-shrink-0" />
+            <div key={i} className="flex gap-4 p-3 rounded-xl border border-border bg-card">
+              <Skeleton className="w-24 h-24 rounded-xl flex-shrink-0" />
               <div className="flex-1 space-y-2 py-1"><Skeleton className="h-4 w-2/3 rounded" /><Skeleton className="h-3 w-full rounded" /><Skeleton className="h-4 w-16 rounded mt-2" /></div>
             </div>
           ))}
         </div>
       ) : searching ? (
-        <div className="flex-1 overflow-y-auto overscroll-y-contain pb-36">{renderItems(searchResults, true, false)}</div>
+        <div className="pb-40">{renderItems(searchResults, true)}</div>
+      ) : sections.length === 0 ? (
+        <div className="pb-40">{renderEmpty(false)}</div>
       ) : (
-        <MenuPager index={activeIndex} count={subcategories.length} onIndexChange={(i) => selectSub(subcategories[i].id)}>
-          {pages}
-        </MenuPager>
+        <div className="pb-40">{sectionsView}</div>
       )}
 
       <AnimatePresence>
@@ -447,15 +630,15 @@ const CategoryPage = () => {
               description_bs: selectedItem.description_bs || undefined,
               price: Number(selectedItem.price),
               image_url: selectedItem.image_url || undefined,
-              // These three were omitted, so a finished allergen safety block
-              // in MenuItemDetail rendered for nobody. Allergens are the one
-              // field on this sheet that can matter medically.
+              // Allergens are the one field on this sheet that can matter
+              // medically; they must always travel with the item.
               allergens: selectedItem.allergens ?? null,
               portion_note: selectedItem.portion_note ?? null,
               prep_minutes: selectedItem.prep_minutes ?? null,
             }}
             onClose={() => setSelectedItem(null)}
             canOrder={hasSession}
+            unavailableLabel={blockedLabel(selectedItem)}
           />
         )}
       </AnimatePresence>

@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, ShieldCheck, Lock, CreditCard, Database, Share2, UserCheck, FileText, Mail } from 'lucide-react';
 import { staggerContainer, fadeUp } from '@/lib/motion';
-import { useLanguageStore, type Locale } from '@/lib/i18n';
+import { useLanguageStore, useT, type Locale } from '@/lib/i18n';
 
 type L = Record<Locale, string>;
 const pick = (o: L, l: Locale) => o[l] ?? o.en;
@@ -82,6 +82,7 @@ const SECTIONS: { icon: React.ElementType; title: L; body: L[] }[] = [
 ];
 
 const Trust = () => {
+  const t = useT();
   const navigate = useNavigate();
   const locale = useLanguageStore((s) => s.locale);
 
@@ -89,7 +90,7 @@ const Trust = () => {
     <div className="min-h-screen bg-background pb-16" dir={locale === 'ar' ? 'rtl' : 'ltr'}>
       <div className="sticky top-0 z-30 glass">
         <div className="flex items-center gap-3 px-4 py-4">
-          <button onClick={() => navigate(-1)} aria-label="Back" className="p-2.5 -ml-2 rounded-full hover:bg-muted transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center">
+          <button onClick={() => navigate(-1)} aria-label={t('back')} className="p-2.5 -ms-2 rounded-full hover:bg-muted transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center">
             <ArrowLeft className={`w-5 h-5 text-foreground ${locale === 'ar' ? 'rotate-180' : ''}`} />
           </button>
           <div className="flex items-center gap-2">

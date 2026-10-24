@@ -90,12 +90,12 @@ const SplitBillSheet = ({ open, total, orders, members, myName, billRequested, r
             {mode === 'even' ? (
               <div className="mt-5 text-center">
                 <div className="flex items-center justify-center gap-4">
-                  <button onClick={() => setN((v) => Math.max(1, v - 1))} className="w-11 h-11 rounded-full bg-muted grid place-items-center tap-sm" aria-label="Fewer people"><Minus className="w-5 h-5" /></button>
+                  <button onClick={() => setN((v) => Math.max(1, v - 1))} className="w-11 h-11 rounded-full bg-muted grid place-items-center tap-sm" aria-label={t('fewer_people')}><Minus className="w-5 h-5" /></button>
                   <div>
                     <p className="font-serif text-2xl font-bold text-foreground tabular-nums">{n}</p>
                     <p className="text-[11px] text-muted-foreground font-sans flex items-center gap-1 justify-center"><Users className="w-3 h-3" />{t('people')}</p>
                   </div>
-                  <button onClick={() => setN((v) => Math.min(20, v + 1))} className="w-11 h-11 rounded-full bg-muted grid place-items-center tap-sm" aria-label="More people"><Plus className="w-5 h-5" /></button>
+                  <button onClick={() => setN((v) => Math.min(20, v + 1))} className="w-11 h-11 rounded-full bg-muted grid place-items-center tap-sm" aria-label={t('more_people')}><Plus className="w-5 h-5" /></button>
                 </div>
                 <div className="mt-5 rounded-2xl bg-primary/5 border border-primary/15 py-4">
                   <p className="text-xs uppercase tracking-wide text-muted-foreground font-sans">{t('each_pays')}</p>

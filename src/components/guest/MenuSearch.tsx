@@ -4,6 +4,7 @@ import { Search, X, Plus } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useT, useLanguageStore, getLocalizedName, getLocalizedDescription } from '@/lib/i18n';
 import { useCartStore } from '@/lib/cart-store';
+import { toast } from 'sonner';
 import SmartImage from '@/components/ui/SmartImage';
 import { track } from '@/lib/analytics';
 
@@ -48,24 +49,33 @@ const MenuSearch = ({ canOrder }: Props) => {
   const deferred = useDeferredValue(query);
   const trimmed = deferred.trim();
 
-  const { data = [], isFetching } = useQuery({
+  const { data = [], isFetching, isError } = useQuery({
     queryKey: ['menu-search', trimmed, locale],
     queryFn: async (): Promise<SearchRow[]> => {
       const { data: rows, error } = await supabase.rpc('guest_search_menu' as never, {
         _query: trimmed,
         _limit: 20,
       } as never);
-      if (error) return [];
+      if (error) throw error;
       return ((rows ?? []) as SearchRow[]).map((r) => ({ ...r, price: Number(r.price) }));
     },
     enabled: trimmed.length >= 2,
     staleTime: 60_000,
   });
 
+  // One event per search a guest actually settled on, not one per keystroke:
+  // "bu", "bur", "burg" were each counted as a search, and a cache hit or a
+  // language change re-counted them.
+  const lastTracked = React.useRef('');
   useEffect(() => {
-    if (trimmed.length < 2 || isFetching) return;
-    track(data.length === 0 ? 'search_no_results' : 'search_performed', { length: trimmed.length, results: data.length });
-  }, [trimmed, isFetching, data.length]);
+    if (trimmed.length < 2 || isFetching || isError) return;
+    const timer = setTimeout(() => {
+      if (lastTracked.current === trimmed) return;
+      lastTracked.current = trimmed;
+      track(data.length === 0 ? 'search_no_results' : 'search_performed', { length: trimmed.length, results: data.length });
+    }, 900);
+    return () => clearTimeout(timer);
+  }, [trimmed, isFetching, isError, data.length]);
 
   const grouped = useMemo(() => data, [data]);
   const active = trimmed.length >= 2;
@@ -85,8 +95,8 @@ const MenuSearch = ({ canOrder }: Props) => {
         {query && (
           <button
             onClick={() => setQuery('')}
-            aria-label={t('clear_filters')}
-            className="absolute top-1/2 -translate-y-1/2 end-2 w-9 h-9 rounded-full grid place-items-center text-muted-foreground hover:bg-muted transition-colors"
+            aria-label={t('clear_search')}
+            className="absolute top-1/2 -translate-y-1/2 end-0.5 w-11 h-11 rounded-full grid place-items-center text-muted-foreground hover:bg-muted transition-colors"
           >
             <X className="w-4 h-4" aria-hidden />
           </button>
@@ -95,7 +105,9 @@ const MenuSearch = ({ canOrder }: Props) => {
 
       {active && (
         <div className="mt-2" aria-live="polite">
-          {grouped.length === 0 && !isFetching ? (
+          {isError ? (
+            <p className="py-6 text-center text-sm font-sans text-muted-foreground" role="alert">{t('load_failed')}</p>
+          ) : grouped.length === 0 && !isFetching ? (
             <div className="py-8 text-center">
               <p className="font-serif text-base font-semibold text-foreground">{t('search_no_results')}</p>
               <p className="text-sm text-muted-foreground font-sans mt-1">{t('search_no_results_sub')}</p>
@@ -113,12 +125,13 @@ const MenuSearch = ({ canOrder }: Props) => {
                       alt=""
                       width={56}
                       height={56}
+                      sizes="56px"
                       wrapperClassName="w-14 h-14 rounded-xl shrink-0"
                       fallbackText={name}
                     />
                     <div className="flex-1 min-w-0">
                       <p className="font-serif text-[15px] font-semibold text-foreground leading-tight truncate">{name}</p>
-                      <p className="text-[11px] text-muted-foreground font-sans">{item.category_name}</p>
+                      <p className="text-xs text-muted-foreground font-sans">{t(item.category_name.toLowerCase()) || item.category_name}</p>
                       {description && (
                         <p className="text-xs text-muted-foreground font-sans truncate">{description}</p>
                       )}
@@ -126,15 +139,16 @@ const MenuSearch = ({ canOrder }: Props) => {
                     <div className="text-end shrink-0">
                       <p className="text-sm font-sans font-bold text-primary tabular-nums">{item.price.toFixed(2)} KM</p>
                       {!item.is_available ? (
-                        <span className="text-[11px] font-sans text-muted-foreground">{t('sold_out')}</span>
+                        <span className="text-xs font-sans font-medium text-muted-foreground">{t('sold_out')}</span>
                       ) : canOrder ? (
                         <button
                           onClick={() => {
-                            addItem({ id: item.id, menuItemId: item.id, name: item.name, price: item.price, image_url: item.image_url || undefined });
+                            addItem({ id: item.id, menuItemId: item.id, name: item.name, name_bs: item.name_bs, name_ar: item.name_ar, price: item.price, image_url: item.image_url || undefined });
                             track('item_added', { item_id: item.id, source: 'search' });
+                            toast.success(t('added_to_order'), { description: name, duration: 1400 });
                           }}
                           aria-label={`${t('add_to_order')} — ${name}`}
-                          className="mt-1 h-9 px-3 rounded-full bg-primary text-primary-foreground font-sans font-semibold text-xs inline-flex items-center gap-1 hover:bg-sage-dark transition-colors tap-sm"
+                          className="mt-1 h-11 px-3.5 rounded-full bg-primary text-primary-foreground font-sans font-semibold text-xs inline-flex items-center gap-1 hover:bg-sage-dark transition-colors tap-sm"
                         >
                           <Plus className="w-3.5 h-3.5" aria-hidden /> {t('add')}
                         </button>
