@@ -22,6 +22,38 @@ Money questions are never answered from analytics events, and behaviour
 questions are never answered from orders alone. Mixing them is how a funnel
 starts disagreeing with the till.
 
+### Days, money and visits
+
+Three definitions every screen shares:
+
+- **Day** is the Sarajevo trading day, `business_day()` /
+  `business_day_range()`. Reports bucket by it (`sales_analytics.by_day`),
+  hours are Sarajevo wall-clock (`by_hour`), and "today" comes from the server,
+  never from the device clock.
+- **Money** is **net sales**: items, minus refunds, without tips —
+  `total − tip_amount − refunded_amount` over `completed_orders`. Tips are
+  reported beside it, never inside it. `sales_analytics.totals.revenue` keeps
+  the gross amount taken (items + tips), which is what the Daily Report calls
+  gross, so the two can be reconciled.
+- **Visit** (in analytics) is one `visit_id`: one phone, one tab. Funnel steps
+  count distinct visits, not events.
+
+### Delivery
+
+Events are buffered in the browser and sent with `fetch(…, { keepalive: true })`
+to `rpc/record_analytics_events`: every 8 s, at 20 events, and on `pagehide` /
+`visibilitychange → hidden`, so the last events of a visit (`order_placed`
+above all) survive the page going away. `flushNow()` sends immediately after a
+terminal event. A failed batch is put back and retried with the next, holding
+at most 100 events while offline. A `PGRST202` (no such function) switches
+tracking off for the visit.
+
+The server is the second line of defence: `item_id` / `source_item_id` values
+that are not uuids are dropped, a malformed `at` is treated as "now" instead of
+failing the batch, and `occurred_at` is clamped to `[now() − 1 h, now() + 1 min]`
+so a phone with the wrong date cannot write into last year's reports. Readers
+cast ids with `analytics_uuid()`, which returns NULL rather than raising.
+
 ### Privacy position
 
 - First-party only. No third-party trackers, no advertising pixels, no cookies.
@@ -55,9 +87,17 @@ Post-order     tab_viewed · reorder_tapped · waiter_called · bill_requested �
 
 Denominators matter more than numerators. Each rate below names its own.
 
+`funnel_summary(from, to)` returns distinct visits per step — menu_viewed →
+category_viewed → item_viewed → item_added → cart_viewed → checkout_opened →
+order_placed — on trading days, plus the number of visits that recorded
+anything at all. Steps are counted independently, not as a strict sequence,
+because a guest arriving on a shared category link never fires `menu_viewed`.
+The Analytics page draws it, and says "not recorded" for a step that reads
+zero while a later step does not.
+
 | Metric | Definition | Source | Target |
 |---|---|---|---|
-| Menu visits | `menu_viewed` events | analytics | — |
+| Menu visits | visits with `menu_viewed` | analytics | — |
 | Valid table sessions | distinct `table_sessions` opened | orders DB | — |
 | Product views | `item_viewed` | analytics | — |
 | Add-to-cart rate | visits with ≥1 `item_added` ÷ `menu_viewed` | analytics | ≥ 45% |
@@ -79,16 +119,19 @@ Treat abandonment as a signal to investigate, not as lost revenue.
 
 | Metric | Definition | Source |
 |---|---|---|
-| Average order value | `avg(total)` over `completed_orders` | `day_reconciliation().average_order` |
+| Net sales | `sum(total − tip − refunded)` over `completed_orders` | `sales_analytics().totals.net_sales` |
+| Average order value | net sales ÷ orders | `sales_analytics().totals.average_order` (`day_reconciliation().average_order` is gross, incl. tips) |
 | Median order value | `percentile_cont(0.5)` over `completed_orders.total` | SQL |
 | Items per order | `sum(quantity) ÷ count(orders)` | `order_items` |
-| Revenue per table | `sum(total)` grouped by `table_session_id` | SQL |
-| Revenue per guest | revenue per table ÷ session members | SQL |
+| Revenue per table | net sales grouped by `table_session_id` | `session_outcomes.net_sales` |
+| Revenue per guest | a visit's net sales ÷ its `covers`, averaged over visits with a head count | `suggestion_impact().per_cover` |
 | Tip rate | orders with `tip_amount > 0` ÷ completed orders | DB |
 | Average tip | `avg(tip_amount)` where `> 0`, and separately as % of items | DB |
 | Dessert / drink / side attachment | orders containing ≥1 item in that category ÷ orders containing a main | `order_items` × `subcategories` |
 | Add-on attachment | as above for `add_on` recommendations | DB + analytics |
-| Suggestion acceptance | `suggestion_accepted` ÷ `suggestion_shown`, split by placement and type | analytics |
+| Suggestion acceptance | server-recorded sightings that became a line on a completed order (`recommendation_impressions` → `suggestion_conversions.decision_id`) | `suggestion_impact().paid_acceptance_pct` |
+| Suggestion taps | `suggestion_accepted` ÷ `suggestion_shown` — taps, not sales; the only history from before the decision ledger | analytics |
+| Looked at, not ordered | available, ≥ 20 views, < 10% of views became an order | `looked_at_not_ordered()` (mirrored by `findLeaks()`) |
 | Repeat-order rate in visit | sessions with ≥2 released orders ÷ sessions with ≥1 | DB |
 
 Attachment should be measured **per placement** (`cart` vs `after_meal`) and
@@ -155,10 +198,17 @@ for it today.
 ## Useful queries
 
 ```sql
--- Today, the whole picture, with correct denominators.
-SELECT public.day_reconciliation(CURRENT_DATE);
+-- Today, the whole picture, with correct denominators. No argument: the
+-- default is today's Sarajevo trading day. CURRENT_DATE is the UTC date and
+-- is a different day for the first hours after local midnight.
+SELECT public.day_reconciliation();
 
--- Suggestion performance by placement and type, last 14 days.
+-- The ordering funnel for the last seven trading days.
+SELECT public.funnel_summary();
+
+-- Suggestion TAPS by placement and type, last 14 days. Taps fire on the
+-- phone and are not sales; for acceptance that was paid for, use
+-- suggestion_impact() or decision_performance().
 SELECT props->>'placement' AS placement,
        props->>'type'      AS type,
        count(*) FILTER (WHERE event = 'suggestion_shown')    AS shown,
@@ -170,7 +220,8 @@ SELECT props->>'placement' AS placement,
  GROUP BY 1, 2
  ORDER BY shown DESC;
 
--- Checkout funnel by visit, last 7 days.
+-- Checkout funnel by visit, last 7 days (rolling hours; funnel_summary()
+-- above is the same idea on trading days).
 WITH v AS (
   SELECT visit_id,
          bool_or(event = 'item_added')        AS added,

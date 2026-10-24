@@ -23,6 +23,8 @@ export interface ItemPerformance {
   price: number;
   is_available: boolean;
   margin_score: number;
+  /** When the dish was added. A dish added mid-window has not had a fair chance to sell. */
+  created_at: string;
   views: number;
   adds: number;
   removes: number;
@@ -69,7 +71,10 @@ export interface SuggestionRow {
 
 export interface SuggestionImpact {
   days: number;
+  /** Net sales — items, minus refunds, without tips. Same figure as `net_sales`. */
   total_revenue: number;
+  net_sales: number;
+  tips: number;
   attributed_revenue: number;
   uplift_pct: number;
   orders: number;
@@ -77,14 +82,21 @@ export interface SuggestionImpact {
   attach_rate_pct: number;
   avg_order_with_suggestion: number;
   avg_order_without_suggestion: number;
+  /** Client TAPS: fired on mount and on tap, with no link to a paid order. */
   shown: number;
   accepted: number;
   overall_acceptance_pct: number;
+  /** Server-recorded sightings (one per decision), from the decision ledger. */
+  seen: number;
+  /** Of those sightings, how many became a line on a completed order. */
+  paid: number;
+  paid_acceptance_pct: number | null;
   /**
-   * Revenue per head, which removes party size from the comparison.
-   * `orders_counted` is the honesty: only sittings where someone counted.
+   * Net sales per head, per VISIT, which removes party size from the
+   * comparison. `sessions_counted` is the honesty: only visits where staff
+   * recorded a head count.
    */
-  per_cover: { orders_counted: number; with_suggestions: number; holdout: number };
+  per_cover: { sessions_counted: number; orders_counted: number; with_suggestions: number; holdout: number };
 }
 
 export interface EngineHealth {
@@ -105,6 +117,8 @@ export interface EngineHealth {
   pairs_retired: number;
   affinity_computed_at: string | null;
   stats_updated_at: string | null;
+  /** The window pairings and suggestion stats are rebuilt over, whatever range the page shows. */
+  window_days?: number;
   orders_analysed: number;
 }
 
@@ -113,31 +127,51 @@ export interface EngineHealth {
  *
  * `status` is the headline and is allowed to say "we do not know yet" — which
  * is the correct answer far more often than a dashboard usually admits.
+ *
+ * The unit is the VISIT (a table session) and the money is net sales — items
+ * minus refunds, without tips — because treatment is assigned per session and
+ * a tip is not something a suggestion earned. Shared by Menu Intelligence and
+ * the impact page, so the two cannot drift apart again.
  */
 export type HoldoutStatus =
-  /** No holdout configured, so there is nothing to compare against. */
+  /** No experiment overlaps the window, so there is nothing to compare against. */
   | 'not_running'
-  /** Fewer than 30 orders on a side. Any difference is noise. */
+  /** Fewer than 30 visits on a side. Any difference is noise. */
   | 'too_early'
+  /** The split does not match what was configured. No result can be trusted. */
+  | 'invalid_srm'
   /** Enough data, and the interval spans zero. */
   | 'no_measurable_effect'
   | 'positive'
   | 'negative';
 
+export interface HoldoutArm {
+  sessions: number;
+  avg_net_sales: number;
+}
+
 export interface HoldoutComparison {
   days: number;
-  holdout_pct: number;
+  /** Days of the window the experiment actually ran; the projection's denominator. */
+  measured_days?: number;
   status: HoldoutStatus;
-  with_suggestions: { orders: number; avg_order: number };
-  holdout: { orders: number; avg_order: number };
-  difference: number | null;
+  holdout_pct?: number;
+  with_suggestions?: HoldoutArm;
+  holdout?: HoldoutArm;
+  difference?: number | null;
   /** 95% interval on the difference. An effect is only claimed when it excludes zero. */
-  ci_low: number | null;
-  ci_high: number | null;
-  significant: boolean;
+  ci_low?: number | null;
+  ci_high?: number | null;
+  significant?: boolean;
   /** Money per month, projected from CI_LOW. Null unless the effect is real. */
-  conservative_monthly_value: number | null;
-  reliable: boolean;
+  conservative_monthly_value?: number | null;
+  experiment?: { name: string; policy_version: string; started_at: string } | null;
+  srm?: { checked: boolean; healthy: boolean; observed_holdout_pct: number; expected_holdout_pct: number } | null;
+  power?: { ready: boolean; sessions_needed_per_arm: number; days_remaining: number | null } | null;
+  guardrails?: {
+    rating_treatment: number | null; rating_holdout: number | null;
+    minutes_treatment: number | null; minutes_holdout: number | null;
+  } | null;
 }
 
 /** Attribution split by the surface the suggestion appeared on. */
@@ -155,8 +189,28 @@ export interface SoldOutRow {
   item_id: string;
   name: string;
   views: number;
+  /** Takings in the window, and the last trading day it sold. */
+  revenue: number;
+  last_sold_day: string | null;
+  /** Trading days from the window start (or when it was added) to the last day it sold. */
+  selling_days: number;
   avg_daily_revenue_when_available: number;
+  /**
+   * The same per-day figure: what each further trading day without the dish
+   * forgoes, before allowing for guests who order something else instead.
+   * Per day, and an upper bound — not a running total.
+   */
   estimated_lost_revenue: number;
+}
+
+/** How each suggestion surface is named on screen. One place, so no table calls the dish page "Cart". */
+export function placementLabel(placement: string): string {
+  switch (placement) {
+    case 'cart': return 'In the cart';
+    case 'item': return 'On the dish page';
+    case 'after_meal': return 'After the meal';
+    default: return placement;
+  }
 }
 
 export const getItemPerformance = (days = 30) =>
@@ -199,22 +253,35 @@ export const curatePairing = async (sourceItemId: string, recommendedItemId: str
 };
 
 /**
- * Items that get looked at and not bought.
+ * "Looked at, not ordered" — the shared rule.
  *
- * A low order rate on a high-view item is almost always a description, a photo
- * or a price problem — not a demand problem. Needs enough views to mean
- * something, hence the floor.
+ * Mirrors `looked_at_not_ordered()` in
+ * supabase/migrations/20261024150000_analytics_fixes.sql; change both or
+ * neither. A low order rate on a high-view dish is almost always a
+ * description, a photo or a price problem — not a demand problem. Sold-out
+ * dishes are excluded: nobody could order them, so their rate says nothing.
  */
-export function findLeaks(items: ItemPerformance[], minViews = 20): ItemPerformance[] {
+export const LEAK_MIN_VIEWS = 20;
+export const LEAK_MAX_ORDER_RATE = 10;
+
+export function findLeaks(items: ItemPerformance[]): ItemPerformance[] {
   return items
-    .filter((i) => i.views >= minViews && i.order_rate !== null && i.order_rate < 10)
+    .filter((i) => i.is_available
+      && i.views >= LEAK_MIN_VIEWS
+      && (i.order_rate ?? 0) < LEAK_MAX_ORDER_RATE)
     .sort((a, b) => b.views - a.views);
 }
 
-/** Available items nobody is buying. Candidates to cut or re-merchandise. */
-export function findDeadWeight(items: ItemPerformance[]): ItemPerformance[] {
+/**
+ * Available dishes nobody bought in the window. Candidates to cut or
+ * re-merchandise — but only if they were on the menu for the whole window: a
+ * dish added on Tuesday has not failed by Thursday.
+ */
+export function findDeadWeight(items: ItemPerformance[], days: number, now: Date = new Date()): ItemPerformance[] {
+  const windowStart = now.getTime() - days * 24 * 60 * 60 * 1000;
   return items
-    .filter((i) => i.is_available && i.units === 0)
+    .filter((i) => i.is_available && i.units === 0
+      && (!i.created_at || new Date(i.created_at).getTime() <= windowStart))
     .sort((a, b) => b.views - a.views);
 }
 

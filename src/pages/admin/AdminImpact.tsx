@@ -6,6 +6,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { AlertTriangle, CheckCircle2, Eye, HelpCircle, Sparkles, TrendingDown, TrendingUp } from 'lucide-react';
 import { toast } from 'sonner';
+import type { HoldoutComparison } from '@/lib/menu-intelligence';
 
 /**
  * What did this app earn us?
@@ -26,22 +27,13 @@ import { toast } from 'sonner';
 
 const km = (n: number | null | undefined) => `${Number(n ?? 0).toFixed(2)} KM`;
 
-interface Causal {
-  status: 'not_running' | 'too_early' | 'no_measurable_effect' | 'positive' | 'negative' | 'invalid_srm';
-  holdout_pct?: number;
-  with_suggestions?: { sessions: number; avg_net_sales: number };
-  holdout?: { sessions: number; avg_net_sales: number };
-  difference?: number | null;
-  ci_low?: number | null;
-  ci_high?: number | null;
-  conservative_monthly_value?: number | null;
-  experiment?: { name: string; policy_version: string; started_at: string } | null;
-  srm?: { checked: boolean; healthy: boolean; observed_holdout_pct: number; expected_holdout_pct: number } | null;
-  power?: { ready: boolean; sessions_needed_per_arm: number; days_remaining: number | null } | null;
-  guardrails?: {
-    rating_treatment: number | null; rating_holdout: number | null;
-    minutes_treatment: number | null; minutes_holdout: number | null;
-  } | null;
+/** The holdout read. One shared type with Menu Intelligence, so the two pages cannot drift apart. */
+type Causal = HoldoutComparison;
+
+interface LookedAt {
+  name: string;
+  views: number;
+  adds: number;
 }
 
 interface Summary {
@@ -50,7 +42,7 @@ interface Summary {
   net_sales: number;
   causal: Causal;
   attributed: { revenue: number; orders: number; is_causal: false };
-  looked_at_not_ordered: { name: string; views: number; adds: number }[];
+  looked_at_not_ordered: LookedAt[];
   food_cost: { items: number; with_cost: number; coverage: number };
 }
 
@@ -81,20 +73,26 @@ const AdminImpact = () => {
   const [days, setDays] = useState(30);
   const [data, setData] = useState<Summary | null>(null);
   const [readiness, setReadiness] = useState<Readiness | null>(null);
+  const [lookedAt, setLookedAt] = useState<LookedAt[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
-    const [summary, gate] = await Promise.all([
+    const [summary, gate, looked] = await Promise.all([
       supabase.rpc('app_impact_summary' as never, { _days: days } as never),
       supabase.rpc('bandit_readiness' as never),
+      // The shared "looked at, not ordered" rule — the same list Menu
+      // Intelligence shows. Sold-out dishes are left out: nobody could order them.
+      supabase.rpc('looked_at_not_ordered' as never, { _days: days, _limit: 5 } as never),
     ]);
     if (summary.error) { setError(summary.error.message); setData(null); }
     else { setError(null); setData(summary.data as unknown as Summary); }
     // The gate is a footnote, not the page. A failure to read it must not
     // replace the number the owner came here for.
     setReadiness(gate.error ? null : (gate.data as unknown as Readiness));
+    // Falls back to the summary's own list on a database without the shared rule.
+    setLookedAt(looked.error ? null : (looked.data as unknown as LookedAt[]));
     setLoading(false);
   }, [days]);
 
@@ -111,6 +109,7 @@ const AdminImpact = () => {
   };
 
   const c = data?.causal;
+  const looked = lookedAt ?? data?.looked_at_not_ordered ?? [];
 
   return (
     <div>
@@ -159,9 +158,13 @@ const AdminImpact = () => {
                   </p>
                   <p className="text-sm font-sans text-muted-foreground mt-2 max-w-2xl">
                     Tables shown suggestions spend <strong className="text-foreground">{km(c.difference)}</strong> more
-                    per visit than tables shown none. The figure above is the cautious one — it uses the low end of
-                    the likely range ({km(c.ci_low)} to {km(c.ci_high)} per visit), so the true value is probably
-                    higher.
+                    per visit, in net sales (items, excluding tips), than tables shown none. The figure above is the
+                    cautious one — it uses the low end of the likely range ({km(c.ci_low)} to {km(c.ci_high)} per
+                    visit), so the true value is probably higher.
+                    {c.measured_days != null && (
+                      <> Projected from the {Number(c.measured_days).toFixed(0)} day
+                        {Number(c.measured_days) >= 1.5 ? 's' : ''} the experiment has been running.</>
+                    )}
                   </p>
                 </>
               )}
@@ -275,13 +278,14 @@ const AdminImpact = () => {
                 the one to trust.
               </p>
               <p className="text-xs font-sans text-muted-foreground mt-2">
-                {data.sessions} visits in this period, {km(data.net_sales)} in net sales (excluding tips and refunds).
+                {data.sessions} visits in this period, {km(data.net_sales)} in net sales — items after refunds,
+                with tips left out because a suggestion did not earn them.
               </p>
             </CardContent>
           </Card>
 
           {/* ---- Money left on the table ---- */}
-          {data.looked_at_not_ordered.length > 0 && (
+          {looked.length > 0 && (
             <Card>
               <CardHeader className="pb-3">
                 <CardTitle className="font-serif text-lg flex items-center gap-2">
@@ -294,9 +298,9 @@ const AdminImpact = () => {
                   dish. The cheapest revenue on this page.
                 </p>
                 <div className="space-y-1.5">
-                  {data.looked_at_not_ordered.map((row) => (
-                    <div key={row.name} className="flex items-center justify-between gap-3 py-2 px-3 rounded-lg bg-muted/40">
-                      <span className="text-sm font-sans font-medium">{row.name}</span>
+                  {looked.map((row) => (
+                    <div key={row.name} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-0.5 py-2 px-3 rounded-lg bg-muted/40">
+                      <span className="text-sm font-sans font-medium min-w-0">{row.name}</span>
                       <span className="text-sm font-sans tabular-nums text-muted-foreground">
                         {row.views} looks · <span className="text-destructive font-semibold">{row.adds} added</span>
                       </span>
@@ -334,9 +338,9 @@ const AdminImpact = () => {
                       {readiness.checks.map((row) => (
                         <div
                           key={row.check}
-                          className="flex items-center justify-between gap-3 py-2 px-3 rounded-lg bg-muted/40"
+                          className="flex flex-wrap items-center justify-between gap-x-3 gap-y-0.5 py-2 px-3 rounded-lg bg-muted/40"
                         >
-                          <span className="text-sm font-sans flex items-center gap-2">
+                          <span className="text-sm font-sans flex items-center gap-2 min-w-0">
                             {row.pass
                               ? <CheckCircle2 className="w-4 h-4 text-primary shrink-0" aria-hidden />
                               : <span className="w-4 h-4 rounded-full border-2 border-muted-foreground/40 shrink-0" aria-hidden />}

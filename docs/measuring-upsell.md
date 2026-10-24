@@ -3,10 +3,15 @@
 How the app decides whether its own recommendation engine is worth having, and
 why several obvious ways of answering that are wrong.
 
-Enforcement lives in `20260804090000_experiment_integrity.sql`,
-`20260804090100_decision_ledger.sql` and `20260804090600_app_impact.sql`,
-covered by `supabase/tests/experiment-integrity.test.ts`,
-`decision-ledger.test.ts` and `maintenance-and-impact.test.ts`.
+Enforcement lives in `20260803002004_dc2b05ee-….sql` (experiment integrity —
+originally written as `20260804090000_experiment_integrity.sql`, applied live
+under Lovable's timestamp), `20260803002115_d9fa33c5-….sql` (the decision
+ledger, originally `20260804090100_decision_ledger.sql`),
+`20260804090600_app_impact.sql`, and `20261024150000_analytics_fixes.sql`
+(projection window, per-visit revenue per guest, verified acceptance, the
+shared "looked at, not ordered" rule). Covered by
+`supabase/tests/experiment-integrity.test.ts`, `decision-ledger.test.ts`,
+`maintenance-and-impact.test.ts` and `analytics-fixes.test.ts`.
 
 ---
 
@@ -82,6 +87,12 @@ Computed from **`ci_low`**, never the point estimate. A dashboard that
 overstates once is never believed again, so the figure shown is the one the
 data supports even at the pessimistic end.
 
+The daily rate behind it is **visits per day the experiment actually ran**
+inside the window (`measured_days`, floored at one day), not visits per day of
+the window. Dividing by the whole window understated the money by the share of
+the window that predated the experiment — five times over for an experiment
+started six days into a 30-day view.
+
 ## 6. The decision ledger
 
 Client-fired events could not be trusted in four ways: they fired on mount, a
@@ -102,11 +113,30 @@ Now:
 - **Acceptance means paid for**, joined through `suggestion_conversions.decision_id`
   to a completed order.
 
+Menu Intelligence reads acceptance this way (`suggestion_impact().seen` and
+`.paid`). The older client counts (`shown`, `accepted`) are still returned,
+because they are the only history from before the ledger, and the page labels
+them **taps** whenever it has to fall back to them.
+
 ## 7. Attributed revenue is an upper bound, and says so
 
 It counts the whole line every time a guest takes a suggestion, including the
 coffee they were always going to order. It is useful and it is not causal. On
 the impact page it sits **below** the holdout figure, explicitly labelled.
+
+The same goes for "average order with a suggestion vs without" in Menu
+Intelligence: guests who take a suggestion were already the bigger spenders,
+so the gap is selection as much as effect. It sits under the holdout card,
+labelled *upper bound, not causal*.
+
+Menu Intelligence shows only a short holdout summary — same function, same
+type, per visit and in net sales — and links to the impact page for the full
+read (split health, power, guardrails). Before, it read fields the function no
+longer returned and showed zeros for both arms.
+
+**Revenue per guest** is per visit: a party's whole net spend divided by its
+head count once. Dividing each order by the full party, as it did before,
+counted a four-top's three rounds as three quarter-sized guests.
 
 ## 8. Contribution margin, only if you enter costs
 
