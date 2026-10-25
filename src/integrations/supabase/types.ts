@@ -194,6 +194,36 @@ export type Database = {
         }
         Relationships: []
       }
+      guest_profiles: {
+        Row: {
+          client_id: string
+          computed_at: string
+          first_seen: string
+          last_seen: string
+          net_spend: number
+          orders: number
+          visits: number
+        }
+        Insert: {
+          client_id: string
+          computed_at?: string
+          first_seen: string
+          last_seen: string
+          net_spend?: number
+          orders?: number
+          visits?: number
+        }
+        Update: {
+          client_id?: string
+          computed_at?: string
+          first_seen?: string
+          last_seen?: string
+          net_spend?: number
+          orders?: number
+          visits?: number
+        }
+        Relationships: []
+      }
       maintenance_runs: {
         Row: {
           job: string
@@ -2125,6 +2155,7 @@ export type Database = {
         Returns: Json
       }
       guest_check_venue_token: { Args: { _token: string }; Returns: Json }
+      guest_forget_me: { Args: { _client_id: string }; Returns: Json }
       guest_get_join_request: {
         Args: { _client_id: string; _request_id: string; _session_id: string }
         Returns: Json
@@ -2486,6 +2517,7 @@ export type Database = {
         Args: { _method: string; _note?: string; _order_id: string }
         Returns: Json
       }
+      refresh_guest_profiles: { Args: never; Returns: number }
       refresh_menu_affinity: {
         Args: { _days?: number; _min_pair_orders?: number }
         Returns: number
@@ -2540,6 +2572,7 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      returning_guest_stats: { Args: { _days?: number }; Returns: Json }
       role_is_drink: {
         Args: { _role: Database["public"]["Enums"]["meal_role"] }
         Returns: boolean
