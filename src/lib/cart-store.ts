@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 import { touchSession } from '@/lib/guest-api';
 import { track } from '@/lib/analytics';
 import { t } from '@/lib/i18n';
+import { knownPrices, unitPrice, salePrice, type ComboDef, type SaleFields } from '@/lib/promotions';
 
 /** Where a cart line came from, when it came from a suggestion. */
 export interface SuggestionOrigin {
@@ -19,6 +20,20 @@ export interface SuggestionOrigin {
   decisionId?: string | null;
 }
 
+/** One part of a combo, as the guest chose it. Names travel with it, like the line's own. */
+export interface CartComboComponent {
+  slot_id: string;
+  slot_label: string;
+  slot_label_bs?: string | null;
+  slot_label_ar?: string | null;
+  item_id: string;
+  name: string;
+  name_bs?: string | null;
+  name_ar?: string | null;
+  /** Extra charge for this choice, already inside the line's price. */
+  surcharge: number;
+}
+
 export interface CartItem {
   /** Cart-line id. For plain items this is the menu item id; special requests get a distinct line id. */
   id: string;
@@ -29,6 +44,15 @@ export interface CartItem {
   name_bs?: string | null;
   name_ar?: string | null;
   price: number;
+  /**
+   * The menu price, when the line is on sale: shown struck through next to
+   * `price`. Absent when there is no sale.
+   */
+  regularPrice?: number;
+  /** The sale's label key (happy_hour, ...) or '' for a plain sale. */
+  saleLabel?: string | null;
+  /** Set for a combo: what was chosen for each part. Part of the line's identity. */
+  combo?: { components: CartComboComponent[] };
   quantity: number;
   notes?: string;
   image_url?: string;
@@ -88,8 +112,17 @@ interface CartStore {
   beginCheckout: () => string;
   finishCheckout: () => void;
   setUnavailable: (menuItemIds: string[]) => void;
-  /** Refresh prices and names from the live menu; returns true if a price moved. */
-  reprice: (menu: { id: string; price: number; name: string; name_bs?: string | null; name_ar?: string | null }[]) => boolean;
+  /**
+   * Refresh prices and names from the live menu, at `at`: sales that started
+   * or ended, combo surcharges. Returns true if a price moved.
+   */
+  reprice: (menu: RepriceRow[], combos?: ComboDef[] | null, at?: number) => boolean;
+  /**
+   * Take the prices the server quoted when it refused an order because the
+   * screen was out of date ('Prices changed'). `lineIds` is the cart as it
+   * was sent, so `line` indexes into it.
+   */
+  applyServerPrices: (changes: ServerPriceChange[], lineIds: string[]) => void;
   updateQuantity: (id: string, quantity: number) => void;
   updateNotes: (id: string, notes: string) => void;
   clearCart: () => void;
@@ -113,6 +146,15 @@ interface CartStore {
   stopHeartbeat: () => void;
 }
 
+export type RepriceRow = SaleFields & { id: string; price: number | string; name: string; name_bs?: string | null; name_ar?: string | null };
+
+export interface ServerPriceChange {
+  line: number;
+  menu_item_id: string;
+  unit_price: number;
+  regular_unit_price?: number;
+}
+
 let heartbeatInterval: ReturnType<typeof setInterval> | null = null;
 
 const genId = (): string => {
@@ -129,9 +171,33 @@ const normalizeNotes = (notes?: string): string | undefined => {
 
 const getMenuItemId = (item: Pick<CartItem, 'id' | 'menuItemId'>): string => item.menuItemId ?? item.id;
 
-const buildCartLineId = (menuItemId: string, notes?: string): string => {
-  if (!notes) return menuItemId;
-  return `${menuItemId}::${encodeURIComponent(notes.toLowerCase())}`;
+/** The chosen dishes of a combo line, as part of its identity. */
+const comboKey = (combo?: CartItem['combo']): string =>
+  combo ? combo.components.map((c) => `${c.slot_id}=${c.item_id}`).join('&') : '';
+
+const buildCartLineId = (menuItemId: string, notes?: string, combo?: CartItem['combo']): string => {
+  const key = comboKey(combo);
+  const base = key ? `${menuItemId}::combo:${key}` : menuItemId;
+  if (!notes) return base;
+  return `${base}::${encodeURIComponent(notes.toLowerCase())}`;
+};
+
+const toCents = (n: number) => Math.round(n * 100);
+
+/**
+ * The price a plain line is added at: the latest sale data seen for the dish
+ * if there is any (see the price book in promotions.ts), else what the button
+ * that added it said. Combos are priced by the sheet that built them.
+ */
+const livePricing = (item: Pick<CartItem, 'price' | 'regularPrice' | 'saleLabel' | 'combo'>, menuItemId: string) => {
+  const given = { price: item.price, regularPrice: item.regularPrice, saleLabel: item.saleLabel };
+  if (item.combo) return given;
+  const known = knownPrices(menuItemId);
+  if (!known) return given;
+  const sale = salePrice(known);
+  return sale === null
+    ? { price: Number(known.price), regularPrice: undefined, saleLabel: undefined }
+    : { price: sale, regularPrice: Number(known.price), saleLabel: known.sale_label ?? '' };
 };
 
 export const useCartStore = create<CartStore>()(persist((set, get) => ({
@@ -152,8 +218,9 @@ export const useCartStore = create<CartStore>()(persist((set, get) => ({
     set((state) => {
       const notes = normalizeNotes(item.notes);
       const menuItemId = item.menuItemId ?? item.id;
-      const id = buildCartLineId(menuItemId, notes);
-      const existing = state.items.find((i) => getMenuItemId(i) === menuItemId && normalizeNotes(i.notes) === notes);
+      const id = buildCartLineId(menuItemId, notes, item.combo);
+      const existing = state.items.find((i) => getMenuItemId(i) === menuItemId
+        && normalizeNotes(i.notes) === notes && comboKey(i.combo) === comboKey(item.combo));
       if (existing) {
         // Silently capping at 10 made the eleventh tap look broken.
         if (existing.quantity >= 10) toast(t('max_quantity_reached'));
@@ -164,7 +231,8 @@ export const useCartStore = create<CartStore>()(persist((set, get) => ({
           ),
         };
       }
-      return { checkoutKey: null, items: [...state.items, { ...item, id, menuItemId, notes, quantity: 1 }] };
+      const pricing = livePricing(item, menuItemId);
+      return { checkoutKey: null, items: [...state.items, { ...item, ...pricing, id, menuItemId, notes, quantity: 1 }] };
     });
   },
 
@@ -192,17 +260,68 @@ export const useCartStore = create<CartStore>()(persist((set, get) => ({
 
   setUnavailable: (menuItemIds) => set({ unavailableIds: menuItemIds }),
 
-  reprice: (menu) => {
+  reprice: (menu, combos, at = Date.now()) => {
     const byId = new Map(menu.map((m) => [m.id, m]));
+    const comboById = new Map((combos ?? []).map((c) => [c.combo_item_id, c]));
     let moved = false;
     const items = get().items.map((line) => {
       const live = byId.get(getMenuItemId(line));
       if (!live) return line;
-      if (Number(live.price) !== line.price) moved = true;
-      return { ...line, price: Number(live.price), name: live.name, name_bs: live.name_bs ?? null, name_ar: live.name_ar ?? null };
+      let surcharge = 0;
+      let components = line.combo?.components;
+      if (line.combo) {
+        // Surcharges from the live combo when it is known; the ones the line
+        // was added with otherwise. A choice that is no longer on offer keeps
+        // its old surcharge here: the server refuses that line and names it.
+        const def = comboById.get(getMenuItemId(line));
+        components = line.combo.components.map((c) => {
+          const opt = def?.slots.find((s) => s.id === c.slot_id)?.options.find((o) => o.item_id === c.item_id);
+          return opt ? { ...c, surcharge: Number(opt.surcharge) } : c;
+        });
+        surcharge = components.reduce((sum, c) => sum + toCents(c.surcharge), 0) / 100;
+      }
+      const sale = salePrice(live, at);
+      const price = (toCents(unitPrice(live, at)) + toCents(surcharge)) / 100;
+      const regular = (toCents(Number(live.price)) + toCents(surcharge)) / 100;
+      if (toCents(price) !== toCents(line.price)) moved = true;
+      return {
+        ...line,
+        price,
+        regularPrice: sale === null ? undefined : regular,
+        saleLabel: sale === null ? undefined : (live.sale_label ?? ''),
+        ...(line.combo ? { combo: { components: components ?? [] } } : {}),
+        name: live.name,
+        name_bs: live.name_bs ?? null,
+        name_ar: live.name_ar ?? null,
+      };
     });
     set(moved ? { items, checkoutKey: null } : { items });
     return moved;
+  },
+
+  applyServerPrices: (changes, lineIds) => {
+    const byLine = new Map<string, ServerPriceChange>();
+    for (const change of changes) {
+      const id = lineIds[change.line];
+      if (id) byLine.set(id, change);
+    }
+    if (byLine.size === 0) return;
+    set((state) => ({
+      checkoutKey: null,
+      items: state.items.map((line) => {
+        const change = byLine.get(line.id);
+        if (!change || getMenuItemId(line) !== change.menu_item_id) return line;
+        const price = Number(change.unit_price);
+        const regular = change.regular_unit_price != null ? Number(change.regular_unit_price) : undefined;
+        const onSale = regular !== undefined && toCents(regular) > toCents(price);
+        return {
+          ...line,
+          price,
+          regularPrice: onSale ? regular : undefined,
+          saleLabel: onSale ? (line.saleLabel ?? '') : undefined,
+        };
+      }),
+    }));
   },
 
   updateQuantity: (id, quantity) => {
@@ -267,7 +386,8 @@ export const useCartStore = create<CartStore>()(persist((set, get) => ({
     set({ sessionId: null, sessionToken: null, tableNumber: null, guestName: null, pendingPayment: null, checkoutKey: null });
   },
 
-  total: () => get().items.reduce((sum, i) => sum + i.price * i.quantity, 0),
+  // In cents: 3 x 14.40 is 43.199999... in floating point.
+  total: () => get().items.reduce((sum, i) => sum + toCents(i.price) * i.quantity, 0) / 100,
 
   itemCount: () => get().items.reduce((sum, i) => sum + i.quantity, 0),
 

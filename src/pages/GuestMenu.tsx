@@ -1,5 +1,5 @@
-import React, { useMemo, useState } from 'react';
-import { motion } from 'framer-motion';
+import React, { useCallback, useMemo, useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { Phone, MapPin, ChevronRight, QrCode, RefreshCw, BadgeCheck } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
@@ -22,6 +22,10 @@ import { menuHref } from '@/lib/menu-sections';
 import InstallPrompt from '@/components/guest/InstallPrompt';
 import RecentOrdersRow from '@/components/guest/RecentOrdersRow';
 import MenuSearch from '@/components/guest/MenuSearch';
+import HomePromotions from '@/components/guest/HomePromotions';
+import DishSheet from '@/components/guest/DishSheet';
+import { rememberPrices } from '@/lib/promotions';
+import type { MenuItemRow } from '@/lib/promotions-api';
 import { track } from '@/lib/analytics';
 import type { Database } from '@/integrations/supabase/types';
 
@@ -156,6 +160,15 @@ const GuestMenu = () => {
 
   const rtl = locale === 'ar';
 
+  // The dish sheet, opened from a promotion card or a combo in search.
+  const [sheetItem, setSheetItem] = useState<MenuItemRow | null>(null);
+  const openById = useCallback(async (id: string) => {
+    const { data } = await supabase.from('menu_items').select('*').eq('id', id).maybeSingle();
+    if (!data) return;
+    rememberPrices([data]);
+    setSheetItem(data);
+  }, []);
+
   return (
     <div className="min-h-screen flex flex-col bg-background">
       {/* A short brand band, not a full-screen splash: the first thing a guest
@@ -237,9 +250,11 @@ const GuestMenu = () => {
           </div>
         )}
 
-        <MenuSearch canOrder={hasSession} />
+        <MenuSearch canOrder={hasSession} onOpenItem={(id) => { void openById(id); }} />
 
         {hasSession && <RecentOrdersRow />}
+
+        <HomePromotions onOpen={setSheetItem} />
 
         <div className="space-y-3">
           {categoriesLoading && [0, 1, 2].map((i) => <Skeleton key={i} className="w-full aspect-[16/9] rounded-2xl" />)}
@@ -359,6 +374,10 @@ const GuestMenu = () => {
           </Link>
         </motion.footer>
       </motion.main>
+
+      <AnimatePresence>
+        {sheetItem && <DishSheet row={sheetItem} canOrder={hasSession} onClose={() => setSheetItem(null)} />}
+      </AnimatePresence>
 
       {hasSession && <CartBar />}
 

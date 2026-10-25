@@ -6,6 +6,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useT, useI18n } from '@/lib/i18n';
 import { duration, easeEnter, easeExit, exitTransition, springSnappy, useCountUp } from '@/lib/motion';
 import { ADDED_LABEL_MS, useCartFx } from '@/lib/cart-fx';
+import { useCartLivePrices } from '@/lib/promotions-api';
 
 /**
  * The one bar at the bottom of the menu.
@@ -31,6 +32,9 @@ const CartBar = () => {
   const t = useT();
   const { price, plural } = useI18n();
   const displayTotal = useCountUp(total());
+  // The total here is the one the guest will be charged: re-priced when a sale
+  // on something in the cart starts or ends while they are still browsing.
+  useCartLivePrices();
 
   // The session lives in the store, not the URL. The PWA start_url is /menu
   // with no query string, so deriving it from search params made the cart bar

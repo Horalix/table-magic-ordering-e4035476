@@ -1,12 +1,20 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
 import SmartImage from '@/components/ui/SmartImage';
 import { ChefHat, CupSoda, Loader2, Upload, X } from 'lucide-react';
+import ComboBuilder from '@/components/admin/ComboBuilder';
+import { fetchCombos } from '@/lib/promotions-api';
+import { SALE_LABELS, SALE_LABEL_NAMES } from '@/lib/promotions';
+import {
+  defaultNewUntil, emptySale, saleColumns, saleDraftFromRow, saleEndPresets, salePreview, slotsFromCombo,
+  slotsPayload, slotsProblem, type BuilderSlot, type SaleDraft,
+} from '@/lib/admin-promotions';
 import { toast } from 'sonner';
 import { DIET_TAGS, getItemTags } from '@/lib/dietary';
 import { useT } from '@/lib/i18n';
@@ -23,7 +31,38 @@ interface Props {
   /** Provided when editing an existing item. */
   item?: MenuItemRow | null;
   onSaved: () => void;
+  /** Open with the Combo section switched on (Promotions → New combo). */
+  startAsCombo?: boolean;
+  /** Scroll to a section when the dialog opens. */
+  focus?: 'sale' | 'combo' | 'highlight';
 }
+
+/**
+ * One switchable section of the editor: Sale, Combo, New, Featured.
+ * Off, it is one line; on, it opens what it needs and nothing else.
+ */
+const PromoSection = ({
+  id, title, description, checked, onCheckedChange, disabled, children,
+}: {
+  id: string;
+  title: string;
+  description: string;
+  checked: boolean;
+  onCheckedChange: (on: boolean) => void;
+  disabled?: boolean;
+  children?: React.ReactNode;
+}) => (
+  <section id={`item-${id}`} aria-labelledby={`item-${id}-title`} className={`rounded-xl border p-3 ${checked ? 'border-primary/40 bg-primary/[0.03]' : 'border-border'}`}>
+    <div className="flex items-start gap-3">
+      <div className="flex-1 min-w-0">
+        <Label id={`item-${id}-title`} htmlFor={`item-${id}-switch`} className="text-sm font-sans font-semibold text-foreground">{title}</Label>
+        <p className="text-[11px] text-muted-foreground font-sans">{description}</p>
+      </div>
+      <Switch id={`item-${id}-switch`} checked={checked} onCheckedChange={onCheckedChange} disabled={disabled} />
+    </div>
+    {checked && children && <div className="mt-3 space-y-3">{children}</div>}
+  </section>
+);
 
 /**
  * Allergens, kept separate from dietary tags.
@@ -62,11 +101,11 @@ const MEAL_ROLES: { key: string; label: string }[] = [
   { key: 'cold_drink', label: 'Cold drink' },
 ];
 
+// "New" is not here: it has its own switch below, with an end date.
 const MERCH_TAGS: { key: string; label: string }[] = [
   { key: 'signature', label: 'Signature' },
   { key: 'chef_pick', label: "Chef's pick" },
   { key: 'popular', label: 'Popular' },
-  { key: 'new', label: 'New' },
   { key: 'seasonal', label: 'Seasonal' },
   { key: 'house_favourite', label: 'House favourite' },
 ];
@@ -189,7 +228,7 @@ const Chip = ({ on, onClick, children }: { on: boolean; onClick: () => void; chi
  * the profitability tiebreak in the engine was inert: it had been shipped and
  * had never once been able to fire.
  */
-const MenuItemDialog = ({ open, onOpenChange, subcategoryId, item, onSaved }: Props) => {
+const MenuItemDialog = ({ open, onOpenChange, subcategoryId, item, onSaved, startAsCombo = false, focus }: Props) => {
   const isEdit = !!item;
   const [name, setName] = useState('');
   const [nameBs, setNameBs] = useState('');
@@ -211,6 +250,30 @@ const MenuItemDialog = ({ open, onOpenChange, subcategoryId, item, onSaved }: Pr
   const [to, setTo] = useState('');
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
+
+  // ---- Promotions ----
+  const [sale, setSale] = useState<SaleDraft>(emptySale);
+  const [newOn, setNewOn] = useState(false);
+  const [newUntil, setNewUntil] = useState('');
+  const [featuredOn, setFeaturedOn] = useState(false);
+  const [featuredNote, setFeaturedNote] = useState('');
+  const [featuredNoteBs, setFeaturedNoteBs] = useState('');
+  const [featuredNoteAr, setFeaturedNoteAr] = useState('');
+  const [comboOn, setComboOn] = useState(false);
+  const [wasCombo, setWasCombo] = useState(false);
+  const [slots, setSlots] = useState<BuilderSlot[]>([]);
+  /** Every dish, for picking a combo's choices. Loaded when the Combo section is first opened. */
+  const [pickable, setPickable] = useState<{ id: string; name: string; price: number; subcategory_id: string; is_available: boolean }[]>([]);
+  const [sections, setSections] = useState<{ id: string; name: string }[]>([]);
+  const [comboIds, setComboIds] = useState<Set<string>>(new Set());
+  /** Other dishes holding the three home-screen slots. */
+  const [featuredOthers, setFeaturedOthers] = useState<{ id: string; name: string; featured_rank: number }[]>([]);
+  /**
+   * Whether the database has the promotion columns (20261026100000). Until it
+   * does, the editor saves exactly what it saved before, so a frontend that
+   * ships ahead of its migration cannot break saving a dish.
+   */
+  const [promoAvailable, setPromoAvailable] = useState(false);
   /** The image this dialog opened with, so a replaced one can be cleaned up. */
   const originalImage = useRef<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -238,7 +301,66 @@ const MenuItemDialog = ({ open, onOpenChange, subcategoryId, item, onSaved }: Pr
     setMealRole((item as { meal_role?: string | null })?.meal_role ?? '');
     setFrom(toTimeInput(item?.available_from));
     setTo(toTimeInput(item?.available_to));
-  }, [open, item]);
+
+    setSale(saleDraftFromRow(item));
+    const tags = item?.merchandising_tags ?? [];
+    setNewOn(tags.includes('new'));
+    setNewUntil(item?.new_until ?? '');
+    setFeaturedOn(item?.featured_rank != null);
+    setFeaturedNote(item?.featured_note ?? '');
+    setFeaturedNoteBs(item?.featured_note_bs ?? '');
+    setFeaturedNoteAr(item?.featured_note_ar ?? '');
+    setComboOn(startAsCombo);
+    setWasCombo(false);
+    setSlots([]);
+    setPromoAvailable(!!item && 'sale_kind' in item);
+
+    let cancelled = false;
+    // What the editor needs to know about the rest of the menu: which dishes
+    // are featured, and which are combos (this one included).
+    void (async () => {
+      const featured = await supabase.from('menu_items').select('id, name, featured_rank').not('featured_rank', 'is', null);
+      if (cancelled) return;
+      if (!featured.error) {
+        setPromoAvailable(true);
+        setFeaturedOthers(((featured.data ?? []) as { id: string; name: string; featured_rank: number }[]).filter((r) => r.id !== item?.id));
+      }
+      const combos = await fetchCombos();
+      if (cancelled || !combos) return;
+      setComboIds(new Set(combos.map((c) => c.combo_item_id)));
+      const mine = item ? combos.find((c) => c.combo_item_id === item.id) : undefined;
+      if (mine) {
+        setWasCombo(true);
+        setComboOn(true);
+        setSlots(slotsFromCombo(mine));
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [open, item, startAsCombo]);
+
+  // The dishes a combo can be built from, once it is a combo.
+  useEffect(() => {
+    if (!open || !comboOn || pickable.length > 0) return;
+    void (async () => {
+      const [{ data: rows }, { data: subs }] = await Promise.all([
+        supabase.from('menu_items').select('id, name, price, subcategory_id, is_available').order('name'),
+        supabase.from('subcategories').select('id, name').order('sort_order'),
+      ]);
+      setPickable((rows ?? []).map((r) => ({ ...r, price: Number(r.price) })));
+      setSections(subs ?? []);
+    })();
+  }, [open, comboOn, pickable.length]);
+
+  // Opened from Promotions to do one thing: go straight to it.
+  useEffect(() => {
+    if (!open || !focus) return;
+    const timer = setTimeout(() => document.getElementById(`item-${focus}`)?.scrollIntoView({ block: 'center' }), 150);
+    return () => clearTimeout(timer);
+  }, [open, focus]);
+
+  const priceForPreview = parsePrice(price);
+  const preview = useMemo(() => salePreview(sale, priceForPreview), [sale, priceForPreview]);
+  const featuredFull = !item?.featured_rank && featuredOthers.length >= 3;
 
   const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -278,6 +400,23 @@ const MenuItemDialog = ({ open, onOpenChange, subcategoryId, item, onSaved }: Pr
       return;
     }
 
+    const saleResult = saleColumns(sale, priceNum);
+    if ('error' in saleResult) { toast.error(`Sale: ${saleResult.error}`); return; }
+    if (comboOn) {
+      const problem = slotsProblem(slots);
+      if (problem) { toast.error(`Combo: ${problem}`); return; }
+    }
+    // The lowest free slot on the home screen, or the one it already has.
+    let featuredRank: number | null = null;
+    if (featuredOn) {
+      const taken = new Set(featuredOthers.map((f) => f.featured_rank));
+      featuredRank = item?.featured_rank ?? [1, 2, 3].find((r) => !taken.has(r)) ?? null;
+      if (featuredRank === null) {
+        toast.error(`Three dishes are already featured (${featuredOthers.map((f) => f.name).join(', ')}). Unpin one in Promotions first.`);
+        return;
+      }
+    }
+
     setSaving(true);
     const payload: MenuItemInsert = {
       subcategory_id: item?.subcategory_id ?? subcategoryId ?? '',
@@ -291,7 +430,8 @@ const MenuItemDialog = ({ open, onOpenChange, subcategoryId, item, onSaved }: Pr
       image_url: imageUrl.trim() || null,
       dietary_tags: diets,
       allergens,
-      merchandising_tags: merch,
+      // "New" lives on its own switch.
+      merchandising_tags: [...merch.filter((tag) => tag !== 'new'), ...(newOn ? ['new'] : [])],
       margin_score: marginNum,
       prep_minutes: prepNum,
       portion_note: portion.trim() || null,
@@ -300,6 +440,14 @@ const MenuItemDialog = ({ open, onOpenChange, subcategoryId, item, onSaved }: Pr
       meal_role: (mealRole || null) as MenuItemInsert['meal_role'],
       available_from: fromTimeInput(from),
       available_to: fromTimeInput(to),
+      ...(promoAvailable ? {
+        ...saleResult.columns,
+        new_until: newOn ? (newUntil || defaultNewUntil()) : null,
+        featured_rank: featuredRank,
+        featured_note: featuredOn ? featuredNote.trim() || null : null,
+        featured_note_bs: featuredOn ? featuredNoteBs.trim() || null : null,
+        featured_note_ar: featuredOn ? featuredNoteAr.trim() || null : null,
+      } : {}),
     };
 
     /*
@@ -324,12 +472,34 @@ const MenuItemDialog = ({ open, onOpenChange, subcategoryId, item, onSaved }: Pr
     // One write, no silent fallback. The old form retried without
     // dietary_tags when the column was missing and still toasted success, so a
     // manager could set tags, be told it worked, and find them gone.
-    const { error } = isEdit
-      ? await supabase.from('menu_items').update(payload).eq('id', item!.id)
-      : await supabase.from('menu_items').insert({ ...payload, sort_order: nextSort });
+    let savedId = item?.id ?? null;
+    let error: { message: string } | null = null;
+    if (isEdit) {
+      ({ error } = await supabase.from('menu_items').update(payload).eq('id', item!.id));
+    } else if (comboOn) {
+      // A new combo needs its id for its parts.
+      const res = await supabase.from('menu_items').insert({ ...payload, sort_order: nextSort }).select('id').single();
+      error = res.error;
+      savedId = res.data?.id ?? null;
+    } else {
+      ({ error } = await supabase.from('menu_items').insert({ ...payload, sort_order: nextSort }));
+    }
 
+    if (error) { setSaving(false); toast.error(error.message); return; }
+
+    if (savedId && (comboOn || wasCombo)) {
+      const { error: comboError } = await supabase.rpc('admin_save_combo', {
+        _combo_item_id: savedId,
+        _slots: comboOn ? slotsPayload(slots) : [],
+      });
+      if (comboError) {
+        setSaving(false);
+        toast.error(`The dish is saved, but its combo parts are not: ${comboError.message}`);
+        onSaved();
+        return;
+      }
+    }
     setSaving(false);
-    if (error) { toast.error(error.message); return; }
 
     if (originalImage.current && originalImage.current !== payload.image_url) {
       void deleteMenuImage(originalImage.current);
@@ -347,7 +517,8 @@ const MenuItemDialog = ({ open, onOpenChange, subcategoryId, item, onSaved }: Pr
           <DialogTitle className="font-serif">{isEdit ? 'Edit item' : 'Add item'}</DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-3">
+        {/* min-w-0: the dialog is a grid, and one long dish name in a combo part would otherwise widen the whole form past a phone screen. */}
+        <div className="space-y-3 min-w-0">
           {/* Image */}
           <div>
             <Label className="text-xs text-muted-foreground">Photo</Label>
@@ -397,7 +568,7 @@ const MenuItemDialog = ({ open, onOpenChange, subcategoryId, item, onSaved }: Pr
           </div>
           <div className="grid grid-cols-2 gap-2">
             <div>
-              <Label className="text-xs text-muted-foreground">Price (KM)</Label>
+              <Label className="text-xs text-muted-foreground">{comboOn ? 'Combo price (KM)' : 'Price (KM)'}</Label>
               {/* Text, not number: a number field drops "4,50" without a word. */}
               <Input
                 placeholder="4,50"
@@ -493,6 +664,138 @@ const MenuItemDialog = ({ open, onOpenChange, subcategoryId, item, onSaved }: Pr
                 </Chip>
               ))}
             </div>
+          </div>
+
+          {/* ---- Promotions ---- */}
+          {/* Hidden, not silently ignored, until the database can store them. */}
+          {!promoAvailable && (
+            <p className="rounded-lg bg-muted px-3 py-2 text-[11px] font-sans text-muted-foreground">
+              Sales, combos and featuring appear here once the database has the promotions migration (20261026100000).
+            </p>
+          )}
+          {promoAvailable && (
+          <PromoSection
+            id="sale"
+            title="Sale"
+            description="A lower price for a while. Guests see the menu price struck through and pay the sale price, only while it runs."
+            checked={sale.on}
+            onCheckedChange={(on) => setSale((s) => ({ ...s, on }))}
+          >
+            <div className="flex gap-1.5" role="group" aria-label="Kind of sale">
+              <Chip on={sale.kind === 'percent'} onClick={() => setSale((s) => ({ ...s, kind: 'percent' }))}>% off</Chip>
+              <Chip on={sale.kind === 'price'} onClick={() => setSale((s) => ({ ...s, kind: 'price' }))}>Sale price</Chip>
+            </div>
+            <div className="flex items-center gap-2">
+              <Input
+                value={sale.value}
+                onChange={(e) => setSale((s) => ({ ...s, value: e.target.value }))}
+                placeholder={sale.kind === 'percent' ? '20' : '14,40'}
+                inputMode="decimal"
+                aria-label={sale.kind === 'percent' ? 'Percent off' : 'Sale price in KM'}
+                className="w-28"
+              />
+              <span className="text-sm text-muted-foreground">{sale.kind === 'percent' ? '% off' : 'KM'}</span>
+            </div>
+            <div>
+              <Label className="text-xs text-muted-foreground">Label on the badge</Label>
+              <div className="mt-1.5 flex flex-wrap gap-1.5" role="group" aria-label="Sale label">
+                <Chip on={sale.label === ''} onClick={() => setSale((s) => ({ ...s, label: '' }))}>Just “−%”</Chip>
+                {SALE_LABELS.map((key) => (
+                  <Chip key={key} on={sale.label === key} onClick={() => setSale((s) => ({ ...s, label: key }))}>{SALE_LABEL_NAMES[key]}</Chip>
+                ))}
+              </div>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <div>
+                <Label className="text-xs text-muted-foreground">Starts (empty = now)</Label>
+                <div className="mt-1 flex gap-1.5">
+                  <Input type="date" value={sale.startDate} onChange={(e) => setSale((s) => ({ ...s, startDate: e.target.value }))} aria-label="Sale starts on" className="min-w-0" />
+                  <Input type="time" value={sale.startTime} onChange={(e) => setSale((s) => ({ ...s, startTime: e.target.value }))} aria-label="Sale starts at" className="w-28" />
+                </div>
+              </div>
+              <div>
+                <Label className="text-xs text-muted-foreground">Ends (empty = until you end it)</Label>
+                <div className="mt-1 flex gap-1.5">
+                  <Input type="date" value={sale.endDate} onChange={(e) => setSale((s) => ({ ...s, endDate: e.target.value }))} aria-label="Sale ends on" className="min-w-0" />
+                  <Input type="time" value={sale.endTime} onChange={(e) => setSale((s) => ({ ...s, endTime: e.target.value }))} aria-label="Sale ends at" className="w-28" />
+                </div>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-1.5" role="group" aria-label="Quick end">
+              {saleEndPresets().map((p) => (
+                <Chip key={p.label} on={sale.endDate === p.date && sale.endTime === p.time} onClick={() => setSale((s) => ({ ...s, endDate: p.date, endTime: p.time }))}>
+                  {p.label}
+                </Chip>
+              ))}
+              {(sale.startDate || sale.endDate) && (
+                <Chip on={false} onClick={() => setSale((s) => ({ ...s, startDate: '', startTime: '', endDate: '', endTime: '' }))}>No dates</Chip>
+              )}
+            </div>
+            {preview && (
+              <p
+                data-testid="sale-preview"
+                aria-live="polite"
+                className={`rounded-lg px-3 py-2 text-sm font-sans font-semibold tabular-nums ${preview.tone === 'ok' ? 'bg-primary/10 text-primary' : 'bg-accent/10 text-accent'}`}
+              >
+                {preview.text}
+              </p>
+            )}
+            <p className="text-[11px] text-muted-foreground font-sans">Times are Sarajevo time.</p>
+          </PromoSection>
+          )}
+
+          {promoAvailable && (
+          <PromoSection
+            id="combo"
+            title="Combo"
+            description="Guests choose one dish for each part (a burger, a side, a drink). The price above becomes the combo price."
+            checked={comboOn}
+            onCheckedChange={setComboOn}
+          >
+            <ComboBuilder
+              slots={slots}
+              onChange={setSlots}
+              items={pickable}
+              sections={sections}
+              comboPrice={parsePrice(price)}
+              selfId={item?.id}
+              comboIds={comboIds}
+            />
+          </PromoSection>
+          )}
+
+          <div id="item-highlight" className="space-y-3">
+            <PromoSection
+              id="new"
+              title="Mark as new"
+              description="A “New” badge and a place in “New at La Soul” on the home screen. It ends by itself."
+              checked={newOn}
+              onCheckedChange={(on) => { setNewOn(on); if (on && !newUntil) setNewUntil(defaultNewUntil()); }}
+            >
+              <div className="flex items-center gap-2">
+                <Label htmlFor="item-new-until" className="text-xs text-muted-foreground shrink-0">New until</Label>
+                <Input id="item-new-until" type="date" value={newUntil} onChange={(e) => setNewUntil(e.target.value)} className="w-44" />
+              </div>
+            </PromoSection>
+
+            {promoAvailable && (
+            <PromoSection
+              id="featured"
+              title="Feature on the home screen"
+              description={featuredFull
+                ? `Three dishes are featured already (${featuredOthers.map((f) => f.name).join(', ')}). Unpin one in Promotions first.`
+                : 'One of up to three large cards at the top of the menu, with a short line if you like.'}
+              checked={featuredOn}
+              onCheckedChange={setFeaturedOn}
+              disabled={!featuredOn && featuredFull}
+            >
+              <Input value={featuredNote} onChange={(e) => setFeaturedNote(e.target.value)} maxLength={80} placeholder="Short line (EN), e.g. Our classic since 2019" aria-label="Featured line (EN)" />
+              <div className="grid grid-cols-2 gap-2">
+                <Input value={featuredNoteBs} onChange={(e) => setFeaturedNoteBs(e.target.value)} maxLength={80} placeholder="Line (BS)" aria-label="Featured line (BS)" />
+                <Input value={featuredNoteAr} onChange={(e) => setFeaturedNoteAr(e.target.value)} maxLength={80} placeholder="Line (AR)" dir="rtl" aria-label="Featured line (AR)" />
+              </div>
+            </PromoSection>
+            )}
           </div>
 
           <div className="grid grid-cols-2 gap-2">

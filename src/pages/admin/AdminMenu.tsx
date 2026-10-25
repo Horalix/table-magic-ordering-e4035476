@@ -18,6 +18,8 @@ import {
 import { toast } from 'sonner';
 import MenuItemDialog from '@/components/admin/MenuItemDialog';
 import { DIET_BY_KEY, getItemTags } from '@/lib/dietary';
+import { Link } from 'react-router-dom';
+import { isNew, saleScheduled } from '@/lib/promotions';
 import type { Database } from '@/integrations/supabase/types';
 
 type CategoryInsert = Database['public']['Tables']['categories']['Insert'];
@@ -353,6 +355,9 @@ const AdminMenu = () => {
             {isMigrating ? <Loader2 className="w-4 h-4 animate-spin" /> : <ImageIcon className="w-4 h-4" />}
             {isMigrating ? 'Migrating…' : 'Self-host Images'}
           </Button>
+          <Button asChild variant="outline" size="sm" className="rounded-lg font-sans gap-1">
+            <Link to="/admin/promotions">Promotions</Link>
+          </Button>
           <Button onClick={() => setAddingCategory(true)} className="rounded-lg font-sans" size="sm">
             <Plus className="w-4 h-4 mr-1" /> Add Category
           </Button>
@@ -547,7 +552,14 @@ const AdminMenu = () => {
                                           <span className="shrink-0 text-xs leading-none">{getItemTags(item).slice(0, 4).map((k) => DIET_BY_KEY[k]?.emoji).filter(Boolean).join(' ')}</span>
                                         )}
                                       </div>
-                                      <p className="text-xs text-muted-foreground tabular-nums">{Number(item.price).toFixed(2)} KM</p>
+                                      <p className="text-xs text-muted-foreground tabular-nums">
+                                        {Number(item.price).toFixed(2)} KM
+                                        {/* What a guest sees on it, at a glance. */}
+                                        {saleScheduled(item) === 'running' && <span className="ml-1.5 font-semibold text-sale">Sale</span>}
+                                        {saleScheduled(item) === 'scheduled' && <span className="ml-1.5 font-semibold">Sale soon</span>}
+                                        {isNew(item) && <span className="ml-1.5 font-semibold text-primary">New</span>}
+                                        {item.featured_rank != null && <span className="ml-1.5 font-semibold text-primary">Featured</span>}
+                                      </p>
                                     </div>
                                   </div>
                                   <div className="flex items-center gap-0.5 shrink-0">

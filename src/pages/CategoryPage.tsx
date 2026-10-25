@@ -21,6 +21,11 @@ import { duration, easeEnter, exitTransition, springPill, springSheet } from '@/
 import { DIET_TAGS, DIET_BY_KEY, getItemTags, matchesDietFilter, useDietFilterStore } from '@/lib/dietary';
 import { merchBadges, unorderableReason, windowLabel } from '@/lib/availability';
 import { sectionSlug } from '@/lib/menu-sections';
+import { PriceTag, SaleBadge, NewBadge, ComboBadge } from '@/components/guest/PriceTag';
+import { useComboMap } from '@/lib/promotions-api';
+import {
+  comboRegularPrice, comboUnitPrice, fixedChoices, isNew, missingSlots, nextPriceChange, rememberPrices, saleView, type ComboDef,
+} from '@/lib/promotions';
 import type { Database } from '@/integrations/supabase/types';
 
 type CategoryRow = Database['public']['Tables']['categories']['Row'];
@@ -61,6 +66,8 @@ const fetchSubcategories = async (categoryId: string) => {
 const fetchCategoryItems = async (subIds: string[]) => {
   const { data, error } = await supabase.from('menu_items').select('*').in('subcategory_id', subIds).order('sort_order');
   if (error) throw error;
+  // Whatever adds one of these to the order adds it at this price.
+  rememberPrices(data);
   return data;
 };
 
@@ -259,6 +266,19 @@ const CategoryPage = () => {
     const timer = window.setTimeout(() => void warm(), 600);
     return () => { cancelled = true; window.clearTimeout(timer); };
   }, [allLoading, category, categories, queryClient]);
+
+  const comboMap = useComboMap();
+
+  // The clock the prices on this page are read at. It moves exactly when a
+  // sale on this page starts or ends, so a happy hour ending at 18:00 takes
+  // its strikethrough with it without anyone reloading.
+  const [priceNow, setPriceNow] = useState(() => Date.now());
+  useEffect(() => {
+    const next = nextPriceChange(allItems, Date.now());
+    if (next === null) return;
+    const timer = setTimeout(() => setPriceNow(Date.now()), Math.min(next - Date.now() + 250, 2 ** 31 - 1));
+    return () => clearTimeout(timer);
+  }, [allItems, priceNow]);
   // Defer the heavy re-layout when toggling list/grid so the tap stays snappy.
   const deferredView = useDeferredValue(view);
 
@@ -408,9 +428,33 @@ const CategoryPage = () => {
 
   const closeSearch = () => { setSearch(''); setSearchOpen(false); };
 
+  /** A combo the guest has to choose for. One whose every part is fixed adds in one tap. */
+  const needsChoice = (def: ComboDef | undefined) => !!def && missingSlots(def, fixedChoices(def)).length > 0;
+
   const quickAdd = (item: MenuItemRow, source: 'list' | 'grid', from?: DOMRect) => {
     const name = getLocalizedName(item, locale);
-    addItem({ id: item.id, name: item.name, name_bs: item.name_bs, name_ar: item.name_ar, price: Number(item.price), image_url: item.image_url || undefined });
+    const def = comboMap.get(item.id);
+    if (def) {
+      const choices = fixedChoices(def);
+      const sale = saleView(item);
+      addItem({
+        id: item.id, name: item.name, name_bs: item.name_bs, name_ar: item.name_ar,
+        price: comboUnitPrice(item, def, choices),
+        regularPrice: sale ? comboRegularPrice(item, def, choices) : undefined,
+        saleLabel: sale ? (item.sale_label ?? '') : undefined,
+        image_url: item.image_url || undefined,
+        combo: {
+          components: def.slots.map((slot) => ({
+            slot_id: slot.id, slot_label: slot.label, slot_label_bs: slot.label_bs ?? null, slot_label_ar: slot.label_ar ?? null,
+            item_id: slot.options[0].item_id, name: slot.options[0].name,
+            name_bs: slot.options[0].name_bs ?? null, name_ar: slot.options[0].name_ar ?? null,
+            surcharge: Number(slot.options[0].surcharge),
+          })),
+        },
+      });
+    } else {
+      addItem({ id: item.id, name: item.name, name_bs: item.name_bs, name_ar: item.name_ar, price: Number(item.price), image_url: item.image_url || undefined });
+    }
     track('item_added', { item_id: item.id, source });
     // The photo flies into the CartBar instead of a toast; see FlyToCart.
     emitAdd({ id: item.id, imageUrl: item.image_url, from, name });
@@ -459,9 +503,22 @@ const CategoryPage = () => {
    * where the eye already is, and it never covers the name or the price.
    */
   const renderStepper = (item: MenuItemRow, name: string, source: 'list' | 'grid') => {
-    const inCart = cartItems.find((c) => (c.menuItemId ?? c.id) === item.id && !c.notes);
+    const inCart = cartItems.find((c) => (c.menuItemId ?? c.id) === item.id && !c.notes && !c.combo);
     const qty = inCart?.quantity ?? 0;
     const shell = 'bg-card text-foreground shadow-[0_2px_10px_rgba(20,30,25,0.18)] ring-1 ring-black/5';
+    // A combo is built in its sheet: "+" opens it rather than guessing the drink.
+    if (needsChoice(comboMap.get(item.id))) {
+      return (
+        <button
+          type="button"
+          aria-label={t('combo_choose_for', { name })}
+          onClick={(e) => { stop(e); haptic('tick'); openItem(item); }}
+          className={`w-11 h-11 rounded-full ${shell} flex items-center justify-center tap-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring`}
+        >
+          <Plus className="w-5 h-5 text-primary" strokeWidth={2.5} aria-hidden />
+        </button>
+      );
+    }
     if (qty === 0) {
       return (
         <button
@@ -499,19 +556,31 @@ const CategoryPage = () => {
   };
 
   const inCartQty = (item: MenuItemRow) =>
-    cartItems.find((c) => (c.menuItemId ?? c.id) === item.id && !c.notes)?.quantity ?? 0;
+    cartItems.find((c) => (c.menuItemId ?? c.id) === item.id && !c.notes && !c.combo)?.quantity ?? 0;
 
-  /** Small, quiet labels under the name. Never more than one marketing badge. */
+  /**
+   * Small, quiet labels under the name. A sale and "Combo" say what the
+   * price is; beyond them, never more than one marketing badge, and "New"
+   * stops on its own after its last day.
+   */
   const renderBadges = (item: MenuItemRow, isSearch: boolean) => {
     const blocked = blockedLabel(item);
-    const badges = merchBadges(item);
+    const sale = blocked ? null : saleView(item, priceNow);
+    const combo = comboMap.has(item.id);
+    const fresh = !blocked && isNew(item, priceNow);
+    // "New" is its own pill, and only while it lasts; it is the one marketing badge when present.
+    const marketing = fresh ? null
+      : merchBadges({ merchandising_tags: (item.merchandising_tags ?? []).filter((tag) => tag !== 'new') })[0] ?? null;
     const section = isSearch ? subNameById.get(item.subcategory_id || '') : undefined;
-    const popular = !blocked && badges.length === 0 && popularIds.has(item.id);
-    if (!blocked && badges.length === 0 && !popular && !section) return null;
+    const popular = !blocked && !fresh && !marketing && popularIds.has(item.id);
+    if (!blocked && !sale && !combo && !fresh && !marketing && !popular && !section) return null;
     return (
       <div className="flex items-center gap-1.5 flex-wrap mt-1">
         {blocked && <span className="px-2 py-0.5 rounded-full bg-foreground/80 text-[11px] font-sans font-semibold text-background">{blocked}</span>}
-        {!blocked && badges.length > 0 && <span className="text-xs font-sans font-semibold text-primary">{badges[0]}</span>}
+        {sale && <SaleBadge label={item.sale_label} percentOff={sale.percentOff} />}
+        {combo && !blocked && <ComboBadge />}
+        {fresh && <NewBadge />}
+        {!blocked && marketing && <span className="text-xs font-sans font-semibold text-primary">{marketing}</span>}
         {popular && (
           <span className="inline-flex items-center gap-1 text-xs font-sans font-semibold text-accent">
             <Star className="w-3 h-3 fill-current" aria-hidden /> {t('popular')}
@@ -520,6 +589,24 @@ const CategoryPage = () => {
         {section && <span className="text-xs text-muted-foreground font-sans">· {section}</span>}
       </div>
     );
+  };
+
+  /**
+   * The price on a row or card: struck through when on sale, "from" for a
+   * combo whose choices can cost extra.
+   */
+  const renderPrice = (item: MenuItemRow, blocked: boolean) => {
+    const sale = blocked ? null : saleView(item, priceNow);
+    const def = comboMap.get(item.id);
+    if (def) {
+      const lowest = comboUnitPrice(item, def, fixedChoices(def), priceNow);
+      const varies = def.slots.some((slot) => slot.options.some((o) => Number(o.surcharge) > 0));
+      const tag = <PriceTag price={lowest} regular={sale ? lowest + Number(item.price) - sale.price : null} />;
+      return varies
+        ? <span className="tabular-nums">{t('combo_from', { price: priceBare(lowest) })}</span>
+        : tag;
+    }
+    return <PriceTag price={sale ? sale.price : Number(item.price)} regular={sale?.regular} />;
   };
 
   const renderGridCard = (item: MenuItemRow, i: number, eager: boolean) => {
@@ -548,7 +635,7 @@ const CategoryPage = () => {
             <button type="button" className={`text-start font-serif text-[15px] font-semibold line-clamp-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded ${blocked ? 'text-muted-foreground' : 'text-foreground'}`}>{name}</button>
           </h3>
           {renderBadges(item, false)}
-          <p className={`text-[15px] font-sans font-semibold mt-0.5 tabular-nums ${blocked ? 'text-muted-foreground' : 'text-foreground'}`}>{priceBare(Number(item.price))}</p>
+          <p className={`text-[15px] font-sans font-semibold mt-0.5 ${blocked ? 'text-muted-foreground' : 'text-foreground'}`}>{renderPrice(item, !!blocked)}</p>
         </div>
       </ImpressionCard>
     );
@@ -579,7 +666,7 @@ const CategoryPage = () => {
           {renderBadges(item, isSearch)}
           {localizedDesc && <p className="text-sm leading-relaxed text-muted-foreground font-sans mt-1 line-clamp-2">{localizedDesc}</p>}
           <div className="flex items-center gap-2 mt-2 flex-wrap">
-            <p className={`text-[15px] font-sans font-semibold tabular-nums ${blocked ? 'text-muted-foreground' : 'text-foreground'}`}>{priceBare(Number(item.price))}</p>
+            <p className={`text-[15px] font-sans font-semibold ${blocked ? 'text-muted-foreground' : 'text-foreground'}`}>{renderPrice(item, !!blocked)}</p>
             {meta && <span className="text-xs font-sans text-muted-foreground">{meta}</span>}
             {tags.map((k) => (
               <span key={k} className="text-sm leading-none" title={t(DIET_BY_KEY[k].labelKey)} aria-label={t(DIET_BY_KEY[k].labelKey)}>{DIET_BY_KEY[k].emoji}</span>
@@ -674,7 +761,7 @@ const CategoryPage = () => {
     )),
     // renderItems is recreated each render; the value deps below fully determine its output.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [sections, deferredView, locale, popularIds, cartItems, hasSession, subNameById, t, eagerSectionId],
+    [sections, deferredView, locale, popularIds, cartItems, hasSession, subNameById, t, eagerSectionId, comboMap, priceNow],
   );
 
   const loadFailed = categoryFailed || subsFailed || itemsFailed;
@@ -877,6 +964,13 @@ const CategoryPage = () => {
               description_ar: selectedItem.description_ar || undefined,
               description_bs: selectedItem.description_bs || undefined,
               price: Number(selectedItem.price),
+              sale_kind: selectedItem.sale_kind ?? null,
+              sale_value: selectedItem.sale_value ?? null,
+              sale_starts_at: selectedItem.sale_starts_at ?? null,
+              sale_ends_at: selectedItem.sale_ends_at ?? null,
+              sale_label: selectedItem.sale_label ?? null,
+              merchandising_tags: selectedItem.merchandising_tags ?? [],
+              new_until: selectedItem.new_until ?? null,
               image_url: selectedItem.image_url || undefined,
               // Allergens are the one field on this sheet that can matter
               // medically; they must always travel with the item.

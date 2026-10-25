@@ -11,8 +11,11 @@ import { supabase as sb } from '@/integrations/supabase/client';
 import { track } from '@/lib/analytics';
 import { haptic } from '@/lib/haptics';
 import { emitAdd } from '@/lib/cart-fx';
+import { PriceTag } from '@/components/guest/PriceTag';
+import { useComboMap } from '@/lib/promotions-api';
+import { rememberPrices, saleView, unitPrice, type SaleFields } from '@/lib/promotions';
 
-interface LiveItem {
+interface LiveItem extends SaleFields {
   id: string;
   name: string;
   name_bs: string | null;
@@ -55,14 +58,18 @@ const RecentOrdersRow = () => {
    */
   const [usual, setUsual] = useState(() => getUsualItem());
 
-  const { data: live = [] } = useQuery({
+  // A combo needs its parts chosen, which a one-tap "again" cannot do.
+  const comboMap = useComboMap();
+  const { data: liveAll = [] } = useQuery({
     queryKey: ['recent-items-live', recentIds.join(',')],
     queryFn: async (): Promise<LiveItem[]> => {
       if (recentIds.length === 0) return [];
+      // Every column, so a dish on sale is offered at its sale price.
       const { data } = await supabase
         .from('menu_items')
-        .select('id, name, name_bs, name_ar, price, image_url, is_available')
+        .select('*')
         .in('id', recentIds);
+      rememberPrices(data);
       const order = new Map(recentIds.map((id, i) => [id, i]));
       return ((data ?? []) as LiveItem[])
         .filter((i) => i.is_available)
@@ -73,6 +80,7 @@ const RecentOrdersRow = () => {
     staleTime: 60_000,
   });
 
+  const live = liveAll.filter((i) => !comboMap.has(i.id));
   const usualLive = usual ? live.find((i) => i.id === usual.id) : undefined;
 
   if (live.length === 0) return null;
@@ -101,8 +109,8 @@ const RecentOrdersRow = () => {
             <p className="font-serif text-base font-semibold text-foreground truncate">
               {getLocalizedName(usualLive, locale)}
             </p>
-            <p className="text-sm font-sans font-bold text-primary tabular-nums">
-              {priceBare(usualLive.price)}
+            <p className="text-sm font-sans font-bold text-primary">
+              <PriceTag price={unitPrice(usualLive)} regular={saleView(usualLive)?.regular} saleClassName="text-sale" />
             </p>
           </div>
           <button
@@ -196,8 +204,8 @@ const RecentOrdersRow = () => {
                 />
                 <div className="p-2">
                   <p className="text-xs font-serif font-semibold text-foreground line-clamp-1">{name}</p>
-                  <p className="text-[11px] font-sans font-bold text-primary mt-0.5 tabular-nums">
-                    {priceBare(it.price)}
+                  <p className="text-[11px] font-sans font-bold text-primary mt-0.5">
+                    <PriceTag price={unitPrice(it)} regular={saleView(it)?.regular} />
                   </p>
                 </div>
               </div>

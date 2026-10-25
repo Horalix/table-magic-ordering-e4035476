@@ -8,6 +8,9 @@ import SmartImage from '@/components/ui/SmartImage';
 import { track } from '@/lib/analytics';
 import { haptic } from '@/lib/haptics';
 import { emitAdd } from '@/lib/cart-fx';
+import { PriceTag, SaleBadge } from '@/components/guest/PriceTag';
+import { useComboMap } from '@/lib/promotions-api';
+import { knownPrices, saleView } from '@/lib/promotions';
 
 interface SearchRow {
   id: string;
@@ -29,6 +32,8 @@ interface SearchRow {
 interface Props {
   /** Only show the quick-add button when the guest has a table session. */
   canOrder: boolean;
+  /** Open a dish's sheet — for a combo, whose parts are chosen there. */
+  onOpenItem?: (id: string) => void;
 }
 
 /**
@@ -42,7 +47,7 @@ interface Props {
  * dish deserves to be told it is unavailable instead of concluding the search
  * is broken. They simply cannot be added.
  */
-const MenuSearch = ({ canOrder }: Props) => {
+const MenuSearch = ({ canOrder, onOpenItem }: Props) => {
   const t = useT();
   const { priceBare } = useI18n();
   const locale = useLanguageStore((s) => s.locale);
@@ -80,6 +85,7 @@ const MenuSearch = ({ canOrder }: Props) => {
   }, [trimmed, isFetching, isError, data.length]);
 
   const grouped = useMemo(() => data, [data]);
+  const comboMap = useComboMap();
   const active = trimmed.length >= 2;
 
   return (
@@ -116,10 +122,14 @@ const MenuSearch = ({ canOrder }: Props) => {
             </div>
           ) : (
             <>
-            <ul className="space-y-2">
+            <ul className="space-y-2" data-search-results>
               {grouped.map((item) => {
                 const name = getLocalizedName(item, locale);
                 const description = getLocalizedDescription(item, locale);
+                // Search rows carry no sale columns; the menu reads that did are remembered.
+                const known = knownPrices(item.id);
+                const sale = known && Number(known.price) === item.price ? saleView(known) : null;
+                const isCombo = comboMap.has(item.id);
                 return (
                   <li key={item.id} className="card-lux p-3 flex items-center gap-3">
                     <SmartImage
@@ -140,11 +150,22 @@ const MenuSearch = ({ canOrder }: Props) => {
                         <p className="text-xs text-muted-foreground font-sans truncate">{description}</p>
                       )}
                     </div>
-                    <div className="text-end shrink-0">
-                      <p className="text-sm font-sans font-semibold text-foreground tabular-nums">{priceBare(item.price)}</p>
+                    <div className="text-end shrink-0 flex flex-col items-end">
+                      {sale && <SaleBadge label={known?.sale_label} percentOff={sale.percentOff} className="mb-0.5" />}
+                      <p className="text-sm font-sans font-semibold text-foreground">
+                        <PriceTag price={sale ? sale.price : item.price} regular={sale?.regular} />
+                      </p>
                       {!item.is_available ? (
                         <span className="text-xs font-sans font-medium text-muted-foreground">{t('sold_out')}</span>
-                      ) : canOrder ? (
+                      ) : canOrder && isCombo && onOpenItem ? (
+                        <button
+                          onClick={() => { haptic('tick'); onOpenItem(item.id); }}
+                          aria-label={t('combo_choose_for', { name })}
+                          className="mt-1 h-11 px-3.5 rounded-full border border-primary text-primary font-sans font-semibold text-xs inline-flex items-center gap-1 hover:bg-primary/5 transition-colors tap-sm"
+                        >
+                          {t('combo_open')}
+                        </button>
+                      ) : canOrder && !isCombo ? (
                         <button
                           onClick={(e) => {
                             addItem({ id: item.id, menuItemId: item.id, name: item.name, name_bs: item.name_bs, name_ar: item.name_ar, price: item.price, image_url: item.image_url || undefined });
