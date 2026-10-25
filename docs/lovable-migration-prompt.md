@@ -2,10 +2,17 @@
 
 Copy everything between the rules into Lovable. Nothing else needs to be said.
 
-Last updated: **26 October 2026**, for thirty-six migrations from
-`20260804090300` to `20261026130000`.
+Last updated: **26 October 2026**, for thirty-five migrations from
+`20260804090400` to `20261026130000`.
 
-> **What is actually live.** Checked against the production API on
+> **Already applied: `20260804090300_session_context.sql`.** Lovable's
+> preflight on 25 October showed its four replaced search texts gone, and the
+> production API confirms what it creates exists (`after_meal_moment()`,
+> `session_context()`, `restaurant_settings.after_meal_prompt_minutes`)
+> while the next files' functions (`business_day()`, `bandit_readiness()`)
+> do not. The batch therefore starts at `20260804090400_session_affinity.sql`.
+
+> **What was live on 24 October.** Checked against the production API on
 > 24 October 2026: functions from the 3 August batch exist (for example
 > `reco_policy_version()`), but nothing from `20260804090300` onwards does —
 > `business_day()`, `bandit_readiness()`, `app_impact_summary()` and
@@ -42,13 +49,12 @@ whose search text is not in the live function — send it back before going on.
 
 ## Step 2 — the prompt
 
-> **Task: apply thirty-six existing migration files to Supabase, in order. Do not
+> **Task: apply thirty-five existing migration files to Supabase, in order. Do not
 > write any new SQL.**
 >
 > These files are already in the repository under `supabase/migrations/`:
 >
 > ```
-> 20260804090300_session_context.sql
 > 20260804090400_session_affinity.sql
 > 20260804090500_maintenance.sql
 > 20260804090600_app_impact.sql

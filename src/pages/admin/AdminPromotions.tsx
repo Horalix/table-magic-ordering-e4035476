@@ -95,7 +95,9 @@ const AdminPromotions = () => {
   /** Write a change, show it at once, put it back if the database says no. */
   const update = async (row: MenuItemRow, changes: Partial<MenuItemRow>, done: string, undo?: Partial<MenuItemRow>) => {
     patchLocal(row.id, changes);
-    const { error } = await supabase.from('menu_items').update(changes).eq('id', row.id);
+    // The promotion columns are not in the generated types until the live
+    // database has them (see AGENTS.md); the server validates them.
+    const { error } = await supabase.from('menu_items').update(changes as never).eq('id', row.id);
     if (error) {
       patchLocal(row.id, undo ?? {});
       toast.error(`Could not update ${row.name}: ${error.message}`);
