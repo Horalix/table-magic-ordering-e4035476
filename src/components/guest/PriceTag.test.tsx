@@ -62,10 +62,12 @@ describe('combo parts on the kitchen ticket', () => {
   const settings = { paperWidth: 80, header: 'La Soul', footer: '', showPrices: true, copies: 1 };
 
   it('prints each part under the combo, before its note', () => {
+    // In the shared layout's format (supabase/functions/_shared/ticket-layout.ts):
+    // "+ slot: part", a part made elsewhere tagged with its station.
     const text = buildKitchenTicketText(order, settings);
     const lines = text.split('\n');
     const at = lines.findIndex((l) => l.includes('1 x Burger Combo'));
-    expect(lines.slice(at + 1, at + 4)).toEqual(['  - Burger: Cheeseburger', '  - Drink: Lemonade (BAR)', '  ! no pickles']);
-    expect(buildKitchenTicketHtml(order, settings)).toContain('<div class="item__part">&ndash; Drink: Lemonade (BAR)</div>');
+    expect(lines.slice(at + 1, at + 4)).toEqual(['    + Burger: Cheeseburger', '    + Drink: Lemonade [BAR]', '  ! no pickles']);
+    expect(buildKitchenTicketHtml(order, settings)).toContain('<div class="l b component"><span>    + Drink: Lemonade [BAR]</span></div>');
   });
 });
