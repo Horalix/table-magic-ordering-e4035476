@@ -1424,17 +1424,22 @@ GRANT EXECUTE ON FUNCTION public.maybe_refresh_menu_intelligence(int) TO authent
 
 /**
  * What pg_cron runs every 15 minutes. Same mark as run_scheduled_maintenance
- * (see is_trusted_caller): function-scoped, gone when it returns, and
- * executable by no API role.
+ * (see is_trusted_caller): held for the call only, set at run time because a
+ * function attribute would need a superuser, and executable by no API role.
  */
 CREATE OR REPLACE FUNCTION public.run_scheduled_learning_refresh()
 RETURNS jsonb
 LANGUAGE plpgsql
 SET search_path = public
-SET lasoul.scheduled_job = 'on'
 AS $$
+DECLARE
+  v_prev text := COALESCE(current_setting('lasoul.scheduled_job', true), '');
+  v_result jsonb;
 BEGIN
-  RETURN public.maybe_refresh_menu_intelligence(30);
+  PERFORM set_config('lasoul.scheduled_job', 'on', true);
+  v_result := public.maybe_refresh_menu_intelligence(30);
+  PERFORM set_config('lasoul.scheduled_job', v_prev, true);
+  RETURN v_result;
 END;
 $$;
 

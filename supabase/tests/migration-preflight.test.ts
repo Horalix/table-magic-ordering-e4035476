@@ -28,11 +28,12 @@ describe('migration preflight', () => {
     expect(rows.filter((r) => !r.found).map((r) => r.rewrite)).toEqual([]);
   }, 180_000);
 
-  // Production on 26 October 2026: session_context applied (Lovable's earlier
-  // batch), nothing after it. The texts that file replaced are gone there by
-  // design; the preflight must still say every row is fine.
-  it('passes on production as it stands: session_context applied, the rest pending', async () => {
-    const db = await createTestDatabase({ quiet: true, until: '20260804090400' });
+  // Production now: session_context applied (Lovable's earlier batch) and
+  // session_affinity (the first file of this one, before it stopped at
+  // maintenance), nothing after. The texts session_context replaced are gone
+  // there by design; the preflight must still say every row is fine.
+  it('passes on production as it stands: session_context and session_affinity applied, the rest pending', async () => {
+    const db = await createTestDatabase({ quiet: true, until: '20260804090500' });
     const sql = readFileSync(path.join(__dirname, '..', '..', 'docs', 'migration-preflight.sql'), 'utf8');
     const { rows } = await db.query<{ rewrite: string; found: boolean }>(sql);
     await db.close();

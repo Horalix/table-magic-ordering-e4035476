@@ -3,7 +3,9 @@
 --
 -- 20260804090300_session_context.sql is already applied on the live database
 -- (confirmed 26 Oct 2026); its rows pass on that evidence, since the texts it
--- replaced are gone by design.
+-- replaced are gone by design. 20260804090400_session_affinity.sql is applied
+-- too (Lovable, before it stopped at maintenance); its search texts survive
+-- its own edits, so its rows pass as they are.
 SELECT rewrite, function, found
   FROM (
   SELECT '20260804090300_session_context.sql:149 (or already applied)' AS rewrite, 'rank_recommendations' AS function, ((position('      public.cart_has_drink(_cart_item_ids) AS has_drink

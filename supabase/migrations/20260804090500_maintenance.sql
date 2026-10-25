@@ -68,7 +68,7 @@ CREATE POLICY "Staff read maintenance" ON public.maintenance_runs
  *   * a request carrying the service_role JWT — the project's master key,
  *     which an Edge Function or external scheduler would use;
  *   * `run_scheduled_maintenance()`, below, which is what pg_cron runs. It
- *     marks itself with a function-scoped setting, and the mark is only
+ *     marks itself for the length of the call, and the mark is only
  *     honoured when the connection itself belongs to a database owner role.
  *
  * Deliberately NOT `current_user IN ('postgres', ...)`: inside a SECURITY
@@ -271,19 +271,27 @@ GRANT EXECUTE ON FUNCTION public.run_daily_maintenance() TO authenticated;
 /**
  * What pg_cron runs.
  *
- * The function-scoped SET is the scheduler's mark (see is_trusted_caller): it
- * exists only while this function executes and reverts the moment it returns,
- * so nothing that runs afterwards in the same session inherits it. Executable
- * by nobody but the owner — no API role can reach it.
+ * It holds the scheduler's mark (see is_trusted_caller) for the length of the
+ * call only: the previous value is put back before it returns, and a failed
+ * run rolls the mark back with everything else, so nothing that runs
+ * afterwards in the same session inherits it. Set at run time, not as a
+ * function attribute: `SET lasoul.scheduled_job` on the function itself needs
+ * a superuser, and the role that applies migrations on Supabase is not one.
+ * Executable by nobody but the owner and the server role — no API role.
  */
 CREATE OR REPLACE FUNCTION public.run_scheduled_maintenance()
 RETURNS jsonb
 LANGUAGE plpgsql
 SET search_path = public
-SET lasoul.scheduled_job = 'on'
 AS $$
+DECLARE
+  v_prev text := COALESCE(current_setting('lasoul.scheduled_job', true), '');
+  v_result jsonb;
 BEGIN
-  RETURN public.run_daily_maintenance();
+  PERFORM set_config('lasoul.scheduled_job', 'on', true);
+  v_result := public.run_daily_maintenance();
+  PERFORM set_config('lasoul.scheduled_job', v_prev, true);
+  RETURN v_result;
 END;
 $$;
 
