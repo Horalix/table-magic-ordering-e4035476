@@ -54,6 +54,11 @@ export interface TicketComponent {
   item_id?: string | null;
   name: string;
   station?: string | null;
+  /**
+   * The part's OWN allergens (menu_items.allergens by item_id). Not stored on
+   * the order: each printer path looks them up — see withPartAllergens().
+   */
+  allergens?: string[] | null;
 }
 
 export interface TicketItem {
@@ -228,7 +233,13 @@ interface PlannedLine {
  * A combo is ordered as one line ("Burger menu") but made at two stations: the
  * burger in the kitchen, the cola at the bar. A bar ticket that dropped the
  * line because the PARENT is a kitchen item would lose the drink, so a part
- * made at this station brings its line along, labelled with what it is part of.
+ * made at this station becomes a line of its own, labelled with what it is
+ * part of.
+ *
+ * The same rule as enqueue_order_ticket (20261026130000_combo_station_tickets
+ * .sql), so the queued payload and the paper agree: the combo line's quantity
+ * and notes — a guest writes one note for the whole combo, and "lemonade
+ * without ice" has to reach the bar — and the PART's own allergens.
  */
 function planLines(order: TicketOrder, station: 'kitchen' | 'bar' | null | undefined): PlannedLine[] {
   const out: PlannedLine[] = [];
@@ -241,13 +252,56 @@ function planLines(order: TicketOrder, station: 'kitchen' | 'bar' | null | undef
     const mine = parts.filter((c) => c.station && c.station === station);
     for (const part of mine) {
       out.push({
-        item: { ...item, menu_item_name: part.name, notes: null, components: null, allergens: null },
+        item: {
+          ...item,
+          menu_item_name: part.name,
+          station: part.station,
+          components: null,
+          allergens: Array.isArray(part.allergens) ? part.allergens : null,
+        },
         components: [],
         partOf: item.menu_item_name,
       });
     }
   }
   return out;
+}
+
+/** The menu item ids of every combo part on an order — what to look allergens up for. */
+export function partItemIds(items: readonly { components?: readonly TicketComponent[] | null }[]): string[] {
+  const ids = new Set<string>();
+  for (const item of items ?? []) {
+    if (!Array.isArray(item.components)) continue;
+    for (const part of item.components) {
+      if (part && typeof part.item_id === 'string' && part.item_id) ids.add(part.item_id);
+    }
+  }
+  return [...ids];
+}
+
+/**
+ * Give every combo part its own allergens, from menu_items by item_id.
+ *
+ * Order lines store a part's name and station but not its allergens, so the
+ * printer path (cloudprnt) and the board (browser) each look them up and
+ * attach them here; the ticket then bands them like any line's. A part not in
+ * `allergensById` keeps what it had.
+ */
+export function withPartAllergens<T extends { components?: TicketComponent[] | null }>(
+  items: T[],
+  allergensById: Readonly<Record<string, readonly string[] | null | undefined>>,
+): T[] {
+  return items.map((item) => {
+    if (!Array.isArray(item.components) || item.components.length === 0) return item;
+    let changed = false;
+    const components = item.components.map((part) => {
+      const found = part?.item_id ? allergensById[part.item_id] : undefined;
+      if (found === undefined) return part;
+      changed = true;
+      return { ...part, allergens: found ? [...found] : null };
+    });
+    return changed ? { ...item, components } : item;
+  });
 }
 
 /** True when a station ticket would have nothing on it. Print nothing then. */

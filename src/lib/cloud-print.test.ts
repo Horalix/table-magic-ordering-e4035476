@@ -26,7 +26,13 @@ const order: TicketOrder = {
   items: [{ quantity: 2, menu_item_name: 'Ćevapi', notes: 'luk posebno', station: 'kitchen', allergens: ['gluten'] }],
 };
 
-function fakeQueue(over: Partial<CloudPrinter> = {}) {
+interface FakeOptions {
+  ticketType?: string;
+  order?: TicketOrder;
+  partAllergens?: CloudPrintBackend['partAllergens'];
+}
+
+function fakeQueue(over: Partial<CloudPrinter> = {}, opts: FakeOptions = {}) {
   const calls: { fn: string; args: unknown[] }[] = [];
   let queued: string[] = ['ticket-1'];
   const printer: CloudPrinter = {
@@ -44,15 +50,16 @@ function fakeQueue(over: Partial<CloudPrinter> = {}) {
       if (!id || !queued.includes(id)) return null;
       queued = queued.filter((q) => q !== id);
       const claimed: ClaimedTicket = {
-        ticket_id: id, order_id: 'order-1', ticket_type: 'kitchen', original_printed_at: null,
+        ticket_id: id, order_id: 'order-1', ticket_type: opts.ticketType ?? 'kitchen', original_printed_at: null,
         paper_width: printer.paper_width, plain_text: printer.plain_text,
       };
       return claimed;
     },
     async report(token, ticketId, ok, error) { calls.push({ fn: 'report', args: [token, ticketId, ok, error] }); return ticketId; },
     async testDone(token, ok, error) { calls.push({ fn: 'testDone', args: [token, ok, error] }); },
-    async loadOrder() { return order; },
+    async loadOrder() { return opts.order ?? order; },
     async settings() { return { header: 'La Soul', footer: null }; },
+    ...(opts.partAllergens ? { partAllergens: opts.partAllergens } : {}),
   };
   return { backend, calls };
 }
@@ -209,5 +216,66 @@ describe('Epson Server Direct Print', () => {
 
   it('parses a response even with odd spacing and case', () => {
     expect(parseEpsonResponse('<response  code="EX_TIMEOUT" success="false"/>')).toEqual({ ok: false, code: 'EX_TIMEOUT', jobId: null });
+  });
+});
+
+describe('a combo on a bar printer', () => {
+  /** One burger combo, nothing else: before 20261026130000 the bar got no ticket at all. */
+  const comboOnly: TicketOrder = {
+    ...order,
+    items: [{
+      quantity: 2, menu_item_name: 'Chicken Burger Combo', notes: 'lemonade without ice', station: 'kitchen',
+      allergens: ['gluten'],
+      components: [
+        { slot_label: 'Burger', item_id: 'item-chicken', name: 'Chicken Burger', station: 'kitchen' },
+        { slot_label: 'Drink', item_id: 'item-lemonade', name: 'Strawberry Lemonade', station: 'bar' },
+      ],
+    }],
+  };
+  const barPrinter = { name: 'Bar printer', station: 'bar' as const };
+
+  it('Star: prints the drink as a line of its own, with its own allergens', async () => {
+    const asked: string[][] = [];
+    const { backend } = fakeQueue({ ...barPrinter, plain_text: true }, {
+      ticketType: 'bar', order: comboOnly,
+      partAllergens: async (ids) => { asked.push(ids); return { 'item-lemonade': ['sulphites'], 'item-chicken': ['gluten', 'egg'] }; },
+    });
+    const res = await handleCloudPrint(star.get('type=text/plain&token=ticket-1'), backend, { now: NOW });
+    const text = await res.text();
+    expect(asked).toEqual([['item-chicken', 'item-lemonade']]);
+    expect(text).toContain('BAR ORDER');
+    expect(text).toContain('2 x Strawberry Lemonade');
+    expect(text).toContain('(part of Chicken Burger Combo)');
+    expect(text).toContain('! lemonade without ice');
+    expect(text).toContain('ALLERGENS: SULPHITES');
+    expect(text).not.toContain('x Chicken Burger');
+    expect(text).not.toContain('GLUTEN');
+  });
+
+  it('Epson: the same ticket in ePOS-Print XML', async () => {
+    const { backend } = fakeQueue(barPrinter, {
+      ticketType: 'bar', order: comboOnly, partAllergens: async () => ({ 'item-lemonade': ['sulphites'] }),
+    });
+    const xml = await (await handleCloudPrint(epson({ ConnectionType: 'GetRequest' }), backend, { now: NOW })).text();
+    expect(xml).toContain('2 x Strawberry Lemonade');
+    expect(xml).toMatch(/reverse="true"[^>]*>\s*ALLERGENS: SULPHITES/);
+  });
+
+  it('still prints when the allergen lookup fails', async () => {
+    const { backend, calls } = fakeQueue({ ...barPrinter, plain_text: true }, {
+      ticketType: 'bar', order: comboOnly, partAllergens: async () => { throw new Error('menu_items: timeout'); },
+    });
+    const res = await handleCloudPrint(star.get('type=text/plain&token=ticket-1'), backend, { now: NOW });
+    expect(res.status).toBe(200);
+    expect(await res.text()).toContain('2 x Strawberry Lemonade');
+    expect(calls.some((c) => c.fn === 'report')).toBe(false);
+  });
+
+  it('the kitchen printer keeps the combo whole, drink marked as the bar\u2019s', async () => {
+    const { backend } = fakeQueue({ plain_text: true }, { order: comboOnly });
+    const text = await (await handleCloudPrint(star.get('type=text/plain&token=ticket-1'), backend, { now: NOW })).text();
+    expect(text).toContain('2 x Chicken Burger Combo');
+    expect(text).toContain('+ Drink: Strawberry Lemonade [BAR]');
+    expect(text).not.toContain('part of');
   });
 });

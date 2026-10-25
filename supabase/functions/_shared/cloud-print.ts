@@ -24,7 +24,7 @@
  * src/lib/cloud-print.test.ts) and the Edge Function is a thin adapter.
  */
 import {
-  buildTicket, ticketToEposXml, ticketToStarPrnt, ticketToText, foldToAscii,
+  buildTicket, ticketToEposXml, ticketToStarPrnt, ticketToText, foldToAscii, partItemIds, withPartAllergens,
   type TicketOrder,
 } from './ticket-layout.ts';
 
@@ -54,6 +54,12 @@ export interface CloudPrintBackend {
   testDone(token: string, ok: boolean, error: string | null): Promise<void>;
   loadOrder(orderId: string): Promise<TicketOrder | null>;
   settings(): Promise<{ header: string | null; footer: string | null }>;
+  /**
+   * menu_items.allergens for these menu item ids: a combo part's OWN
+   * allergens, which the order line does not store. Optional — without it a
+   * part prints without an allergen band.
+   */
+  partAllergens?(itemIds: string[]): Promise<Record<string, string[] | null>>;
 }
 
 export type Protocol = 'star_cloudprnt' | 'epson_sdp';
@@ -125,6 +131,24 @@ async function render(
 const stationOfTicket = (type: string): 'kitchen' | 'bar' | null =>
   type === 'kitchen' || type === 'bar' ? type : null;
 
+/**
+ * The order as it will be printed: live from the database, with every combo
+ * part's own allergens attached — a bar ticket lists the lemonade of a burger
+ * combo as a line of its own, and its allergens are the lemonade's, not the
+ * burger's.
+ *
+ * A failed allergen lookup still prints: the line keeps its name, quantity
+ * and notes, and a ticket that never prints is the one failure nobody sees.
+ */
+async function loadTicketOrder(backend: CloudPrintBackend, orderId: string): Promise<TicketOrder | null> {
+  const order = await backend.loadOrder(orderId);
+  if (!order || !backend.partAllergens) return order;
+  const ids = partItemIds(order.items);
+  if (ids.length === 0) return order;
+  const found = await backend.partAllergens(ids).catch(() => ({}));
+  return { ...order, items: withPartAllergens(order.items, found) };
+}
+
 /* ------------------------------------------------------------------------ */
 /* Star CloudPRNT                                                             */
 /* ------------------------------------------------------------------------ */
@@ -167,7 +191,7 @@ async function starJob(url: URL, token: string, backend: CloudPrintBackend, now:
   } else {
     const claimed = await backend.claim(token, jobToken);
     if (!claimed) return text('No job', 404);
-    const order = await backend.loadOrder(claimed.order_id);
+    const order = await loadTicketOrder(backend, claimed.order_id);
     if (!order) {
       await backend.report(token, claimed.ticket_id, false, 'The order could not be loaded');
       return text('No job', 404);
@@ -246,7 +270,7 @@ async function epson(req: Request, token: string, backend: CloudPrintBackend, no
   const claimed = await backend.claim(token, null);
   // "Nothing to print" is an empty answer, not an error.
   if (!claimed) return text('', 200, EPSON_XML);
-  const order = await backend.loadOrder(claimed.order_id);
+  const order = await loadTicketOrder(backend, claimed.order_id);
   if (!order) {
     await backend.report(token, claimed.ticket_id, false, 'The order could not be loaded');
     return text('', 200, EPSON_XML);

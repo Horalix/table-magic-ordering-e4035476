@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
-  buildTicket, foldToAscii, ticketClock, ticketIsEmpty, ticketToEposXml, ticketToEscPos, ticketToStarPrnt, ticketToText,
-  type TicketOrder,
+  buildTicket, foldToAscii, partItemIds, ticketClock, ticketIsEmpty, ticketToEposXml, ticketToEscPos, ticketToStarPrnt,
+  ticketToText, withPartAllergens, type TicketOrder,
 } from '../../supabase/functions/_shared/ticket-layout.ts';
 
 /**
@@ -100,8 +100,60 @@ describe('combos', () => {
     expect(text).toContain('1 x Espresso');
     expect(text).not.toContain('x La Soul Burger');
     expect(text).not.toContain('Pomfrit');
-    // The burger's "no onions" is not the barman's business.
-    expect(text).not.toContain('no onions');
+    // Not the burger's allergens: the cola's own (none here).
+    expect(text).not.toContain('SESAME');
+  });
+
+  it('gives the combo drink its own line: quantity, part of, the line note, its own allergens', () => {
+    const combo: TicketOrder = {
+      ...order,
+      notes: null,
+      items: [{
+        quantity: 2, menu_item_name: 'Chicken Burger Combo', notes: 'lemonade without ice', station: 'kitchen',
+        allergens: ['gluten', 'egg'],
+        components: [
+          { slot_label: 'Burger', item_id: 'chicken', name: 'Chicken Burger', station: 'kitchen' },
+          { slot_label: 'Drink', item_id: 'lemonade', name: 'Strawberry Lemonade', station: 'bar', allergens: ['sulphites'] },
+        ],
+      }],
+    };
+    const lines = buildTicket(combo, { paperWidth: 80, station: 'bar' });
+    const at = (kind: string) => lines.filter((l) => l.kind === kind).map((l) => l.text.trim());
+    expect(at('item')).toEqual(['2 x Strawberry Lemonade']);
+    expect(at('part-of')).toEqual(['(part of Chicken Burger Combo)']);
+    // A guest writes one note for the whole combo; the bar must see it.
+    expect(at('note')).toEqual(['! lemonade without ice']);
+    expect(at('allergen')).toEqual(['ALLERGENS: SULPHITES']);
+    expect(at('component')).toEqual([]);
+    // In that order, under the line.
+    expect(lines.map((l) => l.kind).filter((k) => ['item', 'part-of', 'note', 'allergen'].includes(String(k))))
+      .toEqual(['item', 'part-of', 'note', 'allergen']);
+
+    // The kitchen keeps the combo whole, drink marked as the bar's, burger's allergens.
+    const kitchenText = ticketToText(buildTicket(combo, { paperWidth: 80, station: 'kitchen' }));
+    expect(kitchenText).toContain('2 x Chicken Burger Combo');
+    expect(kitchenText).toContain('+ Drink: Strawberry Lemonade [BAR]');
+    expect(kitchenText).toContain('ALLERGENS: GLUTEN, EGG');
+    expect(kitchenText).not.toContain('SULPHITES');
+    expect(kitchenText).not.toContain('part of');
+  });
+
+  it('a combo with nothing for the bar leaves the bar ticket empty', () => {
+    const food: TicketOrder = {
+      ...order,
+      items: [{
+        quantity: 1, menu_item_name: 'Kids menu', notes: null, station: 'kitchen',
+        components: [{ slot_label: 'Side', name: 'Pomfrit', station: 'kitchen' }],
+      }],
+    };
+    expect(ticketIsEmpty(food, 'bar')).toBe(true);
+    expect(ticketIsEmpty(food, 'kitchen')).toBe(false);
+  });
+
+  it('a combo-only order still has a bar ticket', () => {
+    const comboOnly: TicketOrder = { ...order, items: [order.items[0]] };
+    expect(ticketIsEmpty(comboOnly, 'bar')).toBe(false);
+    expect(ticketToText(buildTicket(comboOnly, { station: 'bar' }))).toContain('2 x Coca-Cola');
   });
 
   it('ignores rows without components', () => {
@@ -109,6 +161,35 @@ describe('combos', () => {
     expect(() => buildTicket(plain, { station: 'bar' })).not.toThrow();
     expect(ticketIsEmpty(plain, 'kitchen')).toBe(true);
     expect(ticketIsEmpty(plain, 'bar')).toBe(false);
+  });
+});
+
+describe('part allergens', () => {
+  const items: TicketOrder['items'] = [
+    {
+      quantity: 1, menu_item_name: 'Combo', station: 'kitchen',
+      components: [
+        { name: 'Burger', item_id: 'b', station: 'kitchen' },
+        { name: 'Lemonade', item_id: 'l', station: 'bar' },
+        { name: 'Old row without an id', station: 'bar' },
+      ],
+    },
+    { quantity: 1, menu_item_name: 'Espresso', station: 'bar' },
+    { quantity: 1, menu_item_name: 'Combo again', station: 'kitchen', components: [{ name: 'Lemonade', item_id: 'l', station: 'bar' }] },
+  ];
+
+  it('knows which menu items to look up, once each', () => {
+    expect(partItemIds(items)).toEqual(['b', 'l']);
+    expect(partItemIds([{ components: null }, {}])).toEqual([]);
+  });
+
+  it('attaches what was found and leaves the rest alone', () => {
+    const out = withPartAllergens(items, { l: ['sulphites'], b: null });
+    expect(out[0].components?.map((c) => c.allergens)).toEqual([null, ['sulphites'], undefined]);
+    expect(out[1]).toBe(items[1]);
+    expect(out[2].components?.[0].allergens).toEqual(['sulphites']);
+    // The input is not mutated.
+    expect(items[0].components?.[1].allergens).toBeUndefined();
   });
 });
 
@@ -161,6 +242,36 @@ describe('printer languages', () => {
     expect(has(star, [0x1b, 0x35])).toBe(true);
     expect(has(star, [0x1b, 0x69, 0x01, 0x01])).toBe(true);
     expect(Array.from(star).every((b) => b < 0x80)).toBe(true);
+  });
+
+  it('every language carries the combo drink on the bar ticket, its allergens banded', () => {
+    const [burger, ...rest] = order.items;
+    const withIds = [{
+      ...burger,
+      components: burger.components?.map((c) => ({ ...c, item_id: c.name === 'Coca-Cola' ? 'coke-id' : 'fries-id' })),
+    }, ...rest];
+    const withAllergens: TicketOrder = { ...order, items: withPartAllergens(withIds, { 'coke-id': ['caffeine'] }) };
+    const lines = buildTicket(withAllergens, { paperWidth: 58, station: 'bar' });
+    const text = ticketToText(lines);
+    expect(text).toContain('2 x Coca-Cola');
+    expect(text).toContain('(part of La Soul');
+    expect(text).toContain('ALLERGENS: CAFFEINE');
+
+    const ascii = (s: string) => Array.from(s, (c) => c.charCodeAt(0));
+    const esc = ticketToEscPos(lines);
+    expect(new TextDecoder().decode(esc)).toContain('2 x Coca-Cola');
+    expect(has(esc, [0x1d, 0x42, 0x01, ...ascii('  ALLERGENS: CAFFEINE')])).toBe(true); // GS B 1, then the band
+
+    const star = ticketToStarPrnt(lines);
+    expect(new TextDecoder().decode(star)).toContain('2 x Coca-Cola');
+    expect(has(star, [0x1b, 0x34, ...ascii('  ALLERGENS: CAFFEINE')])).toBe(true); // ESC 4, then the band
+
+    const xml = ticketToEposXml(lines);
+    expect(new DOMParser().parseFromString(xml, 'application/xml').getElementsByTagName('parsererror')).toHaveLength(0);
+    expect(xml).toMatch(/reverse="true"[^>]*>\s*ALLERGENS: CAFFEINE/);
+    expect(xml).toContain('(part of La Soul');
+
+    for (const line of lines) expect(line.text.length, line.text).toBeLessThanOrEqual(line.size === 2 ? 16 : 32);
   });
 
   it('ePOS-Print XML is well-formed, escaped, and bands the notes', () => {

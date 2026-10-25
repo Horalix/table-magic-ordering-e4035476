@@ -52,7 +52,9 @@ const backend: CloudPrintBackend = {
 
   // Read live at print time rather than from the payload queued with the
   // ticket: a reprint should show the order as it is now, and `*` picks up
-  // newer columns (order_items.components) without this file changing.
+  // newer columns (order_items.components) without this file changing. The
+  // shared layout turns a combo part made at the printer's station into its
+  // own line, the same rule enqueue_order_ticket uses for the payload.
   loadOrder: async (orderId): Promise<TicketOrder | null> => {
     const { data, error } = await admin
       .from("orders")
@@ -101,6 +103,19 @@ const backend: CloudPrintBackend = {
       tip_amount: order.tip_amount == null ? null : Number(order.tip_amount),
       items,
     };
+  },
+
+  // A combo part's own allergens. order_items.components stores the part's
+  // name and station but not its allergens; the shared handler asks for them
+  // and bands them on the part's line (ticket-layout.ts, withPartAllergens).
+  partAllergens: async (itemIds) => {
+    const { data, error } = await admin.from("menu_items").select("id, allergens").in("id", itemIds);
+    if (error) throw new Error(`menu_items: ${error.message}`);
+    const out: Record<string, string[] | null> = {};
+    for (const row of (Array.isArray(data) ? data : []).map(rec)) {
+      if (typeof row.id === "string") out[row.id] = Array.isArray(row.allergens) ? (row.allergens as string[]) : null;
+    }
+    return out;
   },
 
   settings: async () => {
