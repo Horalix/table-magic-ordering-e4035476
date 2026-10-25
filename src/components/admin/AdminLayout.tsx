@@ -10,6 +10,7 @@ import {
 import { toast } from 'sonner';
 import { springPill } from '@/lib/motion';
 import { useStaffDocument } from '@/components/staff/useStaffDocument';
+import { useLearningHeartbeat } from '@/hooks/useLearningHeartbeat';
 import type { User } from '@supabase/supabase-js';
 
 // Grouped so the sidebar reads as a hierarchy, not a flat list.
@@ -61,6 +62,7 @@ const AdminLayout = () => {
 
   // English, left-to-right, whatever a guest last picked on this device.
   useStaffDocument();
+  useLearningHeartbeat();
 
   useEffect(() => {
     let cancelled = false;
