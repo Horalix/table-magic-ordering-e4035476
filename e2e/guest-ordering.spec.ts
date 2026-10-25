@@ -20,9 +20,20 @@ test.describe('menu and discovery', () => {
     await page.goto('/menu');
     await page.getByRole('heading', { level: 2, name: /Food|Hrana/ }).click();
 
-    await expect(page).toHaveURL(/\/menu\/food/);
+    await expect(page).toHaveURL(/\/menu\/lasoul\/food/);
     await expect(page.getByRole('heading', { level: 2, name: /Burgers|Burgeri/ })).toBeVisible();
     await expect(page.getByText('La Soul Burger').first()).toBeVisible();
+  });
+
+  // Each restaurant's menu has its own address; the old ones still lead there.
+  test('the old menu addresses lead to La Soul’s menu, keeping the table and section', async ({ page }) => {
+    await page.goto('/menu?table=7');
+    await expect(page).toHaveURL(/\/menu\/lasoul\?table=7$/);
+    await page.goto('/menu/food?section=burgers');
+    await expect(page).toHaveURL(/\/menu\/lasoul\/food\?section=burgers$/);
+    await expect(page.getByRole('heading', { level: 2, name: /Burgers|Burgeri/ })).toBeVisible();
+    await page.goto('/menu/italiaverde');
+    await expect(page.getByRole('link', { name: /Back to Menu|Nazad na meni/ })).toBeVisible();
   });
 
   // Printed QR codes and links from the old menu site land on a section.
@@ -136,7 +147,7 @@ test.describe('menu and discovery', () => {
     await page.goBack();
 
     await expect(sheet).toBeHidden();
-    await expect(page).toHaveURL(/\/menu\/food/);
+    await expect(page).toHaveURL(/\/menu\/lasoul\/food/);
     await expect(page.getByRole('heading', { level: 2, name: /Burgers|Burgeri/ })).toBeVisible();
   });
 
@@ -188,7 +199,7 @@ test.describe('adding to the order', () => {
     await expect(page.locator('[data-sonner-toast]')).toHaveCount(0);
     // Closing by Add took the sheet's history entry back out: Back now leaves
     // the page as it normally would, instead of re-closing a sheet.
-    await expect(page).toHaveURL(/\/menu\/food/);
+    await expect(page).toHaveURL(/\/menu\/lasoul\/food/);
   });
 });
 

@@ -102,7 +102,7 @@ test.describe('accessibility basics', () => {
     await expect(dialog).toBeVisible();
     await page.goBack();
     await expect(dialog).toHaveCount(0);
-    await expect(page).toHaveURL(/\/menu\/food/);
+    await expect(page).toHaveURL(/\/menu\/lasoul\/food/);
   });
 
   test('with reduced motion an add still says what happened', async ({ page }) => {
