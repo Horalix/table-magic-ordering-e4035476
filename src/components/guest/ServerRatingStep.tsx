@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { useT } from '@/lib/i18n';
+import { PRESS_SCALE_ICON } from '@/lib/motion';
 
 interface ServerRatingStepProps {
   waiterName?: string | null;
@@ -40,7 +41,7 @@ const ServerRatingStep = ({ waiterName, onSubmit, onSkip }: ServerRatingStepProp
         {[1, 2, 3, 4, 5].map((star) => (
           <motion.button
             key={star}
-            whileTap={{ scale: 0.9 }}
+            whileTap={{ scale: PRESS_SCALE_ICON }}
             whileHover={{ scale: 1.1 }}
             onMouseEnter={() => setHover(star)}
             onMouseLeave={() => setHover(0)}

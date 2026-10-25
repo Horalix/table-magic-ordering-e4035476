@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
-import { Phone, MapPin, ChevronRight, QrCode, RefreshCw } from 'lucide-react';
+import { Phone, MapPin, ChevronRight, QrCode, RefreshCw, BadgeCheck } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import CallWaiterButton from '@/components/guest/CallWaiterButton';
@@ -17,7 +17,7 @@ import {
 import { useT, useLanguageStore, getLocalizedName } from '@/lib/i18n';
 import { useSessionHeartbeat } from '@/hooks/useSessionHeartbeat';
 import { useSessionGuard } from '@/hooks/useSessionGuard';
-import { staggerContainer, fadeUp } from '@/lib/motion';
+import { staggerContainer, fadeUp, duration, easeEnter, PRESS_SCALE } from '@/lib/motion';
 import { menuHref } from '@/lib/menu-sections';
 import InstallPrompt from '@/components/guest/InstallPrompt';
 import RecentOrdersRow from '@/components/guest/RecentOrdersRow';
@@ -163,7 +163,7 @@ const GuestMenu = () => {
       <motion.header
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
-        transition={{ duration: 0.35 }}
+        transition={{ duration: duration.base, ease: easeEnter }}
         className="hero-depth relative overflow-hidden px-5 pt-[max(1.25rem,env(safe-area-inset-top))] pb-9"
         style={{ backgroundColor: 'hsl(140, 12%, 53%)' }}
       >
@@ -194,13 +194,21 @@ const GuestMenu = () => {
           <LanguageSelector variant="hero" />
         </div>
 
+        {/* The first question many guests have, answered before they ask it. */}
+        <p
+
+          className="relative z-10 mt-3 inline-flex items-center gap-1.5 rounded-full bg-white/15 px-3 py-1 text-[11px] font-sans font-semibold text-white"
+        >
+          <BadgeCheck className="w-3.5 h-3.5" aria-hidden /> {t('halal_promise')}
+        </p>
+
         {/* Row two is the table: where you are, and the one thing you can ask of it. */}
         {(table && hasSession) && (
           <div className="relative z-10 mt-5 flex items-center justify-between gap-2">
             <motion.button
               initial={{ opacity: 0, y: 4 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.15, duration: 0.25 }}
+              transition={{ duration: duration.base, ease: easeEnter }}
               onClick={onChangeTable}
               className="px-4 min-h-[40px] rounded-full border border-white/25 bg-white/10 text-xs font-sans font-medium text-white tracking-wide rtl:tracking-normal hover:bg-white/20 transition-colors"
               title={t('not_your_table')}
@@ -213,7 +221,7 @@ const GuestMenu = () => {
       </motion.header>
 
       <motion.main
-        variants={staggerContainer(0.06, 0.1)}
+        variants={staggerContainer()}
         initial="hidden"
         animate="show"
         className="flex-1 bg-background px-5 pt-5 pb-36 space-y-4 -mt-5 rounded-t-3xl relative z-10"
@@ -253,7 +261,7 @@ const GuestMenu = () => {
               <motion.button
                 key={cat.id}
                 variants={fadeUp}
-                whileTap={{ scale: 0.98 }}
+                whileTap={{ scale: PRESS_SCALE }}
                 onClick={() => openCategory(cat.name)}
                 className="relative block w-full aspect-[16/9] overflow-hidden rounded-2xl bg-muted text-start shadow-sm tap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
               >

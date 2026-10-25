@@ -19,6 +19,7 @@ const TableNumberEntry = lazy(() => import("./pages/TableNumberEntry"));
 const Trust = lazy(() => import("./pages/Trust"));
 const PageTransition = lazy(() => import("./components/PageTransition"));
 const TablePresence = lazy(() => import("./components/guest/TablePresence"));
+const FlyToCart = lazy(() => import("./components/guest/FlyToCart"));
 const AdminLogin = lazy(() => import("./pages/AdminLogin"));
 const AdminLayout = lazy(() => import("./components/admin/AdminLayout"));
 const AdminDashboard = lazy(() => import("./pages/admin/AdminDashboard"));
@@ -75,6 +76,8 @@ const App = () => (
     <TooltipProvider>
       <Toaster />
       <Sonner />
+      {/* Add-to-order flights; see src/lib/cart-fx.ts. */}
+      <Suspense fallback={null}><FlyToCart /></Suspense>
       <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
       <LocaleShell>
         <Suspense fallback={null}>

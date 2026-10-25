@@ -4,7 +4,7 @@ import { UserPlus } from 'lucide-react';
 import { useCartStore } from '@/lib/cart-store';
 import { Button } from '@/components/ui/button';
 import { useT } from '@/lib/i18n';
-import { springSoft, fade } from '@/lib/motion';
+import { springSheet, exitTransition, fade } from '@/lib/motion';
 import { listPendingJoinRequests, resolveJoinRequest } from '@/lib/guest-api';
 
 interface JoinReq {
@@ -67,8 +67,8 @@ const TablePresence = () => {
           <motion.div
             initial={{ y: '100%' }}
             animate={{ y: 0 }}
-            exit={{ y: '100%' }}
-            transition={springSoft}
+            exit={{ y: '100%', transition: exitTransition }}
+            transition={springSheet}
             className="relative w-full max-w-sm bg-card rounded-t-3xl sm:rounded-3xl p-6 text-center shadow-lux-lg"
           >
             <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">

@@ -100,6 +100,57 @@ test.describe('menu and discovery', () => {
     await expect(page.getByText('07:00–07:01').first()).toBeVisible();
   });
 
+  test('list prices are bare, said once as KM, and the sheet keeps KM on Add', async ({ page }) => {
+    await seedSession(page);
+    await page.goto('/menu/food');
+
+    const row = page.locator('#section-burgers');
+    await expect(row.getByText('La Soul Burger').first()).toBeVisible();
+    // "18", not "18.00 KM", on every row…
+    await expect(row.getByText('18', { exact: true })).toBeVisible();
+    await expect(row.getByText(/KM/)).toHaveCount(0);
+    // …because the header says it once.
+    await expect(page.getByText(/^Prices in KM$|^Cijene su u KM$/)).toBeVisible();
+
+    // Anything the guest is about to pay keeps the currency.
+    await page.getByText('La Soul Burger').first().click();
+    await expect(page.getByRole('dialog').getByRole('button', { name: /Add to order · 18\.00\sKM|Dodaj u narudžbu · 18,00\sKM/ })).toBeVisible();
+  });
+
+  test('search results are bare too, with the note under them', async ({ page }) => {
+    await page.goto('/menu');
+    await page.getByRole('searchbox').fill('burger');
+
+    await expect(page.getByText('La Soul Burger')).toBeVisible();
+    await expect(page.getByText('18', { exact: true })).toBeVisible();
+    await expect(page.getByText(/^Prices in KM$|^Cijene su u KM$/)).toBeVisible();
+  });
+
+  test('Back closes the dish sheet and stays on the category page', async ({ page }) => {
+    await page.goto('/menu/food');
+    await page.getByText('La Soul Burger').first().click();
+    const sheet = page.getByRole('dialog');
+    await expect(sheet).toBeVisible();
+
+    // Android's Back gesture is a history pop.
+    await page.goBack();
+
+    await expect(sheet).toBeHidden();
+    await expect(page).toHaveURL(/\/menu\/food/);
+    await expect(page.getByRole('heading', { level: 2, name: /Burgers|Burgeri/ })).toBeVisible();
+  });
+
+  test('the note field waits behind a link', async ({ page }) => {
+    await seedSession(page);
+    await page.goto('/menu/food');
+    await page.getByText('La Soul Burger').first().click();
+    const sheet = page.getByRole('dialog');
+
+    await expect(sheet.getByRole('textbox')).toHaveCount(0);
+    await sheet.getByRole('button', { name: /Add a note|Dodajte napomenu/ }).click();
+    await expect(sheet.getByRole('textbox')).toBeFocused();
+  });
+
   test('the page never scrolls sideways on a phone', async ({ page }) => {
     await page.goto('/menu');
     const overflow = await page.evaluate(
@@ -109,12 +160,46 @@ test.describe('menu and discovery', () => {
   });
 });
 
+test.describe('adding to the order', () => {
+  test.beforeEach(async ({ page }) => {
+    await seedSession(page);
+  });
+
+  test('an add lands in the cart bar as "+ name", with no toast', async ({ page }) => {
+    await page.goto('/menu/food');
+    await page.getByRole('button', { name: /Add La Soul Burger to order|Dodaj La Soul Burger u narudžbu/ }).click();
+
+    // The bar's label swaps to the dish for a moment instead of a toast up top.
+    await expect(page.getByRole('button', { name: /\+ La Soul Burger/ })).toBeVisible();
+    await expect(page.locator('[data-sonner-toast]')).toHaveCount(0);
+    // Screen readers hear the count and the total.
+    await expect(page.getByRole('status').filter({ hasText: /Added La Soul Burger\. 1 item, 18\.00\sKM|Dodano: La Soul Burger/ })).toHaveCount(1);
+    // Then it goes back to saying what it does.
+    await expect(page.getByRole('button', { name: /View Order|Pogledaj narudžbu/ })).toBeVisible({ timeout: 4_000 });
+  });
+
+  test('adding from the dish sheet closes it and lands in the cart bar', async ({ page }) => {
+    await page.goto('/menu/food');
+    await page.getByText('La Soul Burger').first().click();
+    await page.getByRole('dialog').getByRole('button', { name: /Add to order|Dodaj u narudžbu/ }).click();
+
+    await expect(page.getByRole('dialog')).toBeHidden();
+    await expect(page.getByRole('button', { name: /\+ La Soul Burger/ })).toBeVisible();
+    await expect(page.locator('[data-sonner-toast]')).toHaveCount(0);
+    // Closing by Add took the sheet's history entry back out: Back now leaves
+    // the page as it normally would, instead of re-closing a sheet.
+    await expect(page).toHaveURL(/\/menu\/food/);
+  });
+});
+
 test.describe('checkout', () => {
   test.beforeEach(async ({ page }) => {
     await seedSession(page);
   });
 
-  test('pay at the table sends the order and confirms it', async ({ page, state }) => {
+  test('pay at the table sends the order in one tap and confirms it', async ({ page, state }) => {
+    // Online card is off in the stub flags (and in the e2e build).
+    expect(state.serviceStatus.online_card_enabled).toBe(false);
     await page.goto('/menu');
     await page.getByRole('searchbox').fill('burger');
     await page.getByRole('button', { name: /Add to order|Dodaj/ }).first().click();
@@ -122,14 +207,12 @@ test.describe('checkout', () => {
     await page.goto('/cart');
     await page.getByRole('button', { name: /Send order|Pošalji narudžbu/ }).click();
 
-    // No tip is preselected — "No tip" must be a real, reachable choice.
-    await expect(page.getByRole('button', { name: /No tip|Bez napojnice/ })).toBeVisible();
-
-    await page.getByRole('button', { name: /^Cash|Gotovina/ }).click();
-
+    // No sheet, no tip before service: straight to the confirmation.
     await expect(page.getByRole('heading', { name: /Order sent to the kitchen|Narudžba je poslana/i })).toBeVisible();
+    await expect(page.getByRole('button', { name: /No tip|Bez napojnice/ })).toHaveCount(0);
     // The confirmation must show the real amount, not a cleared cart's zero.
     await expect(page.getByText('18.00 KM')).toBeVisible();
+    await expect(page.getByText(/We’ll bring it to table 7|za sto 7/)).toBeVisible();
     expect(state.placedOrders).toHaveLength(1);
     expect(state.placedOrders[0].payment_method).toBe('cash');
     // Nothing has been paid yet, and the screen must not say otherwise.
@@ -139,17 +222,20 @@ test.describe('checkout', () => {
     expect(state.placedOrders[0].client_order_id).toMatch(/^[0-9a-f-]{36}$|^c_/);
   });
 
-  test('card at the table is a distinct choice from cash', async ({ page, state }) => {
+  test('the one-tap send never opens the payment sheet', async ({ page, state }) => {
     await page.goto('/menu');
     await page.getByRole('searchbox').fill('burger');
     await page.getByRole('button', { name: /Add to order|Dodaj/ }).first().click();
 
     await page.goto('/cart');
+    const placed = page.waitForRequest('**/rpc/guest_place_order');
     await page.getByRole('button', { name: /Send order|Pošalji narudžbu/ }).click();
-    await page.getByRole('button', { name: /Card at the table|Kartica za stolom/ }).click();
+    await placed;
 
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: /^Cash|Gotovina|Card at the table|Kartica za stolom/ })).toHaveCount(0);
     await expect(page.getByRole('heading', { name: /Order sent to the kitchen|Narudžba je poslana/i })).toBeVisible();
-    expect(state.placedOrders[0].payment_method).toBe('pos_terminal');
+    expect(state.placedOrders).toHaveLength(1);
   });
 
   test('online card is not offered while the restaurant has it switched off', async ({ page }) => {

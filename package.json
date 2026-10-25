@@ -17,7 +17,10 @@
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "scan:secrets": "node scripts/scan-secrets.mjs",
-    "verify": "npm run typecheck && npm run lint && npm run test && npm run scan:secrets && npm run build"
+    "verify": "npm run typecheck && npm run lint && npm run test && npm run scan:secrets && npm run build",
+    "photos:export": "node scripts/menu-photos.mjs export",
+    "photos:import": "node scripts/menu-photos.mjs import",
+    "photos:prompts": "node scripts/photo-prompts.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

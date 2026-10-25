@@ -87,18 +87,30 @@ test.describe('accessibility basics', () => {
     expect(tooSmall).toEqual([]);
   });
 
-  test('the checkout sheet is announced as a dialog and closes on Escape', async ({ page }) => {
-    await page.goto('/menu');
-    await page.getByRole('searchbox').fill('burger');
-    await page.getByRole('button', { name: /Add to order|Dodaj/ }).first().click();
-    await page.goto('/cart');
-
-    await page.getByRole('button', { name: /Send order|Pošalji narudžbu/ }).click();
+  // The checkout sheet only opens when online card payment is on, which the
+  // e2e build never enables; its dialog behaviour is covered in
+  // CheckoutSheet.test.tsx. The dish sheet uses the same useDialog contract.
+  test('the dish sheet is announced as a dialog and closes on Escape and on Back', async ({ page }) => {
+    await page.goto('/menu/food');
+    await page.getByText('La Soul Burger').first().click();
     const dialog = page.getByRole('dialog');
     await expect(dialog).toBeVisible();
-
     await page.keyboard.press('Escape');
     await expect(dialog).toHaveCount(0);
+
+    await page.getByText('La Soul Burger').first().click();
+    await expect(dialog).toBeVisible();
+    await page.goBack();
+    await expect(dialog).toHaveCount(0);
+    await expect(page).toHaveURL(/\/menu\/food/);
+  });
+
+  test('with reduced motion an add still says what happened', async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await page.goto('/menu/food');
+    await page.getByRole('button', { name: /Add La Soul Burger to order|Dodaj La Soul Burger u narudžbu/ }).click();
+    await expect(page.getByRole('button', { name: /\+ La Soul Burger/ })).toBeVisible();
+    await expect(page.locator('[data-sonner-toast]')).toHaveCount(0);
   });
 
   test('reduced motion is respected', async ({ page }) => {

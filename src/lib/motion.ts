@@ -26,53 +26,112 @@ export function prefersReducedMotion(): boolean {
 }
 
 /* ---- Easings ---------------------------------------------------------- */
-// The signature ease already used ad-hoc across the app (decelerate-out).
-export const easeLux = [0.16, 1, 0.3, 1] as const;
-export const easeOutSoft = [0.22, 0.61, 0.36, 1] as const;
+/** Things arriving: fast out of the gate, long gentle settle. */
+export const easeEnter = [0.16, 1, 0.3, 1] as const;
+/** Things leaving: slow start, accelerating out of the way. */
+export const easeExit = [0.3, 0, 0.8, 0.15] as const;
+/** Things moving from one place on screen to another. */
+export const easeStandard = [0.2, 0, 0, 1] as const;
+/** The original name of `easeEnter`, kept for existing imports. */
+export const easeLux = easeEnter;
 
 /* ---- Durations (seconds) --------------------------------------------- */
 export const duration = {
-  fast: 0.16,
-  base: 0.24,
+  /** Press feedback (scale on tap). */
+  press: 0.1,
+  fast: 0.15,
+  /** A number rolling in a stepper. */
+  roll: 0.16,
+  /** Route-level page fade. */
+  page: 0.18,
+  /** Anything leaving the screen. Exits are always quicker than entrances. */
+  exit: 0.2,
+  base: 0.25,
+  /** An SVG stroke drawing itself (the order-sent check). */
+  draw: 0.3,
   slow: 0.36,
+  /** The one moment per flow that deserves attention (order sent, add-to-cart flight). */
+  emphasis: 0.45,
 } as const;
 
+/* ---- Stagger ---------------------------------------------------------- */
+/** Delay between list items. */
+export const STAGGER = 0.03;
+/** Only the first few items of a list animate; the rest are simply there. */
+export const STAGGER_MAX = 6;
+
 /* ---- Springs ---------------------------------------------------------- */
-// Soft: bottom sheets / modal surfaces (matches MenuItemDetail today).
-export const springSoft: Transition = { type: 'spring', damping: 28, stiffness: 300 };
-// Snappy: floating bars / pills that should settle quickly (CartBar today).
-export const springSnappy: Transition = { type: 'spring', damping: 22, stiffness: 320 };
-// Pill: layout-shared active indicators (tabs, nav).
-export const springPill: Transition = { type: 'spring', stiffness: 500, damping: 38 };
+// visualDuration + bounce: the time the eye perceives, independent of mass.
+/** Bottom sheets and modal surfaces. */
+export const springSheet: Transition = { type: 'spring', visualDuration: 0.35, bounce: 0.1 };
+/** Floating bars, badges, small things that should settle quickly. */
+export const springSnappy: Transition = { type: 'spring', visualDuration: 0.25, bounce: 0.12 };
+/** Layout-shared active indicators (tabs, section pills). */
+export const springPill: Transition = { type: 'spring', visualDuration: 0.2, bounce: 0 };
+/** Success confirmations: the only place a visible bounce is welcome. */
+export const springSuccess: Transition = { type: 'spring', visualDuration: 0.4, bounce: 0.3 };
+/** The original name of `springSheet`, kept for existing imports. */
+export const springSoft = springSheet;
+
+/* ---- Exit / press helpers -------------------------------------------- */
+export const exitTransition: Transition = { duration: duration.exit, ease: easeExit };
+/** Press scale for cards and full-width bars. */
+export const PRESS_SCALE = 0.97;
+/** Press scale for icon buttons. */
+export const PRESS_SCALE_ICON = 0.92;
+
+/**
+ * Whether a sheet dragged down by `offsetY` px at `velocityY` px/s should
+ * close: past a quarter of its height, or flicked.
+ */
+export function shouldDismissSheet(offsetY: number, velocityY: number, sheetHeight: number): boolean {
+  if (velocityY > 500) return true;
+  return sheetHeight > 0 && offsetY > sheetHeight * 0.25;
+}
 
 /* ---- Reusable variants ----------------------------------------------- */
 export const fadeUp: Variants = {
   hidden: { opacity: 0, y: 8 },
-  show: { opacity: 1, y: 0, transition: { duration: duration.base, ease: easeLux } },
+  show: { opacity: 1, y: 0, transition: { duration: duration.base, ease: easeEnter } },
+};
+
+/**
+ * `fadeUp` for long lists: pass the index as `custom`. Items past
+ * STAGGER_MAX start visible, so a 40-line tab never takes a second to appear.
+ * Use without a stagger container (the delay is computed here).
+ */
+export const fadeUpCapped: Variants = {
+  hidden: (i: number = 0) => (i >= STAGGER_MAX ? { opacity: 1, y: 0 } : { opacity: 0, y: 8 }),
+  show: (i: number = 0) => ({
+    opacity: 1,
+    y: 0,
+    transition: { duration: duration.base, ease: easeEnter, delay: Math.min(i, STAGGER_MAX - 1) * STAGGER },
+  }),
 };
 
 export const scaleIn: Variants = {
   hidden: { opacity: 0, scale: 0.96 },
-  show: { opacity: 1, scale: 1, transition: { duration: duration.base, ease: easeLux } },
+  show: { opacity: 1, scale: 1, transition: { duration: duration.base, ease: easeEnter } },
 };
 
 export const sheetUp: Variants = {
   hidden: { y: '100%' },
-  show: { y: 0, transition: springSoft },
-  exit: { y: '100%', transition: { duration: duration.base, ease: easeLux } },
+  show: { y: 0, transition: springSheet },
+  exit: { y: '100%', transition: exitTransition },
 };
 
 export const fade: Variants = {
   hidden: { opacity: 0 },
-  show: { opacity: 1, transition: { duration: duration.base, ease: easeLux } },
-  exit: { opacity: 0, transition: { duration: duration.fast, ease: easeLux } },
+  show: { opacity: 1, transition: { duration: duration.base, ease: easeEnter } },
+  exit: { opacity: 0, transition: exitTransition },
 };
 
 /**
  * Container that staggers its direct `fadeUp`/`scaleIn` children.
  * Pair with `variants={staggerContainer()}` + `initial="hidden" animate="show"`.
+ * For lists longer than STAGGER_MAX use `fadeUpCapped` instead.
  */
-export const staggerContainer = (stagger = 0.04, delayChildren = 0): Variants => ({
+export const staggerContainer = (stagger = STAGGER, delayChildren = 0): Variants => ({
   hidden: {},
   show: { transition: { staggerChildren: stagger, delayChildren } },
 });
@@ -83,7 +142,7 @@ export const staggerContainer = (stagger = 0.04, delayChildren = 0): Variants =>
  * Refined, not gimmicky — used for totals and admin stats. Honors
  * `prefers-reduced-motion` by snapping straight to the target.
  */
-export function useCountUp(value: number, ms = 600): number {
+export function useCountUp(value: number, ms = 300): number {
   const [display, setDisplay] = useState(value);
   const fromRef = useRef(value);
   const rafRef = useRef<number>();

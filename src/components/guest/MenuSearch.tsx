@@ -4,9 +4,10 @@ import { Search, X, Plus } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useT, useLanguageStore, getLocalizedName, getLocalizedDescription, useI18n } from '@/lib/i18n';
 import { useCartStore } from '@/lib/cart-store';
-import { toast } from 'sonner';
 import SmartImage from '@/components/ui/SmartImage';
 import { track } from '@/lib/analytics';
+import { haptic } from '@/lib/haptics';
+import { emitAdd } from '@/lib/cart-fx';
 
 interface SearchRow {
   id: string;
@@ -43,7 +44,7 @@ interface Props {
  */
 const MenuSearch = ({ canOrder }: Props) => {
   const t = useT();
-  const { price } = useI18n();
+  const { priceBare } = useI18n();
   const locale = useLanguageStore((s) => s.locale);
   const addItem = useCartStore((s) => s.addItem);
   const [query, setQuery] = useState('');
@@ -114,6 +115,7 @@ const MenuSearch = ({ canOrder }: Props) => {
               <p className="text-sm text-muted-foreground font-sans mt-1">{t('search_no_results_sub')}</p>
             </div>
           ) : (
+            <>
             <ul className="space-y-2">
               {grouped.map((item) => {
                 const name = getLocalizedName(item, locale);
@@ -139,15 +141,16 @@ const MenuSearch = ({ canOrder }: Props) => {
                       )}
                     </div>
                     <div className="text-end shrink-0">
-                      <p className="text-sm font-sans font-semibold text-foreground tabular-nums">{price(item.price)}</p>
+                      <p className="text-sm font-sans font-semibold text-foreground tabular-nums">{priceBare(item.price)}</p>
                       {!item.is_available ? (
                         <span className="text-xs font-sans font-medium text-muted-foreground">{t('sold_out')}</span>
                       ) : canOrder ? (
                         <button
-                          onClick={() => {
+                          onClick={(e) => {
                             addItem({ id: item.id, menuItemId: item.id, name: item.name, name_bs: item.name_bs, name_ar: item.name_ar, price: item.price, image_url: item.image_url || undefined });
                             track('item_added', { item_id: item.id, source: 'search' });
-                            toast.success(t('added_to_order'), { description: name, duration: 1400 });
+                            emitAdd({ id: item.id, imageUrl: item.image_url, from: e.currentTarget.getBoundingClientRect(), name });
+                            haptic('add');
                           }}
                           aria-label={`${t('add_to_order')} — ${name}`}
                           className="mt-1 h-11 px-3.5 rounded-full bg-primary text-primary-foreground font-sans font-semibold text-xs inline-flex items-center gap-1 hover:bg-sage-dark transition-colors tap-sm"
@@ -160,6 +163,9 @@ const MenuSearch = ({ canOrder }: Props) => {
                 );
               })}
             </ul>
+              {/* Prices here are bare ("12,50"); the currency is said once. */}
+              <p className="pt-2 px-1 text-xs font-sans text-muted-foreground">{t('prices_in_km')}</p>
+            </>
           )}
         </div>
       )}

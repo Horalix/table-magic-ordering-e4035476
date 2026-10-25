@@ -10,6 +10,8 @@ import {
 } from '@/lib/recommendations';
 import { allergensToAvoid, useDietFilterStore } from '@/lib/dietary';
 import { track } from '@/lib/analytics';
+import { useCartFx } from '@/lib/cart-fx';
+import { haptic } from '@/lib/haptics';
 
 interface Props {
   placement: Placement;
@@ -47,7 +49,7 @@ const CartSuggestion = ({ placement, disabled, forItemIds }: Props) => {
   const t = useT();
   const { price } = useI18n();
   const locale = useLanguageStore((s) => s.locale);
-  const { items, addItem } = useCartStore();
+  const { items, addItem, updateQuantity } = useCartStore();
   const sessionId = useCartStore((st) => st.sessionId);
   const sessionToken = useCartStore((st) => st.sessionToken);
   /*
@@ -63,20 +65,41 @@ const CartSuggestion = ({ placement, disabled, forItemIds }: Props) => {
   const avoid = useMemo(() => allergensToAvoid(activeDiets), [activeDiets]);
   const dietKey = useMemo(() => [...activeDiets].sort(), [activeDiets]);
 
+  /** Portions per dish in the cart: lines of one dish with different notes are one dish here. */
+  const portions = useMemo(() => {
+    const byDish = new Map<string, number>();
+    for (const line of items) {
+      const id = line.menuItemId ?? line.id;
+      byDish.set(id, (byDish.get(id) ?? 0) + line.quantity);
+    }
+    return byDish;
+  }, [items]);
+
   const cartIds = useMemo(() => {
-    const inCart = items.map((i) => i.menuItemId ?? i.id).sort();
+    const inCart = [...portions.keys()].sort();
     if (!forItemIds) return inCart;
     return placement === 'item' ? pairingContextIds(forItemIds, inCart) : forItemIds;
-  }, [forItemIds, items, placement]);
+  }, [forItemIds, portions, placement]);
+
+  /*
+   * Where the whole order is in view (the cart, the running tab), the server
+   * is told how many of each dish, so three burgers can be offered three
+   * drinks. The dish page asks about one dish, so it sends none.
+   */
+  const cartQuantities = useMemo(
+    () => (placement === 'cart' || placement === 'tab' ? cartIds.map((id) => portions.get(id) ?? 1) : undefined),
+    [cartIds, placement, portions],
+  );
 
   // Everything the suggestion depends on except the dismissals.
-  const contextKey = JSON.stringify([placement, locale, cartIds, sessionId, avoid, dietKey]);
+  const contextKey = JSON.stringify([placement, locale, cartIds, cartQuantities, sessionId, avoid, dietKey]);
 
   const { data, isPlaceholderData } = useQuery({
     queryKey: ['recommendations', contextKey, dismissed.join(',')],
     queryFn: () => fetchRecommendations(sessionId!, sessionToken!, cartIds, placement, locale, 4, avoid, {
       requireTags: dietKey,
       excludeItemIds: dismissed,
+      cartQuantities,
     }),
     staleTime: 5 * 60 * 1000,
     enabled: !disabled && !!sessionId && !!sessionToken,
@@ -170,7 +193,13 @@ const CartSuggestion = ({ placement, disabled, forItemIds }: Props) => {
     ? items.find((line) => (line.menuItemId ?? line.id) === primary.source_item_id)
     : undefined;
 
-  const accept = () => {
+  /**
+   * How many the card offers. Above one only for drinks for the table, and
+   * only as the server worked it out; "Just one" is always a tap away.
+   */
+  const offered = Math.max(1, primary.suggested_quantity ?? 1);
+
+  const accept = (quantity: number, from?: DOMRect) => {
     addItem({
       id: primary.id,
       menuItemId: primary.id,
@@ -188,17 +217,26 @@ const CartSuggestion = ({ placement, disabled, forItemIds }: Props) => {
         decisionId: isDecisionChoice ? decisionId : null,
       },
     });
+    if (quantity > 1) {
+      // The server never suggests what is already in the cart, so this is a
+      // new line of one; set it to what the guest chose.
+      const line = useCartStore.getState().items
+        .find((l) => (l.menuItemId ?? l.id) === primary.id && !l.notes);
+      if (line) updateQuantity(line.id, quantity);
+    }
     track('suggestion_accepted', {
       placement,
       decision_id: isDecisionChoice ? decisionId : null,
       item_id: primary.id,
       source_item_id: primary.source_item_id ?? null,
       type: primary.recommendation_type,
+      quantity,
+      offered_quantity: offered,
     });
     setAccepted((prev) => [...prev, primary.id]);
-    if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
-      try { navigator.vibrate(8); } catch { /* not supported */ }
-    }
+    // Same feedback as every other add: the dish flies into the order.
+    useCartFx.getState().emitAdd({ id: primary.id, imageUrl: primary.image_url, from, name });
+    haptic('add');
   };
 
   const dismiss = () => {
@@ -212,10 +250,12 @@ const CartSuggestion = ({ placement, disabled, forItemIds }: Props) => {
     if (sessionId) dismissSuggestion(sessionId, primary.id);
   };
 
+  const headline = t(headlineKeyFor(placement, primary.recommendation_type, offered));
+
   return (
-    <section className="px-4 pt-5" aria-label={t(headlineKeyFor(placement, primary.recommendation_type))}>
+    <section className="px-4 pt-5" aria-label={headline}>
       <p className="text-xs uppercase tracking-wide rtl:tracking-normal text-muted-foreground font-sans mb-2">
-        {t(headlineKeyFor(placement, primary.recommendation_type))}
+        {headline}
       </p>
 
       <div ref={cardRef} className="card-lux p-3 flex items-center gap-3">
@@ -230,24 +270,48 @@ const CartSuggestion = ({ placement, disabled, forItemIds }: Props) => {
           fallbackText={name}
         />
         <div className="flex-1 min-w-0">
-          <p className="font-serif text-base font-semibold text-foreground leading-tight truncate">{name}</p>
-          <p className="text-sm font-sans font-semibold text-foreground tabular-nums mt-0.5">
-            {price(primary.price)}
+          <p className="font-serif text-base font-semibold text-foreground leading-tight truncate">
+            {offered > 1 ? t('reco_qty_name', { n: offered, name }) : name}
           </p>
+          <p className="text-sm font-sans font-semibold text-foreground tabular-nums mt-0.5">
+            {offered > 1
+              ? t('reco_qty_price', { total: price(primary.price * offered), each: price(primary.price) })
+              : price(primary.price)}
+          </p>
+          {offered > 1 && (
+            <p className="text-xs font-sans text-muted-foreground mt-0.5">
+              {t('reco_one_each')}{' · '}
+              <button
+                onClick={(e) => accept(1, e.currentTarget.getBoundingClientRect())}
+                aria-label={t('add_item_to_order', { name })}
+                className="underline underline-offset-2 text-foreground hover:text-primary transition-colors"
+              >
+                {t('reco_just_one')}
+              </button>
+            </p>
+          )}
           {/* Only what the data supports, and only when it supports it. */}
-          {evidence?.kind === 'quantified' && (
+          {offered === 1 && evidence?.kind === 'quantified' && (
             <p className="text-[11px] font-sans text-muted-foreground mt-0.5">
               {t('ordered_by_share', { pct: evidence.percent })}
             </p>
           )}
-          {evidence?.kind === 'qualitative' && (
+          {offered === 1 && evidence?.kind === 'qualitative' && (
             <p className="text-[11px] font-sans text-muted-foreground mt-0.5">
               {t('often_ordered_with')}
             </p>
           )}
-          {evidence?.kind !== 'quantified' && evidence?.kind !== 'qualitative' && sourceLine && (
+          {offered === 1 && evidence?.kind !== 'quantified' && evidence?.kind !== 'qualitative' && sourceLine && (
             <p className="text-xs font-sans text-muted-foreground mt-0.5 truncate">
               {t('goes_with_your', { name: getLocalizedName(sourceLine, locale) })}
+            </p>
+          )}
+          {/* Popularity is claimed only when popularity is why it is here:
+              the server labels a dish `popular` only from paid orders at
+              this time of day. */}
+          {offered === 1 && !evidence?.kind && !sourceLine && primary.recommendation_type === 'popular' && (
+            <p className="text-xs font-sans text-muted-foreground mt-0.5 truncate">
+              {t('reco_popular_now')}
             </p>
           )}
         </div>
@@ -260,11 +324,11 @@ const CartSuggestion = ({ placement, disabled, forItemIds }: Props) => {
             <X className="w-4 h-4" aria-hidden />
           </button>
           <button
-            onClick={accept}
-            aria-label={t('add_item_to_order', { name })}
+            onClick={(e) => accept(offered, e.currentTarget.getBoundingClientRect())}
+            aria-label={offered > 1 ? t('reco_add_n_item', { n: offered, name }) : t('add_item_to_order', { name })}
             className="h-11 px-4 rounded-full bg-primary text-primary-foreground font-sans font-semibold text-sm inline-flex items-center gap-1.5 hover:bg-sage-dark transition-colors tap-sm"
           >
-            <Plus className="w-4 h-4" aria-hidden /> {t('add')}
+            <Plus className="w-4 h-4" aria-hidden /> {offered > 1 ? t('reco_add_n', { n: offered }) : t('add')}
           </button>
         </div>
       </div>

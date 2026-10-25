@@ -101,7 +101,7 @@ const Trust = () => {
         <div className="h-px bg-gradient-to-r from-transparent via-primary/20 to-transparent" />
       </div>
 
-      <motion.div variants={staggerContainer(0.05)} initial="hidden" animate="show" className="px-4 pt-5 space-y-3 max-w-xl mx-auto">
+      <motion.div variants={staggerContainer()} initial="hidden" animate="show" className="px-4 pt-5 space-y-3 max-w-xl mx-auto">
         <motion.p variants={fadeUp} className="text-sm text-muted-foreground font-sans px-1 leading-relaxed">{pick(INTRO, locale)}</motion.p>
 
         {SECTIONS.map((sec, i) => (

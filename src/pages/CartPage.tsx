@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Minus, Plus, Trash2, Send, ShoppingBag, UtensilsCrossed, Undo2, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, Minus, Plus, Trash2, Send, ShoppingBag, UtensilsCrossed, Undo2, AlertTriangle, Loader2 } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useCartStore, type CartItem } from '@/lib/cart-store';
@@ -11,7 +11,9 @@ import { supabase } from '@/integrations/supabase/client';
 import { unorderableReason } from '@/lib/availability';
 import { useSessionHeartbeat } from '@/hooks/useSessionHeartbeat';
 import SmartImage from '@/components/ui/SmartImage';
-import { staggerContainer, fadeUp, useCountUp } from '@/lib/motion';
+import { fadeUpCapped, useCountUp } from '@/lib/motion';
+import { haptic } from '@/lib/haptics';
+import RollingNumber from '@/components/guest/RollingNumber';
 import CheckoutSheet from '@/components/guest/CheckoutSheet';
 import MonriCardForm from '@/components/guest/MonriCardForm';
 import PaymentStatus, { type PaymentPhase } from '@/components/guest/PaymentStatus';
@@ -32,7 +34,7 @@ const CartPage = () => {
   const [searchParams] = useSearchParams();
   const {
     items, total, updateQuantity, removeItem, addItem, clearCart,
-    sessionId, sessionToken, guestName, setLastOrderTime, itemCount,
+    sessionId, sessionToken, guestName, setLastOrderTime, itemCount, tableNumber,
     pendingPayment, setPendingPayment,
     beginCheckout, finishCheckout, unavailableIds, setUnavailable, reprice,
   } = useCartStore();
@@ -49,6 +51,8 @@ const CartPage = () => {
    */
   const [resolvedOrder, setResolvedOrder] = useState<{
     code: string; total: number; payLater: boolean;
+    /** For the ETA on the confirmation. */
+    orderId?: string;
     /** Waiting for the waiter to confirm before it prints. */
     held?: boolean;
   } | null>(null);
@@ -79,6 +83,14 @@ const CartPage = () => {
   // Card disabled AND pay-at-table switched off leaves the checkout with no
   // buttons at all; say so here instead of opening an empty sheet.
   const noWayToPay = !!service && !onlineCardEnabled && !payAtTableEnabled;
+  /**
+   * With no online card payment there is nothing to choose before the meal:
+   * "Send order" sends it, to be paid at the table, in one tap. The waiter
+   * records cash or terminal when the guest actually pays. ('cash' is the
+   * pay-at-table method the server already knows.) Until the service status
+   * has loaded, a build that can take cards still opens the sheet.
+   */
+  const oneTapSend = service ? !onlineCardEnabled && payAtTableEnabled : !cardPaymentEnabledInBuild;
 
   // Prices are frozen when a line is added and the cart is persisted, so a
   // guest whose visit spans a menu update would see one total and be charged
@@ -138,7 +150,7 @@ const CartPage = () => {
       );
       if (cancelled) return;
 
-      setResolvedOrder({ code: pendingPayment.orderCode, total: pendingPayment.total, payLater: false });
+      setResolvedOrder({ code: pendingPayment.orderCode, total: pendingPayment.total, payLater: false, orderId: pendingPayment.orderId });
 
       if (result.outcome === 'received') {
         clearCart();
@@ -244,6 +256,7 @@ const CartPage = () => {
       setCheckoutOpen(false);
       setResolvedOrder({
         code: order.order_code, total: Number(order.total), payLater: !order.awaiting_payment, held: order.held === true,
+        orderId: order.order_id,
       });
 
       if (order.awaiting_payment) {
@@ -318,7 +331,7 @@ const CartPage = () => {
       if (res.status === 'released') {
         clearCart();
         setPendingPayment(null);
-        setResolvedOrder({ code: pendingPayment.orderCode, total: pendingPayment.total, payLater: true });
+        setResolvedOrder({ code: pendingPayment.orderCode, total: pendingPayment.total, payLater: true, orderId: pendingPayment.orderId });
         setPhase('received');
         track('payment_switched_to_table', { method: 'cash' });
         return;
@@ -360,6 +373,8 @@ const CartPage = () => {
         released={phase === 'received'}
         payLater={phase === 'received' && resolvedOrder?.payLater === true}
         held={resolvedOrder?.held === true}
+        orderId={resolvedOrder?.orderId ?? pendingPayment?.orderId ?? null}
+        tableNumber={table ?? (tableNumber ? String(tableNumber) : null)}
         busy={recovering}
         onRetryCard={phase === 'failed' && onlineCardEnabled && pendingPayment
           ? () => openCardForm(pendingPayment.orderId)
@@ -444,16 +459,15 @@ const CartPage = () => {
           {/* One panel, one row per dish: the order reads like a receipt, not
               a stack of separate cards. */}
           <motion.div
-            variants={staggerContainer(0.04)}
             initial="hidden"
             animate="show"
             className="mx-4 mt-4 rounded-3xl bg-card border border-border/70 shadow-[0_1px_2px_rgba(20,30,25,0.04)] divide-y divide-border/70 overflow-hidden"
           >
-            {items.map((item) => {
+            {items.map((item, index) => {
               const blocked = unavailableIds.includes(item.menuItemId ?? item.id);
               const name = getLocalizedName(item, locale);
               return (
-              <motion.div key={item.id} variants={fadeUp} className={`flex items-center gap-3.5 px-4 py-3.5 ${blocked ? 'bg-destructive/5' : ''}`}>
+              <motion.div key={item.id} variants={fadeUpCapped} custom={index} className={`flex items-center gap-3.5 px-4 py-3.5 ${blocked ? 'bg-destructive/5' : ''}`}>
                 {item.image_url ? (
                   <SmartImage
                     src={item.image_url}
@@ -484,18 +498,18 @@ const CartPage = () => {
                     as lowering, and Undo is right there if it was a slip. */}
                 <div className="flex items-center h-10 rounded-full border border-border bg-background shrink-0">
                   <button
-                    onClick={() => (item.quantity <= 1 ? removeWithUndo(item) : updateQuantity(item.id, item.quantity - 1))}
+                    onClick={() => { haptic('tick'); if (item.quantity <= 1) removeWithUndo(item); else updateQuantity(item.id, item.quantity - 1); }}
                     aria-label={item.quantity <= 1 ? t('remove_item', { name }) : t('decrease_item', { name })}
-                    className="w-10 h-10 rounded-full flex items-center justify-center text-foreground active:scale-90 transition-transform"
+                    className="w-10 h-10 rounded-full flex items-center justify-center text-foreground tap-sm"
                   >
                     {item.quantity <= 1 ? <Trash2 className="w-4 h-4 text-muted-foreground" aria-hidden /> : <Minus className="w-4 h-4" aria-hidden />}
                   </button>
-                  <span className="min-w-[16px] text-[15px] font-sans font-semibold text-center tabular-nums" aria-live="polite">{item.quantity}</span>
+                  <span className="min-w-[16px] text-[15px] font-sans font-semibold text-center tabular-nums" aria-live="polite"><RollingNumber value={item.quantity} /></span>
                   <button
-                    onClick={() => updateQuantity(item.id, item.quantity + 1)}
+                    onClick={() => { haptic('tick'); updateQuantity(item.id, item.quantity + 1); }}
                     disabled={item.quantity >= 10 || blocked}
                     aria-label={t('increase_item', { name })}
-                    className="w-10 h-10 rounded-full flex items-center justify-center text-primary active:scale-90 transition-transform disabled:opacity-40"
+                    className="w-10 h-10 rounded-full flex items-center justify-center text-primary tap-sm disabled:opacity-40"
                   >
                     <Plus className="w-4 h-4" strokeWidth={2.5} aria-hidden />
                   </button>
@@ -530,15 +544,25 @@ const CartPage = () => {
               <p className="text-sm text-muted-foreground text-center mb-2 font-sans">{t('no_payment_options')}</p>
             )}
             <Button
-              onClick={() => { setCheckoutOpen(true); track('checkout_opened', { item_count: itemCount() }); }}
-              disabled={!sessionId || !sessionToken || orderingPaused || noWayToPay || blockedLines.length > 0}
+              onClick={() => {
+                track('checkout_opened', { item_count: itemCount(), one_tap: oneTapSend });
+                if (oneTapSend) void placeOrder('cash', 0);
+                else setCheckoutOpen(true);
+              }}
+              disabled={!sessionId || !sessionToken || orderingPaused || noWayToPay || blockedLines.length > 0 || submitting !== null}
+              aria-busy={submitting !== null}
               className="w-full h-14 rounded-2xl bg-primary text-primary-foreground font-sans font-semibold text-base hover:bg-sage-dark hover:shadow-lg hover:shadow-primary/30 disabled:opacity-50 transition-all duration-200 tap"
             >
               <span className="flex items-center gap-2">
-                <Send className="w-4 h-4 rtl:-scale-x-100" aria-hidden />
+                {submitting !== null && oneTapSend
+                  ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden />
+                  : <Send className="w-4 h-4 rtl:-scale-x-100" aria-hidden />}
                 {t('send_order')} · {price(displayTotal)}
               </span>
             </Button>
+            {oneTapSend && !noWayToPay && (
+              <p className="text-xs text-muted-foreground text-center mt-2 font-sans">{t('pay_waiter_when_ready')}</p>
+            )}
             {(!sessionId || !sessionToken) && (
               <p className="text-xs text-destructive text-center mt-2 font-sans">{t('scan_qr_again')}</p>
             )}

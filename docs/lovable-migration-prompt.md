@@ -2,8 +2,8 @@
 
 Copy everything between the rules into Lovable. Nothing else needs to be said.
 
-Last updated: **25 October 2026**, for twenty-nine migrations from
-`20260804090300` to `20261025140000`.
+Last updated: **25 October 2026**, for thirty-one migrations from
+`20260804090300` to `20261025160000`.
 
 > **What is actually live.** Checked against the production API on
 > 24 October 2026: functions from the 3 August batch exist (for example
@@ -42,7 +42,7 @@ whose search text is not in the live function — send it back before going on.
 
 ## Step 2 — the prompt
 
-> **Task: apply twenty-nine existing migration files to Supabase, in order. Do not
+> **Task: apply thirty-one existing migration files to Supabase, in order. Do not
 > write any new SQL.**
 >
 > These files are already in the repository under `supabase/migrations/`:
@@ -77,6 +77,8 @@ whose search text is not in the live function — send it back before going on.
 > 20261025126000_management_insights.sql
 > 20261025127000_prep_history.sql
 > 20261025140000_menu_translations.sql
+> 20261025150000_menu_corrections.sql
+> 20261025160000_reco_profit.sql
 > ```
 >
 > **Run each file, in that exact order, exactly as written.** Read each one from
@@ -181,6 +183,17 @@ whose search text is not in the live function — send it back before going on.
   they were on sale; history before that is estimated, and the page says so.
   The Daily Report shows tomorrow's prep list only once it beats "same as last
   week" on the last six same weekdays.
+- **Suggestions a waiter would make** (`20261025160000`): a suggestion
+  must belong before it is ranked — one of your pairings, or something that
+  goes with what is on the table (a drink with food, fries with a burger, a
+  salad with pasta, coffee or dessert after the meal, a croissant with a
+  morning coffee). Never a second main or side, no cake before 11:00, no
+  croissant in the evening, nothing sweet with a frappé; if nothing belongs
+  the card stays empty. Among what belongs, the one that earns most leads.
+  A table of three with burgers and no drinks is offered three drinks, with
+  "Just one" a tap away; the running tab offers a drink while the food is
+  coming. The notice `house pairings: N moved towards margin` says how many
+  seeded pairings were nudged (only ones you have not edited).
 - **House pairings**: suggestions start from what a La Soul waiter would
   offer (fries with a burger, churros with a hot chocolate, an espresso after
   dessert) as curated rules you can edit or switch off in Admin → Service &

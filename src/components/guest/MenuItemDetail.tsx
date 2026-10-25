@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { motion, useDragControls } from 'framer-motion';
+import React, { useEffect, useRef, useState } from 'react';
+import { motion, useDragControls, useReducedMotion, useIsPresent, MotionConfig, type Variants } from 'framer-motion';
 import { X, Plus, Minus, QrCode, UtensilsCrossed, AlertTriangle, Clock } from 'lucide-react';
 import { useCartStore } from '@/lib/cart-store';
 import { useDialog } from '@/lib/use-dialog';
@@ -8,11 +8,21 @@ import { Textarea } from '@/components/ui/textarea';
 import SmartImage from '@/components/ui/SmartImage';
 import CartSuggestion from '@/components/guest/CartSuggestion';
 import { useT, useLanguageStore, getLocalizedName, getLocalizedDescription, useI18n } from '@/lib/i18n';
-import { sheetUp, fade } from '@/lib/motion';
+import { sheetUp, fade, duration, easeEnter, exitTransition, springSheet, shouldDismissSheet } from '@/lib/motion';
 import { track } from '@/lib/analytics';
+import { haptic } from '@/lib/haptics';
+import { emitAdd } from '@/lib/cart-fx';
+import RollingNumber from '@/components/guest/RollingNumber';
 
 /** The server keeps the first 500 characters of a note; say so up front. */
 const NOTE_MAX = 500;
+
+/** Reduced motion: no slide, no shared photo, just a short fade. */
+const reducedFade: Variants = {
+  hidden: { opacity: 0 },
+  show: { opacity: 1, transition: { duration: duration.fast, ease: easeEnter } },
+  exit: { opacity: 0, transition: { ...exitTransition, duration: duration.fast } },
+};
 
 interface Props {
   item: {
@@ -32,6 +42,8 @@ interface Props {
     prep_minutes?: number | null;
   };
   onClose: () => void;
+  /** Called just before onClose when the sheet closes because of Add. */
+  onAdded?: () => void;
   canOrder?: boolean;
   /**
    * Why this item cannot be ordered right now ("Sold out", "From 07:00"), or
@@ -41,11 +53,20 @@ interface Props {
   unavailableLabel?: string | null;
 }
 
-const MenuItemDetail = ({ item, onClose, canOrder = true, unavailableLabel = null }: Props) => {
-  // role=dialog, focus trap, Escape, scroll lock, focus restore.
-  const { dialogProps } = useDialog({ onClose, labelledBy: 'item-detail-title' });
+const MenuItemDetail = ({ item, onClose, onAdded, canOrder = true, unavailableLabel = null }: Props) => {
+  // role=dialog, focus trap, Escape, scroll lock, focus restore, Back closes.
+  // Released as soon as the sheet starts leaving, not when its exit animation
+  // ends: the history entry, scroll lock and focus go back right away.
+  const isPresent = useIsPresent();
+  const { dialogProps, panelRef } = useDialog({ open: isPresent, onClose, labelledBy: 'item-detail-title' });
   const [quantity, setQuantity] = useState(1);
   const [notes, setNotes] = useState('');
+  // Most dishes are ordered as they come, so the note field waits behind a link.
+  const [notesOpen, setNotesOpen] = useState(false);
+  const notesRef = useRef<HTMLTextAreaElement>(null);
+  const addRef = useRef<HTMLButtonElement>(null);
+  const reduced = useReducedMotion();
+  useEffect(() => { if (notesOpen) notesRef.current?.focus(); }, [notesOpen]);
   const { addItem } = useCartStore();
   const t = useT();
   const { price, list } = useI18n();
@@ -73,12 +94,18 @@ const MenuItemDetail = ({ item, onClose, canOrder = true, unavailableLabel = nul
     }
     // Only ids and counts — the note itself is never sent to analytics.
     track('item_added', { item_id: item.id, quantity, source: 'detail', has_note: notes.trim().length > 0 });
+    haptic('add');
+    // The sheet gets out of the way first (200 ms on the exit curve), then
+    // the photo flies from the Add button into the bag.
+    const from = addRef.current?.getBoundingClientRect() ?? null;
+    onAdded?.();
     onClose();
+    emitAdd({ id: item.id, imageUrl: item.image_url, from, name: localizedName, delayMs: duration.exit * 1000 });
   };
 
   return (
     <motion.div
-      variants={fade}
+      variants={reduced ? reducedFade : fade}
       initial="hidden"
       animate="show"
       exit="exit"
@@ -97,7 +124,8 @@ const MenuItemDetail = ({ item, onClose, canOrder = true, unavailableLabel = nul
         dragConstraints={{ top: 0, bottom: 0 }}
         dragElastic={0.2}
         onDragEnd={(_, info) => {
-          if (info.offset.y > 120 || info.velocity.y > 600) onClose();
+          // A quarter of the sheet, or a flick.
+          if (shouldDismissSheet(info.offset.y, info.velocity.y, panelRef.current?.offsetHeight ?? 0)) onClose();
         }}
         className="relative w-full max-w-lg bg-card rounded-t-3xl sm:rounded-3xl overflow-hidden focus:outline-none max-h-[92dvh] flex flex-col"
         {...dialogProps}
@@ -121,6 +149,8 @@ const MenuItemDetail = ({ item, onClose, canOrder = true, unavailableLabel = nul
 
         <div className="flex-1 overflow-y-auto overscroll-contain">
           {item.image_url ? (
+            // Grows out of the list photo (CategoryPage's OpeningPhoto) on the sheet spring.
+            <MotionConfig transition={springSheet}>
             <SmartImage
               src={item.image_url}
               id={item.id}
@@ -135,6 +165,7 @@ const MenuItemDetail = ({ item, onClose, canOrder = true, unavailableLabel = nul
               priority
               wrapperClassName={`w-full h-56 ${unavailableLabel ? 'opacity-60 saturate-50' : ''}`}
             />
+            </MotionConfig>
           ) : (
             <div className="w-full h-40 bg-primary/5 flex items-center justify-center">
               <UtensilsCrossed className="w-10 h-10 text-primary/20" aria-hidden />
@@ -179,17 +210,30 @@ const MenuItemDetail = ({ item, onClose, canOrder = true, unavailableLabel = nul
 
             {orderable && (
               <>
-                <div className="mt-5">
-                  <label htmlFor="item-notes" className="text-sm font-sans font-medium text-foreground">{t('special_requests')}</label>
-                  <Textarea
-                    id="item-notes"
-                    placeholder={t('special_requests_placeholder')}
-                    value={notes}
-                    maxLength={NOTE_MAX}
-                    onChange={(e) => setNotes(e.target.value)}
-                    className="mt-1.5 bg-muted border-border text-base"
-                    rows={2}
-                  />
+                <div className="mt-4">
+                  {notesOpen || notes ? (
+                    <>
+                      <label htmlFor="item-notes" className="text-sm font-sans font-medium text-foreground">{t('special_requests')}</label>
+                      <Textarea
+                        id="item-notes"
+                        ref={notesRef}
+                        placeholder={t('special_requests_placeholder')}
+                        value={notes}
+                        maxLength={NOTE_MAX}
+                        onChange={(e) => setNotes(e.target.value)}
+                        className="mt-1.5 bg-muted border-border text-base"
+                        rows={2}
+                      />
+                    </>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setNotesOpen(true)}
+                      className="min-h-[44px] -ms-1 px-1 text-sm font-sans font-semibold text-primary underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
+                    >
+                      {t('add_a_note')}
+                    </button>
+                  )}
                 </div>
 
                 {/*
@@ -220,16 +264,16 @@ const MenuItemDetail = ({ item, onClose, canOrder = true, unavailableLabel = nul
           <div className="shrink-0 border-t border-border/60 bg-card px-6 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] flex items-center gap-3">
             <div className="flex items-center gap-1 bg-muted rounded-full p-0.5" role="group" aria-label={localizedName}>
               <button
-                onClick={() => setQuantity(Math.max(1, quantity - 1))}
+                onClick={() => { haptic('tick'); setQuantity(Math.max(1, quantity - 1)); }}
                 aria-label={t('decrease_item', { name: localizedName })}
                 disabled={quantity <= 1}
                 className="w-11 h-11 rounded-full flex items-center justify-center hover:bg-card transition-colors tap-sm disabled:opacity-40"
               >
                 <Minus className="w-4 h-4" aria-hidden />
               </button>
-              <span className="text-base font-sans font-semibold w-6 text-center tabular-nums" aria-live="polite">{quantity}</span>
+              <span className="text-base font-sans font-semibold w-6 text-center tabular-nums" aria-live="polite"><RollingNumber value={quantity} /></span>
               <button
-                onClick={() => setQuantity(Math.min(10, quantity + 1))}
+                onClick={() => { haptic('tick'); setQuantity(Math.min(10, quantity + 1)); }}
                 aria-label={t('increase_item', { name: localizedName })}
                 className="w-11 h-11 rounded-full flex items-center justify-center hover:bg-card transition-colors tap-sm disabled:opacity-40"
                 disabled={quantity >= 10}
@@ -239,6 +283,7 @@ const MenuItemDetail = ({ item, onClose, canOrder = true, unavailableLabel = nul
             </div>
 
             <Button
+              ref={addRef}
               onClick={handleAdd}
               className="flex-1 h-12 rounded-full bg-primary text-primary-foreground font-sans font-semibold text-base hover:bg-sage-dark hover:shadow-lg hover:shadow-primary/30 transition-all duration-200 tap tabular-nums"
             >

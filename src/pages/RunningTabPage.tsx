@@ -51,7 +51,16 @@ const RunningTabPage = () => {
       return getGuestTab(sessionId, sessionToken);
     },
     enabled: !!sessionId && !!sessionToken,
-    refetchInterval: 10000,
+    // Polling, not realtime: guests are anonymous and RLS gives anon no read
+    // access to orders, so postgres_changes would never deliver to them. Fast
+    // while something is still on its way (a stage change shows within ~5 s),
+    // slow once everything has been served.
+    refetchInterval: (query) => {
+      const live = (query.state.data?.orders ?? []).some(
+        (o) => !['served', 'cancelled', 'awaiting_payment', 'payment_failed'].includes(o.status),
+      );
+      return live ? 5_000 : 20_000;
+    },
   });
 
   const orders = tab?.orders ?? [];
@@ -222,7 +231,14 @@ const RunningTabPage = () => {
                   <Clock className="w-3.5 h-3.5" aria-hidden /> {t('waiting_for_waiter_confirm')}
                 </p>
               )}
-              <OrderStatusTimeline status={activeOrder.status} />
+              {/* "Received" began when the order was placed; later stages have no
+                  server timestamp in guest_get_tab, so the timeline times them
+                  from when this screen saw them change. */}
+              <OrderStatusTimeline
+                status={activeOrder.status}
+                changedAt={['pending', 'confirmed'].includes(activeOrder.status) ? activeOrder.created_at : null}
+                held={activeOrder.held === true}
+              />
             </motion.section>
           )}
 
@@ -230,6 +246,9 @@ const RunningTabPage = () => {
               only while the guest has not asked for the bill — offering coffee
               to someone who is trying to leave is the definition of pushy. */}
           {afterMeal && !billRequested && <CartSuggestion placement="after_meal" />}
+          {/* While the food is coming: a drink for a table that ordered none.
+              The server shows nothing once the table has a drink. */}
+          {!afterMeal && !billRequested && <CartSuggestion placement="tab" />}
 
           {/* Every order, newest first, as one receipt. */}
           <motion.section

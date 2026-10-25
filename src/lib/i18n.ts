@@ -161,6 +161,7 @@ const translations: Record<string, Record<Locale, string>> = {
   'diet_gluten_free': { en: 'Gluten-free', bs: 'Bez glutena', ar: 'خالٍ من الغلوتين' },
   'diet_dairy_free': { en: 'Dairy-free', bs: 'Bez mliječnih proizvoda', ar: 'خالٍ من الألبان' },
   'diet_contains_nuts': { en: 'Contains nuts', bs: 'Sadrži orašaste plodove', ar: 'يحتوي على مكسرات' },
+  'halal_promise': { en: '100% halal · alcohol-free', bs: '100% halal · bez alkohola', ar: '100% حلال · بدون كحول' },
   'diet_halal': { en: 'Halal', bs: 'Halal', ar: 'حلال' },
   'sold_out': { en: 'Sold out', bs: 'Trenutno nema', ar: 'نفدت الكمية' },
 
@@ -378,6 +379,17 @@ const translations: Record<string, Record<Locale, string>> = {
   'ordered_by_share': { en: '{pct}% of tables order this too', bs: '{pct}% stolova naručuje i ovo', ar: '{pct}% من الطاولات تطلب هذا أيضًا' },
   'no_thanks': { en: 'No thanks', bs: 'Ne, hvala', ar: 'لا، شكراً' },
   'add': { en: 'Add', bs: 'Dodaj', ar: 'أضف' },
+  // Drinks for the table, and the running tab while the table waits.
+  'reco_for_the_table': { en: 'For the table', bs: 'Za cijeli sto', ar: 'للطاولة كلها' },
+  'reco_while_you_wait': { en: 'Something to drink while you wait?', bs: 'Nešto za piće dok čekate?', ar: 'هل ترغبون بمشروب أثناء الانتظار؟' },
+  'reco_qty_name': { en: '{n} × {name}', bs: '{n} × {name}', ar: '{n} × {name}' },
+  'reco_qty_price': { en: '{total} · {each} each', bs: '{total} · {each} po komadu', ar: '{total} · {each} للواحد' },
+  'reco_one_each': { en: 'One for each of you', bs: 'Po jedno za svakoga od Vas', ar: 'واحد لكل شخص منكم' },
+  'reco_add_n': { en: 'Add {n}', bs: 'Dodaj {n}', ar: 'أضف {n}' },
+  'reco_add_n_item': { en: 'Add {n} × {name} to order', bs: 'Dodaj {n} × {name} u narudžbu', ar: 'أضف {n} × {name} إلى الطلب' },
+  'reco_just_one': { en: 'Just one', bs: 'Samo jedno', ar: 'واحد فقط' },
+  // Only when the dish is among the most ordered at this time of day (three paid orders at least).
+  'reco_popular_now': { en: 'Popular at this time of day', bs: 'Rado se naručuje u ovo doba dana', ar: 'يُطلب كثيرًا في هذا الوقت من اليوم' },
 
   // ---- Cart controls (screen-reader labels)
   'remove': { en: 'Remove', bs: 'Ukloni', ar: 'إزالة' },
@@ -432,6 +444,19 @@ const translations: Record<string, Record<Locale, string>> = {
   'allergen_celery': { en: 'Celery', bs: 'Celer', ar: 'الكرفس' },
   'allergen_mustard': { en: 'Mustard', bs: 'Senf (gorušica)', ar: 'الخردل' },
   'allergen_sulphites': { en: 'Sulphites', bs: 'Sulfiti', ar: 'الكبريتيت' },
+  // ---- Motion & feedback pass (add-to-order, tracking, notes, tip)
+  'cart_added_name': { en: '+ {name}', bs: '+ {name}', ar: '+ {name}' },
+  'cart_added_status': { en: 'Added {name}. {items}, {total}.', bs: 'Dodano: {name}. {items}, {total}.', ar: 'تمت إضافة {name}. {items}، {total}.' },
+  'prices_in_km': { en: 'Prices in KM', bs: 'Cijene su u KM', ar: 'الأسعار بعملة KM' },
+  'add_a_note': { en: '+ Add a note', bs: '+ Dodajte napomenu', ar: '+ أضف ملاحظة' },
+  'tip_round_up': { en: 'Round up', bs: 'Zaokruži', ar: 'تقريب المبلغ' },
+  'tip_for_card': { en: 'Add a tip to your card payment?', bs: 'Dodati napojnicu uz plaćanje karticom?', ar: 'هل تودّ إضافة إكرامية إلى الدفع بالبطاقة؟' },
+  'or_pay_at_table': { en: 'Or pay at the table', bs: 'Ili platite za stolom', ar: 'أو ادفع على الطاولة' },
+  'bring_to_table_n': { en: 'We’ll bring it to table {n}.', bs: 'Donijet ćemo Vam narudžbu za sto {n}.', ar: 'سنُحضر طلبك إلى الطاولة {n}.' },
+  'stage_received_line': { en: 'The kitchen has your order', bs: 'Kuhinja je primila Vašu narudžbu', ar: 'وصل طلبك إلى المطبخ' },
+  'stage_preparing_line': { en: 'Being prepared now', bs: 'Upravo se priprema', ar: 'يُحضَّر الآن' },
+  'stage_ready_line': { en: 'Ready — on its way to you', bs: 'Spremno — stiže do Vas', ar: 'جاهز — في الطريق إليك' },
+  'stage_served_line': { en: 'Enjoy!', bs: 'Prijatno!', ar: 'بالهناء والشفاء!' },
 };
 
 /** Read-only view of the table, for the completeness tests. */
@@ -491,6 +516,12 @@ const plurals: Record<string, Record<Locale, PluralForms>> = {
     bs: { one: '{n} min', other: '{n} min' },
     ar: { zero: '0 دقيقة', one: 'دقيقة واحدة', two: 'دقيقتان', few: '{n} دقائق', many: '{n} دقيقة', other: '{n} دقيقة' },
   },
+  // How long ago an order changed stage. Under a minute reads "just now".
+  minutes_ago: {
+    en: { one: '{n} min ago', other: '{n} min ago' },
+    bs: { one: 'prije {n} min', other: 'prije {n} min' },
+    ar: { zero: 'الآن', one: 'منذ دقيقة', two: 'منذ دقيقتين', few: 'منذ {n} دقائق', many: 'منذ {n} دقيقة', other: 'منذ {n} دقيقة' },
+  },
 };
 
 export const pluralTable: Readonly<typeof plurals> = plurals;
@@ -536,8 +567,15 @@ const NBSP = String.fromCharCode(0xa0);
  * every language — the menu, the bill and the card terminal all print them.
  * The space is a no-break space, so the amount and KM never wrap apart.
  */
-export function formatPrice(amount: number | string, locale: Locale): string {
-  const fixed = (Number(amount) || 0).toFixed(2);
+export function formatPrice(amount: number | string, locale: Locale, opts?: { bare?: boolean }): string {
+  let fixed = (Number(amount) || 0).toFixed(2);
+  // Menu lists drop the currency (one "Prices in KM" note says it once) and
+  // whole-mark cents: "12" rather than "12.00 KM" on every row. Anything a
+  // guest pays — the sheet's Add button, the cart, the bill — keeps the full form.
+  if (opts?.bare) {
+    if (fixed.endsWith('.00')) fixed = fixed.slice(0, -3);
+    return locale === 'bs' ? fixed.replace('.', ',') : fixed;
+  }
   return `${locale === 'bs' ? fixed.replace('.', ',') : fixed}${NBSP}KM`;
 }
 
@@ -558,6 +596,8 @@ export function useI18n() {
     t: tr,
     plural: (key: string, n: number) => plural(key, n, locale),
     price: (amount: number | string) => formatPrice(amount, locale),
+    /** A list price without the currency, for menu rows and cards. */
+    priceBare: (amount: number | string) => formatPrice(amount, locale, { bare: true }),
     list: (items: string[]) => formatList(items, locale),
   }), [locale, tr]);
 }

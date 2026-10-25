@@ -1,5 +1,6 @@
 import React, { useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { PRESS_SCALE } from '@/lib/motion';
 import { Hand, Check } from 'lucide-react';
 import { useCartStore } from '@/lib/cart-store';
 import { toast } from 'sonner';
@@ -48,7 +49,7 @@ const CallWaiterButton = ({ variant = 'default' }: Props) => {
       onClick={handleCall}
       disabled={called || loading}
       aria-busy={loading}
-      whileTap={{ scale: 0.95 }}
+      whileTap={{ scale: PRESS_SCALE }}
       className={`flex items-center gap-2 px-4 py-2.5 rounded-full font-sans text-sm font-medium transition-all duration-300 ${
         called
           ? isHero

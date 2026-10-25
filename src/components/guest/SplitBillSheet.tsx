@@ -5,6 +5,8 @@ import { Button } from '@/components/ui/button';
 import { useT, useI18n } from '@/lib/i18n';
 import { useDialog } from '@/lib/use-dialog';
 import { fade, sheetUp } from '@/lib/motion';
+import { haptic } from '@/lib/haptics';
+import RollingNumber from '@/components/guest/RollingNumber';
 
 interface Props {
   open: boolean;
@@ -89,12 +91,12 @@ const SplitBillSheet = ({ open, total, orders, members, myName, billRequested, r
             {mode === 'even' ? (
               <div className="mt-5 text-center">
                 <div className="flex items-center justify-center gap-4">
-                  <button onClick={() => setN((v) => Math.max(1, v - 1))} className="w-11 h-11 rounded-full bg-muted grid place-items-center tap-sm" aria-label={t('fewer_people')}><Minus className="w-5 h-5" /></button>
+                  <button onClick={() => { haptic('tick'); setN((v) => Math.max(1, v - 1)); }} className="w-11 h-11 rounded-full bg-muted grid place-items-center tap-sm" aria-label={t('fewer_people')}><Minus className="w-5 h-5" /></button>
                   <div>
-                    <p className="font-sans text-2xl font-semibold text-foreground tabular-nums">{n}</p>
+                    <p className="font-sans text-2xl font-semibold text-foreground tabular-nums"><RollingNumber value={n} /></p>
                     <p className="text-[11px] text-muted-foreground font-sans flex items-center gap-1 justify-center"><Users className="w-3 h-3" aria-hidden />{plural('people_word', n)}</p>
                   </div>
-                  <button onClick={() => setN((v) => Math.min(20, v + 1))} className="w-11 h-11 rounded-full bg-muted grid place-items-center tap-sm" aria-label={t('more_people')}><Plus className="w-5 h-5" /></button>
+                  <button onClick={() => { haptic('tick'); setN((v) => Math.min(20, v + 1)); }} className="w-11 h-11 rounded-full bg-muted grid place-items-center tap-sm" aria-label={t('more_people')}><Plus className="w-5 h-5" /></button>
                 </div>
                 <div className="mt-5 rounded-2xl bg-primary/5 border border-primary/15 py-4">
                   <p className="text-xs uppercase tracking-wide rtl:tracking-normal text-muted-foreground font-sans">{t('each_pays')}</p>

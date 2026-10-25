@@ -22,8 +22,8 @@ test.describe('a held order, from the guest side', () => {
     await page.getByRole('button', { name: /Add to order|Dodaj/ }).first().click();
 
     await page.goto('/cart');
+    // Online card is off: Send order sends it to be paid at the table, in one tap.
     await page.getByRole('button', { name: /Send order|Pošalji narudžbu/ }).click();
-    await page.getByRole('button', { name: /^Cash|Gotovina/ }).click();
 
     await expect(page.getByRole('heading', { name: /Order received|Narudžba je primljena/i })).toBeVisible();
     await expect(page.getByText(/waiter will confirm it|konobar će je potvrditi/i)).toBeVisible();
@@ -41,8 +41,8 @@ test.describe('a held order, from the guest side', () => {
     await page.getByRole('searchbox').fill('burger');
     await page.getByRole('button', { name: /Add to order|Dodaj/ }).first().click();
     await page.goto('/cart');
+    // Online card is off: Send order sends it to be paid at the table, in one tap.
     await page.getByRole('button', { name: /Send order|Pošalji narudžbu/ }).click();
-    await page.getByRole('button', { name: /^Cash|Gotovina/ }).click();
     await expect(page.getByRole('heading', { name: /Order sent to the kitchen|Narudžba je poslana/i })).toBeVisible();
     await expect(page.getByText(/waiter will confirm it/i)).toHaveCount(0);
   });

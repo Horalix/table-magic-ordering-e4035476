@@ -185,9 +185,11 @@
   /* [UX] Respect the iOS home-indicator / notch for fixed bottom bars & sheets */
   .pb-safe { padding-bottom: calc(1.5rem + env(safe-area-inset-bottom, 0px)); }
 
-  /* [UX] Tactile tap feedback — apply to any interactive element */
+  /* [UX] Tactile tap feedback — apply to any interactive element.
+     .tap for cards and full-width bars (0.97), .tap-sm for icon buttons (0.92).
+     100 ms = the `press` duration in src/lib/motion.ts. */
   .tap {
-    @apply transition-transform duration-100 ease-out active:scale-[0.96];
+    @apply transition-transform duration-100 ease-out active:scale-[0.97];
     -webkit-tap-highlight-color: transparent;
     touch-action: manipulation;
   }
@@ -273,6 +275,11 @@
   }
   .breathe-urgent {
     --breathe-color: var(--destructive);
+  }
+  /* Guest screens: glow three times, then rest (WCAG 2.2.2 — nothing moves on
+     its own for more than five seconds). Staff screens keep the endless loop. */
+  .breathe-thrice {
+    animation-iteration-count: 3;
   }
   @keyframes breathe {
     0%, 100% { box-shadow: 0 0 0 0 hsl(var(--breathe-color) / 0.0), 0 0 0 1px hsl(var(--breathe-color) / 0.25); }

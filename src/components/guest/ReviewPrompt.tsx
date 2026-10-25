@@ -8,6 +8,8 @@ import { toast } from 'sonner';
 import { motion } from 'framer-motion';
 import ServerRatingStep from './ServerRatingStep';
 import { getWaiterForReview, submitServerRating, submitVisitRating } from '@/lib/guest-api';
+import { useBackToClose } from '@/lib/use-dialog';
+import { PRESS_SCALE_ICON } from '@/lib/motion';
 
 interface ReviewPromptProps {
   open: boolean;
@@ -26,6 +28,8 @@ const ReviewPrompt = ({ open, onClose, sessionId, sessionToken }: ReviewPromptPr
   const [rating, setRating] = useState(0);
   const [hoveredStar, setHoveredStar] = useState(0);
   const [waiter, setWaiter] = useState<{ id: string; display_name: string } | null>(null);
+  // Radix handles focus and Escape; the phone's Back button is ours to wire.
+  useBackToClose(open, onClose);
 
   useEffect(() => {
     if (!open || !sessionId || !sessionToken) return;
@@ -83,7 +87,7 @@ const ReviewPrompt = ({ open, onClose, sessionId, sessionToken }: ReviewPromptPr
               <motion.button
                 key={star}
                 whileHover={{ scale: 1.15 }}
-                whileTap={{ scale: 0.9 }}
+                whileTap={{ scale: PRESS_SCALE_ICON }}
                 onMouseEnter={() => setHoveredStar(star)}
                 onMouseLeave={() => setHoveredStar(0)}
                 onClick={() => submitOverall(star)}

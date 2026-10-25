@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
+import { duration, easeEnter } from '@/lib/motion';
 import { useCartStore } from '@/lib/cart-store';
 import { Loader2, AlertCircle, Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -220,6 +221,7 @@ const TableEntry = () => {
         <motion.div
           initial={{ opacity: 0, scale: 0.96 }}
           animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: duration.base, ease: easeEnter }}
           className="w-full max-w-sm text-center"
         >
           <div className="relative w-20 h-20 mx-auto mb-6">

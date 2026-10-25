@@ -1,9 +1,11 @@
-import React from 'react';
-import { motion } from 'framer-motion';
-import { CheckCircle2, Clock, AlertTriangle, Loader2, Hand, CreditCard, UtensilsCrossed } from 'lucide-react';
+import React, { useEffect } from 'react';
+import { motion, useReducedMotion } from 'framer-motion';
+import { Clock, AlertTriangle, Loader2, Hand, CreditCard, UtensilsCrossed } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useT } from '@/lib/i18n';
-import { prefersReducedMotion } from '@/lib/motion';
+import { duration, easeEnter, springSuccess } from '@/lib/motion';
+import { haptic } from '@/lib/haptics';
+import OrderEta from '@/components/guest/OrderEta';
 
 export type PaymentPhase =
   /** Card form is open / SDK is working. */
@@ -34,6 +36,10 @@ interface Props {
    * a normal step, never as a suspicion: nearly every one is a real guest.
    */
   held?: boolean;
+  /** The order, for its ETA once it is with the kitchen. */
+  orderId?: string | null;
+  /** Where the food is going: "We'll bring it to table 7." */
+  tableNumber?: string | null;
   onRetryCard?: () => void;
   onPayAtTable?: () => void;
   onContinue?: () => void;
@@ -53,6 +59,32 @@ const OrderCode = ({ code }: { code: string | null }) => {
 };
 
 /**
+ * The "order sent" moment: the circle springs in (0.6 → 1, the one bounce the
+ * app allows itself) and the check draws itself. Reduced motion: both simply
+ * appear.
+ */
+const SuccessMark = () => {
+  const reduced = useReducedMotion();
+  return (
+    <motion.div
+      initial={reduced ? false : { scale: 0.6, opacity: 0 }}
+      animate={{ scale: 1, opacity: 1 }}
+      transition={springSuccess}
+      className="w-16 h-16 mx-auto rounded-full bg-primary/10 grid place-items-center"
+    >
+      <svg viewBox="0 0 24 24" className="w-8 h-8 text-primary" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+        <motion.path
+          d="M5.5 12.5l4.25 4.25L18.5 7.75"
+          initial={reduced ? false : { pathLength: 0 }}
+          animate={{ pathLength: 1 }}
+          transition={{ duration: duration.draw, ease: easeEnter, delay: duration.fast }}
+        />
+      </svg>
+    </motion.div>
+  );
+};
+
+/**
  * The guest-facing payment result.
  *
  * The one rule this component exists to keep: it renders "received" only when
@@ -61,17 +93,23 @@ const OrderCode = ({ code }: { code: string | null }) => {
  * "still confirming — do not pay again", never as failure.
  */
 const PaymentStatus = ({
-  phase, orderCode, amountLabel, released, payLater, held, onRetryCard, onPayAtTable, onContinue, onTrackOrder, busy,
+  phase, orderCode, amountLabel, released, payLater, held, orderId, tableNumber, onRetryCard, onPayAtTable, onContinue, onTrackOrder, busy,
 }: Props) => {
   const t = useT();
-  const reduced = prefersReducedMotion();
+  const reduced = useReducedMotion();
+
+  // Felt, not just seen: the order arrived, or the card did not go through.
+  useEffect(() => {
+    if (phase === 'received') haptic('success');
+    else if (phase === 'failed') haptic('error');
+  }, [phase]);
 
   const shell = (children: React.ReactNode) => (
     <div className="min-h-screen bg-background flex items-center justify-center px-6">
       <motion.div
         initial={reduced ? false : { opacity: 0, y: 8 }}
         animate={reduced ? undefined : { opacity: 1, y: 0 }}
-        transition={{ duration: 0.25 }}
+        transition={{ duration: duration.base, ease: easeEnter }}
         className="text-center max-w-sm w-full"
         role="status"
         aria-live="polite"
@@ -144,12 +182,10 @@ const PaymentStatus = ({
     );
   }
 
-  // received
+  // received (including held: it reached the restaurant, the waiter confirms it)
   return shell(
     <>
-      <div className="w-16 h-16 mx-auto rounded-full bg-primary/10 grid place-items-center">
-        <CheckCircle2 className="w-8 h-8 text-primary" aria-hidden />
-      </div>
+      <SuccessMark />
       <h2 className="font-serif text-2xl font-bold text-foreground mt-5">
         {payLater && held ? t('order_received_title') : payLater ? t('order_sent_title') : t('payment_received_title')}
       </h2>
@@ -162,6 +198,13 @@ const PaymentStatus = ({
         {amountLabel}
       </p>
       <OrderCode code={orderCode} />
+      {(tableNumber || (orderId && !held)) && (
+        <div className="mt-4 flex flex-col items-center gap-1">
+          {/* Silent when the kitchen has no basis for an estimate. */}
+          {orderId && !held && <OrderEta orderId={orderId} />}
+          {tableNumber && <p className="text-sm font-sans text-muted-foreground">{t('bring_to_table_n', { n: tableNumber })}</p>}
+        </div>
+      )}
       <div className="mt-6 space-y-2.5">
         {onTrackOrder && (
           <Button onClick={onTrackOrder} className="w-full h-12 rounded-2xl bg-primary text-primary-foreground hover:bg-sage-dark font-sans font-semibold">

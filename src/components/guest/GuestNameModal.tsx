@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
+import { duration, springSuccess } from '@/lib/motion';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useT } from '@/lib/i18n';
@@ -45,7 +46,7 @@ const GuestNameModal = ({ onSubmit }: Props) => {
         <motion.div
           initial={{ scale: 0 }}
           animate={{ scale: 1 }}
-          transition={{ type: 'spring', damping: 12, stiffness: 200, delay: 0.2 }}
+          transition={{ ...springSuccess, delay: duration.exit }}
           className="w-24 h-24 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-6"
         >
           {/* Brand dark on the light dialog: the old white artwork vanished here. */}

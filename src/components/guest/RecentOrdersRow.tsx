@@ -9,6 +9,8 @@ import { useT, useLanguageStore, getLocalizedName, useI18n } from '@/lib/i18n';
 import { forgetRecentItems, getRecentItems, getUsualItem } from '@/lib/recent-items';
 import { supabase as sb } from '@/integrations/supabase/client';
 import { track } from '@/lib/analytics';
+import { haptic } from '@/lib/haptics';
+import { emitAdd } from '@/lib/cart-fx';
 
 interface LiveItem {
   id: string;
@@ -32,7 +34,7 @@ interface LiveItem {
  */
 const RecentOrdersRow = () => {
   const t = useT();
-  const { price } = useI18n();
+  const { priceBare } = useI18n();
   const locale = useLanguageStore((s) => s.locale);
   const addItem = useCartStore((s) => s.addItem);
   const clientId = useCartStore((s) => s.clientId);
@@ -100,12 +102,12 @@ const RecentOrdersRow = () => {
               {getLocalizedName(usualLive, locale)}
             </p>
             <p className="text-sm font-sans font-bold text-primary tabular-nums">
-              {price(usualLive.price)}
+              {priceBare(usualLive.price)}
             </p>
           </div>
           <button
             type="button"
-            onClick={() => {
+            onClick={(e) => {
               addItem({
                 id: usualLive.id,
                 menuItemId: usualLive.id,
@@ -116,7 +118,13 @@ const RecentOrdersRow = () => {
                 image_url: usualLive.image_url || undefined,
               });
               track('reorder_tapped', { item_id: usualLive.id, source: 'usual' });
-              toast.success(t('added_to_order'), { description: getLocalizedName(usualLive, locale) });
+              emitAdd({
+                id: usualLive.id,
+                imageUrl: usualLive.image_url,
+                from: e.currentTarget.getBoundingClientRect(),
+                name: getLocalizedName(usualLive, locale),
+              });
+              haptic('add');
             }}
             className="h-11 px-4 rounded-full bg-primary text-primary-foreground font-sans font-semibold text-sm shrink-0 tap-sm"
           >
@@ -165,15 +173,13 @@ const RecentOrdersRow = () => {
           return (
             <button
               key={it.id}
-              onClick={() => {
+              onClick={(e) => {
                 // menuItemId set so this merges with the same dish added from
                 // the menu rather than creating a second, separate line.
                 addItem({ id: it.id, menuItemId: it.id, name: it.name, name_bs: it.name_bs, name_ar: it.name_ar, price: it.price, image_url: it.image_url || undefined });
                 track('reorder_tapped', { item_id: it.id });
-                toast.success(t('added_to_order'), { description: name, duration: 1400 });
-                if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
-                  try { navigator.vibrate(8); } catch { /* gesture-gated */ }
-                }
+                emitAdd({ id: it.id, imageUrl: it.image_url, from: e.currentTarget.getBoundingClientRect(), name });
+                haptic('add');
               }}
               className="relative shrink-0 w-28 text-start tap-sm"
               aria-label={t('add_item_to_order', { name })}
@@ -191,7 +197,7 @@ const RecentOrdersRow = () => {
                 <div className="p-2">
                   <p className="text-xs font-serif font-semibold text-foreground line-clamp-1">{name}</p>
                   <p className="text-[11px] font-sans font-bold text-primary mt-0.5 tabular-nums">
-                    {price(it.price)}
+                    {priceBare(it.price)}
                   </p>
                 </div>
               </div>

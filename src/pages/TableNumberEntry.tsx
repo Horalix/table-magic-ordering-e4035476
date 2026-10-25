@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { useT } from '@/lib/i18n';
 import { useCartStore } from '@/lib/cart-store';
 import { checkVenueToken, type VenueTokenCheck } from '@/lib/guest-api';
-import { prefersReducedMotion } from '@/lib/motion';
+import { prefersReducedMotion, duration, easeEnter } from '@/lib/motion';
 
 /**
  * Single-QR entry.
@@ -96,7 +96,7 @@ const TableNumberEntry = () => {
       <motion.div
         initial={reduced ? false : { opacity: 0, y: 12 }}
         animate={reduced ? undefined : { opacity: 1, y: 0 }}
-        transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+        transition={{ duration: duration.emphasis, ease: easeEnter }}
         className="w-full max-w-sm text-center"
       >
         <img src="/brand/lockup-white.webp" alt="La Soul" width={645} height={960} className="h-40 w-auto mx-auto mb-7" />

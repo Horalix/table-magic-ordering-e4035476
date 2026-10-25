@@ -1,10 +1,12 @@
-import React, { useState, useEffect, useLayoutEffect, useMemo, useRef, useDeferredValue, useCallback } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import React, { useState, useEffect, useLayoutEffect, useMemo, useRef, useDeferredValue, useCallback, createContext, useContext } from 'react';
+import { motion, AnimatePresence, MotionConfig, useReducedMotion } from 'framer-motion';
 import { useParams, useNavigate, useSearchParams, useLocation } from 'react-router-dom';
 import { ArrowLeft, Plus, Minus, Search, X, Star, LayoutGrid, List, SlidersHorizontal, RefreshCw } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
-import { toast } from 'sonner';
 import { track } from '@/lib/analytics';
+import { haptic } from '@/lib/haptics';
+import { emitAdd } from '@/lib/cart-fx';
+import RollingNumber from '@/components/guest/RollingNumber';
 import { useItemImpression } from '@/lib/impressions';
 import { supabase } from '@/integrations/supabase/client';
 import { useCartStore } from '@/lib/cart-store';
@@ -15,7 +17,7 @@ import MenuItemDetail from '@/components/guest/MenuItemDetail';
 import LanguageSelector from '@/components/guest/LanguageSelector';
 import { useT, useLanguageStore, getLocalizedName, getLocalizedDescription, useI18n } from '@/lib/i18n';
 import { useSessionHeartbeat } from '@/hooks/useSessionHeartbeat';
-import { springPill } from '@/lib/motion';
+import { duration, easeEnter, exitTransition, springPill, springSheet } from '@/lib/motion';
 import { DIET_TAGS, DIET_BY_KEY, getItemTags, matchesDietFilter, useDietFilterStore } from '@/lib/dietary';
 import { merchBadges, unorderableReason, windowLabel } from '@/lib/availability';
 import { sectionSlug } from '@/lib/menu-sections';
@@ -54,8 +56,41 @@ const ImpressionCard = ({
 
 const stop = (e: React.SyntheticEvent) => e.stopPropagation();
 
-const vibrate = (ms: number) => {
-  if (typeof navigator !== 'undefined' && 'vibrate' in navigator) { try { navigator.vibrate(ms); } catch { /* gesture-gated */ } }
+/**
+ * The photo of the dish being opened, and nothing else, takes part in the
+ * shared photo-to-sheet transition.
+ *
+ * A layoutId on every row would put all of them in framer's layout tree and
+ * cost measurements on every scroll-driven render. Instead the opened row
+ * mounts a copy of its photo with the layoutId on top of the real one; the
+ * sheet's photo (same layoutId) grows out of it, and shrinks back into it on
+ * close. Context rather than props, so the memoised list never re-renders.
+ *
+ * `phase` 1 mounts the copy; 2, one frame later and in the same render that
+ * mounts the sheet, re-renders it so framer measures it first.
+ */
+type Opening = { id: string; phase: 1 | 2 } | null;
+const OpeningContext = createContext<Opening>(null);
+
+const OpeningPhoto = ({ itemId, src, alt, sizes }: { itemId: string; src: string; alt: string; sizes: string }) => {
+  const opening = useContext(OpeningContext);
+  if (!opening || opening.id !== itemId) return null;
+  return (
+    <MotionConfig transition={springSheet}>
+      <SmartImage
+        src={src}
+        id={itemId}
+        layoutId={`item-img-${itemId}`}
+        alt={alt}
+        width={108}
+        height={108}
+        square
+        sizes={sizes}
+        data-phase={opening.phase}
+        wrapperClassName="absolute inset-0 w-full h-full rounded-2xl z-[1]"
+      />
+    </MotionConfig>
+  );
 };
 
 const CategoryPage = () => {
@@ -89,8 +124,11 @@ const CategoryPage = () => {
   const storeSessionToken = useCartStore((s) => s.sessionToken);
   const storeTableNumber = useCartStore((s) => s.tableNumber);
   const t = useT();
-  const { price } = useI18n();
+  const { priceBare } = useI18n();
   const locale = useLanguageStore((s) => s.locale);
+  const reducedMotion = useReducedMotion();
+  const [opening, setOpening] = useState<Opening>(null);
+  const openingTimer = useRef<ReturnType<typeof setTimeout>>();
 
   // The session lives in the store, not the URL — see the note in GuestMenu.
   const table = searchParams.get('table') ?? (storeTableNumber ? String(storeTableNumber) : null);
@@ -263,7 +301,8 @@ const CategoryPage = () => {
 
   const selectSub = (id: string) => {
     scrollToSub(id);
-    vibrate(4);
+    // The tap only. The scroll spy moving the pill never buzzes.
+    haptic('tick');
   };
 
   // ?section=burgers opens the page at that section — used by the home
@@ -287,13 +326,41 @@ const CategoryPage = () => {
 
   const closeSearch = () => { setSearch(''); setSearchOpen(false); };
 
-  const quickAdd = (item: MenuItemRow, source: 'list' | 'grid') => {
+  const quickAdd = (item: MenuItemRow, source: 'list' | 'grid', from?: DOMRect) => {
     const name = getLocalizedName(item, locale);
     addItem({ id: item.id, name: item.name, name_bs: item.name_bs, name_ar: item.name_ar, price: Number(item.price), image_url: item.image_url || undefined });
     track('item_added', { item_id: item.id, source });
-    toast.success(t('added_to_order'), { description: name, duration: 1400 });
-    vibrate(8);
+    // The photo flies into the CartBar instead of a toast; see FlyToCart.
+    emitAdd({ id: item.id, imageUrl: item.image_url, from, name });
+    haptic('add');
   };
+
+  /**
+   * Open a dish. With motion on, its photo first gets a shared-layout twin
+   * (see OpeningPhoto) and the sheet mounts a frame later, so framer has
+   * something to grow the sheet's photo out of.
+   */
+  const openItem = (item: MenuItemRow) => {
+    clearTimeout(openingTimer.current);
+    if (reducedMotion || !item.image_url) {
+      setOpening(null);
+      setSelectedItem(item);
+      return;
+    }
+    setOpening({ id: item.id, phase: 1 });
+    requestAnimationFrame(() => {
+      setOpening({ id: item.id, phase: 2 });
+      setSelectedItem(item);
+    });
+  };
+
+  const closeItem = () => {
+    setSelectedItem(null);
+    // Keep the twin while the photo shrinks back into the list.
+    clearTimeout(openingTimer.current);
+    openingTimer.current = setTimeout(() => setOpening(null), 500);
+  };
+  useEffect(() => () => clearTimeout(openingTimer.current), []);
 
   const blockedLabel = (item: MenuItemRow) => {
     const blocked = unorderableReason(item);
@@ -318,8 +385,8 @@ const CategoryPage = () => {
         <button
           type="button"
           aria-label={t('add_item_to_order', { name })}
-          onClick={(e) => { stop(e); quickAdd(item, source); }}
-          className={`w-11 h-11 rounded-full ${shell} flex items-center justify-center active:scale-90 transition-transform focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring`}
+          onClick={(e) => { stop(e); quickAdd(item, source, e.currentTarget.getBoundingClientRect()); }}
+          className={`w-11 h-11 rounded-full ${shell} flex items-center justify-center tap-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring`}
         >
           <Plus className="w-5 h-5 text-primary" strokeWidth={2.5} aria-hidden />
         </button>
@@ -330,18 +397,18 @@ const CategoryPage = () => {
         <button
           type="button"
           aria-label={t('decrease_item', { name })}
-          onClick={() => { if (qty <= 1) removeItem(inCart!.id, 'menu_stepper'); else updateQuantity(inCart!.id, qty - 1); }}
-          className="w-10 h-11 rounded-full flex items-center justify-center active:scale-90 transition-transform"
+          onClick={() => { haptic('tick'); if (qty <= 1) removeItem(inCart!.id, 'menu_stepper'); else updateQuantity(inCart!.id, qty - 1); }}
+          className="w-10 h-11 rounded-full flex items-center justify-center tap-sm"
         >
           <Minus className="w-4 h-4" aria-hidden />
         </button>
-        <span className="min-w-[18px] text-center text-[15px] font-sans font-semibold tabular-nums" aria-live="polite">{qty}</span>
+        <span className="min-w-[18px] text-center text-[15px] font-sans font-semibold tabular-nums" aria-live="polite"><RollingNumber value={qty} /></span>
         <button
           type="button"
           aria-label={t('increase_item', { name })}
           disabled={qty >= 10}
-          onClick={() => updateQuantity(inCart!.id, qty + 1)}
-          className="w-10 h-11 rounded-full flex items-center justify-center active:scale-90 transition-transform disabled:opacity-40"
+          onClick={() => { haptic('tick'); updateQuantity(inCart!.id, qty + 1); }}
+          className="w-10 h-11 rounded-full flex items-center justify-center tap-sm disabled:opacity-40"
         >
           <Plus className="w-4 h-4 text-primary" strokeWidth={2.5} aria-hidden />
         </button>
@@ -377,7 +444,7 @@ const CategoryPage = () => {
     const name = getLocalizedName(item, locale);
     const blocked = blockedLabel(item);
     return (
-      <ImpressionCard key={item.id} itemId={item.id} onOpen={() => setSelectedItem(item)} className="relative cursor-pointer group">
+      <ImpressionCard key={item.id} itemId={item.id} onOpen={() => openItem(item)} className="relative cursor-pointer group">
         <div className="relative">
           <SmartImage
             src={item.image_url || undefined}
@@ -391,14 +458,15 @@ const CategoryPage = () => {
             fallbackText={name}
             wrapperClassName={`w-full aspect-square rounded-2xl ${blocked ? 'opacity-45 saturate-50' : ''}`}
           />
-          {hasSession && !blocked && <div className="absolute bottom-2 end-2">{renderStepper(item, name, 'grid')}</div>}
+          {item.image_url && <OpeningPhoto itemId={item.id} src={item.image_url} alt={name} sizes="(max-width: 640px) 46vw, 220px" />}
+          {hasSession && !blocked && <div className="absolute bottom-2 end-2 z-[2]">{renderStepper(item, name, 'grid')}</div>}
         </div>
         <div className="pt-2 pe-1">
           <h3 className="leading-snug">
             <button type="button" className={`text-start font-serif text-[15px] font-semibold line-clamp-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded ${blocked ? 'text-muted-foreground' : 'text-foreground'}`}>{name}</button>
           </h3>
           {renderBadges(item, false)}
-          <p className={`text-[15px] font-sans font-semibold mt-0.5 tabular-nums ${blocked ? 'text-muted-foreground' : 'text-foreground'}`}>{price(Number(item.price))}</p>
+          <p className={`text-[15px] font-sans font-semibold mt-0.5 tabular-nums ${blocked ? 'text-muted-foreground' : 'text-foreground'}`}>{priceBare(Number(item.price))}</p>
         </div>
       </ImpressionCard>
     );
@@ -417,7 +485,7 @@ const CategoryPage = () => {
       <ImpressionCard
         key={item.id}
         itemId={item.id}
-        onOpen={() => setSelectedItem(item)}
+        onOpen={() => openItem(item)}
         className="relative flex gap-4 px-4 py-4 cursor-pointer transition-colors active:bg-muted/50"
       >
         <div className="flex-1 min-w-0 py-0.5">
@@ -429,7 +497,7 @@ const CategoryPage = () => {
           {renderBadges(item, isSearch)}
           {localizedDesc && <p className="text-sm leading-relaxed text-muted-foreground font-sans mt-1 line-clamp-2">{localizedDesc}</p>}
           <div className="flex items-center gap-2 mt-2 flex-wrap">
-            <p className={`text-[15px] font-sans font-semibold tabular-nums ${blocked ? 'text-muted-foreground' : 'text-foreground'}`}>{price(Number(item.price))}</p>
+            <p className={`text-[15px] font-sans font-semibold tabular-nums ${blocked ? 'text-muted-foreground' : 'text-foreground'}`}>{priceBare(Number(item.price))}</p>
             {meta && <span className="text-xs font-sans text-muted-foreground">{meta}</span>}
             {tags.map((k) => (
               <span key={k} className="text-sm leading-none" title={t(DIET_BY_KEY[k].labelKey)} aria-label={t(DIET_BY_KEY[k].labelKey)}>{DIET_BY_KEY[k].emoji}</span>
@@ -450,10 +518,11 @@ const CategoryPage = () => {
               fallbackText={localizedName}
               wrapperClassName={`w-[108px] h-[108px] rounded-2xl ${blocked ? 'opacity-45 saturate-50' : ''}`}
             />
+            <OpeningPhoto itemId={item.id} src={item.image_url} alt="" sizes="108px" />
             {hasSession && !blocked && (
               // "+" sits on the corner; once the dish is in the order the wider
               // "− 2 +" pill centres under the photo instead of hanging off it.
-              <div className={inCartQty(item) > 0 ? 'absolute -bottom-3 inset-x-0 flex justify-center' : 'absolute -bottom-2 -end-2'}>
+              <div className={`z-[2] ${inCartQty(item) > 0 ? 'absolute -bottom-3 inset-x-0 flex justify-center' : 'absolute -bottom-2 -end-2'}`}>
                 {renderStepper(item, localizedName, 'list')}
               </div>
             )}
@@ -563,6 +632,7 @@ const CategoryPage = () => {
   const iconButton = 'w-11 h-11 rounded-full flex items-center justify-center text-foreground hover:bg-muted transition-colors shrink-0';
 
   return (
+    <OpeningContext.Provider value={opening}>
     <div className="min-h-screen bg-background">
       {/* About 100px at rest instead of the ~240px the first redesign used:
           title row plus section pills. Search and diet filters sit behind
@@ -593,7 +663,11 @@ const CategoryPage = () => {
             </div>
           ) : (
             <>
-              <h1 className="flex-1 min-w-0 truncate font-serif text-xl font-semibold text-foreground ps-1">{localizedCategory}</h1>
+              <div className="flex-1 min-w-0 ps-1">
+                <h1 className="truncate font-serif text-xl font-semibold text-foreground leading-tight">{localizedCategory}</h1>
+                {/* Said once, here, so every row can show a bare "12,50". */}
+                <p className="text-[11px] font-sans text-muted-foreground leading-tight">{t('prices_in_km')}</p>
+              </div>
               <button onClick={() => setSearchOpen(true)} aria-label={t('search_in_category', { category: localizedCategory }).replace('…', '')} className={iconButton}>
                 <Search className="w-5 h-5" aria-hidden />
               </button>
@@ -617,8 +691,8 @@ const CategoryPage = () => {
           {filtersOpen && !searchOpen && (
             <motion.div
               initial={{ height: 0, opacity: 0 }}
-              animate={{ height: 'auto', opacity: 1 }}
-              exit={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1, transition: { duration: duration.base, ease: easeEnter } }}
+              exit={{ height: 0, opacity: 0, transition: exitTransition }}
               className="overflow-hidden"
             >
               <div className="px-4 pb-3 space-y-3">
@@ -684,7 +758,10 @@ const CategoryPage = () => {
           ))}
         </div>
       ) : searching ? (
-        <div className="pb-40">{renderItems(searchResults, true, true)}</div>
+        <div className="pb-40">
+          {renderItems(searchResults, true, true)}
+          {searchResults.length > 0 && <p className="px-5 pt-3 text-xs font-sans text-muted-foreground">{t('prices_in_km')}</p>}
+        </div>
       ) : sections.length === 0 ? (
         <div className="pb-40">{renderEmpty(false)}</div>
       ) : (
@@ -710,7 +787,9 @@ const CategoryPage = () => {
               portion_note: selectedItem.portion_note ?? null,
               prep_minutes: selectedItem.prep_minutes ?? null,
             }}
-            onClose={() => setSelectedItem(null)}
+            onClose={closeItem}
+            // Added: no shrink-back into the list; the photo flies to the bag instead.
+            onAdded={() => { clearTimeout(openingTimer.current); setOpening(null); }}
             canOrder={hasSession}
             unavailableLabel={blockedLabel(selectedItem)}
           />
@@ -719,6 +798,7 @@ const CategoryPage = () => {
 
       {hasSession && <CartBar />}
     </div>
+    </OpeningContext.Provider>
   );
 };
 
