@@ -7,11 +7,18 @@ import { t } from '@/lib/i18n';
 import { unorderableReason } from '@/lib/availability';
 import {
   isNew, nextPriceChange, rememberPrices, saleView,
-  type ComboDef,
+  type ComboDef, type SaleFields,
 } from '@/lib/promotions';
 import type { Database } from '@/integrations/supabase/types';
 
-export type MenuItemRow = Database['public']['Tables']['menu_items']['Row'];
+// Promotion fields are absent until the pending migration is applied.
+export type MenuItemRow = Database['public']['Tables']['menu_items']['Row'] & SaleFields & {
+  new_until?: string | null;
+  featured_rank?: number | null;
+  featured_note?: string | null;
+  featured_note_bs?: string | null;
+  featured_note_ar?: string | null;
+};
 
 /**
  * Every combo with its parts and choices.
@@ -22,7 +29,7 @@ export type MenuItemRow = Database['public']['Tables']['menu_items']['Row'];
  * failed request.
  */
 export async function fetchCombos(): Promise<ComboDef[] | null> {
-  const { data, error } = await supabase.rpc('guest_get_combos');
+  const { data, error } = await supabase.rpc('guest_get_combos' as never);
   if (error) return null;
   return Array.isArray(data) ? (data as unknown as ComboDef[]) : [];
 }
