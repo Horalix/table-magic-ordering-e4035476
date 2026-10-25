@@ -2,7 +2,7 @@ import React, { useState, useEffect, useLayoutEffect, useMemo, useRef, useDeferr
 import { motion, AnimatePresence, MotionConfig, useReducedMotion } from 'framer-motion';
 import { useParams, useNavigate, useSearchParams, useLocation } from 'react-router-dom';
 import { ArrowLeft, Plus, Minus, Search, X, Star, LayoutGrid, List, SlidersHorizontal, RefreshCw } from 'lucide-react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { track } from '@/lib/analytics';
 import { haptic } from '@/lib/haptics';
 import { emitAdd } from '@/lib/cart-fx';
@@ -33,6 +33,68 @@ const categoryNameMap: Record<string, string> = {
   desserts: 'Desserts',
   dessert: 'Desserts',
 };
+
+/* The reads a category page needs. Named so the page can also warm the cache
+   for the other categories, which is what makes switching between them with
+   the header tabs instant instead of a loading screen. */
+const fetchCategoriesList = async () => {
+  const { data, error } = await supabase.from('categories').select('*').order('sort_order');
+  if (error) throw error;
+  return data;
+};
+const fetchCategory = async (name: string) => {
+  const { data, error } = await supabase.from('categories').select('*').eq('name', name).single();
+  if (error) throw error;
+  return data;
+};
+const fetchSubcategories = async (categoryId: string) => {
+  const { data, error } = await supabase.from('subcategories').select('*').eq('category_id', categoryId).order('sort_order');
+  if (error) throw error;
+  return data;
+};
+// Everything, including what is currently off.
+//
+// The hard `is_available = true` filter made 86'd items VANISH, while
+// MenuSearch deliberately showed them — so the two surfaces disagreed,
+// and a guest who came for one dish concluded the restaurant had stopped
+// making it. Showing it greyed out answers the question instead.
+const fetchCategoryItems = async (subIds: string[]) => {
+  const { data, error } = await supabase.from('menu_items').select('*').in('subcategory_id', subIds).order('sort_order');
+  if (error) throw error;
+  return data;
+};
+
+/**
+ * Drinks · Food · Desserts, one tap apart. Going from drinks to food used to
+ * mean back to the home screen, find the card, tap it: three steps for the
+ * most common move on a menu. The active tab is the page's heading.
+ */
+const CategoryTabs = ({ categories, current, locale, label, onSelect }: {
+  categories: CategoryRow[];
+  current: string;
+  locale: Parameters<typeof getLocalizedName>[1];
+  label: string;
+  onSelect: (category: CategoryRow) => void;
+}) => (
+  <nav aria-label={label} className="flex-1 min-w-0">
+    <div className="grid gap-0.5 p-1 rounded-full bg-muted/70" style={{ gridTemplateColumns: `repeat(${categories.length}, minmax(0, 1fr))` }}>
+      {categories.map((c) => {
+        const active = c.name === current;
+        return (
+          <button
+            key={c.id}
+            onClick={() => { if (!active) onSelect(c); }}
+            aria-current={active ? 'page' : undefined}
+            className={`relative h-9 px-1.5 rounded-full text-[13px] font-sans font-semibold transition-colors tap-sm ${active ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+          >
+            {active && <motion.span layoutId="category-tab" transition={springPill} className="absolute inset-0 rounded-full bg-card shadow-sm" />}
+            <span className="relative z-10 block truncate">{getLocalizedName(c, locale)}</span>
+          </button>
+        );
+      })}
+    </div>
+  </nav>
+);
 
 /**
  * A menu card that reports being looked at.
@@ -140,21 +202,13 @@ const CategoryPage = () => {
 
   const { data: category, isError: categoryFailed, refetch: refetchCategory } = useQuery({
     queryKey: ['category', categoryName],
-    queryFn: async () => {
-      const { data, error } = await supabase.from('categories').select('*').eq('name', categoryName).single();
-      if (error) throw error;
-      return data;
-    },
+    queryFn: () => fetchCategory(categoryName as string),
     retry: 1,
   });
 
   const { data: subcategories = [], isError: subsFailed } = useQuery({
     queryKey: ['subcategories', category?.id],
-    queryFn: async () => {
-      const { data, error } = await supabase.from('subcategories').select('*').eq('category_id', category!.id).order('sort_order');
-      if (error) throw error;
-      return data;
-    },
+    queryFn: () => fetchSubcategories(category!.id),
     enabled: !!category?.id,
   });
 
@@ -163,17 +217,7 @@ const CategoryPage = () => {
   // Every item in this category, once, sliced per section in memory.
   const { data: allItems = [], isLoading: allLoading, isError: itemsFailed, refetch: refetchItems } = useQuery({
     queryKey: ['menu_items_all', category?.id],
-    queryFn: async () => {
-      // Everything, including what is currently off.
-      //
-      // The hard `is_available = true` filter made 86'd items VANISH, while
-      // MenuSearch deliberately showed them — so the two surfaces disagreed,
-      // and a guest who came for one dish concluded the restaurant had stopped
-      // making it. Showing it greyed out answers the question instead.
-      const { data, error } = await supabase.from('menu_items').select('*').in('subcategory_id', subIds).order('sort_order');
-      if (error) throw error;
-      return data;
-    },
+    queryFn: () => fetchCategoryItems(subIds),
     enabled: subIds.length > 0,
     staleTime: 5 * 60 * 1000,
   });
@@ -188,6 +232,33 @@ const CategoryPage = () => {
     staleTime: 10 * 60 * 1000,
   });
   const popularIds = useMemo(() => new Set(popular.map((p) => p.menu_item_id)), [popular]);
+
+  const queryClient = useQueryClient();
+  const { data: categories = [] } = useQuery({
+    queryKey: ['categories'],
+    queryFn: fetchCategoriesList,
+    staleTime: 10 * 60 * 1000,
+  });
+
+  // Once this category is on screen, quietly load the others, so a tab tap
+  // switches without a loading state.
+  useEffect(() => {
+    if (allLoading || !category || categories.length === 0) return;
+    let cancelled = false;
+    const warm = async () => {
+      for (const c of categories) {
+        if (cancelled || c.id === category.id) continue;
+        try {
+          await queryClient.prefetchQuery({ queryKey: ['category', c.name], queryFn: () => fetchCategory(c.name), staleTime: 5 * 60 * 1000 });
+          const subs = await queryClient.fetchQuery({ queryKey: ['subcategories', c.id], queryFn: () => fetchSubcategories(c.id), staleTime: 5 * 60 * 1000 });
+          const ids = (subs ?? []).map((x) => x.id);
+          if (ids.length) await queryClient.prefetchQuery({ queryKey: ['menu_items_all', c.id], queryFn: () => fetchCategoryItems(ids), staleTime: 5 * 60 * 1000 });
+        } catch { /* best effort: the tab still works, it just loads */ }
+      }
+    };
+    const timer = window.setTimeout(() => void warm(), 600);
+    return () => { cancelled = true; window.clearTimeout(timer); };
+  }, [allLoading, category, categories, queryClient]);
   // Defer the heavy re-layout when toggling list/grid so the tap stays snappy.
   const deferredView = useDeferredValue(view);
 
@@ -322,6 +393,17 @@ const CategoryPage = () => {
     if (token) params.set('token', token);
     const qs = params.toString();
     navigate(qs ? `/menu?${qs}` : '/menu');
+  };
+
+  // Keeps the table and token, and replaces history so Back still goes home.
+  const switchCategory = (c: CategoryRow) => {
+    haptic('tick');
+    const params = new URLSearchParams();
+    if (table) params.set('table', table);
+    if (token) params.set('token', token);
+    const qs = params.toString();
+    window.scrollTo({ top: 0 });
+    navigate(`/menu/${c.name.toLowerCase()}${qs ? `?${qs}` : ''}`, { replace: true, state: location.state });
   };
 
   const closeSearch = () => { setSearch(''); setSearchOpen(false); };
@@ -617,9 +699,13 @@ const CategoryPage = () => {
   if (!category) {
     return (
       <div className="min-h-screen bg-background">
-        <div className="px-4 py-3 flex items-center gap-3">
-          <Skeleton className="w-10 h-10 rounded-full" />
-          <Skeleton className="w-32 h-6 rounded" />
+        <div className="flex items-center gap-1 ps-2 pe-3 h-14">
+          <button onClick={goBack} aria-label={t('back_to_menu')} className="w-11 h-11 rounded-full flex items-center justify-center text-foreground shrink-0">
+            <ArrowLeft className="w-5 h-5 rtl:rotate-180" aria-hidden />
+          </button>
+          {categories.length > 1
+            ? <CategoryTabs categories={categories} current={categoryName as string} locale={locale} label={t('menu')} onSelect={switchCategory} />
+            : <Skeleton className="w-32 h-6 rounded" />}
         </div>
         <div className="px-4 space-y-3 mt-4">
           {[1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-28 w-full rounded-xl" />)}
@@ -663,11 +749,14 @@ const CategoryPage = () => {
             </div>
           ) : (
             <>
-              <div className="flex-1 min-w-0 ps-1">
-                <h1 className="truncate font-serif text-xl font-semibold text-foreground leading-tight">{localizedCategory}</h1>
-                {/* Said once, here, so every row can show a bare "12,50". */}
-                <p className="text-[11px] font-sans text-muted-foreground leading-tight">{t('prices_in_km')}</p>
-              </div>
+              <h1 className="sr-only">{localizedCategory}</h1>
+              {categories.length > 1 ? (
+                <CategoryTabs categories={categories} current={category.name} locale={locale} label={t('menu')} onSelect={switchCategory} />
+              ) : (
+                <div className="flex-1 min-w-0 ps-1">
+                  <p aria-hidden className="truncate font-serif text-xl font-semibold text-foreground leading-tight">{localizedCategory}</p>
+                </div>
+              )}
               <button onClick={() => setSearchOpen(true)} aria-label={t('search_in_category', { category: localizedCategory }).replace('…', '')} className={iconButton}>
                 <Search className="w-5 h-5" aria-hidden />
               </button>
@@ -682,7 +771,6 @@ const CategoryPage = () => {
                   <span className="absolute top-1.5 end-1.5 min-w-4 h-4 px-1 rounded-full bg-primary text-primary-foreground text-[10px] font-bold flex items-center justify-center">{activeDiets.length}</span>
                 )}
               </button>
-              <LanguageSelector />
             </>
           )}
         </div>
@@ -696,13 +784,18 @@ const CategoryPage = () => {
               className="overflow-hidden"
             >
               <div className="px-4 pb-3 space-y-3">
-                <div className="flex items-center gap-2" role="group" aria-label={t('list_view')}>
+                <div className="flex items-center gap-2">
+                  <div className="flex flex-1 items-center gap-2" role="group" aria-label={t('view_mode')}>
                   <button onClick={() => setView('list')} aria-pressed={view === 'list'} className={`inline-flex items-center gap-1.5 px-3.5 min-h-[40px] rounded-full text-sm font-sans font-medium border ${view === 'list' ? 'bg-foreground text-background border-foreground' : 'bg-card text-foreground border-border'}`}>
                     <List className="w-4 h-4" aria-hidden />{t('list_view')}
                   </button>
                   <button onClick={() => setView('grid')} aria-pressed={view === 'grid'} className={`inline-flex items-center gap-1.5 px-3.5 min-h-[40px] rounded-full text-sm font-sans font-medium border ${view === 'grid' ? 'bg-foreground text-background border-foreground' : 'bg-card text-foreground border-border'}`}>
                     <LayoutGrid className="w-4 h-4" aria-hidden />{t('grid_view')}
                   </button>
+                  </div>
+                  {/* The language lives here on menu pages, so the header has
+                      room for the category tabs. It is also on the home screen. */}
+                  <LanguageSelector />
                 </div>
                 {presentTags.length > 0 && (
                   <div className="flex flex-wrap items-center gap-2">
@@ -765,7 +858,11 @@ const CategoryPage = () => {
       ) : sections.length === 0 ? (
         <div className="pb-40">{renderEmpty(false)}</div>
       ) : (
-        <div className="pb-40">{sectionsView}</div>
+        <div className="pb-40">
+          {/* Said once, so every row can show a bare "12,50". */}
+          <p className="px-5 pt-3 -mb-1 text-[11px] font-sans text-muted-foreground">{t('prices_in_km')}</p>
+          {sectionsView}
+        </div>
       )}
 
       <AnimatePresence>
