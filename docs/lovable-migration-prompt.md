@@ -2,7 +2,7 @@
 
 Copy everything between the rules into Lovable. Nothing else needs to be said.
 
-Last updated: **25 October 2026**, for thirty-four migrations from
+Last updated: **26 October 2026**, for thirty-four migrations from
 `20260804090300` to `20261026110000`.
 
 > **What is actually live.** Checked against the production API on
@@ -148,10 +148,33 @@ whose search text is not in the live function — send it back before going on.
 > SELECT hold_first_order_km, hold_first_order_items, hold_unpaid_km, hold_burst_sessions
 >   FROM public.restaurant_settings WHERE id = 1;
 > SELECT indexname FROM pg_indexes WHERE indexname = 'table_sessions_one_active_per_table';
+>
+> -- 9. sales and combos are priced by the server (expect 5 rows, then true)
+> SELECT proname FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+>  WHERE n.nspname = 'public'
+>    AND proname IN ('menu_item_sale_price','menu_item_unit_price','guest_get_combos','admin_save_combo','price_order_lines')
+>  ORDER BY proname;
+> SELECT position('price_order_lines' in pg_get_functiondef(p.oid)) > 0 AS uses_price_order_lines
+>   FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+>  WHERE n.nspname = 'public' AND p.proname = 'guest_place_order';
+>
+> -- 10. the engine learns from every table (expect 3 trigger rows; the cron row
+> --     only if pg_cron is enabled)
+> SELECT tgname FROM pg_trigger WHERE tgname LIKE 'trg_reco_learn%' ORDER BY tgname;
+> SELECT jobname, schedule FROM cron.job WHERE jobname = 'lasoul-learning-refresh';
+>
+> -- 11. halal: no item can be marked alcohol (expect 1 row, and 0)
+> SELECT conname FROM pg_constraint WHERE conname = 'menu_items_no_alcohol';
+> SELECT count(*) AS alcohol_items FROM public.menu_items WHERE meal_role::text = 'alcohol';
+>
+> -- 12. menu text corrections landed (expect butter, vinegar, Cappuccino)
+> SELECT name, left(description, 60) AS description FROM public.menu_items
+>  WHERE name IN ('Butter Croissant', 'Shopska Salad', 'Cappuccino') ORDER BY name;
 > ```
 >
-> If check 6 errors because the `cron` schema does not exist, that is not a
-> failure of the migrations — report it and stop there.
+> If check 6 or check 10's cron query errors because the `cron` schema does not
+> exist, that is not a failure of the migrations — report it and carry on with
+> the remaining checks.
 
 ---
 
