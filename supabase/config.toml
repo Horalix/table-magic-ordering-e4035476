@@ -8,7 +8,8 @@ verify_jwt = true
 [functions.waiter-login]
 verify_jwt = false
 
-# cloudprnt is polled by a network thermal printer (no Supabase JWT); it is
-# protected by the CLOUDPRNT_TOKEN shared secret instead.
+# cloudprnt is polled by a network thermal printer (no Supabase JWT); each
+# printer is identified by the secret last path segment of its own poll URL
+# (printers.poll_token, made in Admin -> Printing).
 [functions.cloudprnt]
 verify_jwt = false
