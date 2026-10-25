@@ -15,6 +15,13 @@
       "when": 1792941638342,
       "tag": "0001_maintenance",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1792941663566,
+      "tag": "0002_app_impact",
+      "breakpoints": true
     }
   ]
 }

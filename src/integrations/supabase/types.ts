@@ -363,6 +363,7 @@ export type Database = {
           description_ar: string | null
           description_bs: string | null
           dietary_tags: string[]
+          food_cost: number | null
           id: string
           image_url: string | null
           is_available: boolean
@@ -389,6 +390,7 @@ export type Database = {
           description_ar?: string | null
           description_bs?: string | null
           dietary_tags?: string[]
+          food_cost?: number | null
           id?: string
           image_url?: string | null
           is_available?: boolean
@@ -415,6 +417,7 @@ export type Database = {
           description_ar?: string | null
           description_bs?: string | null
           dietary_tags?: string[]
+          food_cost?: number | null
           id?: string
           image_url?: string | null
           is_available?: boolean
@@ -2012,6 +2015,7 @@ export type Database = {
       }
       after_meal_moment: { Args: { _session_id: string }; Returns: boolean }
       analytics_event_allowed: { Args: { _event: string }; Returns: boolean }
+      app_impact_summary: { Args: { _days?: number }; Returns: Json }
       assert_guest_session: {
         Args: { _session_id: string; _session_token: string }
         Returns: {
@@ -2097,6 +2101,7 @@ export type Database = {
         Returns: Json
       }
       experiment_srm: { Args: { _experiment_id: string }; Returns: Json }
+      food_cost_coverage: { Args: never; Returns: Json }
       get_popular_items: {
         Args: { _days?: number; _limit?: number }
         Returns: {
