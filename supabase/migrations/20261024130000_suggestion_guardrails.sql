@@ -662,3 +662,8 @@ BEGIN
     RAISE NOTICE 'pg_cron is not available: schedule run_daily_maintenance() another way';
   END IF;
 END $cron$;
+
+-- Internal: changes data, so not callable by guests or staff through the API;
+-- the scheduler and the server role run it.
+REVOKE ALL ON FUNCTION public.reclassify_meal_roles() FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.reclassify_meal_roles() TO service_role;

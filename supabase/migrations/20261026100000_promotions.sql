@@ -220,8 +220,14 @@ CREATE POLICY "Admins manage combo options" ON public.menu_combo_options
   USING (public.has_role(auth.uid(), 'admin'::app_role))
   WITH CHECK (public.has_role(auth.uid(), 'admin'::app_role));
 
-GRANT SELECT ON public.menu_combo_slots, public.menu_combo_options TO anon, authenticated;
-GRANT INSERT, UPDATE, DELETE ON public.menu_combo_slots, public.menu_combo_options TO authenticated;
+REVOKE ALL ON public.menu_combo_slots FROM PUBLIC;
+GRANT SELECT ON public.menu_combo_slots TO anon, authenticated;
+GRANT INSERT, UPDATE, DELETE ON public.menu_combo_slots TO authenticated;
+GRANT ALL ON public.menu_combo_slots TO service_role;
+REVOKE ALL ON public.menu_combo_options FROM PUBLIC;
+GRANT SELECT ON public.menu_combo_options TO anon, authenticated;
+GRANT INSERT, UPDATE, DELETE ON public.menu_combo_options TO authenticated;
+GRANT ALL ON public.menu_combo_options TO service_role;
 
 /**
  * Every combo with its slots and each slot's choices, in one read.

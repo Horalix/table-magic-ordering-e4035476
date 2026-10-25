@@ -44,6 +44,11 @@ ALTER TABLE public.maintenance_runs ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Staff read maintenance" ON public.maintenance_runs;
 CREATE POLICY "Staff read maintenance" ON public.maintenance_runs
   FOR SELECT TO authenticated USING (public.is_staff_member());
+-- Explicit access (Supabase no longer grants new tables to the API roles by
+-- default): matches the policy above; the server role keeps full access.
+REVOKE ALL ON public.maintenance_runs FROM PUBLIC, anon;
+GRANT SELECT ON public.maintenance_runs TO authenticated;
+GRANT ALL ON public.maintenance_runs TO service_role;
 
 -- ---------------------------------------------------------------------
 -- 2. Who may run scheduled work
@@ -282,3 +287,8 @@ END;
 $$;
 
 REVOKE ALL ON FUNCTION public.run_scheduled_maintenance() FROM PUBLIC, anon, authenticated;
+
+-- Internal: changes data, so not callable by guests or staff through the API;
+-- the scheduler and the server role run it.
+REVOKE ALL ON FUNCTION public.run_scheduled_maintenance() FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.run_scheduled_maintenance() TO service_role;

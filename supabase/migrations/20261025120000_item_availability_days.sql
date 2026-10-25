@@ -60,6 +60,8 @@ CREATE POLICY "Staff read availability history"
 
 REVOKE ALL ON public.menu_item_availability_log FROM PUBLIC, anon;
 GRANT SELECT ON public.menu_item_availability_log TO authenticated;
+GRANT ALL ON public.menu_item_availability_log TO service_role;
+GRANT USAGE, SELECT ON SEQUENCE public.menu_item_availability_log_id_seq TO service_role;
 
 /**
  * Trigger body: record a change of is_available.

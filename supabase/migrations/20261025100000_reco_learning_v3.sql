@@ -279,6 +279,11 @@ ALTER TABLE public.suggestion_priors ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Staff read suggestion priors" ON public.suggestion_priors;
 CREATE POLICY "Staff read suggestion priors" ON public.suggestion_priors
   FOR SELECT TO authenticated USING (public.is_staff_member());
+-- Explicit access (Supabase no longer grants new tables to the API roles by
+-- default): matches the policy above; the server role keeps full access.
+REVOKE ALL ON public.suggestion_priors FROM PUBLIC, anon;
+GRANT SELECT ON public.suggestion_priors TO authenticated;
+GRANT ALL ON public.suggestion_priors TO service_role;
 
 /** The prior for a dish at a placement: its own, the placement's, or Beta(1,12). */
 CREATE OR REPLACE FUNCTION public.suggestion_prior(_item_id uuid, _placement text)
@@ -744,6 +749,14 @@ CREATE POLICY "Staff read section affinity" ON public.subcategory_affinity
 DROP POLICY IF EXISTS "Staff read section share" ON public.item_section_share;
 CREATE POLICY "Staff read section share" ON public.item_section_share
   FOR SELECT TO authenticated USING (public.is_staff_member());
+-- Explicit access (Supabase no longer grants new tables to the API roles by
+-- default): matches the policy above; the server role keeps full access.
+REVOKE ALL ON public.subcategory_affinity FROM PUBLIC, anon;
+GRANT SELECT ON public.subcategory_affinity TO authenticated;
+GRANT ALL ON public.subcategory_affinity TO service_role;
+REVOKE ALL ON public.item_section_share FROM PUBLIC, anon;
+GRANT SELECT ON public.item_section_share TO authenticated;
+GRANT ALL ON public.item_section_share TO service_role;
 
 /**
  * Dish pairs within one order (the cart's question), plus the section pairs
@@ -1977,3 +1990,7 @@ BEGIN
   END;
   PERFORM set_config('lasoul.scheduled_job', '', true);
 END $$;
+
+-- The admin reads the running policy version (Admin → Impact).
+REVOKE ALL ON FUNCTION public.reco_policy_version() FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.reco_policy_version() TO authenticated, service_role;

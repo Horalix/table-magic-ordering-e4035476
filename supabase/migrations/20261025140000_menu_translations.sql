@@ -57,6 +57,8 @@ COMMENT ON TABLE public.menu_machine_translations IS
 
 ALTER TABLE public.menu_machine_translations ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON public.menu_machine_translations FROM PUBLIC, anon, authenticated;
+-- Only the translate-menu Edge Function (server role) reads and writes it.
+GRANT ALL ON public.menu_machine_translations TO service_role;
 
 
 -- ---------------------------------------------------------------------

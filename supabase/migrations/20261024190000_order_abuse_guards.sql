@@ -1015,3 +1015,8 @@ BEGIN
 
   EXECUTE v_def;
 END $$;
+
+-- Internal: changes data, so not callable by guests or staff through the API;
+-- the scheduler and the server role run it.
+REVOKE ALL ON FUNCTION public.mark_session_seen(uuid) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.mark_session_seen(uuid) TO service_role;

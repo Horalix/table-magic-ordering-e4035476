@@ -142,6 +142,14 @@ CREATE POLICY "Staff read reco learning" ON public.reco_learning
 DROP POLICY IF EXISTS "Staff read learned visits" ON public.reco_learned_visits;
 CREATE POLICY "Staff read learned visits" ON public.reco_learned_visits
   FOR SELECT TO authenticated USING (public.is_staff_member());
+-- Explicit access (Supabase no longer grants new tables to the API roles by
+-- default): matches the policy above; the server role keeps full access.
+REVOKE ALL ON public.reco_learning FROM PUBLIC, anon;
+GRANT SELECT ON public.reco_learning TO authenticated;
+GRANT ALL ON public.reco_learning TO service_role;
+REVOKE ALL ON public.reco_learned_visits FROM PUBLIC, anon;
+GRANT SELECT ON public.reco_learned_visits TO authenticated;
+GRANT ALL ON public.reco_learned_visits TO service_role;
 
 /** A counter's weight as of `_at`: halves every 45 days. */
 CREATE OR REPLACE FUNCTION public.reco_decayed(_w numeric, _w_at timestamptz, _at timestamptz)
@@ -1462,3 +1470,10 @@ BEGIN
   END;
   PERFORM set_config('lasoul.scheduled_job', '', true);
 END $$;
+
+-- Internal: changes data, so not callable by guests or staff through the API;
+-- the scheduler and the server role run it.
+REVOKE ALL ON FUNCTION public.reco_learn_visit(uuid) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.reco_learn_visit(uuid) TO service_role;
+REVOKE ALL ON FUNCTION public.run_scheduled_learning_refresh() FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.run_scheduled_learning_refresh() TO service_role;

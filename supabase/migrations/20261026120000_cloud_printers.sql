@@ -77,6 +77,7 @@ CREATE POLICY "Admins manage printers"
   WITH CHECK (public.has_role(auth.uid(), 'admin'::public.app_role));
 
 REVOKE ALL ON public.printers FROM anon;
+REVOKE ALL ON public.printers FROM PUBLIC;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.printers TO authenticated;
 GRANT ALL ON public.printers TO service_role;
 

@@ -182,6 +182,11 @@ ALTER TABLE public.reco_fit ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Staff read reco fit" ON public.reco_fit;
 CREATE POLICY "Staff read reco fit" ON public.reco_fit
   FOR SELECT TO authenticated USING (public.is_staff_member());
+-- Explicit access (Supabase no longer grants new tables to the API roles by
+-- default): matches the policy above; the server role keeps full access.
+REVOKE ALL ON public.reco_fit FROM PUBLIC, anon;
+GRANT SELECT ON public.reco_fit TO authenticated;
+GRANT ALL ON public.reco_fit TO service_role;
 
 INSERT INTO public.reco_fit(context_kind, candidate_kind, note)
 SELECT c, d, 'a drink with savoury food'
@@ -230,6 +235,11 @@ ALTER TABLE public.reco_clash ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Staff read reco clash" ON public.reco_clash;
 CREATE POLICY "Staff read reco clash" ON public.reco_clash
   FOR SELECT TO authenticated USING (public.is_staff_member());
+-- Explicit access (Supabase no longer grants new tables to the API roles by
+-- default): matches the policy above; the server role keeps full access.
+REVOKE ALL ON public.reco_clash FROM PUBLIC, anon;
+GRANT SELECT ON public.reco_clash TO authenticated;
+GRANT ALL ON public.reco_clash TO service_role;
 
 INSERT INTO public.reco_clash(context_kind, candidate_kind, note) VALUES
   ('frappe', 'dessert', 'a frappé is already dessert'),
