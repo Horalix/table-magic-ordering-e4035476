@@ -179,7 +179,7 @@ describe('the switch', () => {
       `SELECT reco_sampling_enabled AS on, public.reco_policy_version() AS v
          FROM public.restaurant_settings WHERE id = 1`);
     expect(rows[0].on).toBe(false);
-    expect(rows[0].v).toBe('v1-fixed-ranker');
+    expect(rows[0].v).toBe('v3-profit');
   });
 
   it('leaves the fixed ranker exactly as it was while off', async () => {
@@ -193,7 +193,7 @@ describe('the switch', () => {
   it('changes the policy version, which is what forces a new experiment', async () => {
     await setSampling(true);
     const { rows } = await db.query<{ v: string }>(`SELECT public.reco_policy_version() AS v`);
-    expect(rows[0].v).toBe('v2-thompson');
+    expect(rows[0].v).toBe('v3-profit-thompson');
   });
 
   it('starts sampling once on', async () => {
@@ -283,7 +283,7 @@ describe('allocation', () => {
 
     const { rows } = await db.query<{ policy_version: string }>(
       `SELECT policy_version FROM public.recommendation_decisions`);
-    expect(rows[0].policy_version).toBe('v2-thompson');
+    expect(rows[0].policy_version).toBe('v3-profit-thompson');
   });
 });
 
@@ -303,7 +303,7 @@ describe('turning itself on', () => {
     await db.query(`SELECT public.maybe_enable_sampling()`);
     await actAs(db, null);
     const { rows } = await db.query<{ v: string }>(`SELECT public.reco_policy_version() AS v`);
-    expect(rows[0].v).toBe('v1-fixed-ranker');
+    expect(rows[0].v).toBe('v3-profit');
   });
 
   it('is not a no-op forever — it flips when the gate opens', async () => {
@@ -320,7 +320,7 @@ describe('turning itself on', () => {
     await actAs(db, null);
 
     expect(rows[0].r.changed).toBe(true);
-    expect(rows[0].r.policy_version).toBe('v2-thompson');
+    expect(rows[0].r.policy_version).toBe('v3-profit-thompson');
     expect(again[0].r.reason).toBe('already_on');
   });
 
@@ -364,7 +364,7 @@ describe('the gate reports the live policy', () => {
       `SELECT public.bandit_readiness() AS r`);
     await actAs(db, null);
     expect(rows[0].r.sampling_enabled).toBe(false);
-    expect(rows[0].r.policy_version).toBe('v1-fixed-ranker');
+    expect(rows[0].r.policy_version).toBe('v3-profit');
   });
 
   it('still fails honestly on an empty database', async () => {

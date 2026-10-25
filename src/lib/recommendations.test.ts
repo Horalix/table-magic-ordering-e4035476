@@ -16,7 +16,7 @@ const breadcrumbs: unknown[] = [];
 vi.mock('@sentry/react', () => ({ addBreadcrumb: (b: unknown) => { breadcrumbs.push(b); } }));
 
 const {
-  fetchRecommendations, pairingContextIds, impressionKey, useDismissedSuggestions,
+  fetchRecommendations, pairingContextIds, impressionKey, isDecisionChoice, useDismissedSuggestions,
 } = await import('@/lib/recommendations');
 const { matchesDietFilter } = await import('@/lib/dietary');
 
@@ -102,5 +102,28 @@ describe('dismissals', () => {
 
   it('keys impressions by decision and item', () => {
     expect(impressionKey('d1', 'a')).not.toBe(impressionKey('d1', 'b'));
+  });
+});
+
+describe('which card belongs to the decision', () => {
+  const result = {
+    decisionId: 'd1',
+    items: [row('salad'), row('cola')].map((r) => ({ ...r, price: 4 })) as never[],
+  };
+
+  it('is only the first row of a fresh response', () => {
+    expect(isDecisionChoice(result, 'salad', false)).toBe(true);
+    // The next row, shown after the first was accepted or dismissed.
+    expect(isDecisionChoice(result, 'cola', false)).toBe(false);
+  });
+
+  it('is never a placeholder kept on screen while the next decision loads', () => {
+    expect(isDecisionChoice(result, 'salad', true)).toBe(false);
+  });
+
+  it('is nothing without a decision or a card', () => {
+    expect(isDecisionChoice({ decisionId: null, items: [] }, 'salad', false)).toBe(false);
+    expect(isDecisionChoice(result, undefined, false)).toBe(false);
+    expect(isDecisionChoice(undefined, 'salad', false)).toBe(false);
   });
 });

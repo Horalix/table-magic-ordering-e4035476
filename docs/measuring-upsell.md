@@ -230,3 +230,128 @@ host's session. That is a real limitation, stated rather than hidden.
 rebuilds the same profile on its next visit and the deletion is cosmetic. The
 orders survive: a privacy request must not put a hole in the day's
 reconciliation.
+
+## 11. Suggestions v3: what it learns from, and how to get an answer in a month
+
+`20261025100000_reco_learning_v3.sql` and `20261025110000_reco_measurement.sql`.
+Covered by `supabase/tests/reco-learning-v3.test.ts` and
+`reco-measurement.test.ts`.
+
+### The learning counts are the ledger's
+
+Until v3 the nightly job still built `suggestion_stats` — the numbers the
+ranker learns from and retires pairs by — out of browser events: a card could
+count as "shown" without being the decision's choice, and a tap on an order
+that was later cancelled counted as a success. Now, from the first decision
+the ledger holds:
+
+- **shown** is a decision whose dish was seen (an impression, or proof enough:
+  a dismissal or a paid line), once per decision;
+- **accepted** is that decision's dish on a completed order;
+- **dismissed** still comes from browser events, joined by decision id, for
+  diagnostics only.
+
+Browser events count only for the time before the ledger began, and age out
+of the 90-day window. `bandit_readiness()` has a new check,
+`stats_learn_from_ledger`, that passes once 90% of counted sightings come from
+the ledger. The card itself now reports a sighting only for the decision's
+own dish.
+
+### What changed in the ranking, briefly
+
+- A pair is used only when its **EB05** — the pessimistic end of a shrunk
+  observed/expected ratio — is above 1. Raw lift called two dishes ordered
+  once, together, a perfect match. Orders fade with a 45-day half-life instead
+  of disappearing at 90 days. `lift`, `confidence`, `pair_orders` and
+  `a_orders` keep their old 90-day meaning for the screens that quote them.
+- A dish with no history of its own can be suggested from its **section**:
+  "burgers go with fries", offered as the fries that sell at this time of day.
+- A new pair starts from what its dish does at the same placement elsewhere
+  (`suggestion_priors`), not from one global guess. A pair is **retired** only
+  when even the optimistic end of its record (95th percentile) is under the
+  floor — "2 in 60" at a dish that sells at 6% elsewhere is bad luck, not a
+  verdict.
+- Candidates are ranked by **expected profit**, P(taken) × unit margin from
+  `menu_unit_margins()`, against the best on the shortlist. Until a pair or
+  its dish has a record, every candidate's P(taken) is the same guess, so the
+  margin used is blended towards the shortlist average in proportion to how
+  little is known: otherwise "expected profit" would just mean "most
+  expensive", which the price rule exists to stop. `margin_score` is now a
+  ±0.05 nudge.
+- A dish this table has already seen suggested and passed over loses 0.15 per
+  sighting. No alcohol before `reco_alcohol_from` (12:00), to a table with a
+  kids' dish, or to a guest filtering for halal — curated pairs included.
+
+The policy version is now `v3-profit` (`v3-profit-thompson` once sampling is
+on), and the migration closes any experiment that was running.
+
+### Why spend per visit takes so long, and what helps
+
+Visits differ mostly because parties differ: a table of six spends five times
+a table of one. That spread is noise as far as the comparison is concerned,
+and it is large. The number of visits needed to see an effect δ on a mean
+with spread σ, at 80% power and 5% significance, is
+
+    visits = 7.85 · (σ/δ)² · (1/h + 1/(1 − h))        h = share held out
+
+so a 10% holdout needs `(10 + 1.11) / 4 = 2.8` times the visits of a 50/50
+split. Illustration only — the impact page computes it from real data: if σ
+is 80% of the average visit and the effect is 5%, a 50/50 test needs about
+8,000 visits; at 150 visits a day that is 54 days, and at 10% it is five
+months.
+
+Two things bring that into a month:
+
+1. **Adjusting for what was known before any suggestion could act**
+   (CUPED / ANCOVA). Covers, daypart, weekday or weekend, and the value of the
+   cart when the engine was first asked — before it could have shown anything,
+   in either arm — are combined into one predicted spend per visit, and the
+   comparison is made on what that prediction does not explain. It estimates
+   the same effect as the plain difference; when party size is what makes
+   visits differ, its interval is several times narrower. The impact
+   comparison returns it as `adjusted`, with `variance_reduction_pct` and its
+   own `days_to_answer`. `status` is still the plain comparison.
+   - Caveat: the first cart value is only recorded from v3 on; older visits
+     use the average, which is honest (it carries no information) but helps
+     less.
+2. **Attach rates**, which move much more than spend and are much less noisy:
+   - `attach.after_meal` — of visits with a main served, the share that then
+     ordered a dessert or a hot drink;
+   - `attach.drink_with_main` — of visits whose first round had a main, the
+     share with a drink in that round.
+   Each with a two-proportion interval. They answer "do the suggestions do
+   what they are for" weeks before spend can.
+
+`experiment_power()` now reports `days_to_answer` at the running split and
+`days_to_answer_at_50`.
+
+### Running a 3–4 week 50/50 test
+
+The default holdout is unchanged (0: everybody sees suggestions). To measure:
+
+1. **Admin → Service & suggestions → Measurement holdout**: set **50**, then
+   press **Start measuring at 50%**. (The Impact page's button starts a 10%
+   holdout; the number box alone starts nothing — assignment is recorded per
+   table when it opens, under a running experiment.) Starting closes any
+   experiment already running.
+2. **Change nothing about the ranking for the duration**: weights, curated
+   pairs you are unsure of, the alcohol time. A change mid-test blends two
+   treatments into one number. One thing can change on its own: if the
+   nightly job switches Thompson sampling on, it closes the experiment (the
+   policy changed). If `bandit_readiness()` is close to passing, start the
+   test after it does.
+3. **Do not stop when it first looks good.** Peeking and stopping at the first
+   significant day finds effects that are not there. Read it at the end of
+   week three; let it run to week four if `adjusted.days_to_answer_at_50` says
+   so.
+4. **Read, in order**: `srm.healthy` (if false, nothing else counts);
+   `guardrails` (ratings, minutes to served); `attach.after_meal` and
+   `attach.drink_with_main`; `adjusted` for net spend per visit; the plain
+   difference last.
+5. **Stop it** (`stop_experiment`, which also sets the holdout back to 0), or
+   keep a small ongoing holdout (5–10%) as a smoke alarm rather than a
+   measurement.
+
+It costs something: for those weeks half the tables see no suggestions. If
+the suggestions work, that is real money not earned — the price of knowing
+whether they do, paid once.

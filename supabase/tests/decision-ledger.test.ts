@@ -110,7 +110,7 @@ describe('every decision is recorded', () => {
     const d = await decisions();
     expect(d).toHaveLength(1);
     expect(d[0].chosen_item_id).toBe(COFFEE);
-    expect(d[0].policy_version).toBe('v1-fixed-ranker');
+    expect(d[0].policy_version).toBe('v3-profit');
     expect(Number(d[0].action_probability)).toBe(1);
   });
 

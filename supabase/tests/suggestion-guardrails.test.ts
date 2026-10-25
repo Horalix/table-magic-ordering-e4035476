@@ -196,8 +196,10 @@ describe('coursing rules', () => {
   });
 
   it('keeps alcohol and unclassified items to observed evidence', async () => {
-    expect(await fits('alcohol', 'cart', [BURGER])).toBe(false);
-    expect(await fits('alcohol', 'cart', [BURGER], { rtype: 'observed' })).toBe(true);
+    // At a fixed afternoon hour: alcohol is never suggested before noon at all
+    // (see reco-learning-v3), so "now" would make this depend on the clock.
+    expect(await fits('alcohol', 'cart', [BURGER], { at: AFTERNOON })).toBe(false);
+    expect(await fits('alcohol', 'cart', [BURGER], { rtype: 'observed', at: AFTERNOON })).toBe(true);
     expect(await fits(null, 'cart', [BURGER])).toBe(false);
     expect(await fits(null, 'cart', [BURGER], { rtype: 'observed' })).toBe(true);
   });

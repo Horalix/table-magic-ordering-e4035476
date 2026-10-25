@@ -196,8 +196,13 @@ describe('social proof says only what was measured', () => {
     // Mixed visits, so P(coffee) < 1 and the pairing carries real signal.
     // With coffee in every visit, lift collapses to 1.0 and the correct
     // answer is "say nothing" — which the last test in this block asserts.
-    for (let i = 0; i < 6; i += 1) await visit([[STEAK], [COFFEE]]);
-    for (let i = 0; i < 4; i += 1) await visit([[CAKE]]);
+    //
+    // Twelve steak-and-coffee visits among forty-two: enough for the shrunk
+    // strength (EB05) to clear 1, still under the 20-visit bar for a number.
+    // Six in ten no longer does — two dishes that keep appearing together in
+    // a handful of visits is what shrinkage exists to be sceptical about.
+    for (let i = 0; i < 12; i += 1) await visit([[STEAK], [COFFEE]]);
+    for (let i = 0; i < 30; i += 1) await visit([[CAKE]]);
     await refreshBoth();
 
     const e = await evidence(STEAK, COFFEE);

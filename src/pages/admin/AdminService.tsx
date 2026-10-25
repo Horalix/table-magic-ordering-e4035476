@@ -22,6 +22,8 @@ interface Settings {
   reco_weight_margin: number;
   reco_exploration: number;
   reco_holdout_pct: number;
+  /** Sarajevo time from which an alcoholic drink may be suggested; "12:00:00" by default. */
+  reco_alcohol_from?: string | null;
   session_idle_timeout_minutes: number;
   online_card_enabled: boolean;
   pay_at_table_enabled: boolean;
@@ -119,6 +121,25 @@ const AdminService = () => {
     const { error } = await supabase.from('restaurant_settings').update(changes as never).eq('id', 1);
     if (error) { toast.error(error.message); void load(); return; }
     toast.success('Saved');
+  };
+
+  /**
+   * Start a measured comparison at the holdout set above.
+   *
+   * The percentage box alone does not start one: assignment is recorded per
+   * table when it opens, under a running experiment. Starting closes any
+   * experiment already running.
+   */
+  const startMeasurement = async (pct: number) => {
+    const { data: version } = await supabase.rpc('reco_policy_version' as never);
+    const { error } = await supabase.rpc('start_experiment' as never, {
+      _name: `Suggestions ${pct}% holdout ${new Date().toISOString().slice(0, 10)}`,
+      _policy_version: (version as unknown as string) ?? 'unknown',
+      _holdout_pct: pct,
+    } as never);
+    if (error) { toast.error(error.message); return; }
+    toast.success(`Measuring: ${pct}% of new tables will see no suggestions`);
+    void load();
   };
 
   const nameOf = (id: string | null) => (id ? items.find((i) => i.id === id)?.name ?? 'Unknown item' : 'Any order');
@@ -534,8 +555,8 @@ const AdminService = () => {
             {([
               ['reco_weight_curated',  'Your own rules',        'Pairings you added by hand.'],
               ['reco_weight_observed', 'What sells together',   'Measured from real orders.'],
-              ['reco_weight_learned',  'What guests accept',    'Learned from what gets tapped.'],
-              ['reco_weight_margin',   'Profitability',         'Internal only — never shown to guests.'],
+              ['reco_weight_learned',  'What guests accept',    'How often it is ordered when shown — paid orders only.'],
+              ['reco_weight_margin',   'Profitability',         'Added to the line above: suggestions are ranked by acceptance × margin. Internal only.'],
               ['reco_exploration',     'Try new items',         'How much room a new dish gets to prove itself.'],
             ] as const).map(([key, label, hint]) => (
               <div key={key}>
@@ -570,6 +591,36 @@ const AdminService = () => {
               max={50}
               defaultValue={settings.reco_holdout_pct}
               onBlur={(e) => patch({ reco_holdout_pct: Math.min(50, Math.max(0, Number(e.target.value) || 0)) })}
+            />
+            <p className="text-xs text-muted-foreground font-sans mt-2 leading-relaxed">
+              The fastest honest answer is 50 for three to four weeks: a 10% holdout needs almost three
+              times as many tables to say the same thing. Setting the number does not start a measurement
+              on its own.
+            </p>
+            <Button
+              variant="outline"
+              className="mt-2 min-h-[44px]"
+              disabled={settings.reco_holdout_pct < 1}
+              onClick={() => void startMeasurement(settings.reco_holdout_pct)}
+            >
+              Start measuring at {settings.reco_holdout_pct}%
+            </Button>
+          </div>
+
+          <div className="pt-4 border-t border-border">
+            <Label htmlFor="alcohol-from" className="font-sans font-semibold text-sm">
+              Suggest alcoholic drinks from
+            </Label>
+            <p className="text-xs text-muted-foreground font-sans mb-1.5 leading-relaxed">
+              Before this time (Sarajevo) no alcoholic drink is suggested, not even one of your own
+              pairings. Never to a table with a kids' dish, and never to a guest filtering for halal.
+              Guests can still order from the menu.
+            </p>
+            <Input
+              id="alcohol-from"
+              type="time"
+              defaultValue={hhmm(settings.reco_alcohol_from ?? '12:00')}
+              onBlur={(e) => { if (e.target.value) void patch({ reco_alcohol_from: e.target.value }); }}
             />
           </div>
 

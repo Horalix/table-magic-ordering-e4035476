@@ -2,11 +2,11 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Plus, X } from 'lucide-react';
 import { useCartStore } from '@/lib/cart-store';
-import { useT, useLanguageStore, getLocalizedName } from '@/lib/i18n';
+import { useT, useLanguageStore, getLocalizedName, useI18n } from '@/lib/i18n';
 import SmartImage from '@/components/ui/SmartImage';
 import {
   fetchRecommendations, fetchSuggestionEvidence, markSuggestionSeen, headlineKeyFor,
-  impressionKey, pairingContextIds, useDismissedSuggestions, type Placement,
+  impressionKey, isDecisionChoice as choiceOf, pairingContextIds, useDismissedSuggestions, type Placement,
 } from '@/lib/recommendations';
 import { allergensToAvoid, useDietFilterStore } from '@/lib/dietary';
 import { track } from '@/lib/analytics';
@@ -45,6 +45,7 @@ const NONE: string[] = [];
  */
 const CartSuggestion = ({ placement, disabled, forItemIds }: Props) => {
   const t = useT();
+  const { price } = useI18n();
   const locale = useLanguageStore((s) => s.locale);
   const { items, addItem } = useCartStore();
   const sessionId = useCartStore((st) => st.sessionId);
@@ -96,7 +97,7 @@ const CartSuggestion = ({ placement, disabled, forItemIds }: Props) => {
    * else on screen (a placeholder after a dismissal, or the next row after an
    * accept) is not what the ledger says was shown.
    */
-  const isDecisionChoice = !isPlaceholderData && !!primary && data?.items[0]?.id === primary.id;
+  const isDecisionChoice = choiceOf(data, primary?.id, isPlaceholderData);
 
   /**
    * Report a sighting only when the card is genuinely on screen.
@@ -125,7 +126,11 @@ const CartSuggestion = ({ placement, disabled, forItemIds }: Props) => {
       timer = setTimeout(() => {
         if (reported.current.has(key)) return;
         reported.current.add(key);
-        if (isDecisionChoice) void markSuggestionSeen(decisionId, sessionId, sessionToken);
+        // Only the decision's own dish was "shown" as far as anything that
+        // learns is concerned; any other card under this decision id would
+        // be counted against the wrong dish.
+        if (!isDecisionChoice) return;
+        void markSuggestionSeen(decisionId, sessionId, sessionToken);
         track('suggestion_shown', {
           placement,
           decision_id: decisionId,
@@ -170,18 +175,22 @@ const CartSuggestion = ({ placement, disabled, forItemIds }: Props) => {
       id: primary.id,
       menuItemId: primary.id,
       name: primary.name,
+      name_bs: primary.name_bs,
+      name_ar: primary.name_ar,
       price: primary.price,
       image_url: primary.image_url || undefined,
       // Lets the server attribute what this suggestion actually earned.
+      // The decision id only when this card IS the decision's choice, so a
+      // paid line is never credited to a dish the decision did not pick.
       fromSuggestion: {
         sourceItemId: primary.source_item_id ?? null,
         placement,
-        decisionId,
+        decisionId: isDecisionChoice ? decisionId : null,
       },
     });
     track('suggestion_accepted', {
       placement,
-      decision_id: decisionId,
+      decision_id: isDecisionChoice ? decisionId : null,
       item_id: primary.id,
       source_item_id: primary.source_item_id ?? null,
       type: primary.recommendation_type,
@@ -195,7 +204,7 @@ const CartSuggestion = ({ placement, disabled, forItemIds }: Props) => {
   const dismiss = () => {
     track('suggestion_dismissed', {
       placement,
-      decision_id: decisionId,
+      decision_id: isDecisionChoice ? decisionId : null,
       item_id: primary.id,
       source_item_id: primary.source_item_id ?? null,
       type: primary.recommendation_type,
@@ -205,7 +214,7 @@ const CartSuggestion = ({ placement, disabled, forItemIds }: Props) => {
 
   return (
     <section className="px-4 pt-5" aria-label={t(headlineKeyFor(placement, primary.recommendation_type))}>
-      <p className="text-xs uppercase tracking-wide text-muted-foreground font-sans mb-2">
+      <p className="text-xs uppercase tracking-wide rtl:tracking-normal text-muted-foreground font-sans mb-2">
         {t(headlineKeyFor(placement, primary.recommendation_type))}
       </p>
 
@@ -223,12 +232,12 @@ const CartSuggestion = ({ placement, disabled, forItemIds }: Props) => {
         <div className="flex-1 min-w-0">
           <p className="font-serif text-base font-semibold text-foreground leading-tight truncate">{name}</p>
           <p className="text-sm font-sans font-semibold text-foreground tabular-nums mt-0.5">
-            {primary.price.toFixed(2)} KM
+            {price(primary.price)}
           </p>
           {/* Only what the data supports, and only when it supports it. */}
           {evidence?.kind === 'quantified' && (
             <p className="text-[11px] font-sans text-muted-foreground mt-0.5">
-              {t('ordered_by_share').replace('{pct}', String(evidence.percent))}
+              {t('ordered_by_share', { pct: evidence.percent })}
             </p>
           )}
           {evidence?.kind === 'qualitative' && (
@@ -238,7 +247,7 @@ const CartSuggestion = ({ placement, disabled, forItemIds }: Props) => {
           )}
           {evidence?.kind !== 'quantified' && evidence?.kind !== 'qualitative' && sourceLine && (
             <p className="text-xs font-sans text-muted-foreground mt-0.5 truncate">
-              {t('goes_with_your').replace('{name}', getLocalizedName(sourceLine, locale))}
+              {t('goes_with_your', { name: getLocalizedName(sourceLine, locale) })}
             </p>
           )}
         </div>
@@ -252,7 +261,7 @@ const CartSuggestion = ({ placement, disabled, forItemIds }: Props) => {
           </button>
           <button
             onClick={accept}
-            aria-label={`${t('add_to_order')} — ${name}`}
+            aria-label={t('add_item_to_order', { name })}
             className="h-11 px-4 rounded-full bg-primary text-primary-foreground font-sans font-semibold text-sm inline-flex items-center gap-1.5 hover:bg-sage-dark transition-colors tap-sm"
           >
             <Plus className="w-4 h-4" aria-hidden /> {t('add')}

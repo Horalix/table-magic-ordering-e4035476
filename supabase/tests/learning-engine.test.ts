@@ -292,12 +292,19 @@ describe('learning changes the order of suggestions', () => {
 
   it('gives a new item a chance when exploration is on', async () => {
     await db.query(`UPDATE public.restaurant_settings SET reco_exploration = 50 WHERE id = 1`);
-    await curate(BURGER, COLA, 90);
+    /*
+     * Cola is the owner's favourite and proven; coffee is unproven. Since v3
+     * the proven pair's expected profit carries real weight (it used to add
+     * about 0.02 to the score), so exploration can no longer outbid an owner
+     * ranking of 90 against 10 as well — 60 against 40 still leaves the new
+     * item a real chance, which is what this test is about.
+     */
+    await curate(BURGER, COLA, 60);
     await db.query(`
       INSERT INTO public.suggestion_stats(source_item_id, recommended_item_id, placement, shown, accepted)
       VALUES ($1, $2, 'cart', 5000, 900)
     `, [BURGER, COLA]);
-    await curate(BURGER, COFFEE, 10);
+    await curate(BURGER, COFFEE, 40);
 
     // Across many different sessions the never-shown item must sometimes win.
     let coffeeFirst = 0;
@@ -455,7 +462,7 @@ describe('revenue attribution', () => {
     await db.query(`SELECT public.refresh_suggestion_stats(90)`);
     const { rows } = await db.query<{ shown: number; accepted: number; attributed_revenue: string }>(
       `SELECT shown, accepted, attributed_revenue FROM public.suggestion_stats
-        WHERE recommended_item_id = $1 AND source_item_id = $2`, [FRIES, BURGER]);
+        WHERE recommended_item_id = $1 AND source_item_id = $2 AND daypart IS NULL`, [FRIES, BURGER]);
     await actAs(db, null);
 
     expect(rows[0].shown).toBe(2);

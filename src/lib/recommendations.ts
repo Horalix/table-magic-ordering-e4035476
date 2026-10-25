@@ -188,6 +188,22 @@ export const pairingContextIds = (
  */
 export const impressionKey = (decisionId: string, itemId: string): string => `${decisionId}:${itemId}`;
 
+/**
+ * Is the card on screen the dish this decision chose?
+ *
+ * The ledger records the FIRST row of a response as the decision's choice,
+ * and the server learns only from that. A placeholder shown while the next
+ * decision loads, or the next row after an accept, is a different dish under
+ * the same decision id: reporting it as seen, or attributing an order line to
+ * the decision, would credit the wrong dish.
+ */
+export const isDecisionChoice = (
+  result: RecommendationResult | undefined,
+  shownItemId: string | undefined,
+  isPlaceholder: boolean,
+): boolean =>
+  !isPlaceholder && !!shownItemId && !!result?.decisionId && result.items[0]?.id === shownItemId;
+
 /* ---- "No thanks", remembered for the visit ---------------------------- */
 
 interface DismissedState {
