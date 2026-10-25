@@ -24,7 +24,7 @@ import { sectionSlug } from '@/lib/menu-sections';
 import { PriceTag, SaleBadge, NewBadge, ComboBadge } from '@/components/guest/PriceTag';
 import { useComboMap } from '@/lib/promotions-api';
 import {
-  comboUnitPrice, fixedChoices, isNew, missingSlots, nextPriceChange, rememberPrices, saleView, type ComboDef,
+  comboRegularPrice, comboUnitPrice, fixedChoices, isNew, missingSlots, nextPriceChange, rememberPrices, saleView, type ComboDef,
 } from '@/lib/promotions';
 import type { Database } from '@/integrations/supabase/types';
 
@@ -357,7 +357,8 @@ const CategoryPage = () => {
       addItem({
         id: item.id, name: item.name, name_bs: item.name_bs, name_ar: item.name_ar,
         price: comboUnitPrice(item, def, choices),
-        regularPrice: sale ? Number(item.price) : undefined,
+        regularPrice: sale ? comboRegularPrice(item, def, choices) : undefined,
+        saleLabel: sale ? (item.sale_label ?? '') : undefined,
         image_url: item.image_url || undefined,
         combo: {
           components: def.slots.map((slot) => ({

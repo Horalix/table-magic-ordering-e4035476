@@ -215,7 +215,7 @@ const AdminPromotions = () => {
                       className="h-11 shrink-0 border-destructive/40 text-destructive hover:bg-destructive/10"
                       onClick={() => { void endSale(row); }}
                     >
-                      {state === 'ended' ? 'Clear' : 'End now'}
+                      {state === 'ended' ? 'Clear' : state === 'scheduled' ? 'Cancel' : 'End now'}
                     </Button>
                   </li>
                 );

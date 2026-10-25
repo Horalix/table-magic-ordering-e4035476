@@ -667,6 +667,13 @@ const MenuItemDialog = ({ open, onOpenChange, subcategoryId, item, onSaved, star
           </div>
 
           {/* ---- Promotions ---- */}
+          {/* Hidden, not silently ignored, until the database can store them. */}
+          {!promoAvailable && (
+            <p className="rounded-lg bg-muted px-3 py-2 text-[11px] font-sans text-muted-foreground">
+              Sales, combos and featuring appear here once the database has the promotions migration (20261026100000).
+            </p>
+          )}
+          {promoAvailable && (
           <PromoSection
             id="sale"
             title="Sale"
@@ -735,7 +742,9 @@ const MenuItemDialog = ({ open, onOpenChange, subcategoryId, item, onSaved, star
             )}
             <p className="text-[11px] text-muted-foreground font-sans">Times are Sarajevo time.</p>
           </PromoSection>
+          )}
 
+          {promoAvailable && (
           <PromoSection
             id="combo"
             title="Combo"
@@ -753,6 +762,7 @@ const MenuItemDialog = ({ open, onOpenChange, subcategoryId, item, onSaved, star
               comboIds={comboIds}
             />
           </PromoSection>
+          )}
 
           <div id="item-highlight" className="space-y-3">
             <PromoSection
@@ -768,6 +778,7 @@ const MenuItemDialog = ({ open, onOpenChange, subcategoryId, item, onSaved, star
               </div>
             </PromoSection>
 
+            {promoAvailable && (
             <PromoSection
               id="featured"
               title="Feature on the home screen"
@@ -784,6 +795,7 @@ const MenuItemDialog = ({ open, onOpenChange, subcategoryId, item, onSaved, star
                 <Input value={featuredNoteAr} onChange={(e) => setFeaturedNoteAr(e.target.value)} maxLength={80} placeholder="Line (AR)" dir="rtl" aria-label="Featured line (AR)" />
               </div>
             </PromoSection>
+            )}
           </div>
 
           <div className="grid grid-cols-2 gap-2">
