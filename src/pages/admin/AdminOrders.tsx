@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import { formatStamp } from '@/lib/timing';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -346,10 +347,10 @@ const AdminOrders = () => {
                       );
                     })()}
                   </div>
-                  <p className="text-xs text-muted-foreground font-sans mt-1">{new Date(order.created_at).toLocaleString()}</p>
+                  <p className="text-xs text-muted-foreground font-sans mt-1">{formatStamp(order.created_at)}</p>
                 </div>
                 <div className="flex items-start gap-1 shrink-0">
-                  <p className="font-serif font-bold text-foreground tabular-nums pt-2">{km(order.total)}</p>
+                  <p className="font-sans font-semibold text-foreground tabular-nums pt-2">{km(order.total)}</p>
                   {order.status !== 'cancelled' && (
                     <Button
                       variant="ghost"

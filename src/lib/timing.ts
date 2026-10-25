@@ -26,7 +26,9 @@ export function formatDuration(ms: number): string {
   const m = Math.floor((totalSec % 3600) / 60);
   const s = totalSec % 60;
   if (h > 0) return `${h}h ${m}m`;
-  if (m > 0) return `${m}m ${s}s`;
+  // Whole minutes past the first: a seconds counter ticking on a waiter's
+  // phone is noise, and nobody acts on "4m 37s" differently from "4m".
+  if (m > 0) return `${m}m`;
   return `${s}s`;
 }
 
@@ -36,11 +38,27 @@ export function formatMinutes(ms: number): string {
   return `${Math.floor(m / 60)}h ${m % 60}m`;
 }
 
+// The restaurant's own clock, whatever the device is set to: a manager's
+// laptop on US settings used to show "1:57:23 AM" next to a 24h kitchen.
+const CLOCK = new Intl.DateTimeFormat('en-GB', {
+  hour: '2-digit', minute: '2-digit', hourCycle: 'h23', timeZone: 'Europe/Sarajevo',
+});
+const STAMP = new Intl.DateTimeFormat('en-GB', {
+  day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hourCycle: 'h23', timeZone: 'Europe/Sarajevo',
+});
+
 /** An absolute time, for handovers — "ordered at 20:14" beats "34m ago". */
 export function formatClock(at: string | Date | null | undefined): string {
   if (!at) return '—';
   const d = typeof at === 'string' ? new Date(at) : at;
-  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  return CLOCK.format(d);
+}
+
+/** Day and time, for lists that span more than one service: "25 Oct, 01:57". */
+export function formatStamp(at: string | Date | null | undefined): string {
+  if (!at) return '—';
+  const d = typeof at === 'string' ? new Date(at) : at;
+  return STAMP.format(d);
 }
 
 /* ---- Ticking ---------------------------------------------------------- */

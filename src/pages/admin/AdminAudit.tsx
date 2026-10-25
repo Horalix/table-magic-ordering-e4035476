@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ChevronDown, ChevronRight, ScrollText, Search } from 'lucide-react';
-import { formatClock } from '@/lib/timing';
+import { formatStamp } from '@/lib/timing';
 import { localDayISO } from '@/lib/reporting';
 import type { Database } from '@/integrations/supabase/types';
 
@@ -198,7 +198,7 @@ const AdminAudit = () => {
                           than rendering a blank where a name should be. */}
                       {row.actor_label || (row.actor_user_id ? row.actor_user_id.slice(0, 8) : 'system')}
                       {' · '}
-                      {new Date(row.created_at).toLocaleDateString()} {formatClock(row.created_at)}
+                      {formatStamp(row.created_at)}
                       {row.reason ? ` · ${row.reason}` : ''}
                     </p>
                   </div>

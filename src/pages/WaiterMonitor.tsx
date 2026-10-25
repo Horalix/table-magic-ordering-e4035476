@@ -397,61 +397,67 @@ const WaiterMonitor = () => {
   return (
     <div className="min-h-screen bg-background text-foreground">
       <header className="sticky top-0 z-20 bg-card/95 backdrop-blur border-b border-border">
-        <div className="px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
+        <div className="px-4 sm:px-6 pt-3 pb-2 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2 min-w-0">
             {mode !== 'rail' && (
-              <Button variant="ghost" size="sm" onClick={() => { setMode('rail'); setActiveWaiterId(null); }} className="gap-1.5 min-h-[44px] text-sm">
-                <ArrowLeft className="w-4 h-4" /> Back
+              <Button variant="ghost" onClick={() => { setMode('rail'); setActiveWaiterId(null); }} className="w-11 h-11 p-0 shrink-0" aria-label="Back">
+                <ArrowLeft className="w-5 h-5" />
               </Button>
             )}
-            <div>
-              <h1 className="font-serif text-xl sm:text-2xl font-bold leading-tight">
-                {mode === 'mine' && activeWaiter ? `${activeWaiter.display_name}'s Floor` : mode === 'all' ? 'All Tables' : 'La Soul - Floor'}
+            <div className="min-w-0">
+              <h1 className="font-serif text-xl sm:text-2xl font-semibold leading-tight truncate">
+                {mode === 'mine' && activeWaiter ? `${activeWaiter.display_name}'s floor` : mode === 'all' ? 'All tables' : 'La Soul · Floor'}
               </h1>
-              <p className="text-[11px] uppercase tracking-widest text-muted-foreground font-sans">
-                {new Date(now).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} | {new Date(now).toLocaleDateString()}
+              {/* Restaurant time, 24-hour, and a date a Sarajevo team reads at
+                  a glance — not "01:58 AM | 10/25/2026". */}
+              <p className="text-xs text-muted-foreground font-sans tabular-nums">
+                {new Date(now).toLocaleString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hourCycle: 'h23', timeZone: 'Europe/Sarajevo' })}
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-2 flex-wrap">
-            <ConnectionPill state={connection} />
-            <StatPill icon={<Users className="w-3.5 h-3.5" />} label="Occupied" value={`${occupied}/${tables.length}`} tone="active" />
-            <StatPill icon={<ChefHat className="w-3.5 h-3.5" />} label="Orders" value={openOrders.length} tone={openOrders.length ? 'active' : 'idle'} />
-            <StatPill
-              icon={<Bell className="w-3.5 h-3.5" />}
-              label="Alerts"
-              /* The age of the longest wait, not just the count — five calls
-                 one minute old is a different night from one call ten minutes
-                 old, and the count alone cannot tell them apart. */
-              value={pendingAlerts ? `${pendingAlerts} · ${formatMinutes(oldestAlertMs)}` : 0}
-              tone={oldestAlertMs > 5 * 60_000 ? 'urgent' : pendingAlerts ? 'warn' : 'idle'}
-            />
-            <StatPill
-              icon={<Clock className="w-3.5 h-3.5" />}
-              label="Oldest"
-              value={oldestOrderMs ? formatMinutes(oldestOrderMs) : '-'}
-              tone={oldestOrderMs > 20 * 60_000 ? 'urgent' : oldestOrderMs > 10 * 60_000 ? 'warn' : 'idle'}
-            />
-            {/* Never an unmuted speaker over a context the browser has suspended. */}
-            {soundOn && !audioUnlocked && (
-              <button
-                onClick={() => { void unlockSound(); }}
-                className="inline-flex items-center gap-1.5 min-h-[44px] px-3 rounded-md text-sm font-sans font-medium bg-destructive/10 text-destructive hover:bg-destructive/20"
-              >
-                <VolumeX className="w-4 h-4" /> Sound blocked — tap to enable
-              </button>
-            )}
+          <div className="flex items-center gap-1.5 shrink-0">
             <button
               onClick={() => { const next = !soundOn; setSoundOn(next); localStorage.setItem('monitor:sound', String(next)); if (next) void unlockSound(); }}
               aria-label={soundOn ? 'Mute alerts' : 'Enable alerts'}
-              className="inline-flex items-center justify-center w-11 h-11 rounded-md border border-border hover:bg-accent/10"
+              className="inline-flex items-center justify-center w-11 h-11 rounded-full border border-border bg-card hover:bg-muted"
             >
               {soundOn ? <Volume2 className="w-5 h-5" /> : <VolumeX className="w-5 h-5 text-muted-foreground" />}
             </button>
-            <Link to="/waiter/login" className="inline-flex items-center gap-1.5 text-sm font-sans px-3 min-h-[44px] rounded-md border border-border hover:bg-accent/10">
-              <LogIn className="w-4 h-4" /> Sign in
+            <Link to="/waiter/login" aria-label="Sign in" className="inline-flex items-center justify-center gap-1.5 h-11 min-w-[44px] px-3 rounded-full border border-border bg-card hover:bg-muted text-sm font-sans font-medium">
+              <LogIn className="w-4 h-4" aria-hidden /> <span className="hidden sm:inline">Sign in</span>
             </Link>
           </div>
+        </div>
+        {/* One row of status, scrolling sideways on a narrow phone rather than
+            wrapping the header to three lines. */}
+        <div className="px-4 sm:px-6 pb-3 flex items-center gap-2 overflow-x-auto scrollbar-hide">
+          <ConnectionPill state={connection} className="shrink-0" />
+          {/* Never an unmuted speaker over a context the browser has suspended. */}
+          {soundOn && !audioUnlocked && (
+            <button
+              onClick={() => { void unlockSound(); }}
+              className="shrink-0 inline-flex items-center gap-1.5 h-9 px-3 rounded-full text-sm font-sans font-semibold bg-amber-100 text-amber-900 border border-amber-200"
+            >
+              <VolumeX className="w-4 h-4" aria-hidden /> Tap to enable sound
+            </button>
+          )}
+          <StatPill icon={<Users className="w-3.5 h-3.5" />} label="Occupied" value={`${occupied}/${tables.length}`} tone="active" />
+          <StatPill icon={<ChefHat className="w-3.5 h-3.5" />} label="Orders" value={openOrders.length} tone={openOrders.length ? 'active' : 'idle'} />
+          <StatPill
+            icon={<Bell className="w-3.5 h-3.5" />}
+            label="Alerts"
+            /* The age of the longest wait, not just the count — five calls
+               one minute old is a different night from one call ten minutes
+               old, and the count alone cannot tell them apart. */
+            value={pendingAlerts ? `${pendingAlerts} · ${formatMinutes(oldestAlertMs)}` : 0}
+            tone={oldestAlertMs > 5 * 60_000 ? 'urgent' : pendingAlerts ? 'warn' : 'idle'}
+          />
+          <StatPill
+            icon={<Clock className="w-3.5 h-3.5" />}
+            label="Oldest"
+            value={oldestOrderMs ? formatMinutes(oldestOrderMs) : '—'}
+            tone={oldestOrderMs > 20 * 60_000 ? 'urgent' : oldestOrderMs > 10 * 60_000 ? 'warn' : 'idle'}
+          />
         </div>
         {/* Persistent, not a toast: a toast is gone in four seconds and the
             board stays wrong until the next successful refresh. */}
@@ -713,7 +719,9 @@ const StatPill = ({
     urgent: 'bg-destructive/10 text-destructive border-destructive/20',
   } as const;
   return (
-    <div className={`hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-md border text-[11px] font-sans ${tones[tone]}`}>
+    // Shown on phones too now: the status row scrolls sideways instead of
+    // wrapping, so there is room for the numbers a host actually needs.
+    <div className={`flex shrink-0 items-center gap-1.5 h-9 px-3 rounded-full border text-xs font-sans whitespace-nowrap ${tones[tone]}`}>
       {icon}
       <span className="opacity-80">{label}</span>
       <span className="font-semibold">{value}</span>

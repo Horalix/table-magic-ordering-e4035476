@@ -487,9 +487,9 @@ const WaiterDashboard = () => {
             </div>
             <div className="min-w-0">
               <h1 className="font-serif text-lg sm:text-xl font-bold leading-tight truncate">{waiter?.display_name}</h1>
-              <div className="flex items-center gap-1.5 text-sm text-muted-foreground flex-wrap">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground mt-0.5">
+                <span className="whitespace-nowrap">{tables.length} table{tables.length !== 1 ? 's' : ''}</span>
                 <ConnectionPill state={connection} />
-                <span>{tables.length} table{tables.length !== 1 ? 's' : ''}</span>
               </div>
             </div>
           </div>
@@ -518,9 +518,9 @@ const WaiterDashboard = () => {
           <div className="max-w-6xl mx-auto px-4 sm:px-6 pb-2">
             <button
               onClick={() => { void unlockSound().then((ok) => { if (ok) playWaiterCallAlert(); }); }}
-              className="w-full min-h-[44px] rounded-lg bg-destructive/10 text-destructive text-sm font-sans font-semibold flex items-center justify-center gap-2"
+              className="w-full min-h-[44px] rounded-xl bg-amber-100 text-amber-900 border border-amber-200 text-sm font-sans font-semibold flex items-center justify-center gap-2"
             >
-              <VolumeX className="w-4 h-4" /> Sound is off on this phone — tap to enable alerts
+              <VolumeX className="w-4 h-4" aria-hidden /> Alerts are silent — tap to enable sound
             </button>
           </div>
         )}
@@ -532,11 +532,11 @@ const WaiterDashboard = () => {
         )}
 
         <div className="max-w-6xl mx-auto px-4 sm:px-6 pb-3 grid grid-cols-3 gap-2 text-center">
-          <StatChip label="Owed" value={totalOwed > 0 ? km(totalOwed) : '-'} tone={totalOwed > 0 ? 'warn' : 'idle'} />
+          <StatChip label="Owed" value={totalOwed > 0 ? km(totalOwed) : '—'} tone={totalOwed > 0 ? 'warn' : 'idle'} />
           <StatChip label="In kitchen" value={ordersWaiting} tone={ordersWaiting > 0 ? 'active' : 'idle'} />
           <StatChip
             label="Oldest wait"
-            value={oldestOrderMs > 0 ? formatDuration(oldestOrderMs) : '-'}
+            value={oldestOrderMs > 0 ? formatDuration(oldestOrderMs) : '—'}
             tone={oldestOrderMs > 10 * 60_000 ? 'urgent' : oldestOrderMs > 5 * 60_000 ? 'warn' : 'idle'}
           />
         </div>
@@ -701,9 +701,9 @@ const StatChip = ({
     urgent: 'bg-destructive/10 text-destructive',
   }[tone];
   return (
-    <div className={`rounded-lg ${toneCls} px-2 py-1.5`}>
-      <p className="text-[11px] uppercase tracking-wide opacity-70 leading-none">{label}</p>
-      <p className="font-serif font-bold text-base leading-tight tabular-nums mt-0.5">{value}</p>
+    <div className={`rounded-xl ${toneCls} px-2 py-2`}>
+      <p className="text-xs font-medium opacity-75 leading-none">{label}</p>
+      <p className="font-sans font-semibold text-lg leading-tight tabular-nums mt-1">{value}</p>
     </div>
   );
 };
@@ -711,7 +711,7 @@ const StatChip = ({
 const SectionTitle = ({ icon, title, count }: { icon: React.ReactNode; title: string; count: number }) => (
   <div className="flex items-center gap-2 mb-3">
     <span className="text-muted-foreground">{icon}</span>
-    <h2 className="font-serif text-base sm:text-lg font-bold">{title}</h2>
+    <h2 className="font-serif text-lg font-semibold">{title}</h2>
     <span className="text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground tabular-nums">{count}</span>
   </div>
 );

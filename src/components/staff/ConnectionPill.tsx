@@ -26,13 +26,16 @@ const ConnectionPill = ({ state, className = '' }: { state: ConnectionState; cla
   const label =
     state === 'live' ? 'Live'
       : state === 'connecting' ? 'Connecting…'
-        : 'Reconnecting — refreshing every 15s';
+        : 'Offline · retrying';
 
   return (
     <span
       role="status"
       aria-live="polite"
-      className={`inline-flex items-center gap-1 text-[11px] font-sans font-medium px-2 py-0.5 rounded-full ${style} ${className}`}
+      // Short enough to stay on one line next to a name on a phone; the
+      // tooltip and screen readers still get what the screen is doing.
+      title={state === 'reconnecting' ? 'Live updates dropped — refreshing every 15 seconds until they are back' : undefined}
+      className={`inline-flex items-center gap-1 whitespace-nowrap text-xs font-sans font-semibold px-2 py-0.5 rounded-full ${style} ${className}`}
     >
       <span className={`w-1.5 h-1.5 rounded-full ${dot}`} aria-hidden />
       {label}

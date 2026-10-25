@@ -251,7 +251,7 @@ const TableActionSheet = ({ table, meId, onClose, onChanged }: Props) => {
                 >
                   <Minus className="w-4 h-4" />
                 </Button>
-                <span className="w-10 text-center font-serif text-xl tabular-nums">{covers ?? '—'}</span>
+                <span className="w-10 text-center font-sans text-xl tabular-nums">{covers ?? '—'}</span>
                 <Button
                   size="icon" variant="outline" className="min-h-[44px] min-w-[44px]"
                   aria-label="One more"

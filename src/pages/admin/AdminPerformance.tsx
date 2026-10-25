@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { formatStamp } from '@/lib/timing';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -230,7 +231,7 @@ const AdminPerformance = () => {
                         </p>
                         {rating.comment && <p className="text-xs text-muted-foreground mt-1 break-words">"{rating.comment}"</p>}
                       </div>
-                      <span className="text-xs text-muted-foreground shrink-0">{new Date(rating.created_at).toLocaleString()}</span>
+                      <span className="text-xs text-muted-foreground shrink-0">{formatStamp(rating.created_at)}</span>
                     </div>
                   ))}
                 </div>

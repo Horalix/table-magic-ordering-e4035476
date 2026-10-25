@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { formatClock } from '@/lib/timing';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { supabase } from '@/integrations/supabase/client';
@@ -107,7 +108,7 @@ const StatCard = ({
           <div className="flex items-center justify-between gap-2">
             <div className="min-w-0">
               <p className="text-sm font-sans text-muted-foreground">{label}</p>
-              <p className="text-xl sm:text-2xl font-serif font-bold text-foreground mt-1 tabular-nums">{format(n)}</p>
+              <p className="text-xl sm:text-2xl font-sans font-semibold text-foreground mt-1 tabular-nums">{format(n)}</p>
             </div>
             <div className={`hidden sm:flex w-10 h-10 rounded-lg bg-muted items-center justify-center shrink-0 ${color}`}>
               <Icon className="w-5 h-5" />
@@ -153,7 +154,7 @@ const SuggestionsCard = () => {
             </p>
           ) : (
             <p className="mt-1 font-sans text-foreground">
-              <span className="font-serif text-2xl font-bold tabular-nums">{impact.attributed_revenue.toFixed(2)} KM</span>
+              <span className="font-sans text-2xl font-semibold tabular-nums">{impact.attributed_revenue.toFixed(2)} KM</span>
               <span className="text-sm text-muted-foreground ml-2">
                 from {impact.paid} added of {seen} shown
                 {impact.paid_acceptance_pct != null ? ` (${impact.paid_acceptance_pct}%)` : ''}
@@ -373,7 +374,7 @@ const AdminDashboard = () => {
               return (
                 <div key={row.key} className="rounded-xl border border-border p-4">
                   <p className="text-xs font-sans font-medium text-muted-foreground">{row.label}</p>
-                  <p className="font-serif text-2xl font-bold text-foreground mt-1 tabular-nums">
+                  <p className="font-sans text-2xl font-semibold text-foreground mt-1 tabular-nums">
                     {data.median === null ? '—' : Math.round(data.median)}
                     <span className="text-sm font-sans text-muted-foreground ml-1">min</span>
                   </p>
@@ -431,7 +432,7 @@ const AdminDashboard = () => {
                       Table {order.table_sessions?.tables?.table_number}
                       {order.guest_name && <span className="text-muted-foreground ml-2">- {order.guest_name}</span>}
                     </p>
-                    <p className="text-xs text-muted-foreground">{new Date(order.created_at).toLocaleTimeString()}</p>
+                    <p className="text-xs text-muted-foreground">{formatClock(order.created_at)}</p>
                   </div>
                   <div className="text-right">
                     <p className="text-sm font-sans font-semibold text-foreground tabular-nums">{Number(order.total).toFixed(2)} KM</p>

@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { formatStamp } from '@/lib/timing';
 import { Link } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import PrepAccuracyPanel from '@/components/admin/PrepAccuracyPanel';
@@ -22,7 +23,7 @@ import {
 
 const km = (n: number | null | undefined) => `${Number(n ?? 0).toFixed(2)} KM`;
 const pct = (n: number | null | undefined) => (n === null || n === undefined ? '—' : `${Number(n).toFixed(1)}%`);
-const when = (iso: string | null | undefined) => (iso ? new Date(iso).toLocaleString() : 'never');
+const when = (iso: string | null | undefined) => (iso ? formatStamp(iso) : 'never');
 
 /**
  * One section's data, or why it is missing.
@@ -65,7 +66,7 @@ const Stat = ({ icon: Icon, label, value, sub, tone = 'text-primary' }: {
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-sm font-sans text-muted-foreground">{label}</p>
-          <p className="text-2xl font-serif font-bold text-foreground mt-1 tabular-nums">{value}</p>
+          <p className="text-2xl font-sans font-semibold text-foreground mt-1 tabular-nums">{value}</p>
           {sub && <p className="text-xs font-sans text-muted-foreground mt-0.5 leading-snug">{sub}</p>}
         </div>
         <div className={`w-10 h-10 rounded-lg bg-muted grid place-items-center shrink-0 ${tone}`}>
@@ -101,7 +102,7 @@ const HoldoutSummary = ({ holdout }: { holdout: HoldoutComparison }) => {
       case 'positive':
         return (
           <>
-            <p className="font-serif text-3xl font-bold text-foreground tabular-nums">
+            <p className="font-sans text-3xl font-semibold text-foreground tabular-nums">
               {km(holdout.conservative_monthly_value)}{' '}
               <span className="text-base font-sans font-normal text-muted-foreground">a month</span>
             </p>
@@ -175,12 +176,12 @@ const HoldoutSummary = ({ holdout }: { holdout: HoldoutComparison }) => {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div className="rounded-xl border border-border p-4">
             <p className="text-xs font-sans text-muted-foreground">With suggestions</p>
-            <p className="text-xl font-serif font-bold tabular-nums mt-1">{km(treated.avg_net_sales)}</p>
+            <p className="text-xl font-sans font-semibold tabular-nums mt-1">{km(treated.avg_net_sales)}</p>
             <p className="text-xs font-sans text-muted-foreground">per visit · {treated.sessions} visits</p>
           </div>
           <div className="rounded-xl border border-border p-4">
             <p className="text-xs font-sans text-muted-foreground">Holdout ({holdout.holdout_pct}% of tables)</p>
-            <p className="text-xl font-serif font-bold tabular-nums mt-1">{km(held.avg_net_sales)}</p>
+            <p className="text-xl font-sans font-semibold tabular-nums mt-1">{km(held.avg_net_sales)}</p>
             <p className="text-xs font-sans text-muted-foreground">per visit · {held.sessions} visits</p>
           </div>
         </div>
@@ -426,7 +427,7 @@ const AdminMenuIntelligence = () => {
               </p>
               <Badge variant="outline" className="text-[11px]">Upper bound, not causal</Badge>
             </div>
-            <p className="font-serif text-xl font-bold text-foreground tabular-nums">
+            <p className="font-sans text-xl font-semibold text-foreground tabular-nums">
               {km(im.avg_order_with_suggestion)}{' '}
               <span className="text-sm font-sans font-normal text-muted-foreground">
                 vs {km(im.avg_order_without_suggestion)} per order (items, excluding tips)

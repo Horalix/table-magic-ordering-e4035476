@@ -96,7 +96,7 @@ const AllDayPanel = ({ station, onChanged }: Props) => {
             key={`${row.menu_item_id}-${row.station}`}
             className="flex items-center gap-3 rounded-xl border border-border bg-card px-4 py-3 min-h-[64px]"
           >
-            <span className="font-serif text-2xl font-bold tabular-nums text-foreground w-14 shrink-0">
+            <span className="font-sans text-2xl font-semibold tabular-nums text-foreground w-14 shrink-0">
               {outstanding > 0 ? outstanding : row.qty_ready}
             </span>
 

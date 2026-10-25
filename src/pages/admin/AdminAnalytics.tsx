@@ -285,7 +285,7 @@ const AdminAnalytics = () => {
               <Card key={label} className="border-border">
                 <CardContent className="p-4">
                   <p className="text-xs font-sans text-muted-foreground">{label}</p>
-                  <p className="font-serif text-xl font-bold text-foreground mt-1 tabular-nums">{value}</p>
+                  <p className="font-sans text-xl font-semibold text-foreground mt-1 tabular-nums">{value}</p>
                   {hint && <p className="text-[11px] font-sans text-muted-foreground mt-0.5">{hint}</p>}
                 </CardContent>
               </Card>

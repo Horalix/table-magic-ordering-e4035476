@@ -52,6 +52,9 @@ const navGroups = [
 const AdminLayout = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const currentLabel = navGroups.flatMap((g) => g.items)
+    .filter((i) => location.pathname === i.path || (i.path !== '/admin' && location.pathname.startsWith(i.path)))
+    .sort((a, b) => b.path.length - a.path.length)[0]?.label ?? 'Dashboard';
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [user, setUser] = useState<User | null>(null);
   const [authChecked, setAuthChecked] = useState(false);
@@ -145,16 +148,6 @@ const AdminLayout = () => {
 
   return (
     <div className="min-h-screen bg-background flex">
-      {/* Mobile menu button */}
-      <button
-        onClick={() => setSidebarOpen(!sidebarOpen)}
-        aria-label={sidebarOpen ? 'Close admin navigation' : 'Open admin navigation'}
-        aria-expanded={sidebarOpen}
-        className="lg:hidden fixed top-4 left-4 z-50 p-2 rounded-lg bg-card border border-border shadow-sm"
-      >
-        {sidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-      </button>
-
       {/* Sidebar */}
       <aside className={`
         fixed lg:static inset-y-0 left-0 z-40 w-64 bg-sidebar border-r border-sidebar-border
@@ -221,7 +214,23 @@ const AdminLayout = () => {
 
       {/* Main content */}
       <main className="flex-1 min-w-0 lg:ml-0">
-        <div className="p-6 lg:p-8 pt-16 lg:pt-8 max-w-7xl mx-auto w-full">
+        {/* A real top bar on phones instead of a lone floating button: it says
+            where you are and stays put while the page scrolls under it. */}
+        <div className="lg:hidden sticky top-0 z-50 h-14 flex items-center gap-2 px-2 bg-background/90 backdrop-blur border-b border-border/70">
+          <button
+            onClick={() => setSidebarOpen(!sidebarOpen)}
+            aria-label={sidebarOpen ? 'Close admin navigation' : 'Open admin navigation'}
+            aria-expanded={sidebarOpen}
+            className="w-11 h-11 rounded-full flex items-center justify-center hover:bg-muted"
+          >
+            {sidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+          </button>
+          <div className="min-w-0 leading-tight">
+            <p className="font-serif text-base font-semibold truncate">La Soul admin</p>
+            <p className="text-xs text-muted-foreground truncate">{currentLabel}</p>
+          </div>
+        </div>
+        <div className="px-4 py-5 sm:p-6 lg:p-8 max-w-7xl mx-auto w-full">
           <Outlet />
         </div>
       </main>

@@ -44,7 +44,7 @@ const Stat = ({ icon: Icon, label, value, sub, color = 'text-primary' }: { icon:
       <div className="flex items-center justify-between">
         <div>
           <p className="text-sm font-sans text-muted-foreground">{label}</p>
-          <p className="text-2xl font-serif font-bold text-foreground mt-1 tabular-nums">{value}</p>
+          <p className="text-2xl font-sans font-semibold text-foreground mt-1 tabular-nums">{value}</p>
           {sub && <p className="text-xs font-sans text-muted-foreground mt-0.5">{sub}</p>}
         </div>
         <div className={`w-10 h-10 rounded-lg bg-muted flex items-center justify-center ${color}`}><Icon className="w-5 h-5" /></div>
@@ -181,17 +181,17 @@ const AdminReports = () => {
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
             <Card className="border-border"><CardContent className="p-5">
               <div className="flex items-center gap-2 mb-1"><CreditCard className="w-4 h-4 text-primary" /><p className="font-sans font-semibold text-foreground">Card online</p></div>
-              <p className="text-2xl font-serif font-bold tabular-nums">{km(recon?.paid_online ?? s.cardPaidSum)}</p>
+              <p className="text-2xl font-sans font-semibold tabular-nums">{km(recon?.paid_online ?? s.cardPaidSum)}</p>
               <p className="text-xs text-muted-foreground font-sans mt-1">confirmed paid · {s.cardCount} chose card</p>
             </CardContent></Card>
             <Card className="border-border"><CardContent className="p-5">
               <div className="flex items-center gap-2 mb-1"><Banknote className="w-4 h-4 text-muted-foreground" /><p className="font-sans font-semibold text-foreground">Cash</p></div>
-              <p className="text-2xl font-serif font-bold tabular-nums">{km(recon?.paid_cash ?? 0)}</p>
+              <p className="text-2xl font-sans font-semibold tabular-nums">{km(recon?.paid_cash ?? 0)}</p>
               <p className="text-xs text-muted-foreground font-sans mt-1">recorded by staff · match the drawer</p>
             </CardContent></Card>
             <Card className="border-border"><CardContent className="p-5">
               <div className="flex items-center gap-2 mb-1"><Smartphone className="w-4 h-4 text-muted-foreground" /><p className="font-sans font-semibold text-foreground">POS terminal</p></div>
-              <p className="text-2xl font-serif font-bold tabular-nums">{km(recon?.paid_pos_terminal ?? 0)}</p>
+              <p className="text-2xl font-sans font-semibold tabular-nums">{km(recon?.paid_pos_terminal ?? 0)}</p>
               <p className="text-xs text-muted-foreground font-sans mt-1">match the terminal batch</p>
             </CardContent></Card>
           </div>

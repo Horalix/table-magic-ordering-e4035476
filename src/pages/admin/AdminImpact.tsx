@@ -152,7 +152,7 @@ const AdminImpact = () => {
             <CardContent className="p-6">
               {c.status === 'positive' && (
                 <>
-                  <p className="font-serif text-4xl font-bold text-foreground tabular-nums">
+                  <p className="font-sans text-4xl font-semibold text-foreground tabular-nums">
                     {km(c.conservative_monthly_value)}
                     <span className="text-lg font-sans font-normal text-muted-foreground"> a month</span>
                   </p>
