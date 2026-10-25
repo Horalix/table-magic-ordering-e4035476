@@ -41,3 +41,6 @@ assets/menu-photos/
 
 # Agent worktrees (parallel work branches; merged through git, never committed)
 .claude/worktrees/
+
+# Sales material (pitch deck, generated slides)
+assets/pitch/
