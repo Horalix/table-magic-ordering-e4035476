@@ -1,98 +1,116 @@
-// CloudPRNT endpoint (scaffold) for Star/Epson network thermal printers.
-// The printer polls this URL; it returns queued kitchen tickets from
-// `order_ticket_events` as plain text and marks them printed.
+// Cloud printing endpoint for network thermal printers.
 //
-// Protect with a shared secret: set CLOUDPRNT_TOKEN as an Edge secret and
-// configure the printer's poll URL as
-//   https://<project>.functions.supabase.co/cloudprnt?token=<CLOUDPRNT_TOKEN>
+// A Star CloudPRNT printer (TSP143IV, mC-Print3) or an Epson Server Direct
+// Print printer (TM-m30III, TM-T88VII) polls this URL every few seconds and
+// prints the kitchen/bar tickets waiting for its station. No tablet, no local
+// software, nothing to pair.
 //
-// NOTE: this follows Star CloudPRNT's POST(status)/GET(job)/DELETE(ack) shape
-// but has not been verified against a physical printer — confirm during setup.
+// Each printer has its own URL, made in Admin → Printing:
+//
+//   https://<project>.supabase.co/functions/v1/cloudprnt/<poll_token>
+//
+// The protocol logic lives in ../_shared/cloud-print.ts (unit-tested); the
+// ticket layout in ../_shared/ticket-layout.ts (shared with the web app). This
+// file only connects them to the database, using the service role and the
+// SECURITY DEFINER functions from 20261026120000_cloud_printers.sql — the same
+// claim/report queue the tablets use, so a printer and a tablet can never both
+// print one ticket.
+//
+// Deploy with verify_jwt = false (see supabase/config.toml): a printer cannot
+// send a Supabase JWT. The poll token in the path is the credential.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import { handleCloudPrint, type CloudPrintBackend, type ClaimedTicket, type CloudPrinter } from "../_shared/cloud-print.ts";
+import type { TicketOrder } from "../_shared/ticket-layout.ts";
 
-const cors = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, content-type",
-  "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
+const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, {
+  auth: { autoRefreshToken: false, persistSession: false },
+});
+
+const rec = (value: unknown): Record<string, unknown> =>
+  typeof value === "object" && value !== null ? (value as Record<string, unknown>) : {};
+
+const rpc = async <T>(fn: string, args: Record<string, unknown>): Promise<T | null> => {
+  const { data, error } = await admin.rpc(fn, args);
+  if (error) throw new Error(`${fn}: ${error.message}`);
+  return (data ?? null) as T | null;
 };
 
-const money = (n: unknown) => `${Number(n ?? 0).toFixed(2)} KM`;
+const backend: CloudPrintBackend = {
+  checkin: (token, protocol, mac, status) =>
+    rpc<CloudPrinter>("cloud_printer_checkin", { _token: token, _protocol: protocol, _mac: mac, _status: status }),
 
-const toRecord = (value: unknown): Record<string, unknown> =>
-  typeof value === "object" && value !== null ? Object.fromEntries(Object.entries(value)) : {};
+  claim: (token, ticketId) =>
+    rpc<ClaimedTicket>("cloud_print_claim", { _token: token, _ticket_id: ticketId }),
 
-function renderTicket(payload: unknown): string {
-  const ticket = toRecord(payload);
-  const items = Array.isArray(ticket.items) ? ticket.items.map(toRecord) : [];
-  const lines: (string | null)[] = [
-    "LA SOUL — KITCHEN",
-    `Table: ${ticket.table_number ?? "?"}`,
-    ticket.guest_name ? `Guest: ${ticket.guest_name}` : null,
-    `Time: ${new Date(String(ticket.created_at ?? Date.now())).toLocaleString()}`,
-    "--------------------------------",
-    ...items.flatMap((it) => [
-      `${it.quantity} x ${it.name}`,
-      it.notes ? `  >> ${it.notes}` : null,
-    ]),
-    "--------------------------------",
-    ticket.total != null ? `TOTAL: ${money(ticket.total)}` : null,
-    ticket.payment_method ? `Pay: ${String(ticket.payment_method).toUpperCase()}` : null,
-  ];
-  return lines.filter((l) => l != null).join("\n") + "\n\n\n";
-}
+  report: (token, ticketId, ok, error) =>
+    rpc<string>("cloud_print_report", { _token: token, _ticket_id: ticketId, _ok: ok, _error: error }),
 
-Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response(null, { headers: cors });
+  testDone: async (token, ok, error) => {
+    await rpc("cloud_printer_test_done", { _token: token, _ok: ok, _error: error });
+  },
 
-  const TOKEN = Deno.env.get("CLOUDPRNT_TOKEN");
-  if (!TOKEN) return new Response("CloudPRNT not configured", { status: 501, headers: cors });
+  // Read live at print time rather than from the payload queued with the
+  // ticket: a reprint should show the order as it is now, and `*` picks up
+  // newer columns (order_items.components) without this file changing.
+  loadOrder: async (orderId): Promise<TicketOrder | null> => {
+    const { data, error } = await admin
+      .from("orders")
+      .select("id, order_code, created_at, released_to_kitchen_at, guest_name, notes, payment_method, payment_status, total, tip_amount, table_sessions(assigned_waiter_id, tables(table_number, sections(name))), order_items(*, menu_items(name, allergens))")
+      .eq("id", orderId)
+      .maybeSingle();
+    if (error || !data) return null;
+    const order = rec(data);
+    const session = rec(order.table_sessions);
+    const table = rec(session.tables);
+    const section = rec(table.sections);
 
-  const url = new URL(req.url);
-  const provided = url.searchParams.get("token") || req.headers.get("x-cloudprnt-token") || "";
-  if (provided !== TOKEN) return new Response("Unauthorized", { status: 401, headers: cors });
-
-  const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, {
-    auth: { autoRefreshToken: false, persistSession: false },
-  });
-
-  const nextQueued = async () =>
-    admin.from("order_ticket_events").select("id, payload")
-      .eq("ticket_type", "kitchen").in("status", ["queued", "exported"])
-      .order("created_at", { ascending: true }).limit(1).maybeSingle();
-
-  try {
-    // Printer asks "is there a job?" (Star sends POST with its status JSON).
-    if (req.method === "POST") {
-      const { data } = await nextQueued();
-      return new Response(
-        JSON.stringify({ jobReady: !!data, mediaTypes: ["text/plain"], jobToken: data?.id ?? "" }),
-        { headers: { ...cors, "Content-Type": "application/json" } },
-      );
+    let waiter: string | null = null;
+    if (typeof session.assigned_waiter_id === "string") {
+      const { data: w } = await admin.from("waiters").select("display_name").eq("id", session.assigned_waiter_id).maybeSingle();
+      waiter = typeof w?.display_name === "string" ? w.display_name : null;
     }
 
-    // Printer fetches the job content.
-    if (req.method === "GET") {
-      const { data } = await nextQueued();
-      if (!data) return new Response("", { status: 200, headers: { ...cors, "Content-Type": "text/plain" } });
-      await admin.from("order_ticket_events").update({ status: "exported", exported_at: new Date().toISOString() }).eq("id", data.id);
-      return new Response(renderTicket(data.payload), { status: 200, headers: { ...cors, "Content-Type": "text/plain; charset=utf-8" } });
-    }
+    const items = (Array.isArray(order.order_items) ? order.order_items : []).map(rec)
+      .map((item) => {
+        const menu = rec(item.menu_items);
+        return {
+          quantity: Number(item.quantity ?? 1),
+          menu_item_name: String(menu.name ?? "Item"),
+          notes: typeof item.notes === "string" ? item.notes : null,
+          station: typeof item.station === "string" ? item.station : "kitchen",
+          allergens: Array.isArray(menu.allergens) ? (menu.allergens as string[]) : null,
+          components: Array.isArray(item.components) ? (item.components as TicketOrder["items"][number]["components"]) : null,
+          unit_price: item.unit_price == null ? null : Number(item.unit_price),
+        };
+      });
 
-    // Printer confirms it printed → mark printed.
-    if (req.method === "DELETE") {
-      const target = url.searchParams.get("jobToken");
-      if (target) {
-        await admin.from("order_ticket_events").update({ status: "printed", printed_at: new Date().toISOString() }).eq("id", target);
-      } else {
-        const { data } = await admin.from("order_ticket_events").select("id").eq("status", "exported").order("exported_at", { ascending: true }).limit(1).maybeSingle();
-        if (data) await admin.from("order_ticket_events").update({ status: "printed", printed_at: new Date().toISOString() }).eq("id", data.id);
-      }
-      return new Response("ok", { status: 200, headers: cors });
-    }
+    return {
+      id: String(order.id),
+      order_code: typeof order.order_code === "string" ? order.order_code : null,
+      table_number: Number(table.table_number ?? 0) || "?",
+      created_at: String(order.created_at),
+      released_to_kitchen_at: typeof order.released_to_kitchen_at === "string" ? order.released_to_kitchen_at : null,
+      guest_name: typeof order.guest_name === "string" ? order.guest_name : null,
+      section_name: typeof section.name === "string" ? section.name : null,
+      waiter_name: waiter,
+      notes: typeof order.notes === "string" ? order.notes : null,
+      payment_method: typeof order.payment_method === "string" ? order.payment_method : null,
+      payment_status: typeof order.payment_status === "string" ? order.payment_status : null,
+      total: order.total == null ? null : Number(order.total),
+      tip_amount: order.tip_amount == null ? null : Number(order.tip_amount),
+      items,
+    };
+  },
 
-    return new Response("Method not allowed", { status: 405, headers: cors });
-  } catch (e) {
-    return new Response(e instanceof Error ? e.message : "error", { status: 500, headers: cors });
-  }
-});
+  settings: async () => {
+    const { data } = await admin.from("restaurant_settings").select("print_header, print_footer").eq("id", 1).maybeSingle();
+    const row = rec(data);
+    return {
+      header: typeof row.print_header === "string" ? row.print_header : null,
+      footer: typeof row.print_footer === "string" ? row.print_footer : null,
+    };
+  },
+};
+
+Deno.serve((req) => handleCloudPrint(req, backend));

@@ -296,6 +296,17 @@
     0%, 100% { box-shadow: 0 0 0 0 hsl(var(--breathe-color) / 0.0), 0 0 0 1px hsl(var(--breathe-color) / 0.25); }
     50% { box-shadow: 0 0 16px -2px hsl(var(--breathe-color) / 0.35), 0 0 0 1px hsl(var(--breathe-color) / 0.45); }
   }
+
+  /* [KDS] The new-order banner flashes six times, then holds still: enough to
+     catch an eye across a kitchen, not a strobe for the rest of the shift.
+     Reduced-motion users get the solid colour (see below). */
+  .kds-flash {
+    animation: kds-flash 0.9s ease-in-out 6;
+  }
+  @keyframes kds-flash {
+    0%, 100% { filter: none; transform: scale(1); }
+    50% { filter: brightness(1.18) saturate(1.15); transform: scale(1.01); }
+  }
 }
 
 /* [a11y] Respect reduced motion */

@@ -1,14 +1,18 @@
 import React, { useEffect, useState } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Monitor, Wifi, Bluetooth, Copy, Check, Printer, ChevronDown, Loader2, CheckCircle2, AlertTriangle, Sparkles, HelpCircle } from 'lucide-react';
+import { Monitor, Wifi, Bluetooth, Copy, Check, Printer, ChevronDown, Loader2, CheckCircle2, AlertTriangle, Sparkles, HelpCircle, Usb } from 'lucide-react';
 import { toast } from 'sonner';
-import { buildKitchenTicketText, type KitchenPrintSettings } from '@/lib/ticket-export';
+import { buildKitchenTicketBytes, type KitchenPrintSettings } from '@/lib/ticket-export';
 import {
   bluetoothSupported, connectBluetoothPrinter, connectedPrinterName, disconnectBluetoothPrinter,
-  printTextBluetooth, inEmbeddedFrame, friendlyBluetoothError, tryReconnectBluetoothPrinter,
+  printBytesBluetooth, inEmbeddedFrame, friendlyBluetoothError, tryReconnectBluetoothPrinter,
   forgetBluetoothPrinter, rememberedPrinterName,
 } from '@/lib/printer-connect';
+import {
+  connectSerialPrinter, connectUsbPrinter, directPrinterName, forgetDirectPrinters, printBytesDirect,
+  serialSupported, tryReconnectSerialPrinter, tryReconnectUsbPrinter, usbSupported,
+} from '@/lib/printer-direct';
 
 /**
  * Self-serve kitchen-ticket printer setup. Leads with the easiest method for the
@@ -16,8 +20,6 @@ import {
  */
 
 const origin = typeof window !== 'undefined' ? window.location.origin : 'https://menu.lasoul.net';
-const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL as string | undefined) ?? 'https://YOUR-PROJECT.supabase.co';
-const cloudPrntUrl = `${supabaseUrl}/functions/v1/cloudprnt?token=YOUR_TOKEN`;
 const winShortcut = `"C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe" --kiosk-printing ${origin}/kitchen`;
 const macShortcut = `open -a "Google Chrome" --args --kiosk-printing ${origin}/kitchen`;
 const PRINTER_KEY = 'kitchen:isPrinter';
@@ -95,7 +97,36 @@ const PrinterSetupGuide = ({ settings, onTestPrint }: { settings: KitchenPrintSe
   const btBlocked = inEmbeddedFrame();
   const recommend: 'device' | 'bluetooth' = btOk && !btBlocked ? 'bluetooth' : 'device';
 
-  const [method, setMethod] = useState<'device' | 'bluetooth' | 'network'>(recommend);
+  const [method, setMethod] = useState<'device' | 'bluetooth' | 'usb' | 'network'>(recommend);
+  const directOk = usbSupported() || serialSupported();
+  const [directName, setDirectName] = useState<string | null>(() => directPrinterName());
+  const [directBusy, setDirectBusy] = useState(false);
+
+  useEffect(() => {
+    if (!directOk) return;
+    void tryReconnectUsbPrinter().then((n) => { if (n) setDirectName(n); });
+    void tryReconnectSerialPrinter().then((n) => { if (n) setDirectName((prev) => prev ?? n); });
+  }, [directOk]);
+
+  const connectDirect = async (kind: 'usb' | 'serial') => {
+    setDirectBusy(true);
+    try {
+      const name = kind === 'usb' ? await connectUsbPrinter() : await connectSerialPrinter();
+      setDirectName(name);
+      toast.success(`Connected to ${name}`);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (!/No device selected|cancel/i.test(msg)) toast.error(msg);
+    } finally { setDirectBusy(false); }
+  };
+  const testDirect = async () => {
+    setDirectBusy(true);
+    try {
+      const outcome = await printBytesDirect(buildKitchenTicketBytes(sampleOrder, { ...settings, test: true }));
+      if (!outcome.ok) toast.error(outcome.reason);
+      else toast.success('Test ticket sent. This printer cannot confirm — check the paper came out.');
+    } finally { setDirectBusy(false); }
+  };
   const [showSilent, setShowSilent] = useState(false);
   const [isPrinter, setIsPrinter] = useState(() => typeof localStorage !== 'undefined' && localStorage.getItem(PRINTER_KEY) === 'true');
   const [btName, setBtName] = useState<string | null>(() => connectedPrinterName());
@@ -135,7 +166,7 @@ const PrinterSetupGuide = ({ settings, onTestPrint }: { settings: KitchenPrintSe
   const testBt = async () => {
     setBtBusy(true);
     try {
-      const outcome = await printTextBluetooth(buildKitchenTicketText(sampleOrder, settings), settings.copies);
+      const outcome = await printBytesBluetooth(buildKitchenTicketBytes(sampleOrder, { ...settings, test: true }));
       if (!outcome.ok) toast.error(outcome.reason);
       else if (outcome.verified) toast.success('Test ticket printed — the printer confirmed it');
       else toast.success('Test ticket sent. This printer cannot confirm — check the paper came out.');
@@ -150,9 +181,9 @@ const PrinterSetupGuide = ({ settings, onTestPrint }: { settings: KitchenPrintSe
       <CardContent className="p-5 space-y-4">
         <div>
           <h2 className="font-serif text-lg font-semibold text-foreground flex items-center gap-2">
-            <Printer className="w-5 h-5 text-primary" /> Connect your kitchen printer
+            <Printer className="w-5 h-5 text-primary" /> Tablet printing
           </h2>
-          <p className="text-xs text-muted-foreground font-sans mt-1">For the printer that prints <span className="text-foreground/80">kitchen tickets</span>. The <span className="text-foreground/80">fiscal receipt</span> printer (Tring) is set up separately via fiscalization.</p>
+          <p className="text-xs text-muted-foreground font-sans mt-1">Set up on the tablet that runs the Kitchen screen. The <span className="text-foreground/80">fiscal receipt</span> printer (Tring) is set up separately via fiscalization.</p>
         </div>
 
         {recommend === 'bluetooth' && (
@@ -162,10 +193,11 @@ const PrinterSetupGuide = ({ settings, onTestPrint }: { settings: KitchenPrintSe
           </div>
         )}
 
-        <div className={`grid gap-2 ${btOk ? 'grid-cols-1 sm:grid-cols-3' : 'grid-cols-1 sm:grid-cols-2'}`}>
+        <div className={`grid gap-2 grid-cols-1 sm:grid-cols-2 ${btOk && directOk ? 'lg:grid-cols-4' : btOk || directOk ? 'lg:grid-cols-3' : ''}`}>
           {btOk && <MethodButton active={method === 'bluetooth'} onClick={() => setMethod('bluetooth')} icon={Bluetooth} title="Bluetooth" sub="Pair once, prints automatically" recommended={recommend === 'bluetooth'} />}
-          <MethodButton active={method === 'device'} onClick={() => setMethod('device')} icon={Monitor} title="This device" sub="USB printer on this tablet/PC" recommended={recommend === 'device'} />
-          <MethodButton active={method === 'network'} onClick={() => setMethod('network')} icon={Wifi} title="Network" sub="Wi-Fi/LAN — no computer" />
+          {directOk && <MethodButton active={method === 'usb'} onClick={() => setMethod('usb')} icon={Usb} title="USB or classic Bluetooth" sub="Android tablet + USB cable; Bluetooth printers missing above" />}
+          <MethodButton active={method === 'device'} onClick={() => setMethod('device')} icon={Monitor} title="This device" sub="Print dialog — Windows/Mac printer" recommended={recommend === 'device'} />
+          <MethodButton active={method === 'network'} onClick={() => setMethod('network')} icon={Wifi} title="Network" sub="LAN printer — no tablet needed" />
         </div>
 
         {/* BLUETOOTH */}
@@ -225,6 +257,44 @@ const PrinterSetupGuide = ({ settings, onTestPrint }: { settings: KitchenPrintSe
           </div>
         )}
 
+        {/* USB / SERIAL — straight to the printer, no dialog */}
+        {method === 'usb' && directOk && (
+          <div className="space-y-3 pt-1">
+            <div className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-sans ${directName ? 'bg-primary/10 text-primary' : 'bg-muted/50 text-muted-foreground'}`}>
+              {directName ? <CheckCircle2 className="w-4 h-4 shrink-0" /> : <Usb className="w-4 h-4 shrink-0" />}
+              {directName ? <span>Connected: <span className="font-semibold">{directName}</span> · reconnects automatically</span> : 'No USB or serial printer connected'}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {usbSupported() && (
+                <Button onClick={() => connectDirect('usb')} disabled={directBusy} variant={directName ? 'outline' : 'default'} className="gap-1.5">
+                  {directBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Usb className="w-4 h-4" />} Connect USB printer
+                </Button>
+              )}
+              {serialSupported() && (
+                <Button onClick={() => connectDirect('serial')} disabled={directBusy} variant="outline" className="gap-1.5">
+                  <Bluetooth className="w-4 h-4" /> Classic Bluetooth / serial
+                </Button>
+              )}
+              {directName && (
+                <>
+                  <Button variant="outline" onClick={testDirect} disabled={directBusy} className="gap-1.5"><Printer className="w-4 h-4" /> Send a test ticket</Button>
+                  <Button variant="ghost" onClick={() => { void forgetDirectPrinters().then(() => setDirectName(null)); }} className="text-muted-foreground">Forget</Button>
+                </>
+              )}
+            </div>
+            <div className="space-y-3 pt-1">
+              <Step n={1}><span className="font-medium text-foreground">Android tablet:</span> plug the printer in with a USB‑OTG cable, open this page in <span className="font-medium text-foreground">Chrome</span>, tap <span className="font-medium text-foreground">Connect USB printer</span> and pick it.</Step>
+              <Step n={2}><span className="font-medium text-foreground">Bluetooth printer that does not show up under Bluetooth:</span> pair it in the tablet’s own Bluetooth settings first (PIN is usually 0000 or 1234), then tap <span className="font-medium text-foreground">Classic Bluetooth / serial</span>.</Step>
+              <Step n={3}>Send a test ticket, then keep the <span className="font-medium text-foreground">Kitchen Display</span> open on this tablet — it reconnects on its own and prints every new order, with no print dialog.</Step>
+            </div>
+            <Troubleshoot tips={[
+              <>On Windows the printer’s own driver holds a USB printer — use <span className="font-medium">This device</span> (the print dialog) there instead.</>,
+              <>Classic Bluetooth needs Chrome 117+ on a computer or Chrome 137+ on Android.</>,
+              <>If tickets come out as strange characters, the printer may not be ESC/POS — check its manual or use a network printer.</>,
+            ]} />
+          </div>
+        )}
+
         {/* THIS DEVICE */}
         {method === 'device' && (
           <div className="space-y-3 pt-1">
@@ -264,18 +334,19 @@ const PrinterSetupGuide = ({ settings, onTestPrint }: { settings: KitchenPrintSe
           </div>
         )}
 
-        {/* NETWORK */}
+        {/* NETWORK — now its own section with per-printer addresses. */}
         {method === 'network' && (
           <div className="space-y-3 pt-1">
-            <Step n={1}>Set a secret password: in <span className="font-medium text-foreground">Supabase → Edge Functions → Secrets</span>, add <code className="text-xs bg-muted px-1 rounded">CLOUDPRNT_TOKEN</code> with any strong value.</Step>
-            <Step n={2}>
-              Open your Wi-Fi/LAN printer's setup page and paste this as the <span className="font-medium text-foreground">Server / Poll URL</span> (replace <code className="text-xs bg-muted px-1 rounded">YOUR_TOKEN</code>):
-              <CopyField value={cloudPrntUrl} />
-            </Step>
-            <Step n={3}>Save on the printer. It checks for new orders every few seconds and <span className="font-medium text-foreground">prints them automatically — no tablet or computer needed.</span></Step>
-            <p className="text-[11px] text-muted-foreground font-sans flex items-start gap-1.5 rounded-lg bg-muted/40 border border-border p-2.5">
-              <Wifi className="w-3.5 h-3.5 mt-0.5 shrink-0" /> Uses the Star CloudPRNT standard (Star/Epson network printers). Confirm the exact field name on your model with your installer the first time.
+            <p className="flex items-start gap-2 rounded-lg bg-primary/5 border border-primary/20 px-3 py-2.5 text-sm font-sans text-foreground/80">
+              <Wifi className="w-4 h-4 mt-0.5 shrink-0 text-primary" />
+              <span>
+                A network printer does not need this tablet at all. Add it under <span className="font-semibold text-foreground">Network printers</span> at
+                the top of this page — it gets its own address to paste into the printer, and shows here when it is online.
+              </span>
             </p>
+            <Button variant="outline" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} className="gap-1.5">
+              <Wifi className="w-4 h-4" /> Go to Network printers
+            </Button>
           </div>
         )}
       </CardContent>

@@ -422,6 +422,8 @@ export async function installStaffStubs(page: Page, state: StaffState) {
     if (url.searchParams.get('held_reason') === 'not.is.null') rows = rows.filter(held);
     if ((url.searchParams.get('or') ?? '').includes('held_reason.is.null')) rows = rows.filter((o) => !held(o));
     if (!filter) return json(route, rows);
+    // The waiter phone asks for everything on a table except cancelled.
+    if (filter.startsWith('neq.')) return json(route, rows.filter((o) => String(o.status) !== filter.slice(4)));
     // `in.(a,b,c)` or `eq.x`
     const wanted = filter.startsWith('in.')
       ? filter.slice(4, -1).split(',').map((s) => s.replace(/"/g, ''))

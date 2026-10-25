@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -17,6 +17,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { toast } from 'sonner';
 import MenuItemDialog from '@/components/admin/MenuItemDialog';
+import InlinePrice from '@/components/admin/InlinePrice';
 import { DIET_BY_KEY, getItemTags } from '@/lib/dietary';
 import { Link } from 'react-router-dom';
 import { isNew, saleScheduled } from '@/lib/promotions';
@@ -270,6 +271,37 @@ const AdminMenu = () => {
     return null;
   };
 
+  /**
+   * A new price, from the list. Shown at once, written, and put back on
+   * screen if the database refuses it — the same contract as the sold-out
+   * switch.
+   */
+  const changePrice = async (item: MenuItemRow, price: number): Promise<boolean> => {
+    const before = item.price;
+    patchItem(item.id, { price });
+    const { error } = await supabase.from('menu_items').update({ price }).eq('id', item.id);
+    if (error) {
+      patchItem(item.id, { price: before });
+      toast.error(`Could not change the price of ${item.name}: ${error.message}`);
+      return false;
+    }
+    toast.success(`${item.name}: ${Number(before).toFixed(2)} → ${price.toFixed(2)} KM`);
+    return true;
+  };
+
+  /** "/" jumps to the search box, as on most admin tools. */
+  const searchRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const el = e.target as HTMLElement | null;
+      if (e.key !== '/' || (el && /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName))) return;
+      e.preventDefault();
+      searchRef.current?.focus();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
   const markSoldOutInstead = async (item: MenuItemRow) => {
     setUndeletable(null);
     if (!item.is_available) { toast.info(`${item.name} is already sold out`); return; }
@@ -370,9 +402,10 @@ const AdminMenu = () => {
       <div className="relative mb-4">
         <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
         <Input
+          ref={searchRef}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search the whole menu…"
+          placeholder="Search the whole menu… (press /)"
           className="pl-9 pr-10 h-11"
           aria-label="Search menu items"
         />
@@ -431,7 +464,10 @@ const AdminMenu = () => {
                     <p className={`text-sm font-sans font-medium truncate ${item.is_available ? 'text-foreground' : 'text-muted-foreground line-through'}`}>
                       {item.name}
                     </p>
-                    <p className="text-xs text-muted-foreground truncate">{path} · {Number(item.price).toFixed(2)} KM</p>
+                    <p className="text-xs text-muted-foreground truncate flex items-center gap-1">
+                      <span className="truncate">{path} ·</span>
+                      <InlinePrice name={item.name} price={Number(item.price)} onSave={(p) => changePrice(item, p)} />
+                    </p>
                   </div>
                   <div className="flex items-center gap-0.5 shrink-0">
                     <AvailabilitySwitch item={item} onToggle={toggleAvailability} />
@@ -552,14 +588,14 @@ const AdminMenu = () => {
                                           <span className="shrink-0 text-xs leading-none">{getItemTags(item).slice(0, 4).map((k) => DIET_BY_KEY[k]?.emoji).filter(Boolean).join(' ')}</span>
                                         )}
                                       </div>
-                                      <p className="text-xs text-muted-foreground tabular-nums">
-                                        {Number(item.price).toFixed(2)} KM
+                                      <div className="flex flex-wrap items-center gap-x-1.5 text-xs text-muted-foreground tabular-nums">
+                                        <InlinePrice name={item.name} price={Number(item.price)} onSave={(p) => changePrice(item, p)} />
                                         {/* What a guest sees on it, at a glance. */}
-                                        {saleScheduled(item) === 'running' && <span className="ml-1.5 font-semibold text-sale">Sale</span>}
-                                        {saleScheduled(item) === 'scheduled' && <span className="ml-1.5 font-semibold">Sale soon</span>}
-                                        {isNew(item) && <span className="ml-1.5 font-semibold text-primary">New</span>}
-                                        {item.featured_rank != null && <span className="ml-1.5 font-semibold text-primary">Featured</span>}
-                                      </p>
+                                        {saleScheduled(item) === 'running' && <span className="font-semibold text-sale">Sale</span>}
+                                        {saleScheduled(item) === 'scheduled' && <span className="font-semibold">Sale soon</span>}
+                                        {isNew(item) && <span className="font-semibold text-primary">New</span>}
+                                        {item.featured_rank != null && <span className="font-semibold text-primary">Featured</span>}
+                                      </div>
                                     </div>
                                   </div>
                                   <div className="flex items-center gap-0.5 shrink-0">

@@ -11,7 +11,6 @@ import { useNow } from '@/lib/clock';
 import { formatMinutes, orderUrgency, urgencyMark, urgencyText, formatClock } from '@/lib/timing';
 import { kitchenStart, orderStatusLabel } from '@/components/staff/order-status';
 import type { Database } from '@/integrations/supabase/types';
-import { formatComponents } from '@/lib/order-components';
 
 export type OrderStatus = Database['public']['Enums']['order_status'];
 export type OrderItemStatus = Database['public']['Enums']['order_item_status'];
@@ -28,8 +27,8 @@ export interface KitchenItem {
   ready_at: string | null;
   menu_item_name: string;
   allergens: string[] | null;
-  /** A combo's chosen parts (order_items.components); null otherwise. */
-  components?: unknown;
+  /** Combo parts (order_items.components); absent on older rows. */
+  components?: { slot_label?: string | null; item_id?: string | null; name: string; station?: string | null }[] | null;
 }
 
 export interface KitchenOrder {
@@ -60,7 +59,16 @@ export interface KitchenOrder {
   section_id: string | null;
   section_name: string | null;
   section_color: string | null;
+  /** Who has the table, for the ticket. */
+  waiter_name?: string | null;
   items: KitchenItem[];
+}
+
+/** One station's ticket, as the database last saw it. */
+export interface PrintStateLine {
+  type: 'kitchen' | 'bar';
+  tone: 'ok' | 'busy' | 'bad' | 'idle';
+  label: string;
 }
 
 /**
@@ -149,6 +157,14 @@ interface Props {
   undoSeconds: number;
   showStatus: boolean;
   failedPrint: boolean;
+  /** What the database says happened to this order's tickets. */
+  printStates?: PrintStateLine[];
+  /** Arrived in the last minutes and nobody has started it: flagged NEW. */
+  isNew?: boolean;
+  /** Picked with the keyboard or bump bar. */
+  selected?: boolean;
+  /** Position on the board, 1-based, for the bump-bar digit keys. */
+  slot?: number;
   onBumpItem: (itemId: string, status: OrderItemStatus) => Promise<void>;
   onBumpMany: (itemIds: string[], status: OrderItemStatus) => Promise<void>;
   onAdvanceOrder: (orderId: string, status: OrderStatus) => Promise<void>;
@@ -159,7 +175,7 @@ interface Props {
 }
 
 const KitchenOrderCard = ({
-  order, station, undoSeconds, showStatus, failedPrint,
+  order, station, undoSeconds, showStatus, failedPrint, printStates = [], isNew = false, selected = false, slot,
   onBumpItem, onBumpMany, onAdvanceOrder, onRevertOrder, onCancel, onPrint, onExport,
 }: Props) => {
   const now = useNow();
@@ -221,12 +237,22 @@ const KitchenOrderCard = ({
       animate={{ opacity: 1, scale: 1 }}
       exit={{ opacity: 0, scale: 0.96 }}
       transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
-      className={`rounded-xl border bg-card overflow-hidden shadow-lux ${
+      id={`ticket-${order.id}`}
+      data-selected={selected || undefined}
+      className={`relative rounded-xl border bg-card overflow-hidden shadow-lux scroll-mt-28 ${
         urgency === 'critical' ? 'border-destructive/60 breathe breathe-urgent'
           : urgency === 'late' ? 'border-destructive/50'
-            : urgency === 'attention' ? 'border-accent/50' : 'border-border'
-      }`}
+            : urgency === 'attention' ? 'border-accent/50'
+              : isNew ? 'border-primary breathe' : 'border-border'
+      } ${/* An outline, not a ring: .shadow-lux and the breathing glow both
+             own box-shadow, and a ring drawn with it simply vanished. */
+        selected ? 'outline outline-4 outline-offset-2 outline-foreground' : ''}`}
     >
+      {/* Age as a colour band across the top, readable from across the
+          kitchen: none while fresh, amber when getting on, red when late. */}
+      {urgency !== 'fresh' && (
+        <div aria-hidden className={`h-1.5 ${urgency === 'attention' ? 'bg-accent' : 'bg-destructive'}`} />
+      )}
       <div className="flex items-center justify-between gap-2 px-4 py-3 border-b border-border">
         <div className="flex items-center gap-2 flex-wrap min-w-0">
           {order.section_name && (
@@ -239,7 +265,19 @@ const KitchenOrderCard = ({
           )}
           {/* Read from across a kitchen, not from arm's length: the table
               number is the one thing a runner must get right first time. */}
+          {slot != null && slot <= 9 && (
+            <span
+              className={`inline-flex items-center justify-center w-6 h-6 rounded-md text-xs font-sans font-bold tabular-nums ${selected ? 'bg-foreground text-background' : 'bg-muted text-muted-foreground'}`}
+              title={`Press ${slot} to pick this ticket`}
+              aria-hidden
+            >
+              {slot}
+            </span>
+          )}
           <span className="font-serif text-xl md:text-[28px] md:leading-8 font-bold text-foreground">Table {order.table_number}</span>
+          {isNew && (
+            <span className="text-[11px] font-sans font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-primary text-primary-foreground">New</span>
+          )}
           {order.order_code && (
             <span className="text-xs font-sans font-semibold tabular-nums tracking-wider px-1.5 py-0.5 rounded bg-muted text-foreground">
               #{order.order_code}
@@ -261,7 +299,11 @@ const KitchenOrderCard = ({
         {/* Urgency is spelled out, not only coloured — colour alone fails for
             colour-blind staff and for anyone glancing across a room. */}
         <div className="text-right shrink-0">
-          <span className={`text-sm md:text-lg font-sans font-semibold tabular-nums flex items-center justify-end gap-1 ${urgencyText(urgency)}`}>
+          <span className={`text-sm md:text-lg font-sans font-semibold tabular-nums inline-flex items-center justify-end gap-1 ${
+            urgency === 'late' || urgency === 'critical'
+              ? 'bg-destructive text-destructive-foreground rounded-md px-2'
+              : urgencyText(urgency)
+          }`}>
             {urgencyMark(urgency) && <span aria-hidden>{urgencyMark(urgency)}</span>}
             {formatMinutes(ageMs)}
             {urgency !== 'fresh' && <span className="sr-only"> — {urgency}</span>}
@@ -301,9 +343,20 @@ const KitchenOrderCard = ({
                     <CupSoda className="inline w-4 h-4 ml-1 text-muted-foreground" aria-label="bar" />
                   )}
                 </p>
-                {formatComponents(item.components, item.station).map((part) => (
-                  <p key={part} className="text-sm md:text-base font-sans text-foreground/80 leading-snug pl-6">– {part}</p>
-                ))}
+                {item.components && item.components.length > 0 && (
+                  <ul className="mt-0.5 space-y-0.5">
+                    {item.components.map((part, i) => (
+                      <li key={`${part.item_id ?? part.name}-${i}`} className="text-sm md:text-base font-sans text-foreground/80 leading-snug">
+                        <span aria-hidden>+ </span>
+                        {part.slot_label ? <span className="text-muted-foreground">{part.slot_label}: </span> : null}
+                        <span className="font-semibold">{part.name}</span>
+                        {part.station && part.station !== item.station && (
+                          <span className="ml-1 text-[10px] uppercase px-1 py-0.5 rounded bg-muted text-muted-foreground align-middle">{part.station}</span>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                )}
                 {/* Notes and allergens are what get a dish sent back or a guest
                     hurt. Small italic grey was the least legible text on the
                     card; they are solid, bold blocks now. */}
@@ -335,7 +388,7 @@ const KitchenOrderCard = ({
                   disabled={inFlight}
                   onClick={() => run(item.id, () => onBumpItem(item.id, next))}
                   aria-label={`Mark ${item.menu_item_name} as ${next}`}
-                  className="min-h-[44px] min-w-[76px] rounded-lg text-sm font-sans font-semibold shrink-0 active:scale-95 transition-transform"
+                  className="min-h-[48px] md:min-h-[56px] min-w-[80px] md:min-w-[96px] rounded-lg text-sm md:text-base font-sans font-semibold shrink-0 active:scale-95 transition-transform"
                 >
                   {ITEM_ACTION[item.status]}
                 </Button>
@@ -361,10 +414,21 @@ const KitchenOrderCard = ({
         </div>
       )}
 
-      {failedPrint && (
-        <div className="mx-4 mb-2 px-3 py-2 rounded-lg bg-destructive/10 border border-destructive/25">
-          <p className="text-xs font-sans text-destructive">This ticket did not print. Use Reprint below.</p>
+      {(failedPrint || printStates.some((p) => p.tone === 'bad')) ? (
+        <div role="alert" className="mx-3 mb-2 px-3 py-2 rounded-lg bg-destructive text-destructive-foreground">
+          <p className="text-sm font-sans font-semibold">
+            {printStates.find((p) => p.tone === 'bad')?.label ?? 'This ticket did not print'} — tap Reprint
+          </p>
         </div>
+      ) : printStates.length > 0 && (
+        <p className="px-4 pb-1 text-xs font-sans text-muted-foreground flex flex-wrap gap-x-3" aria-label="Print status">
+          {printStates.map((p) => (
+            <span key={p.type} className={p.tone === 'busy' ? 'text-accent' : undefined}>
+              <Printer className="inline w-3 h-3 -mt-0.5 mr-1" aria-hidden />
+              {printStates.length > 1 ? `${p.type}: ` : ''}{p.label}
+            </span>
+          ))}
+        </p>
       )}
 
       <div className="px-3 pb-3 space-y-2">
@@ -375,9 +439,9 @@ const KitchenOrderCard = ({
               size="sm"
               disabled={busy.has('start-all')}
               onClick={() => run('start-all', () => onBumpMany(pending.map((i) => i.id), 'preparing'))}
-              className="min-h-[44px] rounded-lg text-sm font-sans gap-1.5"
+              className="min-h-[48px] md:min-h-[56px] rounded-lg text-sm md:text-base font-sans gap-1.5"
             >
-              <ChefHat className="w-3.5 h-3.5" /> Start all ({pending.length})
+              <ChefHat className="w-4 h-4" /> Start all ({pending.length})
             </Button>
           )}
           {notReady.length > 0 && (
@@ -385,7 +449,7 @@ const KitchenOrderCard = ({
               size="sm"
               disabled={busy.has('all-ready')}
               onClick={() => run('all-ready', () => onBumpMany(notReady.map((i) => i.id), 'ready'))}
-              className="min-h-[44px] flex-1 min-w-[140px] rounded-lg bg-primary text-primary-foreground text-sm font-sans active:scale-95 transition-transform"
+              className="min-h-[48px] md:min-h-[56px] flex-1 min-w-[140px] rounded-lg bg-primary text-primary-foreground text-sm md:text-base font-sans font-semibold active:scale-95 transition-transform"
             >
               All ready ({notReady.length})
             </Button>
@@ -395,7 +459,7 @@ const KitchenOrderCard = ({
               size="sm"
               disabled={busy.has('served')}
               onClick={() => run('served', () => onAdvanceOrder(order.id, 'served'))}
-              className="min-h-[44px] flex-1 min-w-[140px] rounded-lg bg-primary text-primary-foreground text-sm font-sans active:scale-95 transition-transform"
+              className="min-h-[48px] md:min-h-[56px] flex-1 min-w-[140px] rounded-lg bg-primary text-primary-foreground text-sm md:text-base font-sans font-semibold active:scale-95 transition-transform"
             >
               <Utensils className="w-4 h-4 mr-1.5" /> Mark served
             </Button>
@@ -407,7 +471,7 @@ const KitchenOrderCard = ({
 
         <div className="flex flex-wrap items-center gap-2">
           <Button variant="ghost" size="sm" className="min-h-[44px] rounded-lg gap-1.5 text-sm" onClick={() => onPrint(order)}>
-            <Printer className="w-4 h-4" /> {failedPrint ? 'Reprint' : 'Print'}
+            <Printer className="w-4 h-4" /> {failedPrint || printStates.some((p) => p.tone === 'bad' || p.tone === 'ok') ? 'Reprint' : 'Print'}
           </Button>
 
           {/* Exports are an integration/debugging tool, not service. Two
