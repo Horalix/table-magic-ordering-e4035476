@@ -72,7 +72,7 @@ const SplitBillSheet = ({ open, total, orders, members, myName, billRequested, r
             <h2 id="split-bill-title" className="font-serif text-xl font-bold text-foreground text-center flex items-center justify-center gap-2">
               <ReceiptText className="w-5 h-5 text-primary" /> {t('split_bill')}
             </h2>
-            <p className="text-center text-2xl font-serif font-bold text-primary mt-1 tabular-nums">{km(total)}</p>
+            <p className="text-center text-2xl font-sans font-semibold text-foreground mt-1 tabular-nums">{km(total)}</p>
 
             {/* Mode toggle */}
             <div className="mt-4 grid grid-cols-2 gap-2 p-1 rounded-full bg-muted">
@@ -92,14 +92,14 @@ const SplitBillSheet = ({ open, total, orders, members, myName, billRequested, r
                 <div className="flex items-center justify-center gap-4">
                   <button onClick={() => setN((v) => Math.max(1, v - 1))} className="w-11 h-11 rounded-full bg-muted grid place-items-center tap-sm" aria-label={t('fewer_people')}><Minus className="w-5 h-5" /></button>
                   <div>
-                    <p className="font-serif text-2xl font-bold text-foreground tabular-nums">{n}</p>
+                    <p className="font-sans text-2xl font-semibold text-foreground tabular-nums">{n}</p>
                     <p className="text-[11px] text-muted-foreground font-sans flex items-center gap-1 justify-center"><Users className="w-3 h-3" />{t('people')}</p>
                   </div>
                   <button onClick={() => setN((v) => Math.min(20, v + 1))} className="w-11 h-11 rounded-full bg-muted grid place-items-center tap-sm" aria-label={t('more_people')}><Plus className="w-5 h-5" /></button>
                 </div>
                 <div className="mt-5 rounded-2xl bg-primary/5 border border-primary/15 py-4">
                   <p className="text-xs uppercase tracking-wide text-muted-foreground font-sans">{t('each_pays')}</p>
-                  <p className="font-serif text-3xl font-bold text-primary tabular-nums mt-0.5">{km(evenShare)}</p>
+                  <p className="font-sans text-3xl font-semibold text-foreground tabular-nums mt-0.5">{km(evenShare)}</p>
                 </div>
               </div>
             ) : (
@@ -111,7 +111,7 @@ const SplitBillSheet = ({ open, total, orders, members, myName, billRequested, r
                       <span className="font-sans text-sm font-medium text-foreground truncate">
                         {p.name}{mine && <span className="text-primary"> · {t('your_share')}</span>}
                       </span>
-                      <span className="font-serif font-bold text-foreground tabular-nums">{km(p.amount)}</span>
+                      <span className="font-sans font-semibold text-foreground tabular-nums">{km(p.amount)}</span>
                     </div>
                   );
                 })}

@@ -124,7 +124,7 @@ const TableNumberEntry = () => {
             aria-label={t('table_number_placeholder')}
             aria-invalid={outOfRange}
             aria-describedby={outOfRange ? 'table-range-error' : undefined}
-            className="w-full h-16 text-center text-3xl font-serif font-bold rounded-2xl bg-white/95 text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:ring-4 focus:ring-white/30 tabular-nums"
+            className="w-full h-16 text-center text-3xl font-sans font-semibold rounded-2xl bg-white/95 text-foreground placeholder:text-muted-foreground/40 focus:outline-none focus:ring-4 focus:ring-white/30 tabular-nums"
           />
           {outOfRange && (
             <p id="table-range-error" className="text-sm font-sans text-white/90" role="alert">

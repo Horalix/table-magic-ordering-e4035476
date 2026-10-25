@@ -180,7 +180,7 @@ const MonriCardForm = ({ open, clientSecret, authenticityToken, environment, amo
               <CreditCard className="w-5 h-5 text-primary" aria-hidden />
               <h2 className="font-serif text-xl font-bold">{t('pay_by_card')}</h2>
             </div>
-            <p className="text-center text-2xl font-serif font-bold text-primary mt-2 tabular-nums">{amountLabel}</p>
+            <p className="text-center text-2xl font-sans font-semibold text-foreground mt-2 tabular-nums">{amountLabel}</p>
             {orderCode && (
               <p className="text-center text-xs font-sans text-muted-foreground mt-1">
                 {t('order_number')} <span className="font-semibold tabular-nums tracking-wider">{orderCode}</span>

@@ -35,12 +35,12 @@ const RunningTabPage = () => {
   const token = searchParams.get('token');
 
   const statusConfig: Record<string, { icon: React.ReactNode; label: string; color: string }> = {
-    pending: { icon: <Clock className="w-3.5 h-3.5" />, label: t('status_pending'), color: 'bg-accent/10 text-accent border-accent/20' },
-    confirmed: { icon: <CheckCircle className="w-3.5 h-3.5" />, label: t('status_confirmed'), color: 'bg-primary/10 text-primary border-primary/20' },
-    preparing: { icon: <ChefHat className="w-3.5 h-3.5" />, label: t('status_preparing'), color: 'bg-accent/10 text-accent border-accent/20' },
-    ready: { icon: <CheckCircle className="w-3.5 h-3.5" />, label: t('status_ready'), color: 'bg-primary/10 text-primary border-primary/20' },
-    served: { icon: <Utensils className="w-3.5 h-3.5" />, label: t('status_served'), color: 'bg-muted text-muted-foreground border-border' },
-    cancelled: { icon: <Clock className="w-3.5 h-3.5" />, label: t('status_cancelled'), color: 'bg-destructive/10 text-destructive border-destructive/20' },
+    pending: { icon: <Clock className="w-3.5 h-3.5" />, label: t('status_pending'), color: 'bg-accent/10 text-accent' },
+    confirmed: { icon: <CheckCircle className="w-3.5 h-3.5" />, label: t('status_confirmed'), color: 'bg-primary/10 text-primary' },
+    preparing: { icon: <ChefHat className="w-3.5 h-3.5" />, label: t('status_preparing'), color: 'bg-accent/10 text-accent' },
+    ready: { icon: <CheckCircle className="w-3.5 h-3.5" />, label: t('status_ready'), color: 'bg-primary/10 text-primary' },
+    served: { icon: <Utensils className="w-3.5 h-3.5" />, label: t('status_served'), color: 'bg-muted text-muted-foreground' },
+    cancelled: { icon: <Clock className="w-3.5 h-3.5" />, label: t('status_cancelled'), color: 'bg-destructive/10 text-destructive' },
   };
 
   const { data: tab, isLoading, refetch } = useQuery({
@@ -76,9 +76,10 @@ const RunningTabPage = () => {
     navigate(`/menu?${params.toString()}`);
   };
 
-  const formatTime = (dateStr: string) => {
-    return new Date(dateStr).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  };
+  // Restaurant time, 24-hour: "01:45 AM" read as a foreign app in Sarajevo.
+  const formatTime = (dateStr: string) =>
+    new Date(dateStr).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23', timeZone: 'Europe/Sarajevo' });
+  const panel = 'rounded-3xl bg-card border border-border/70 shadow-[0_1px_2px_rgba(20,30,25,0.04)]';
 
   const getWaitTime = (createdAt: string, status: string) => {
     if (status === 'served' || status === 'cancelled') return null;
@@ -139,93 +140,89 @@ const RunningTabPage = () => {
   }, [isLoading, orders.length]);
 
   return (
-    <div className="min-h-screen bg-background pb-32">
+    <div className="min-h-screen bg-background pb-36">
       <div className="sticky top-0 z-30 glass">
-        <div className="flex items-center gap-3 px-4 py-4">
-          <button onClick={goBack} aria-label={t('back_to_menu')} className="p-2.5 -ms-2 rounded-full hover:bg-muted transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center">
-            <ArrowLeft className={`w-5 h-5 text-foreground ${locale === 'ar' ? 'rotate-180' : ''}`} />
+        <div className="flex items-center gap-1 ps-2 pe-4 h-14">
+          <button onClick={goBack} aria-label={t('back_to_menu')} className="w-11 h-11 rounded-full hover:bg-muted transition-colors flex items-center justify-center">
+            <ArrowLeft className="w-5 h-5 text-foreground rtl:rotate-180" aria-hidden />
           </button>
-          <div className="flex items-center gap-2">
-            <Receipt className="w-5 h-5 text-primary" />
-            <h1 className="font-serif text-xl font-semibold text-foreground">{t('your_tab')}</h1>
-          </div>
+          <h1 className="flex-1 font-serif text-[22px] font-semibold text-foreground tracking-tight ps-1">{t('your_tab')}</h1>
           {table && (
-            <span className="ms-auto text-xs font-sans px-3 py-1 rounded-full bg-primary/10 text-primary font-medium">
+            <span className="text-xs font-sans px-3 py-1.5 rounded-full bg-primary/10 text-primary font-semibold">
               {t('table')} {table}
             </span>
           )}
         </div>
-        <div className="h-px bg-gradient-to-r from-transparent via-primary/20 to-transparent" />
+        <div className="h-px bg-border/70" />
       </div>
 
       {!sessionId || !sessionToken ? (
         <div className="flex flex-col items-center justify-center py-20 px-6">
           <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center mb-4">
-            <Receipt className="w-7 h-7 text-muted-foreground" />
+            <Receipt className="w-7 h-7 text-muted-foreground" aria-hidden />
           </div>
           <p className="text-foreground font-serif text-lg font-semibold">{t('no_active_session')}</p>
           <p className="text-muted-foreground font-sans text-sm mt-1 text-center">{t('scan_qr_tab')}</p>
         </div>
       ) : isLoading ? (
         <div className="px-4 pt-4 space-y-4">
-          <Skeleton className="h-24 w-full rounded-2xl" />
-          <Skeleton className="h-32 w-full rounded-xl" />
+          <Skeleton className="h-28 w-full rounded-3xl" />
+          <Skeleton className="h-40 w-full rounded-3xl" />
         </div>
       ) : orders.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 px-6">
           <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center mb-4">
-            <Receipt className="w-7 h-7 text-muted-foreground" />
+            <Receipt className="w-7 h-7 text-muted-foreground" aria-hidden />
           </div>
           <p className="text-foreground font-serif text-lg font-semibold">{t('no_orders_yet')}</p>
           <p className="text-muted-foreground font-sans text-sm mt-1 text-center">{t('browse_menu_start')}</p>
+          <Button onClick={goBack} className="mt-6 rounded-full px-6 min-h-[48px] font-sans">{t('back_to_menu')}</Button>
         </div>
       ) : (
         <>
-          <div className="px-4 pt-4">
-            <motion.div variants={fadeUp} initial="hidden" animate="show" className="hero-depth p-5 rounded-2xl text-white relative overflow-hidden bg-primary shadow-lux-lg">
-              <div className="absolute inset-0 bg-gradient-to-br from-white/10 to-transparent" />
-              <div className="relative z-10 flex justify-between items-center">
-                <div>
-                  <p className="text-[11px] font-sans text-white/60 uppercase tracking-wider">{t('running_total')}</p>
-                  <p className="font-sans text-3xl font-semibold text-white mt-1 tabular-nums">{displayGrandTotal.toFixed(2)} KM</p>
-                </div>
-                <div className="text-end">
-                  <p className="text-xs font-sans text-white/70">{billable.length} {billable.length === 1 ? t('orders_count_one') : t('orders_count_other')}</p>
-                </div>
+          {/* What the table owes, first and largest: it is the question the
+              tab exists to answer. */}
+          <motion.section variants={fadeUp} initial="hidden" animate="show" className={`${panel} mx-4 mt-4 p-5`}>
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-sm font-sans text-muted-foreground">{billRequested ? t('bill_requested') : t('to_pay')}</p>
+                <p className="font-sans text-[34px] leading-tight font-semibold text-foreground tabular-nums">{displayGrandTotal.toFixed(2)} KM</p>
+                <p className="text-sm font-sans text-muted-foreground mt-0.5">
+                  {billable.length} {billable.length === 1 ? t('orders_count_one') : t('orders_count_other')}
+                  {members.length > 0 && <> · {members.join(', ')}</>}
+                </p>
               </div>
-            </motion.div>
-          </div>
+              <button
+                onClick={() => setSplitOpen(true)}
+                className="shrink-0 inline-flex items-center gap-1.5 px-3.5 min-h-[40px] rounded-full border border-border text-sm font-sans font-medium text-foreground hover:bg-muted transition-colors"
+              >
+                <Users className="w-4 h-4" aria-hidden /> {t('split_bill')}
+              </button>
+            </div>
+            {billRequested && (
+              <p className="mt-3 flex items-center gap-2 text-sm font-sans text-primary">
+                <CheckCircle className="w-4 h-4" aria-hidden /> {t('server_notified')}
+              </p>
+            )}
+          </motion.section>
 
           {activeOrder && (
-            <div className="px-4 pt-3">
-              <motion.div variants={fadeUp} initial="hidden" animate="show" className="card-lux p-4">
-                <div className="flex items-baseline justify-between gap-3 mb-3 flex-wrap">
-                  <p className="text-[11px] font-sans font-semibold text-muted-foreground uppercase tracking-wider">{t('order_progress')}</p>
-                  {/* Renders nothing at all when the kitchen has no basis for
-                      an estimate — silence beats a number nobody can stand behind. */}
-                  <OrderEta orderId={activeOrder.id} active={activeOrder.status !== 'served'} />
-                </div>
-                {activeOrder.held && (
-                  <p className="text-sm font-sans text-accent mb-2 flex items-center gap-1.5">
-                    <Clock className="w-3.5 h-3.5" aria-hidden /> {t('waiting_for_waiter_confirm')}
-                  </p>
-                )}
-                <OrderStatusTimeline status={activeOrder.status} />
-              </motion.div>
-            </div>
-          )}
-
-          {members.length > 0 && (
-            <div className="px-4 pt-3">
-              <div className="flex items-center gap-1.5 flex-wrap text-xs font-sans">
-                <span className="inline-flex items-center gap-1 text-muted-foreground">
-                  <Users className="w-3.5 h-3.5" />{t('at_this_table')}:
-                </span>
-                {members.map((n, i) => (
-                  <span key={i} className="px-2 py-0.5 rounded-full bg-primary/10 text-primary font-medium">{n}</span>
-                ))}
+            <motion.section variants={fadeUp} initial="hidden" animate="show" className={`${panel} mx-4 mt-3 p-4`}>
+              <div className="flex items-baseline justify-between gap-3 mb-3 flex-wrap">
+                <p className="text-sm font-sans font-semibold text-foreground">
+                  {t('order_progress')}
+                </p>
+                {/* Renders nothing at all when the kitchen has no basis for
+                    an estimate — silence beats a number nobody can stand behind. */}
+                <OrderEta orderId={activeOrder.id} active={activeOrder.status !== 'served'} />
               </div>
-            </div>
+              {activeOrder.held && (
+                <p className="text-sm font-sans text-accent mb-2 flex items-center gap-1.5">
+                  <Clock className="w-3.5 h-3.5" aria-hidden /> {t('waiting_for_waiter_confirm')}
+                </p>
+              )}
+              <OrderStatusTimeline status={activeOrder.status} />
+            </motion.section>
           )}
 
           {/* Post-meal suggestion. Only once food has actually been served and
@@ -233,91 +230,80 @@ const RunningTabPage = () => {
               to someone who is trying to leave is the definition of pushy. */}
           {afterMeal && !billRequested && <CartSuggestion placement="after_meal" />}
 
-          <div className="px-4 pt-3 grid grid-cols-2 gap-2">
-            <Button onClick={goBack} variant="outline" className="rounded-xl min-h-[48px] font-sans text-sm gap-2">
-              <Utensils className="w-4 h-4" /> {t('order_more')}
-            </Button>
-            <Button onClick={() => setSplitOpen(true)} variant="outline" className="rounded-xl min-h-[48px] font-sans text-sm gap-2">
-              <Users className="w-4 h-4" /> {t('split_bill')}
-            </Button>
-          </div>
-
-          <div className="px-4 pt-3">
-            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
-              {billRequested ? (
-                <div className="flex items-center gap-3 p-4 rounded-xl border border-primary/20 bg-primary/5">
-                  <CheckCircle className="w-5 h-5 text-primary shrink-0" />
-                  <div>
-                    <p className="text-sm font-sans font-semibold text-foreground">{t('bill_requested')}</p>
-                    <p className="text-xs font-sans text-muted-foreground">{t('server_notified')}</p>
-                  </div>
-                </div>
-              ) : (
-                <Button onClick={requestBill} disabled={requestingBill} className="w-full rounded-xl min-h-[48px] font-sans text-sm gap-2" variant="outline">
-                  {requestingBill ? <Loader2 className="w-4 h-4 animate-spin" /> : <CreditCard className="w-4 h-4" />}
-                  {requestingBill ? t('requesting') : t('request_bill')}
-                </Button>
-              )}
-            </motion.div>
-          </div>
-
-          <motion.div
+          {/* Every order, newest first, as one receipt. */}
+          <motion.section
             variants={staggerContainer(0.05)}
             initial="hidden"
             animate="show"
-            className="px-4 pt-4 space-y-4"
+            className={`${panel} mx-4 mt-3 divide-y divide-border/70 overflow-hidden`}
+            aria-label={t('your_tab')}
           >
             {orders.map((order) => {
               // A held order is `pending` too, but "Pending" would suggest the
               // kitchen has it. It is waiting for the waiter, and says so.
               const status = order.held
-                ? { icon: <Clock className="w-3.5 h-3.5" />, label: t('waiting_for_waiter_confirm'), color: 'bg-accent/10 text-accent border-accent/20' }
+                ? { icon: <Clock className="w-3.5 h-3.5" aria-hidden />, label: t('waiting_for_waiter_confirm'), color: 'bg-accent/10 text-accent' }
                 : statusConfig[order.status] || statusConfig.pending;
               const items = order.order_items || [];
               const waitTime = getWaitTime(order.created_at, order.status);
+              const cancelled = order.status === 'cancelled';
 
               return (
-                <motion.div
-                  key={order.id}
-                  variants={fadeUp}
-                  className={`card-lux overflow-hidden ${order.status === 'cancelled' ? 'opacity-60' : ''}`}
-                >
-                  <div className="flex items-center justify-between px-4 py-3 border-b border-border/50">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-sans text-muted-foreground">{formatTime(order.created_at)}</span>
-                      <span className={`inline-flex items-center gap-1 text-[11px] font-sans font-medium px-2.5 py-1 rounded-full border ${status.color}`}>
+                <motion.div key={order.id} variants={fadeUp} className={`px-4 py-4 ${cancelled ? 'opacity-60' : ''}`}>
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2 flex-wrap min-w-0">
+                      <span className="text-sm font-sans font-semibold text-foreground tabular-nums">{formatTime(order.created_at)}</span>
+                      <span className={`inline-flex items-center gap-1 text-xs font-sans font-semibold px-2.5 py-1 rounded-full ${status.color}`}>
                         {status.icon}
                         {status.label}
                       </span>
-                      {waitTime && (
-                        <span className="inline-flex items-center gap-1 text-[11px] font-sans text-muted-foreground">
-                          <Clock className="w-3 h-3" />
-                          {waitTime}
-                        </span>
-                      )}
+                      {waitTime && <span className="text-xs font-sans text-muted-foreground">{waitTime}</span>}
                       {order.payment_method === 'card_online' && (
-                        <span className={`inline-flex items-center gap-1 text-[11px] font-sans font-medium px-2 py-0.5 rounded-full ${order.payment_status === 'paid' ? 'bg-primary/10 text-primary' : 'bg-accent/10 text-accent'}`}>
-                          <CreditCard className="w-3 h-3" />
+                        <span className={`inline-flex items-center gap-1 text-xs font-sans font-semibold px-2 py-0.5 rounded-full ${order.payment_status === 'paid' ? 'bg-primary/10 text-primary' : 'bg-accent/10 text-accent'}`}>
+                          <CreditCard className="w-3 h-3" aria-hidden />
                           {order.payment_status === 'paid' ? t('paid') : t('card_pending')}
                         </span>
                       )}
                     </div>
-                    <span className={`text-sm font-sans font-bold text-foreground tabular-nums ${order.status === 'cancelled' ? 'line-through' : ''}`}>{Number(order.total).toFixed(2)} KM</span>
+                    <span className={`text-[15px] font-sans font-semibold text-foreground tabular-nums shrink-0 ${cancelled ? 'line-through' : ''}`}>{Number(order.total).toFixed(2)} KM</span>
                   </div>
-                  <div className="px-4 py-3 space-y-2">
+                  <ul className="mt-2.5 space-y-1.5">
                     {items.map((oi) => (
-                      <div key={oi.id} className="flex justify-between items-center">
-                        <span className="text-sm font-sans text-foreground">{oi.quantity}× {oi.menu_items ? getLocalizedName(oi.menu_items, locale) : t('menu_item_fallback')}</span>
-                        <span className="text-xs font-sans text-muted-foreground">{(oi.quantity * Number(oi.unit_price)).toFixed(2)} KM</span>
-                      </div>
+                      <li key={oi.id} className="flex justify-between items-baseline gap-3">
+                        <span className="text-[15px] font-sans text-foreground">
+                          <span className="text-muted-foreground tabular-nums me-1.5">{oi.quantity}×</span>
+                          {oi.menu_items ? getLocalizedName(oi.menu_items, locale) : t('menu_item_fallback')}
+                        </span>
+                        <span className="text-sm font-sans text-muted-foreground tabular-nums shrink-0">{(oi.quantity * Number(oi.unit_price)).toFixed(2)}</span>
+                      </li>
                     ))}
-                  </div>
+                  </ul>
                 </motion.div>
               );
             })}
-          </motion.div>
+          </motion.section>
+
+          {/* The two things a seated guest does from here, where a thumb is. */}
+          <div className="fixed bottom-0 inset-x-0 z-40 px-4 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))] bg-background/85 backdrop-blur-xl border-t border-border/60">
+            <div className="flex gap-2 max-w-lg mx-auto">
+              <Button onClick={goBack} variant="outline" className="flex-1 h-14 rounded-2xl font-sans font-semibold text-base gap-2 bg-card">
+                <Utensils className="w-4 h-4" aria-hidden /> {t('order_more')}
+              </Button>
+              {billRequested ? (
+                <div className="flex-1 h-14 rounded-2xl bg-primary/10 text-primary font-sans font-semibold flex items-center justify-center gap-2">
+                  <CheckCircle className="w-4 h-4" aria-hidden /> {t('bill_requested')}
+                </div>
+              ) : (
+                <Button onClick={requestBill} disabled={requestingBill} className="flex-1 h-14 rounded-2xl font-sans font-semibold text-base gap-2 bg-primary hover:bg-sage-dark">
+                  {requestingBill ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden /> : <Receipt className="w-4 h-4" aria-hidden />}
+                  {requestingBill ? t('requesting') : t('request_bill')}
+                </Button>
+              )}
+            </div>
+          </div>
         </>
       )}
+
 
       {sessionId && sessionToken && (
         <ReviewPrompt
