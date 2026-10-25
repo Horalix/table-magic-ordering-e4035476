@@ -224,6 +224,45 @@ export type Database = {
         }
         Relationships: []
       }
+      item_section_share: {
+        Row: {
+          computed_at: string
+          daypart: string | null
+          item_id: string
+          share: number
+          subcategory_id: string
+        }
+        Insert: {
+          computed_at?: string
+          daypart?: string | null
+          item_id: string
+          share: number
+          subcategory_id: string
+        }
+        Update: {
+          computed_at?: string
+          daypart?: string | null
+          item_id?: string
+          share?: number
+          subcategory_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "item_section_share_item_id_fkey"
+            columns: ["item_id"]
+            isOneToOne: false
+            referencedRelation: "menu_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "item_section_share_subcategory_id_fkey"
+            columns: ["subcategory_id"]
+            isOneToOne: false
+            referencedRelation: "subcategories"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       maintenance_runs: {
         Row: {
           job: string
@@ -242,33 +281,119 @@ export type Database = {
         }
         Relationships: []
       }
+      menu_combo_options: {
+        Row: {
+          item_id: string
+          slot_id: string
+          sort_order: number
+          surcharge: number
+        }
+        Insert: {
+          item_id: string
+          slot_id: string
+          sort_order?: number
+          surcharge?: number
+        }
+        Update: {
+          item_id?: string
+          slot_id?: string
+          sort_order?: number
+          surcharge?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "menu_combo_options_item_id_fkey"
+            columns: ["item_id"]
+            isOneToOne: false
+            referencedRelation: "menu_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "menu_combo_options_slot_id_fkey"
+            columns: ["slot_id"]
+            isOneToOne: false
+            referencedRelation: "menu_combo_slots"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      menu_combo_slots: {
+        Row: {
+          combo_item_id: string
+          created_at: string
+          id: string
+          label: string
+          label_ar: string | null
+          label_bs: string | null
+          sort_order: number
+        }
+        Insert: {
+          combo_item_id: string
+          created_at?: string
+          id?: string
+          label: string
+          label_ar?: string | null
+          label_bs?: string | null
+          sort_order?: number
+        }
+        Update: {
+          combo_item_id?: string
+          created_at?: string
+          id?: string
+          label?: string
+          label_ar?: string | null
+          label_bs?: string | null
+          sort_order?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "menu_combo_slots_combo_item_id_fkey"
+            columns: ["combo_item_id"]
+            isOneToOne: false
+            referencedRelation: "menu_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       menu_item_affinity: {
         Row: {
           a_orders: number
           computed_at: string
           confidence: number
+          eb_mean: number | null
+          eb05: number | null
           item_a: string
           item_b: string
           lift: number
           pair_orders: number
+          w_expected: number | null
+          w_pair: number | null
         }
         Insert: {
           a_orders?: number
           computed_at?: string
           confidence?: number
+          eb_mean?: number | null
+          eb05?: number | null
           item_a: string
           item_b: string
           lift?: number
           pair_orders?: number
+          w_expected?: number | null
+          w_pair?: number | null
         }
         Update: {
           a_orders?: number
           computed_at?: string
           confidence?: number
+          eb_mean?: number | null
+          eb05?: number | null
           item_a?: string
           item_b?: string
           lift?: number
           pair_orders?: number
+          w_expected?: number | null
+          w_pair?: number | null
         }
         Relationships: [
           {
@@ -281,6 +406,38 @@ export type Database = {
           {
             foreignKeyName: "menu_item_affinity_item_b_fkey"
             columns: ["item_b"]
+            isOneToOne: false
+            referencedRelation: "menu_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      menu_item_availability_log: {
+        Row: {
+          changed_at: string
+          changed_by: string | null
+          id: number
+          is_available: boolean
+          menu_item_id: string
+        }
+        Insert: {
+          changed_at?: string
+          changed_by?: string | null
+          id?: number
+          is_available: boolean
+          menu_item_id: string
+        }
+        Update: {
+          changed_at?: string
+          changed_by?: string | null
+          id?: number
+          is_available?: boolean
+          menu_item_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "menu_item_availability_log_menu_item_id_fkey"
+            columns: ["menu_item_id"]
             isOneToOne: false
             referencedRelation: "menu_items"
             referencedColumns: ["id"]
@@ -393,6 +550,10 @@ export type Database = {
           description_ar: string | null
           description_bs: string | null
           dietary_tags: string[]
+          featured_note: string | null
+          featured_note_ar: string | null
+          featured_note_bs: string | null
+          featured_rank: number | null
           food_cost: number | null
           id: string
           image_url: string | null
@@ -403,9 +564,15 @@ export type Database = {
           name: string
           name_ar: string | null
           name_bs: string | null
+          new_until: string | null
           portion_note: string | null
           prep_minutes: number | null
           price: number
+          sale_ends_at: string | null
+          sale_kind: string | null
+          sale_label: string | null
+          sale_starts_at: string | null
+          sale_value: number | null
           sort_order: number
           station: string
           subcategory_id: string
@@ -420,6 +587,10 @@ export type Database = {
           description_ar?: string | null
           description_bs?: string | null
           dietary_tags?: string[]
+          featured_note?: string | null
+          featured_note_ar?: string | null
+          featured_note_bs?: string | null
+          featured_rank?: number | null
           food_cost?: number | null
           id?: string
           image_url?: string | null
@@ -430,9 +601,15 @@ export type Database = {
           name: string
           name_ar?: string | null
           name_bs?: string | null
+          new_until?: string | null
           portion_note?: string | null
           prep_minutes?: number | null
           price: number
+          sale_ends_at?: string | null
+          sale_kind?: string | null
+          sale_label?: string | null
+          sale_starts_at?: string | null
+          sale_value?: number | null
           sort_order?: number
           station?: string
           subcategory_id: string
@@ -447,6 +624,10 @@ export type Database = {
           description_ar?: string | null
           description_bs?: string | null
           dietary_tags?: string[]
+          featured_note?: string | null
+          featured_note_ar?: string | null
+          featured_note_bs?: string | null
+          featured_rank?: number | null
           food_cost?: number | null
           id?: string
           image_url?: string | null
@@ -457,9 +638,15 @@ export type Database = {
           name?: string
           name_ar?: string | null
           name_bs?: string | null
+          new_until?: string | null
           portion_note?: string | null
           prep_minutes?: number | null
           price?: number
+          sale_ends_at?: string | null
+          sale_kind?: string | null
+          sale_label?: string | null
+          sale_starts_at?: string | null
+          sale_value?: number | null
           sort_order?: number
           station?: string
           subcategory_id?: string
@@ -474,6 +661,30 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      menu_machine_translations: {
+        Row: {
+          field: string
+          produced_at: string
+          row_id: string
+          source_table: string
+          value: string
+        }
+        Insert: {
+          field: string
+          produced_at?: string
+          row_id: string
+          source_table: string
+          value: string
+        }
+        Update: {
+          field?: string
+          produced_at?: string
+          row_id?: string
+          source_table?: string
+          value?: string
+        }
+        Relationships: []
       }
       order_code_counters: {
         Row: {
@@ -493,6 +704,7 @@ export type Database = {
       order_items: {
         Row: {
           bumped_by: string | null
+          components: Json | null
           created_at: string
           id: string
           menu_item_id: string
@@ -500,6 +712,7 @@ export type Database = {
           order_id: string
           quantity: number
           ready_at: string | null
+          regular_unit_price: number | null
           served_at: string | null
           started_at: string | null
           station: string
@@ -508,6 +721,7 @@ export type Database = {
         }
         Insert: {
           bumped_by?: string | null
+          components?: Json | null
           created_at?: string
           id?: string
           menu_item_id: string
@@ -515,6 +729,7 @@ export type Database = {
           order_id: string
           quantity?: number
           ready_at?: string | null
+          regular_unit_price?: number | null
           served_at?: string | null
           started_at?: string | null
           station?: string
@@ -523,6 +738,7 @@ export type Database = {
         }
         Update: {
           bumped_by?: string | null
+          components?: Json | null
           created_at?: string
           id?: string
           menu_item_id?: string
@@ -530,6 +746,7 @@ export type Database = {
           order_id?: string
           quantity?: number
           ready_at?: string | null
+          regular_unit_price?: number | null
           served_at?: string | null
           started_at?: string | null
           station?: string
@@ -642,6 +859,7 @@ export type Database = {
           id: string
           last_error: string | null
           order_id: string
+          original_printed_at: string | null
           payload: Json
           print_verified: boolean | null
           printed_at: string | null
@@ -660,6 +878,7 @@ export type Database = {
           id?: string
           last_error?: string | null
           order_id: string
+          original_printed_at?: string | null
           payload?: Json
           print_verified?: boolean | null
           printed_at?: string | null
@@ -678,6 +897,7 @@ export type Database = {
           id?: string
           last_error?: string | null
           order_id?: string
+          original_printed_at?: string | null
           payload?: Json
           print_verified?: boolean | null
           printed_at?: string | null
@@ -708,6 +928,7 @@ export type Database = {
           cancel_reason: string | null
           cancelled_at: string | null
           cancelled_by: string | null
+          client_order_id: string | null
           confirmed_at: string | null
           created_at: string
           fiscal_provider_reference: string | null
@@ -718,6 +939,8 @@ export type Database = {
           fiscalized_at: string | null
           fiscalized_by: string | null
           guest_name: string | null
+          held_at: string | null
+          held_reason: string | null
           id: string
           notes: string | null
           order_code: string | null
@@ -743,6 +966,7 @@ export type Database = {
           cancel_reason?: string | null
           cancelled_at?: string | null
           cancelled_by?: string | null
+          client_order_id?: string | null
           confirmed_at?: string | null
           created_at?: string
           fiscal_provider_reference?: string | null
@@ -753,6 +977,8 @@ export type Database = {
           fiscalized_at?: string | null
           fiscalized_by?: string | null
           guest_name?: string | null
+          held_at?: string | null
+          held_reason?: string | null
           id?: string
           notes?: string | null
           order_code?: string | null
@@ -778,6 +1004,7 @@ export type Database = {
           cancel_reason?: string | null
           cancelled_at?: string | null
           cancelled_by?: string | null
+          client_order_id?: string | null
           confirmed_at?: string | null
           created_at?: string
           fiscal_provider_reference?: string | null
@@ -788,6 +1015,8 @@ export type Database = {
           fiscalized_at?: string | null
           fiscalized_by?: string | null
           guest_name?: string | null
+          held_at?: string | null
+          held_reason?: string | null
           id?: string
           notes?: string | null
           order_code?: string | null
@@ -971,6 +1200,63 @@ export type Database = {
           },
         ]
       }
+      printers: {
+        Row: {
+          created_at: string
+          device_mac: string | null
+          enabled: boolean
+          id: string
+          last_error: string | null
+          last_seen_at: string | null
+          last_status: string | null
+          last_test_printed_at: string | null
+          name: string
+          paper_width: number
+          plain_text: boolean
+          poll_token: string
+          protocol: string | null
+          station: string
+          test_requested_at: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          device_mac?: string | null
+          enabled?: boolean
+          id?: string
+          last_error?: string | null
+          last_seen_at?: string | null
+          last_status?: string | null
+          last_test_printed_at?: string | null
+          name: string
+          paper_width?: number
+          plain_text?: boolean
+          poll_token?: string
+          protocol?: string | null
+          station?: string
+          test_requested_at?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          device_mac?: string | null
+          enabled?: boolean
+          id?: string
+          last_error?: string | null
+          last_seen_at?: string | null
+          last_status?: string | null
+          last_test_printed_at?: string | null
+          name?: string
+          paper_width?: number
+          plain_text?: boolean
+          poll_token?: string
+          protocol?: string | null
+          station?: string
+          test_requested_at?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       ratings: {
         Row: {
           created_at: string
@@ -1007,11 +1293,112 @@ export type Database = {
           },
         ]
       }
+      reco_clash: {
+        Row: {
+          candidate_kind: string
+          context_kind: string
+          note: string | null
+        }
+        Insert: {
+          candidate_kind: string
+          context_kind: string
+          note?: string | null
+        }
+        Update: {
+          candidate_kind?: string
+          context_kind?: string
+          note?: string | null
+        }
+        Relationships: []
+      }
+      reco_fit: {
+        Row: {
+          candidate_kind: string
+          context_kind: string
+          note: string | null
+        }
+        Insert: {
+          candidate_kind: string
+          context_kind: string
+          note?: string | null
+        }
+        Update: {
+          candidate_kind?: string
+          context_kind?: string
+          note?: string | null
+        }
+        Relationships: []
+      }
+      reco_learned_visits: {
+        Row: {
+          item_id: string
+          learned_at: string
+          visit_id: string
+        }
+        Insert: {
+          item_id: string
+          learned_at?: string
+          visit_id: string
+        }
+        Update: {
+          item_id?: string
+          learned_at?: string
+          visit_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reco_learned_visits_item_id_fkey"
+            columns: ["item_id"]
+            isOneToOne: false
+            referencedRelation: "menu_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      reco_learning: {
+        Row: {
+          ctx_key: string
+          ctx_level: string
+          item_id: string | null
+          last_at: string
+          tables: number
+          w: number
+          w_at: string
+        }
+        Insert: {
+          ctx_key: string
+          ctx_level: string
+          item_id?: string | null
+          last_at?: string
+          tables?: number
+          w?: number
+          w_at?: string
+        }
+        Update: {
+          ctx_key?: string
+          ctx_level?: string
+          item_id?: string | null
+          last_at?: string
+          tables?: number
+          w?: number
+          w_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reco_learning_item_id_fkey"
+            columns: ["item_id"]
+            isOneToOne: false
+            referencedRelation: "menu_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       recommendation_decisions: {
         Row: {
           action_probability: number
           arm: string | null
           candidates: Json
+          cart_value: number | null
           chosen_item_id: string | null
           created_at: string
           experiment_id: string | null
@@ -1021,11 +1408,13 @@ export type Database = {
           recommendation_type: string | null
           session_id: string | null
           source_item_id: string | null
+          suggested_quantity: number | null
         }
         Insert: {
           action_probability?: number
           arm?: string | null
           candidates?: Json
+          cart_value?: number | null
           chosen_item_id?: string | null
           created_at?: string
           experiment_id?: string | null
@@ -1035,11 +1424,13 @@ export type Database = {
           recommendation_type?: string | null
           session_id?: string | null
           source_item_id?: string | null
+          suggested_quantity?: number | null
         }
         Update: {
           action_probability?: number
           arm?: string | null
           candidates?: Json
+          cart_value?: number | null
           chosen_item_id?: string | null
           created_at?: string
           experiment_id?: string | null
@@ -1049,6 +1440,7 @@ export type Database = {
           recommendation_type?: string | null
           session_id?: string | null
           source_item_id?: string | null
+          suggested_quantity?: number | null
         }
         Relationships: [
           {
@@ -1114,6 +1506,13 @@ export type Database = {
       restaurant_settings: {
         Row: {
           after_meal_prompt_minutes: number
+          default_cost_pct: Json
+          hold_auto_admitted: boolean | null
+          hold_burst_sessions: number | null
+          hold_first_order_items: number | null
+          hold_first_order_km: number | null
+          hold_second_session: boolean | null
+          hold_unpaid_km: number | null
           id: number
           kitchen_capacity_minutes: number
           kitchen_delay_minutes: number
@@ -1130,6 +1529,7 @@ export type Database = {
           print_header: string
           print_paper_width: number
           print_show_prices: boolean
+          reco_alcohol_from: string
           reco_exploration: number
           reco_holdout_pct: number
           reco_min_acceptance: number
@@ -1140,6 +1540,8 @@ export type Database = {
           reco_weight_margin: number
           reco_weight_observed: number
           recommendations_enabled: boolean
+          service_close: string | null
+          service_open: string | null
           session_idle_timeout_minutes: number
           social_proof_min_sessions: number
           stale_order_hours: number
@@ -1149,6 +1551,13 @@ export type Database = {
         }
         Insert: {
           after_meal_prompt_minutes?: number
+          default_cost_pct?: Json
+          hold_auto_admitted?: boolean | null
+          hold_burst_sessions?: number | null
+          hold_first_order_items?: number | null
+          hold_first_order_km?: number | null
+          hold_second_session?: boolean | null
+          hold_unpaid_km?: number | null
           id?: number
           kitchen_capacity_minutes?: number
           kitchen_delay_minutes?: number
@@ -1165,6 +1574,7 @@ export type Database = {
           print_header?: string
           print_paper_width?: number
           print_show_prices?: boolean
+          reco_alcohol_from?: string
           reco_exploration?: number
           reco_holdout_pct?: number
           reco_min_acceptance?: number
@@ -1175,6 +1585,8 @@ export type Database = {
           reco_weight_margin?: number
           reco_weight_observed?: number
           recommendations_enabled?: boolean
+          service_close?: string | null
+          service_open?: string | null
           session_idle_timeout_minutes?: number
           social_proof_min_sessions?: number
           stale_order_hours?: number
@@ -1184,6 +1596,13 @@ export type Database = {
         }
         Update: {
           after_meal_prompt_minutes?: number
+          default_cost_pct?: Json
+          hold_auto_admitted?: boolean | null
+          hold_burst_sessions?: number | null
+          hold_first_order_items?: number | null
+          hold_first_order_km?: number | null
+          hold_second_session?: boolean | null
+          hold_unpaid_km?: number | null
           id?: number
           kitchen_capacity_minutes?: number
           kitchen_delay_minutes?: number
@@ -1200,6 +1619,7 @@ export type Database = {
           print_header?: string
           print_paper_width?: number
           print_show_prices?: boolean
+          reco_alcohol_from?: string
           reco_exploration?: number
           reco_holdout_pct?: number
           reco_min_acceptance?: number
@@ -1210,6 +1630,8 @@ export type Database = {
           reco_weight_margin?: number
           reco_weight_observed?: number
           recommendations_enabled?: boolean
+          service_close?: string | null
+          service_open?: string | null
           session_idle_timeout_minutes?: number
           social_proof_min_sessions?: number
           stale_order_hours?: number
@@ -1380,30 +1802,42 @@ export type Database = {
           computed_at: string
           confidence: number
           confidence_low: number
+          eb_mean: number | null
+          eb05: number | null
           item_a: string
           item_b: string
           lift: number
           pair_sessions: number
+          w_expected: number | null
+          w_pair: number | null
         }
         Insert: {
           a_sessions: number
           computed_at?: string
           confidence: number
           confidence_low: number
+          eb_mean?: number | null
+          eb05?: number | null
           item_a: string
           item_b: string
           lift: number
           pair_sessions: number
+          w_expected?: number | null
+          w_pair?: number | null
         }
         Update: {
           a_sessions?: number
           computed_at?: string
           confidence?: number
           confidence_low?: number
+          eb_mean?: number | null
+          eb05?: number | null
           item_a?: string
           item_b?: string
           lift?: number
           pair_sessions?: number
+          w_expected?: number | null
+          w_pair?: number | null
         }
         Relationships: [
           {
@@ -1559,6 +1993,57 @@ export type Database = {
           },
         ]
       }
+      subcategory_affinity: {
+        Row: {
+          a_orders: number
+          computed_at: string
+          eb_mean: number
+          eb05: number
+          pair_orders: number
+          sub_a: string
+          sub_b: string
+          w_expected: number
+          w_pair: number
+        }
+        Insert: {
+          a_orders: number
+          computed_at?: string
+          eb_mean: number
+          eb05: number
+          pair_orders: number
+          sub_a: string
+          sub_b: string
+          w_expected: number
+          w_pair: number
+        }
+        Update: {
+          a_orders?: number
+          computed_at?: string
+          eb_mean?: number
+          eb05?: number
+          pair_orders?: number
+          sub_a?: string
+          sub_b?: string
+          w_expected?: number
+          w_pair?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "subcategory_affinity_sub_a_fkey"
+            columns: ["sub_a"]
+            isOneToOne: false
+            referencedRelation: "subcategories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "subcategory_affinity_sub_b_fkey"
+            columns: ["sub_b"]
+            isOneToOne: false
+            referencedRelation: "subcategories"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       suggestion_conversions: {
         Row: {
           created_at: string
@@ -1631,6 +2116,44 @@ export type Database = {
           },
         ]
       }
+      suggestion_priors: {
+        Row: {
+          alpha0: number
+          beta0: number
+          item_accepted: number
+          item_shown: number
+          placement: string
+          recommended_item_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          alpha0: number
+          beta0: number
+          item_accepted?: number
+          item_shown?: number
+          placement: string
+          recommended_item_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          alpha0?: number
+          beta0?: number
+          item_accepted?: number
+          item_shown?: number
+          placement?: string
+          recommended_item_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "suggestion_priors_recommended_item_id_fkey"
+            columns: ["recommended_item_id"]
+            isOneToOne: false
+            referencedRelation: "menu_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       suggestion_stats: {
         Row: {
           accepted: number
@@ -1641,6 +2164,7 @@ export type Database = {
           placement: string
           recommended_item_id: string
           shown: number
+          shown_ledger: number
           source_item_id: string | null
           updated_at: string
         }
@@ -1653,6 +2177,7 @@ export type Database = {
           placement: string
           recommended_item_id: string
           shown?: number
+          shown_ledger?: number
           source_item_id?: string | null
           updated_at?: string
         }
@@ -1665,6 +2190,7 @@ export type Database = {
           placement?: string
           recommended_item_id?: string
           shown?: number
+          shown_ledger?: number
           source_item_id?: string | null
           updated_at?: string
         }
@@ -1688,6 +2214,8 @@ export type Database = {
       table_sessions: {
         Row: {
           assigned_waiter_id: string | null
+          auto_admitted_at: string | null
+          blocked_at: string | null
           closed_at: string | null
           covers: number | null
           first_order_at: string | null
@@ -1698,11 +2226,14 @@ export type Database = {
           last_heartbeat_at: string
           last_served_at: string | null
           opened_at: string
+          staff_seen_at: string | null
           table_id: string
           token: string
         }
         Insert: {
           assigned_waiter_id?: string | null
+          auto_admitted_at?: string | null
+          blocked_at?: string | null
           closed_at?: string | null
           covers?: number | null
           first_order_at?: string | null
@@ -1713,11 +2244,14 @@ export type Database = {
           last_heartbeat_at?: string
           last_served_at?: string | null
           opened_at?: string
+          staff_seen_at?: string | null
           table_id: string
           token?: string
         }
         Update: {
           assigned_waiter_id?: string | null
+          auto_admitted_at?: string | null
+          blocked_at?: string | null
           closed_at?: string | null
           covers?: number | null
           first_order_at?: string | null
@@ -1728,6 +2262,7 @@ export type Database = {
           last_heartbeat_at?: string
           last_served_at?: string | null
           opened_at?: string
+          staff_seen_at?: string | null
           table_id?: string
           token?: string
         }
@@ -2055,17 +2590,79 @@ export type Database = {
         }
         Returns: number
       }
+      acceptance_retired: {
+        Args: {
+          _accepted: number
+          _alpha0: number
+          _beta0: number
+          _min_acceptance: number
+          _shown: number
+        }
+        Returns: boolean
+      }
+      acceptance_upper95: {
+        Args: {
+          _accepted: number
+          _alpha0: number
+          _beta0: number
+          _shown: number
+        }
+        Returns: number
+      }
+      admin_save_combo: {
+        Args: { _combo_item_id: string; _slots: Json }
+        Returns: Json
+      }
       admin_set_waiter_pin: {
         Args: { _pin: string; _waiter_id: string }
         Returns: undefined
       }
       after_meal_moment: { Args: { _session_id: string }; Returns: boolean }
       analytics_event_allowed: { Args: { _event: string }; Returns: boolean }
+      analytics_item_days: {
+        Args: { _from: string; _to: string }
+        Returns: {
+          basis: string
+          day: string
+          item_id: string
+          visits: number
+        }[]
+      }
+      analytics_timestamptz: { Args: { _value: string }; Returns: string }
+      analytics_trading_days: {
+        Args: { _from: string; _to: string }
+        Returns: {
+          day: string
+          orders: number
+          visits: number
+        }[]
+      }
+      analytics_uuid: { Args: { _value: string }; Returns: string }
+      analytics_window_start: { Args: { _days: number }; Returns: string }
+      ancova_interval: {
+        Args: {
+          _cov_a: number
+          _cov_b: number
+          _mean_x_a: number
+          _mean_x_b: number
+          _mean_y_a: number
+          _mean_y_b: number
+          _n_a: number
+          _n_b: number
+          _var_x_a: number
+          _var_x_b: number
+          _var_y_a: number
+          _var_y_b: number
+        }
+        Returns: Json
+      }
       app_impact_summary: { Args: { _days?: number }; Returns: Json }
       assert_guest_session: {
         Args: { _session_id: string; _session_token: string }
         Returns: {
           assigned_waiter_id: string | null
+          auto_admitted_at: string | null
+          blocked_at: string | null
           closed_at: string | null
           covers: number | null
           first_order_at: string | null
@@ -2076,6 +2673,7 @@ export type Database = {
           last_heartbeat_at: string
           last_served_at: string | null
           opened_at: string
+          staff_seen_at: string | null
           table_id: string
           token: string
         }
@@ -2091,6 +2689,10 @@ export type Database = {
         Returns: string
       }
       bandit_readiness: { Args: never; Returns: Json }
+      basket_weight: {
+        Args: { _at: string; _half_life_days?: number; _now?: string }
+        Returns: number
+      }
       business_day: { Args: { _at?: string }; Returns: string }
       business_day_range: {
         Args: { _day: string }
@@ -2122,7 +2724,62 @@ export type Database = {
       }
       close_stale_orders: { Args: { _hours?: number }; Returns: Json }
       close_stale_sessions: { Args: never; Returns: number }
+      cloud_print_candidates: {
+        Args: { _types: string[] }
+        Returns: {
+          attempts: number
+          claimed_at: string | null
+          claimed_by_device: string | null
+          created_at: string
+          destination: string | null
+          exported_at: string | null
+          format: string
+          id: string
+          last_error: string | null
+          order_id: string
+          original_printed_at: string | null
+          payload: Json
+          print_verified: boolean | null
+          printed_at: string | null
+          status: string
+          ticket_type: string
+          updated_at: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "order_ticket_events"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
+      cloud_print_claim: {
+        Args: { _ticket_id?: string; _token: string }
+        Returns: Json
+      }
+      cloud_print_report: {
+        Args: {
+          _error?: string
+          _ok: boolean
+          _ticket_id: string
+          _token: string
+        }
+        Returns: string
+      }
+      cloud_printer_checkin: {
+        Args: {
+          _mac?: string
+          _protocol?: string
+          _status?: string
+          _token: string
+        }
+        Returns: Json
+      }
+      cloud_printer_test_done: {
+        Args: { _error?: string; _ok: boolean; _token: string }
+        Returns: undefined
+      }
       covers_summary: { Args: { _day?: string }; Returns: Json }
+      daily_anomalies: { Args: never; Returns: Json }
       day_reconciliation: { Args: { _day?: string }; Returns: Json }
       daypart_acceptance: {
         Args: {
@@ -2147,6 +2804,18 @@ export type Database = {
           with_suggestion: number
         }[]
       }
+      default_cost_share: {
+        Args: { _role: Database["public"]["Enums"]["meal_role"] }
+        Returns: number
+      }
+      eb_lower05: {
+        Args: { _alpha?: number; _beta?: number; _e: number; _n: number }
+        Returns: number
+      }
+      eb_posterior_mean: {
+        Args: { _alpha?: number; _beta?: number; _e: number; _n: number }
+        Returns: number
+      }
       enqueue_order_ticket: {
         Args: { _order_id: string; _ticket_type?: string }
         Returns: string
@@ -2158,6 +2827,7 @@ export type Database = {
       }
       experiment_srm: { Args: { _experiment_id: string }; Returns: Json }
       food_cost_coverage: { Args: never; Returns: Json }
+      funnel_summary: { Args: { _from?: string; _to?: string }; Returns: Json }
       get_popular_items: {
         Args: { _days?: number; _limit?: number }
         Returns: {
@@ -2182,6 +2852,7 @@ export type Database = {
       }
       guest_check_venue_token: { Args: { _token: string }; Returns: Json }
       guest_forget_me: { Args: { _client_id: string }; Returns: Json }
+      guest_get_combos: { Args: never; Returns: Json }
       guest_get_join_request: {
         Args: { _client_id: string; _request_id: string; _session_id: string }
         Returns: Json
@@ -2193,10 +2864,13 @@ export type Database = {
       guest_get_recommendations: {
         Args: {
           _cart_item_ids?: string[]
+          _cart_quantities?: number[]
           _exclude_allergens?: string[]
+          _exclude_item_ids?: string[]
           _language?: string
           _limit?: number
           _placement?: string
+          _require_tags?: string[]
           _session_id: string
           _session_token: string
         }
@@ -2212,6 +2886,7 @@ export type Database = {
           reason: string
           recommendation_type: string
           source_item_id: string
+          suggested_quantity: number
         }[]
       }
       guest_get_service_status: { Args: never; Returns: Json }
@@ -2270,6 +2945,7 @@ export type Database = {
       guest_order_eta: { Args: { _order_id: string }; Returns: Json }
       guest_place_order: {
         Args: {
+          _client_order_id?: string
           _guest_name: string
           _items: Json
           _payment_method: string
@@ -2371,6 +3047,10 @@ export type Database = {
           u2: number
         }[]
       }
+      in_service_hours: {
+        Args: { _at: string; _close: string; _open: string }
+        Returns: boolean
+      }
       is_staff_member: { Args: never; Returns: boolean }
       is_trusted_caller: { Args: never; Returns: boolean }
       item_prep_estimate: {
@@ -2378,6 +3058,24 @@ export type Database = {
         Returns: {
           minutes: number
           source: string
+        }[]
+      }
+      item_trends: {
+        Args: { _prior_days?: number; _recent_days?: number }
+        Returns: {
+          cost_estimated: boolean
+          days0: number
+          days1: number
+          e0: number
+          e1: number
+          is_available: boolean
+          item_id: string
+          k0: number
+          k1: number
+          name: string
+          price: number
+          unit_cm: number
+          units1: number
         }[]
       }
       kds_all_day: {
@@ -2403,7 +3101,72 @@ export type Database = {
           station: string
         }[]
       }
+      looked_at_not_ordered: {
+        Args: { _days?: number; _limit?: number }
+        Returns: {
+          adds: number
+          item_id: string
+          name: string
+          order_rate: number
+          orders: number
+          views: number
+        }[]
+      }
+      management_insights: {
+        Args: { _days?: number; _min_km?: number }
+        Returns: {
+          action: string
+          confidence: string
+          est_km_per_week: number
+          evidence: number
+          evidence_label: string
+          headline: string
+          item_id: string
+          kind: string
+          link: string
+          related_item_id: string
+          why: string
+        }[]
+      }
+      mark_session_seen: { Args: { _session_id: string }; Returns: undefined }
       maybe_enable_sampling: { Args: never; Returns: Json }
+      maybe_refresh_menu_intelligence: {
+        Args: { _max_age_minutes?: number }
+        Returns: Json
+      }
+      menu_engineering: {
+        Args: { _days?: number }
+        Returns: {
+          availability_basis: string
+          available_days: number
+          category_name: string
+          class_avg_cm: number
+          class_items: number
+          class_lines: number
+          class_units: number
+          class_units_per_week: number
+          cost_estimated: boolean
+          is_available: boolean
+          item_id: string
+          lines: number
+          menu_class: string
+          menu_mix: number
+          mix_high: number
+          mix_low: number
+          name: string
+          popularity: string
+          popularity_threshold: number
+          price: number
+          profitability: string
+          quadrant: string
+          revenue: number
+          trading_days: number
+          unit_cm: number
+          unit_cost: number
+          units: number
+          units_per_week: number
+        }[]
+      }
       menu_item_orderable: {
         Args: {
           _at?: string
@@ -2418,6 +3181,7 @@ export type Database = {
           add_rate: number
           adds: number
           category_name: string
+          created_at: string
           is_available: boolean
           item_id: string
           margin_score: number
@@ -2432,6 +3196,20 @@ export type Database = {
           views: number
         }[]
       }
+      menu_item_sale_price: {
+        Args: {
+          _at?: string
+          _item: Database["public"]["Tables"]["menu_items"]["Row"]
+        }
+        Returns: number
+      }
+      menu_item_unit_price: {
+        Args: {
+          _at?: string
+          _item: Database["public"]["Tables"]["menu_items"]["Row"]
+        }
+        Returns: number
+      }
       menu_pairings: {
         Args: { _limit?: number }
         Returns: {
@@ -2443,6 +3221,16 @@ export type Database = {
           name_a: string
           name_b: string
           pair_orders: number
+        }[]
+      }
+      menu_unit_margins: {
+        Args: never
+        Returns: {
+          cost_estimated: boolean
+          item_id: string
+          price: number
+          unit_cm: number
+          unit_cost: number
         }[]
       }
       monri_apply_callback: {
@@ -2478,6 +3266,10 @@ export type Database = {
       }
       next_order_code: { Args: never; Returns: string }
       online_card_payments_enabled: { Args: never; Returns: boolean }
+      order_hold_reason: {
+        Args: { _item_count: number; _items_total: number; _session_id: string }
+        Returns: string
+      }
       order_item_status_rank: {
         Args: { _s: Database["public"]["Enums"]["order_item_status"] }
         Returns: number
@@ -2513,8 +3305,47 @@ export type Database = {
           total: number
         }[]
       }
+      pair_strength: { Args: { _eb05: number }; Returns: number }
       payment_status_rank: { Args: { _status: string }; Returns: number }
+      popular_items_for_daypart: {
+        Args: { _daypart: string; _days?: number; _limit?: number }
+        Returns: {
+          menu_item_id: string
+          qty: number
+          relative: number
+          share: number
+        }[]
+      }
       prep_confidence_threshold: { Args: never; Returns: number }
+      prep_history: { Args: { _day?: string }; Returns: Json }
+      price_order_lines: {
+        Args: { _at?: string; _items: Json }
+        Returns: {
+          components: Json
+          line_no: number
+          menu_item_id: string
+          notes: string
+          quantity: number
+          regular_unit_price: number
+          unit_price: number
+        }[]
+      }
+      printer_health: {
+        Args: never
+        Returns: {
+          enabled: boolean
+          id: string
+          last_error: string
+          last_seen_at: string
+          last_status: string
+          name: string
+          online: boolean
+          protocol: string
+          station: string
+          waiting: number
+        }[]
+      }
+      printer_ticket_types: { Args: { _station: string }; Returns: string[] }
       prune_analytics_events: { Args: { _days?: number }; Returns: number }
       prune_recommendation_decisions: {
         Args: { _days?: number }
@@ -2523,6 +3354,7 @@ export type Database = {
       rank_recommendations: {
         Args: {
           _cart_item_ids?: string[]
+          _cart_quantities?: number[]
           _exclude_allergens?: string[]
           _language?: string
           _limit?: number
@@ -2540,10 +3372,85 @@ export type Database = {
           reason: string
           recommendation_type: string
           source_item_id: string
+          suggested_quantity: number
+        }[]
+      }
+      rebuild_reco_learning: { Args: { _days?: number }; Returns: Json }
+      reclassify_meal_roles: { Args: never; Returns: Json }
+      reco_decayed: {
+        Args: { _at: string; _w: number; _w_at: string }
+        Returns: number
+      }
+      reco_funnel: {
+        Args: { _days?: number }
+        Returns: {
+          decisions: number
+          km_per_1000_seen: number
+          paid: number
+          paid_km: number
+          placement: string
+          seen: number
+          tapped: number
+          week_start: string
+          with_suggestion: number
         }[]
       }
       reco_holdout_comparison: { Args: { _days?: number }; Returns: Json }
+      reco_kind: {
+        Args: {
+          _name: string
+          _role: Database["public"]["Enums"]["meal_role"]
+          _section: string
+          _station?: string
+        }
+        Returns: string
+      }
+      reco_learn_visit: { Args: { _visit: string }; Returns: number }
+      reco_learned_pairs: {
+        Args: { _at?: string; _context: string[] }
+        Returns: {
+          attach: number
+          item_id: string
+          level: string
+          lift: number
+          source_item_id: string
+          strength: number
+          tables: number
+        }[]
+      }
+      reco_learning_keys: {
+        Args: { _items: string[] }
+        Returns: {
+          ctx_key: string
+          ctx_level: string
+          item_id: string
+        }[]
+      }
+      reco_now: { Args: never; Returns: string }
       reco_policy_version: { Args: never; Returns: string }
+      reco_role_fits: {
+        Args: {
+          _at?: string
+          _candidate_role: Database["public"]["Enums"]["meal_role"]
+          _cart: string[]
+          _is_curated: boolean
+          _no_alcohol?: boolean
+          _placement: string
+          _rtype: string
+          _session_id: string
+        }
+        Returns: boolean
+      }
+      reco_vetoed: {
+        Args: {
+          _at: string
+          _curated: boolean
+          _kind: string
+          _placement?: string
+          _role: Database["public"]["Enums"]["meal_role"]
+        }
+        Returns: boolean
+      }
       recommendation_engine_health: { Args: never; Returns: Json }
       record_analytics_events: {
         Args: { _events: Json; _visit_id: string }
@@ -2575,6 +3482,7 @@ export type Database = {
         Args: { _days?: number; _min_pair_sessions?: number }
         Returns: number
       }
+      refresh_suggestion_priors: { Args: never; Returns: number }
       refresh_suggestion_stats: { Args: { _days?: number }; Returns: number }
       release_order_to_kitchen: {
         Args: { _order_id: string }
@@ -2631,12 +3539,61 @@ export type Database = {
       rotate_table_qr_token: { Args: { _table_id: string }; Returns: string }
       rotate_venue_qr_token: { Args: never; Returns: string }
       run_daily_maintenance: { Args: never; Returns: Json }
+      run_scheduled_learning_refresh: { Args: never; Returns: Json }
       run_scheduled_maintenance: { Args: never; Returns: Json }
       sales_analytics: { Args: { _from?: string; _to?: string }; Returns: Json }
-      sample_acceptance: {
-        Args: { _accepted: number; _seed: string; _shown: number }
-        Returns: number
+      sales_change_terms: {
+        Args: {
+          _cmp_covered: number
+          _cmp_covers: number
+          _cmp_net: number
+          _cmp_units: number
+          _cmp_visits: number
+          _covered: number
+          _covers: number
+          _net: number
+          _scale: number
+          _units: number
+          _use_covers: boolean
+          _visits: number
+        }
+        Returns: Json
       }
+      sales_components: {
+        Args: { _from: string; _to: string }
+        Returns: {
+          covered_visits: number
+          covers: number
+          daypart: string
+          net: number
+          units: number
+          visits: number
+        }[]
+      }
+      sales_decomposition: {
+        Args: {
+          _cmp_from?: string
+          _cmp_to?: string
+          _from?: string
+          _to?: string
+        }
+        Returns: Json
+      }
+      sample_acceptance:
+        | {
+            Args: { _accepted: number; _seed: string; _shown: number }
+            Returns: number
+          }
+        | {
+            Args: {
+              _accepted: number
+              _alpha0: number
+              _beta0: number
+              _seed: string
+              _shown: number
+            }
+            Returns: number
+          }
       session_context: {
         Args: { _session_id: string }
         Returns: {
@@ -2651,6 +3608,13 @@ export type Database = {
         }[]
       }
       session_idle_timeout: { Args: never; Returns: number }
+      session_outstanding: {
+        Args: { _session_id: string }
+        Returns: {
+          outstanding: number
+          unpaid_orders: number
+        }[]
+      }
       set_order_fiscalization: {
         Args: {
           _error?: string
@@ -2662,22 +3626,36 @@ export type Database = {
         Returns: Json
       }
       shift_close_for: { Args: { _day?: string }; Returns: Json }
-      smoothed_acceptance: {
-        Args: { _accepted: number; _shown: number }
-        Returns: number
-      }
+      smoothed_acceptance:
+        | { Args: { _accepted: number; _shown: number }; Returns: number }
+        | {
+            Args: {
+              _accepted: number
+              _alpha0: number
+              _beta0: number
+              _shown: number
+            }
+            Returns: number
+          }
       sold_out_impact: {
         Args: { _days?: number }
         Returns: {
           avg_daily_revenue_when_available: number
           estimated_lost_revenue: number
           item_id: string
+          last_sold_day: string
           name: string
+          revenue: number
+          selling_days: number
           views: number
         }[]
       }
       staff_ack_bill_request: { Args: { _request_id: string }; Returns: Json }
       staff_ack_waiter_call: { Args: { _call_id: string }; Returns: Json }
+      staff_block_session: {
+        Args: { _reason?: string; _session_id: string }
+        Returns: Json
+      }
       staff_bump_order_item: {
         Args: {
           _item_id: string
@@ -2692,6 +3670,13 @@ export type Database = {
         }
         Returns: Json
       }
+      staff_close_session: { Args: { _session_id: string }; Returns: Json }
+      staff_mark_session_seen: { Args: { _session_id: string }; Returns: Json }
+      staff_performance: {
+        Args: { _from?: string; _to?: string }
+        Returns: Json
+      }
+      staff_release_held_order: { Args: { _order_id: string }; Returns: Json }
       staff_resolve_bill_request: {
         Args: { _close_session?: boolean; _request_id: string }
         Returns: Json
@@ -2720,6 +3705,7 @@ export type Database = {
         Args: { _holdout_pct?: number; _name: string; _policy_version: string }
         Returns: Json
       }
+      station_timings: { Args: { _days?: number }; Returns: Json }
       stop_experiment: { Args: { _notes?: string }; Returns: Json }
       suggestion_evidence: {
         Args: { _recommended_item_id: string; _source_item_id: string }
@@ -2755,7 +3741,19 @@ export type Database = {
           status: string
         }[]
       }
+      suggestion_prior: {
+        Args: { _item_id: string; _placement: string }
+        Returns: {
+          alpha0: number
+          beta0: number
+          item_shown: number
+        }[]
+      }
       touch_session: { Args: { _id: string; _token: string }; Returns: boolean }
+      two_proportion_interval: {
+        Args: { _n_a: number; _n_b: number; _x_a: number; _x_b: number }
+        Returns: Json
+      }
       verify_waiter_pin: {
         Args: { _pin: string; _waiter_id: string }
         Returns: boolean
@@ -2770,6 +3768,13 @@ export type Database = {
           _var_b: number
         }
         Returns: Json
+      }
+      wilson_interval: {
+        Args: { _n: number; _p: number; _z?: number }
+        Returns: {
+          high: number
+          low: number
+        }[]
       }
       wilson_lower: {
         Args: { _successes: number; _trials: number; _z?: number }
