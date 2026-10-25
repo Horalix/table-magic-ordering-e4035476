@@ -61,6 +61,12 @@ const THUMB_ZOOM_EXCEPTIONS = {
   'c98d1f5e-bbc2-47c2-b4ab-48ec64383283': 1, // Picnic Box Set (flat lay)
   '4bdf76b3-b150-46f5-b059-0f228d48c56d': 0.92, // Churros: the long tray needs the width
 };
+// Where across a landscape photo the square thumbnail is centred (0 = left
+// edge, 1 = right), for photos where the attention crop picks the props: the
+// Chemex stands at the right of its tray, and the crop chose the two glasses.
+const THUMB_CENTRE = {
+  '7c1e2a40-5b0d-4c8e-9a51-1f6d3e2b9c01': 0.73, // Chemex Hot
+};
 // Downscaling softens edges; a light unsharp mask on the small sizes keeps a
 // burger looking like a burger at thumbnail size.
 const SHARPEN = { sigma: 0.6, m1: 0.5, m2: 2.5 };
@@ -204,6 +210,9 @@ async function processRow(row, manifest, counters) {
       const left = Math.round((srcW - box) / 2);
       const top = Math.min(srcH - box, Math.max(0, Math.round(srcH * 0.56 - box / 2)));
       thumbSource = await sharp(input).rotate().extract({ left, top, width: box, height: box }).toBuffer();
+    } else if (THUMB_CENTRE[id] !== undefined && srcW > srcH) {
+      const left = Math.min(srcW - srcH, Math.max(0, Math.round(srcW * THUMB_CENTRE[id] - srcH / 2)));
+      thumbSource = await sharp(input).rotate().extract({ left, top: 0, width: srcH, height: srcH }).toBuffer();
     }
 
     const side = Math.round(Math.min(srcW, srcH) * zoom);

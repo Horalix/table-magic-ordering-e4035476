@@ -1286,6 +1286,74 @@
     "ext": "webp",
     "src": "https://jgxnvrrphxnmzongtmzs.supabase.co/storage/v1/object/public/menu-images/7a8b578e-d53f-4892-bbe1-771240aed585.jpg"
   },
+  "7c1e2a40-5b0d-4c8e-9a51-1f6d3e2b9c01": {
+    "widths": [
+      96,
+      192,
+      384,
+      768,
+      1152
+    ],
+    "squares": [
+      160,
+      240,
+      360
+    ],
+    "blur": "data:image/webp;base64,UklGRnIAAABXRUJQVlA4IGYAAADQAQCdASoQAAsAA4BaJQBOgBhlVhNI4AD+T70n4N6AOnto8TS0HafpjF8a/PBfXif1eun8zSEbfkJwzz/4Zb7IypltMsBT2Z7uAV35SQcIXIBkI7oOtgLMJYCrlrSJZ2cMKYcAAAA=",
+    "ext": "webp",
+    "src": "https://menu.lasoul.net/img/drink/chemex.jpg"
+  },
+  "7c1e2a40-5b0d-4c8e-9a51-1f6d3e2b9c02": {
+    "widths": [
+      96,
+      192,
+      384,
+      768,
+      1086
+    ],
+    "squares": [
+      160,
+      240,
+      360
+    ],
+    "blur": "data:image/webp;base64,UklGRqQAAABXRUJQVlA4IJgAAACwBACdASoQABUAPu1iqU2ppaOiMAgBMB2JbAC7MoEUVgYyUu/HbOqzQNm6f1EqAP7ynvxLlD7bFHJmvfo3fnd56v0h/pjdF2W+A0qEiWq2EC3jZaCKWthvd9dM7lEQtekwmG9WqwMZUuEOC6mcnYVqjOjKQdjWdjur7dTIvzcQx4Tu2Pt2aFgxOLoy3OgVups5z4rPdsnAAA==",
+    "ext": "webp",
+    "src": "https://menu.lasoul.net/img/food/healthybeefburger.jpg"
+  },
+  "7c1e2a40-5b0d-4c8e-9a51-1f6d3e2b9c03": {
+    "widths": [
+      96,
+      192,
+      384,
+      768,
+      1086
+    ],
+    "squares": [
+      160,
+      240,
+      360
+    ],
+    "blur": "data:image/webp;base64,UklGRqIAAABXRUJQVlA4IJYAAADQBACdASoQABUAPu1iqU2ppaOiMAgBMB2JbAC7MoEUVkR0L/ergvqfvFQRN50aUAD+8p78RR3667oX6b9MCYGtEgorhMI/6b19sgjVkow9tSh7+DQ3QkDe51+Cyvntk7R5gCfmb6q3d3qJ3H7SyGBYqoXxIN8dkp68EbliVDwZvVf7ftxYMUOsBIt868jZm+R8fFf4AAA=",
+    "ext": "webp",
+    "src": "https://menu.lasoul.net/img/food/healthychickenburger.jpg"
+  },
+  "7c1e2a40-5b0d-4c8e-9a51-1f6d3e2b9c04": {
+    "widths": [
+      96,
+      192,
+      384,
+      768,
+      1152
+    ],
+    "squares": [
+      160,
+      240,
+      360
+    ],
+    "blur": "data:image/webp;base64,UklGRmIAAABXRUJQVlA4IFYAAACwAQCdASoQABAAA4BaJbACdADOd0kAAPyOmvTmZRhCIoadDSCSkP/m3KStun9puI0pVUMwuKCIARe1QGRANcGWMb1O6+1pmfduObEvzXsPCQTGngAAAA==",
+    "ext": "webp",
+    "src": "https://menu.lasoul.net/img/bananapudding.jpg"
+  },
   "7c9e6489-94ad-4ef5-a777-958f7f1bed9a": {
     "widths": [
       96,
