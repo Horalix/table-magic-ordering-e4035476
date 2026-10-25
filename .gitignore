@@ -34,3 +34,7 @@ test-results/
 playwright-report/
 blob-report/
 .playwright/
+
+# Menu photo working folder (npm run photos:export). Improved photos that
+# matter are copied into scripts/image-sources/ by photos:import.
+assets/menu-photos/
