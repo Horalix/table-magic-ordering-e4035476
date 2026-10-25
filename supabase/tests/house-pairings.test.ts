@@ -105,6 +105,9 @@ const suggest = async (cart: string[], placement = 'cart') => {
 describe('house pairings on the first night', () => {
   beforeAll(async () => { db = await createTestDatabase({ quiet: true }); }, 180_000);
   afterAll(async () => { await db?.close(); });
+  // The ranker's rules know the time of day (no cake at 09:00, no croissant at
+  // 21:00); a fixed Wednesday afternoon keeps these tests off the wall clock.
+  beforeAll(async () => { await db.exec(`SET lasoul.reco_now = '2026-10-21 15:00+02'`); });
   beforeEach(seed);
 
   it('offers a cold drink first with a burger, fries close behind', async () => {

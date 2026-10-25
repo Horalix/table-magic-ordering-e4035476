@@ -22,8 +22,6 @@ interface Settings {
   reco_weight_margin: number;
   reco_exploration: number;
   reco_holdout_pct: number;
-  /** Sarajevo time from which an alcoholic drink may be suggested; "12:00:00" by default. */
-  reco_alcohol_from?: string | null;
   session_idle_timeout_minutes: number;
   online_card_enabled: boolean;
   pay_at_table_enabled: boolean;
@@ -544,10 +542,13 @@ const AdminService = () => {
         </CardHeader>
         <CardContent className="space-y-5">
           <p className="text-sm font-sans text-muted-foreground leading-relaxed">
-            Each candidate is scored from four signals and the highest wins. Raise a number to lean
-            on that signal more. Whatever you set, the safety rules still apply on top: never a
-            sold-out dish, never something already in the cart, never another item from the same
-            part of the menu unless you marked it an upgrade or add-on.
+            First, a suggestion has to belong: one of your pairings, or something that goes with what
+            is on the table (a drink with food, fries with a burger, a salad with pasta, coffee or
+            dessert after the meal). Nothing else is ever shown — an empty card is better than a
+            wrong one. Among what belongs, each candidate is scored from four signals and the
+            highest wins. Raise a number to lean on that signal more. The safety rules always apply
+            on top: never a sold-out dish, never something already in the cart, never a second main
+            or a second side.
             See <strong>Menu intelligence</strong> for what it is currently learning.
           </p>
 
@@ -605,23 +606,6 @@ const AdminService = () => {
             >
               Start measuring at {settings.reco_holdout_pct}%
             </Button>
-          </div>
-
-          <div className="pt-4 border-t border-border">
-            <Label htmlFor="alcohol-from" className="font-sans font-semibold text-sm">
-              Suggest alcoholic drinks from
-            </Label>
-            <p className="text-xs text-muted-foreground font-sans mb-1.5 leading-relaxed">
-              Before this time (Sarajevo) no alcoholic drink is suggested, not even one of your own
-              pairings. Never to a table with a kids' dish, and never to a guest filtering for halal.
-              Guests can still order from the menu.
-            </p>
-            <Input
-              id="alcohol-from"
-              type="time"
-              defaultValue={hhmm(settings.reco_alcohol_from ?? '12:00')}
-              onBlur={(e) => { if (e.target.value) void patch({ reco_alcohol_from: e.target.value }); }}
-            />
           </div>
 
           <div className="pt-4 border-t border-border">

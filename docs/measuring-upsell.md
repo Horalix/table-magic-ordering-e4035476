@@ -355,3 +355,33 @@ The default holdout is unchanged (0: everybody sees suggestions). To measure:
 It costs something: for those weeks half the tables see no suggestions. If
 the suggestions work, that is real money not earned — the price of knowing
 whether they do, paid once.
+
+## 12. Relevance first, then profit (`20261025160000_reco_profit.sql`)
+
+The engine's objective is the extra contribution margin a suggestion adds to
+a visit — without the guest ever being offered something silly. So relevance
+is a **gate**, not a weight:
+
+- every dish has a kind (`reco_kind`: burger, pasta, breakfast, dessert,
+  pastry, coffee, refresher, soft drink, ...);
+- a candidate that is not one of the owner's pairings is considered only if
+  `reco_fit` says its kind goes with something on the table; `reco_clash` and
+  `reco_vetoed` remove what never belongs (a second main or side, cake before
+  11:00, a croissant in the evening, sweets with a frappé, a kids' dish, an
+  energy drink, a box for sharing);
+- learned co-occurrence and popularity only *rank* what passed; if nothing
+  passes, the card stays empty.
+
+Among what passed, expected profit decides: P(taken) × unit margin. Before a
+pair has a record, P(taken) is assumed to fall with the square of how far the
+price overshoots a comfortable share of the table's average line (40% for a
+drink or side, 80% for a dessert or starter), and the value term carries 30%
+of its weight; both give way to the pair's own record as it builds. A table
+with more people than drinks is offered one each at the cart and on the
+running tab ("Just one" is always a tap away); the decision records the
+quantity offered, the paid line what was bought.
+
+`supabase/tests/reco-waiter-scenarios.test.ts` runs 70 tables at five times of
+day on the real menu and fails if any first suggestion is one a good waiter
+would not make. Regenerate the readable table with
+`WAITER_REPORT=out.md npx vitest run supabase/tests/reco-waiter-scenarios.test.ts`.

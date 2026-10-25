@@ -18,9 +18,21 @@ export type RecommendationType =
    * evidence it did not have. No copy depends on it: the headline is chosen by
    * placement (see headlineKeyFor).
    */
-  | 'popular';
+  | 'popular'
+  /**
+   * Proposed by the fit graph (reco_fit): the right kind of thing for what is
+   * on the table — a croissant for a coffee, a salad for a risotto — with no
+   * pairing or history behind it yet.
+   */
+  | 'goes_with';
 
-export type Placement = 'cart' | 'after_meal' | 'item';
+/**
+ * Where the card is shown.
+ *
+ * `tab` is the running tab while the table waits for its food: the moment a
+ * table that ordered food and nothing to drink is offered a drink.
+ */
+export type Placement = 'cart' | 'after_meal' | 'item' | 'tab';
 
 export interface Recommendation {
   /**
@@ -42,7 +54,16 @@ export interface Recommendation {
   recommendation_type: RecommendationType;
   /** Which cart item triggered this, if any. Needed for attribution. */
   source_item_id: string | null;
+  /**
+   * How many the card offers: one drink for each person at the table still
+   * without one, when the server can see the whole order (the cart, the
+   * running tab). 1 for everything else, and from a database that predates it.
+   */
+  suggested_quantity: number;
 }
+
+/** The server never offers more than this many of one thing. */
+export const MAX_SUGGESTED_QUANTITY = 6;
 
 /**
  * Ask the server what to suggest.
@@ -66,7 +87,19 @@ export interface RecommendationFilters {
   requireTags?: readonly string[];
   /** What the guest has already said no to this visit. */
   excludeItemIds?: readonly string[];
+  /**
+   * Portions per cart line, parallel to the cart ids. Lets the server see
+   * three burgers rather than one, and offer drinks for the table.
+   */
+  cartQuantities?: readonly number[];
 }
+
+/**
+ * Promises the whole house keeps: every dish at La Soul is halal and
+ * alcohol-free. As a "filter" they could only ever hide a dish somebody
+ * forgot to tag, so they are never sent or applied here.
+ */
+const HOUSE_GUARANTEES = new Set(['halal', 'alcohol_free', 'no_alcohol']);
 
 /** The server's ceiling; asking for it leaves room to filter without emptying the card. */
 const MAX_LIMIT = 8;
@@ -102,7 +135,7 @@ export async function fetchRecommendations(
   excludeAllergens: string[] = [],
   filters: RecommendationFilters = {},
 ): Promise<RecommendationResult> {
-  const requireTags = [...(filters.requireTags ?? [])];
+  const requireTags = [...(filters.requireTags ?? [])].filter((tag) => !HOUSE_GUARANTEES.has(tag));
   const exclude = [...(filters.excludeItemIds ?? [])].slice(-MAX_EXCLUDED);
   const filtering = requireTags.length > 0 || exclude.length > 0;
 
@@ -118,19 +151,26 @@ export async function fetchRecommendations(
     _exclude_allergens: excludeAllergens,
   };
 
+  const filtered = { ...base, _require_tags: requireTags, _exclude_item_ids: exclude };
+  const quantities = filters.cartQuantities && filters.cartQuantities.length === cartItemIds.length
+    ? filters.cartQuantities.map((q) => Math.min(Math.max(Math.round(q) || 1, 1), 10))
+    : null;
+  const missing = (e: unknown) => (e as { code?: string } | null)?.code === 'PGRST202';
+
   try {
-    let { data, error } = await supabase.rpc('guest_get_recommendations' as never, {
-      ...base,
-      _require_tags: requireTags,
-      _exclude_item_ids: exclude,
-    } as never);
+    let { data, error } = await supabase.rpc('guest_get_recommendations' as never, (
+      quantities ? { ...filtered, _cart_quantities: quantities } : filtered
+    ) as never);
 
     /*
      * PGRST202 is "no function with these arguments": a database that has not
-     * run the guardrails migration yet. Ask again the old way rather than show
+     * run the newer migrations yet. Ask again the older ways rather than show
      * nothing; the filter below still keeps the guest's diet and dismissals.
      */
-    if (error && (error as { code?: string }).code === 'PGRST202') {
+    if (error && missing(error) && quantities) {
+      ({ data, error } = await supabase.rpc('guest_get_recommendations' as never, filtered as never));
+    }
+    if (error && missing(error)) {
       ({ data, error } = await supabase.rpc('guest_get_recommendations' as never, base as never));
     }
 
@@ -149,7 +189,12 @@ export async function fetchRecommendations(
       items: rows
         .filter((row) => !exclude.includes(row.id) && matchesDietFilter(row, requireTags))
         .slice(0, limit)
-        .map((row) => ({ ...row, price: Number(row.price) })),
+        .map((row) => ({
+          ...row,
+          price: Number(row.price),
+          suggested_quantity: Math.min(
+            Math.max(Math.round(Number(row.suggested_quantity)) || 1, 1), MAX_SUGGESTED_QUANTITY),
+        })),
     };
   } catch (error) {
     reportFailure('fetch', error);
@@ -242,7 +287,9 @@ export const useDismissedSuggestions = create<DismissedState>()(persist((set) =>
  * everything but upgrades: the type describes where a candidate came from,
  * which is not something a guest needs to be told.
  */
-export const headlineKeyFor = (placement: Placement, type?: RecommendationType): string => {
+export const headlineKeyFor = (placement: Placement, type?: RecommendationType, quantity = 1): string => {
+  if (quantity > 1) return 'reco_for_the_table';
+  if (placement === 'tab') return 'reco_while_you_wait';
   if (placement === 'after_meal') return 'anything_else';
   if (type === 'upgrade_to') return 'goes_well_with';
   if (placement === 'cart') return 'complete_your_order';

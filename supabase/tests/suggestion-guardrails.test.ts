@@ -164,6 +164,9 @@ const MORNING = '2026-08-02 09:00+02';
 
 beforeAll(async () => { db = (await createTestDatabase({ quiet: true })) as unknown as Db; }, 180_000);
 afterAll(async () => { await db?.close(); });
+// The ranker's rules know the time of day (no cake at 09:00, no croissant at
+// 21:00); a fixed Wednesday afternoon keeps these tests off the wall clock.
+beforeAll(async () => { await db.exec(`SET lasoul.reco_now = '2026-10-21 15:00+02'`); });
 beforeEach(seed);
 
 describe('coursing rules', () => {
@@ -195,20 +198,22 @@ describe('coursing rules', () => {
     expect(await fits('hot_drink', 'cart', [COLA], { at: MORNING })).toBe(false);
   });
 
-  it('keeps alcohol and unclassified items to observed evidence', async () => {
-    // At a fixed afternoon hour: alcohol is never suggested before noon at all
-    // (see reco-learning-v3), so "now" would make this depend on the clock.
+  it('never offers alcohol, and keeps unclassified items to observed evidence', async () => {
+    // La Soul is halal and serves no alcohol: not on evidence, not curated.
     expect(await fits('alcohol', 'cart', [BURGER], { at: AFTERNOON })).toBe(false);
-    expect(await fits('alcohol', 'cart', [BURGER], { rtype: 'observed', at: AFTERNOON })).toBe(true);
+    expect(await fits('alcohol', 'cart', [BURGER], { rtype: 'observed', at: AFTERNOON })).toBe(false);
+    expect(await fits('alcohol', 'cart', [BURGER], { curated: true, at: AFTERNOON })).toBe(false);
     expect(await fits(null, 'cart', [BURGER])).toBe(false);
     expect(await fits(null, 'cart', [BURGER], { rtype: 'observed' })).toBe(true);
   });
 
   it('lets a curated pair choose its own moment, but never duplicate a course', async () => {
-    // The owner chose it, so a dessert next to a burger or a hot drink with a
-    // main is theirs to decide. Availability, diet and allergens still apply —
-    // in the ranker, not here.
-    expect(await fits('dessert', 'cart', [BURGER], { curated: true })).toBe(true);
+    // The owner chose it, so a hot drink with a main is theirs to decide.
+    // Availability, diet and allergens still apply — in the ranker, not here.
+    // A dessert next to a meal still in the cart waits for after the meal,
+    // whoever paired it; with a coffee on its own it is the moment.
+    expect(await fits('dessert', 'cart', [BURGER], { curated: true })).toBe(false);
+    expect(await fits('dessert', 'cart', [ESPRESSO], { curated: true })).toBe(true);
     expect(await fits('hot_drink', 'cart', [BURGER], { curated: true, at: '2026-08-04T14:00:00Z' })).toBe(true);
     // What no owner means: a second main, a second drink, a second dessert.
     expect(await fits('main', 'cart', [BURGER], { curated: true })).toBe(false);
@@ -244,10 +249,11 @@ describe('the ranker obeys them', () => {
 
   it('labels generic popularity honestly', async () => {
     // It used to say `frequently_bought_together`, a claim about evidence
-    // that did not exist.
+    // that did not exist. Fries with a burger are now proposed by the fit
+    // graph itself ('goes_with'), which is just as honest.
     await popular([FRIES]);
     const rows = await rank([BURGER]);
-    expect(rows.find((r) => r.id === FRIES)?.recommendation_type).toBe('popular');
+    expect(['popular', 'goes_with']).toContain(rows.find((r) => r.id === FRIES)?.recommendation_type);
   });
 
   it('never offers a second drink to a drinks-only cart', async () => {
@@ -294,6 +300,8 @@ describe('the ranker obeys them', () => {
 
 describe('time windows are Sarajevo time', () => {
   it('offers a dish whose window is open in Sarajevo, not one open in UTC', async () => {
+    // This one is about the real clock.
+    await db.exec(`RESET lasoul.reco_now`);
     /*
      * One window around the current Sarajevo time and one around the current
      * UTC time. They are one or two hours apart all year, so a 20-minute
@@ -314,6 +322,7 @@ describe('time windows are Sarajevo time', () => {
     `);
 
     const got = await ids([BURGER]);
+    await db.exec(`SET lasoul.reco_now = '2026-10-21 15:00+02'`);
     expect(got).toContain(LEMONADE);
     expect(got).not.toContain(COLA);
   });
@@ -347,15 +356,25 @@ describe('what the guest receives', () => {
   });
 
   it('obeys the guest\'s diet filter exactly as the menu does', async () => {
-    // Every active tag must be on the dish. Peach Lemonade is not tagged
-    // halal, so a guest filtering for halal never sees it suggested.
-    const rows = await recommend({ tags: ['halal'] });
+    // Every active tag must be on the dish. Peach Lemonade is made not vegan
+    // here, so a guest filtering for vegan never sees it suggested.
+    await db.exec(`UPDATE public.menu_items SET dietary_tags = '{vegetarian}' WHERE id = '${LEMONADE}'`);
+    const rows = await recommend({ tags: ['vegan'] });
     expect(rows.length).toBeGreaterThan(0);
     expect(rows.map((r) => r.id)).not.toContain(LEMONADE);
     const { rows: tagged } = await db.query<{ ok: boolean }>(
-      `SELECT bool_and('halal' = ANY(dietary_tags)) AS ok FROM public.menu_items WHERE id = ANY($1::uuid[])`,
+      `SELECT bool_and('vegan' = ANY(dietary_tags)) AS ok FROM public.menu_items WHERE id = ANY($1::uuid[])`,
       [rows.map((r) => r.id)]);
     expect(tagged[0].ok).toBe(true);
+  });
+
+  it('does not treat halal as a filter: everything served is halal, tagged or not', async () => {
+    // Peach Lemonade carries no halal tag. A guest who asks for halal must
+    // still be offered it, rather than see the house's own drinks disappear.
+    const plain = (await recommend()).map((r) => r.id);
+    const halal = (await recommend({ tags: ['halal'] })).map((r) => r.id);
+    expect(plain).toContain(LEMONADE);
+    expect(halal).toEqual(plain);
   });
 
   it('leaves out what the guest dismissed, and records what it showed instead', async () => {

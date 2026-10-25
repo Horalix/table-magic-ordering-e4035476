@@ -9,7 +9,8 @@
  *       fallback and a daypart-aware popular list
  *   R3  a new pair starts from what its dish does elsewhere
  *   R4  candidates are ranked by expected profit
- *   R5  a dish passed over this visit is offered less; alcohol has hard rules
+ *   R5  a dish passed over this visit is offered less; halal is not a filter
+ *       here, and alcohol cannot exist (menu_items_no_alcohol)
  */
 import { beforeAll, afterAll, beforeEach, describe, expect, it } from 'vitest';
 // @ts-expect-error -- plain JS harness, no types needed
@@ -27,7 +28,6 @@ const SUB = {
   fries: 'bbbbbbbb-0000-0000-0000-000000000002',
   drinks: 'bbbbbbbb-0000-0000-0000-000000000003',
   sides: 'bbbbbbbb-0000-0000-0000-000000000004',
-  cocktails: 'bbbbbbbb-0000-0000-0000-000000000005',
   kids: 'bbbbbbbb-0000-0000-0000-000000000006',
   extras: 'bbbbbbbb-0000-0000-0000-000000000007',
 };
@@ -39,7 +39,6 @@ const ITEM = {
   cola: 'cccccccc-0000-0000-0000-000000000005',
   salad: 'cccccccc-0000-0000-0000-000000000006',
   slaw: 'cccccccc-0000-0000-0000-000000000007',
-  mojito: 'cccccccc-0000-0000-0000-000000000008',
   nuggets: 'cccccccc-0000-0000-0000-000000000009',
   platter: 'cccccccc-0000-0000-0000-000000000010',
   dip: 'cccccccc-0000-0000-0000-000000000011',
@@ -70,7 +69,7 @@ async function seed() {
            reco_weight_curated = 40, reco_weight_observed = 25,
            reco_weight_learned = 25, reco_weight_margin = 10,
            reco_min_acceptance = 0.030, reco_retire_after_impressions = 60,
-           reco_sampling_enabled = false, reco_alcohol_from = '12:00'
+           reco_sampling_enabled = false
      WHERE id = 1;
 
     INSERT INTO auth.users(id) VALUES ('${STAFF}');
@@ -84,7 +83,6 @@ async function seed() {
       ('${SUB.fries}',     'aaaaaaaa-0000-0000-0000-000000000001', 'Fries', 2),
       ('${SUB.drinks}',    'aaaaaaaa-0000-0000-0000-000000000002', 'Other', 3),
       ('${SUB.sides}',     'aaaaaaaa-0000-0000-0000-000000000001', 'Salads', 4),
-      ('${SUB.cocktails}', 'aaaaaaaa-0000-0000-0000-000000000002', 'Cocktails', 5),
       ('${SUB.kids}',      'aaaaaaaa-0000-0000-0000-000000000001', 'Kids Menu', 6),
       ('${SUB.extras}',    'aaaaaaaa-0000-0000-0000-000000000001', 'Extras', 7);
 
@@ -96,7 +94,6 @@ async function seed() {
       ('${ITEM.cola}',      '${SUB.drinks}',    'Coca-Cola',       4.00, true, 'bar',     'cold_drink', '{halal}'),
       ('${ITEM.salad}',     '${SUB.sides}',     'Side Salad',      6.00, true, 'kitchen', 'side',       '{}'),
       ('${ITEM.slaw}',      '${SUB.sides}',     'Coleslaw',        6.00, true, 'kitchen', 'side',       '{}'),
-      ('${ITEM.mojito}',    '${SUB.cocktails}', 'Rum Mojito',      9.00, true, 'bar',     'alcohol',    '{halal}'),
       ('${ITEM.nuggets}',   '${SUB.kids}',      'Kids Nuggets',    9.00, true, 'kitchen', 'main',       '{}'),
       ('${ITEM.platter}',   '${SUB.extras}',    'Sharing Platter',30.00, true, 'kitchen', NULL,         '{}'),
       ('${ITEM.dip}',       '${SUB.extras}',    'Dip Trio',        4.00, true, 'kitchen', NULL,         '{}');
@@ -185,6 +182,9 @@ const allDay = async (item: string, source: string | null) => {
 
 beforeAll(async () => { db = (await createTestDatabase({ quiet: true })) as unknown as Db; }, 180_000);
 afterAll(async () => { await db?.close(); });
+// The ranker's rules know the time of day (no cake at 09:00, no croissant at
+// 21:00); a fixed Wednesday afternoon keeps these tests off the wall clock.
+beforeAll(async () => { await db.exec(`SET lasoul.reco_now = '2026-10-21 15:00+02'`); });
 beforeEach(seed);
 
 // ---------------------------------------------------------------------------
@@ -337,6 +337,8 @@ describe('R2: shrunk, age-weighted pair strength', () => {
   });
 
   it('offers a section\'s best seller for this daypart when the dish has no history', async () => {
+    // Baskets are dated from the real clock here, so the ranker must use it too.
+    await db.exec(`RESET lasoul.reco_now`);
     const { rows: dp } = await db.query<{ now_dp: string; then_dp: string }>(
       `SELECT public.daypart_of(now()) AS now_dp, public.daypart_of(now() - interval '6 hours') AS then_dp`);
     expect(dp[0].now_dp).not.toBe(dp[0].then_dp);
@@ -358,6 +360,7 @@ describe('R2: shrunk, age-weighted pair strength', () => {
     expect(rows.map((r) => r.id).slice(0, 2)).toEqual([ITEM.friesA, ITEM.friesB]);
     expect(rows[0].recommendation_type).toBe('frequently_bought_together');
     expect(rows[0].source_item_id).toBe(ITEM.newBurger);
+    await db.exec(`SET lasoul.reco_now = '2026-10-21 15:00+02'`);
   });
 
   it('makes the popular fallback depend on the time of day', async () => {
@@ -477,14 +480,7 @@ describe('R4: ranked by expected profit', () => {
   });
 });
 
-describe('R5: fatigue and alcohol', () => {
-  const fits = async (role: string, cart: string[], at: string, opts: { curated?: boolean; noAlcohol?: boolean } = {}) => {
-    const { rows } = await db.query<{ ok: boolean }>(
-      `SELECT public.reco_role_fits($1::public.meal_role, 'cart', 'pair_with', $2, $3::uuid[], $4::uuid,
-                                    $5::timestamptz, $6) AS ok`,
-      [role, opts.curated ?? true, cart, SESSION, at, opts.noAlcohol ?? false]);
-    return rows[0].ok;
-  };
+describe('R5: fatigue, and a halal house', () => {
 
   it('offers a dish passed over twice less than a fresh one', async () => {
     // The salad leads by 0.16 on the owner's ranking.
@@ -531,48 +527,24 @@ describe('R5: fatigue and alcohol', () => {
     expect(rows[0].n).toBe(0);
   });
 
-  it('keeps a curated cocktail out at 10:00 and offers it at 19:00', async () => {
-    expect(await fits('alcohol', [ITEM.burger], '2026-08-02 10:00+02')).toBe(false);
-    expect(await fits('alcohol', [ITEM.burger], '2026-08-02 19:00+02')).toBe(true);
-    // The small hours still belong to the evening before.
-    expect(await fits('alcohol', [ITEM.burger], '2026-08-03 01:30+02')).toBe(true);
+  it('cannot be offered alcohol: the menu refuses it', async () => {
+    await expect(db.exec(`UPDATE public.menu_items SET meal_role = 'alcohol' WHERE id = '${ITEM.cola}'`))
+      .rejects.toThrow(/menu_items_no_alcohol/);
+    const { rows } = await db.query<{ ok: boolean }>(
+      `SELECT public.reco_role_fits('alcohol'::public.meal_role, 'cart', 'observed', true, $1::uuid[], $2::uuid,
+                                    '2026-08-02 19:00+02'::timestamptz) AS ok`, [[ITEM.burger], SESSION]);
+    expect(rows[0].ok).toBe(false);
   });
 
-  it('follows the owner\'s start time', async () => {
-    await db.exec(`UPDATE public.restaurant_settings SET reco_alcohol_from = '17:00' WHERE id = 1`);
-    expect(await fits('alcohol', [ITEM.burger], '2026-08-02 15:00+02')).toBe(false);
-    expect(await fits('alcohol', [ITEM.burger], '2026-08-02 17:30+02')).toBe(true);
-  });
-
-  it('never offers alcohol to a table with a kids\' dish', async () => {
-    expect(await fits('alcohol', [ITEM.burger, ITEM.nuggets], '2026-08-02 19:00+02')).toBe(false);
-    // ...including one ordered earlier in the visit.
-    await db.query(
-      `INSERT INTO public.orders(table_session_id, total, status, payment_status, payment_method, released_to_kitchen_at)
-       VALUES ($1, 9, 'served', 'unpaid', 'cash', now())`, [SESSION]);
-    await db.query(
-      `INSERT INTO public.order_items(order_id, menu_item_id, quantity, unit_price, status)
-       SELECT o.id, $2, 1, 9, 'served' FROM public.orders o WHERE o.table_session_id = $1`, [SESSION, ITEM.nuggets]);
-    expect(await fits('alcohol', [ITEM.burger], '2026-08-02 19:00+02')).toBe(false);
-  });
-
-  it('never offers alcohol when the guest filters it out', async () => {
-    expect(await fits('alcohol', [ITEM.burger], '2026-08-02 19:00+02', { noAlcohol: true })).toBe(false);
-    // Other roles are unaffected by the filter.
-    expect(await fits('cold_drink', [ITEM.burger], '2026-08-02 19:00+02', { noAlcohol: true })).toBe(true);
-  });
-
-  it('turns a halal filter into the alcohol rule, for curated pairs too', async () => {
-    // The mojito is (wrongly) tagged halal, so only the alcohol rule can stop it.
-    await curate(ITEM.burger, ITEM.mojito, 100);
+  it('does not hide a dish for lacking a halal tag', async () => {
+    // Everything here is halal; the salad simply was never tagged.
+    await curate(ITEM.burger, ITEM.salad, 90);
     const { rows } = await db.query<{ id: string }>(
       `SELECT id FROM public.guest_get_recommendations($1::uuid, $2, $3::uuid[], 'cart', 'en', 8,
                                                      '{}'::text[], '{halal}'::text[], '{}'::uuid[])`,
       [SESSION, TOKEN, [ITEM.burger]]);
-    expect(rows.map((r) => r.id)).not.toContain(ITEM.mojito);
+    expect(rows.map((r) => r.id)).toContain(ITEM.salad);
     expect(rows.map((r) => r.id)).toContain(ITEM.cola);
-    const ranked = await rank([ITEM.burger], 'cart', ['alcohol']);
-    expect(ranked.map((r) => r.id)).not.toContain(ITEM.mojito);
   });
 });
 

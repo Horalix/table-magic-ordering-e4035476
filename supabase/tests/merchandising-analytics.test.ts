@@ -97,6 +97,9 @@ beforeAll(async () => {
 }, 120_000);
 
 afterAll(async () => { await db?.close(); });
+// The ranker's rules know the time of day (no cake at 09:00, no croissant at
+// 21:00); a fixed Wednesday afternoon keeps these tests off the wall clock.
+beforeAll(async () => { await db.exec(`SET lasoul.reco_now = '2026-10-21 15:00+02'`); });
 beforeEach(seed);
 
 // ---------------------------------------------------------------------------
@@ -134,13 +137,16 @@ describe('recommendations', () => {
     expect(rows.map((r) => r.id)).not.toContain(SECOND_BURGER);
   });
 
-  it('does allow a same-shelf item when it is explicitly an upgrade', async () => {
+  it('never adds a second of the same course, even as an "upgrade"', async () => {
+    // The cart can add, not swap: an upgrade from one burger to another ends
+    // up as two burgers. The owner's rule is kept, and simply never fires
+    // while a burger is already in the cart.
     await db.query(
       `INSERT INTO public.menu_item_recommendations(source_item_id, recommended_item_id, recommendation_type, priority)
        VALUES ($1, $2, 'upgrade_to', 95)`, [BURGER, SECOND_BURGER]);
 
     const rows = await recommend([BURGER]);
-    expect(rows.map((r) => r.id)).toContain(SECOND_BURGER);
+    expect(rows.map((r) => r.id)).not.toContain(SECOND_BURGER);
   });
 
   it('respects a time window on the item', async () => {
