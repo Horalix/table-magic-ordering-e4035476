@@ -39,16 +39,17 @@ CREATE TABLE IF NOT EXISTS public.maintenance_runs (
   last_result jsonb NOT NULL DEFAULT '{}'::jsonb
 );
 
+-- Access first, then row level security and the policies below (Supabase no
+-- longer grants new tables to the API roles by default).
+REVOKE ALL ON public.maintenance_runs FROM PUBLIC, anon;
+GRANT SELECT ON public.maintenance_runs TO authenticated;
+GRANT ALL ON public.maintenance_runs TO service_role;
+
 ALTER TABLE public.maintenance_runs ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "Staff read maintenance" ON public.maintenance_runs;
 CREATE POLICY "Staff read maintenance" ON public.maintenance_runs
   FOR SELECT TO authenticated USING (public.is_staff_member());
--- Explicit access (Supabase no longer grants new tables to the API roles by
--- default): matches the policy above; the server role keeps full access.
-REVOKE ALL ON public.maintenance_runs FROM PUBLIC, anon;
-GRANT SELECT ON public.maintenance_runs TO authenticated;
-GRANT ALL ON public.maintenance_runs TO service_role;
 
 -- ---------------------------------------------------------------------
 -- 2. Who may run scheduled work

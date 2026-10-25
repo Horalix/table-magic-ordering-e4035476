@@ -272,6 +272,12 @@ CREATE TABLE IF NOT EXISTS public.suggestion_priors (
   updated_at timestamptz NOT NULL DEFAULT now()
 );
 
+-- Access first, then row level security and the policies below (Supabase no
+-- longer grants new tables to the API roles by default).
+REVOKE ALL ON public.suggestion_priors FROM PUBLIC, anon;
+GRANT SELECT ON public.suggestion_priors TO authenticated;
+GRANT ALL ON public.suggestion_priors TO service_role;
+
 CREATE UNIQUE INDEX IF NOT EXISTS suggestion_priors_key
   ON public.suggestion_priors (placement, COALESCE(recommended_item_id, '00000000-0000-0000-0000-000000000000'::uuid));
 
@@ -279,11 +285,6 @@ ALTER TABLE public.suggestion_priors ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Staff read suggestion priors" ON public.suggestion_priors;
 CREATE POLICY "Staff read suggestion priors" ON public.suggestion_priors
   FOR SELECT TO authenticated USING (public.is_staff_member());
--- Explicit access (Supabase no longer grants new tables to the API roles by
--- default): matches the policy above; the server role keeps full access.
-REVOKE ALL ON public.suggestion_priors FROM PUBLIC, anon;
-GRANT SELECT ON public.suggestion_priors TO authenticated;
-GRANT ALL ON public.suggestion_priors TO service_role;
 
 /** The prior for a dish at a placement: its own, the placement's, or Beta(1,12). */
 CREATE OR REPLACE FUNCTION public.suggestion_prior(_item_id uuid, _placement text)
@@ -723,6 +724,12 @@ CREATE TABLE IF NOT EXISTS public.subcategory_affinity (
   PRIMARY KEY (sub_a, sub_b)
 );
 
+-- Access first, then row level security and the policies below (Supabase no
+-- longer grants new tables to the API roles by default).
+REVOKE ALL ON public.subcategory_affinity FROM PUBLIC, anon;
+GRANT SELECT ON public.subcategory_affinity TO authenticated;
+GRANT ALL ON public.subcategory_affinity TO service_role;
+
 /**
  * A dish's share of its section's orders, per daypart, shrunk to all day:
  *   share = (n_dish,dp + 5·s_dish) / (n_section,dp + 5)
@@ -735,6 +742,12 @@ CREATE TABLE IF NOT EXISTS public.item_section_share (
   share numeric NOT NULL,
   computed_at timestamptz NOT NULL DEFAULT now()
 );
+
+-- Access first, then row level security and the policies below (Supabase no
+-- longer grants new tables to the API roles by default).
+REVOKE ALL ON public.item_section_share FROM PUBLIC, anon;
+GRANT SELECT ON public.item_section_share TO authenticated;
+GRANT ALL ON public.item_section_share TO service_role;
 
 CREATE UNIQUE INDEX IF NOT EXISTS item_section_share_key
   ON public.item_section_share (item_id, COALESCE(daypart, '*'));
@@ -749,14 +762,6 @@ CREATE POLICY "Staff read section affinity" ON public.subcategory_affinity
 DROP POLICY IF EXISTS "Staff read section share" ON public.item_section_share;
 CREATE POLICY "Staff read section share" ON public.item_section_share
   FOR SELECT TO authenticated USING (public.is_staff_member());
--- Explicit access (Supabase no longer grants new tables to the API roles by
--- default): matches the policy above; the server role keeps full access.
-REVOKE ALL ON public.subcategory_affinity FROM PUBLIC, anon;
-GRANT SELECT ON public.subcategory_affinity TO authenticated;
-GRANT ALL ON public.subcategory_affinity TO service_role;
-REVOKE ALL ON public.item_section_share FROM PUBLIC, anon;
-GRANT SELECT ON public.item_section_share TO authenticated;
-GRANT ALL ON public.item_section_share TO service_role;
 
 /**
  * Dish pairs within one order (the cart's question), plus the section pairs

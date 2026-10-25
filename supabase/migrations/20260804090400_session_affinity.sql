@@ -49,16 +49,17 @@ CREATE TABLE IF NOT EXISTS public.session_item_affinity (
   PRIMARY KEY (item_a, item_b)
 );
 
+-- Access first, then row level security and the policies below (Supabase no
+-- longer grants new tables to the API roles by default).
+REVOKE ALL ON public.session_item_affinity FROM PUBLIC;
+GRANT SELECT ON public.session_item_affinity TO anon, authenticated;
+GRANT ALL ON public.session_item_affinity TO service_role;
+
 ALTER TABLE public.session_item_affinity ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "Anyone reads session affinity" ON public.session_item_affinity;
 CREATE POLICY "Anyone reads session affinity"
   ON public.session_item_affinity FOR SELECT TO anon, authenticated USING (true);
--- Explicit access (Supabase no longer grants new tables to the API roles by
--- default): matches the policy above; the server role keeps full access.
-REVOKE ALL ON public.session_item_affinity FROM PUBLIC;
-GRANT SELECT ON public.session_item_affinity TO anon, authenticated;
-GRANT ALL ON public.session_item_affinity TO service_role;
 
 /**
  * Wilson score lower bound.

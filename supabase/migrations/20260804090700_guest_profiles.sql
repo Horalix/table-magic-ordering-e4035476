@@ -37,6 +37,12 @@ CREATE TABLE IF NOT EXISTS public.guest_profiles (
   computed_at timestamptz NOT NULL DEFAULT now()
 );
 
+-- Access first, then row level security and the policies below (Supabase no
+-- longer grants new tables to the API roles by default).
+REVOKE ALL ON public.guest_profiles FROM PUBLIC, anon;
+GRANT SELECT ON public.guest_profiles TO authenticated;
+GRANT ALL ON public.guest_profiles TO service_role;
+
 COMMENT ON TABLE public.guest_profiles IS
   'One row per DEVICE that has opened a table. Pseudonymous and derived — it '
   'can be rebuilt from table_sessions at any time, and guest_forget_me removes '
@@ -47,11 +53,6 @@ ALTER TABLE public.guest_profiles ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Staff read guest profiles" ON public.guest_profiles;
 CREATE POLICY "Staff read guest profiles" ON public.guest_profiles
   FOR SELECT TO authenticated USING (public.is_staff_member());
--- Explicit access (Supabase no longer grants new tables to the API roles by
--- default): matches the policy above; the server role keeps full access.
-REVOKE ALL ON public.guest_profiles FROM PUBLIC, anon;
-GRANT SELECT ON public.guest_profiles TO authenticated;
-GRANT ALL ON public.guest_profiles TO service_role;
 
 CREATE INDEX IF NOT EXISTS idx_sessions_host_client
   ON public.table_sessions(host_client_id) WHERE host_client_id IS NOT NULL;

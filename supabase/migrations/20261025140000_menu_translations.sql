@@ -49,6 +49,12 @@ CREATE TABLE IF NOT EXISTS public.menu_machine_translations (
   PRIMARY KEY (source_table, row_id, field)
 );
 
+-- Access first, then row level security (Supabase no longer grants new
+-- tables to the API roles by default).
+REVOKE ALL ON public.menu_machine_translations FROM PUBLIC, anon, authenticated;
+-- Only the translate-menu Edge Function (server role) reads and writes it.
+GRANT ALL ON public.menu_machine_translations TO service_role;
+
 COMMENT ON TABLE public.menu_machine_translations IS
   'The value the translate-menu edge function last wrote into a translation '
   'field. A field whose live value still equals this is machine output and may '
@@ -56,10 +62,6 @@ COMMENT ON TABLE public.menu_machine_translations IS
   'by a person and is kept. Written only by the service role.';
 
 ALTER TABLE public.menu_machine_translations ENABLE ROW LEVEL SECURITY;
-REVOKE ALL ON public.menu_machine_translations FROM PUBLIC, anon, authenticated;
--- Only the translate-menu Edge Function (server role) reads and writes it.
-GRANT ALL ON public.menu_machine_translations TO service_role;
-
 
 -- ---------------------------------------------------------------------
 -- 2. Categories and subcategories

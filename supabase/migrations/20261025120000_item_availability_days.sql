@@ -43,6 +43,13 @@ CREATE TABLE IF NOT EXISTS public.menu_item_availability_log (
   changed_by uuid
 );
 
+-- Access first, then row level security and the policies below (Supabase no
+-- longer grants new tables to the API roles by default).
+REVOKE ALL ON public.menu_item_availability_log FROM PUBLIC, anon;
+GRANT SELECT ON public.menu_item_availability_log TO authenticated;
+GRANT ALL ON public.menu_item_availability_log TO service_role;
+GRANT USAGE, SELECT ON SEQUENCE public.menu_item_availability_log_id_seq TO service_role;
+
 CREATE INDEX IF NOT EXISTS idx_menu_item_availability_log_item
   ON public.menu_item_availability_log(menu_item_id, changed_at);
 
@@ -57,11 +64,6 @@ CREATE POLICY "Staff read availability history"
   ON public.menu_item_availability_log
   FOR SELECT TO authenticated
   USING (public.is_staff_member());
-
-REVOKE ALL ON public.menu_item_availability_log FROM PUBLIC, anon;
-GRANT SELECT ON public.menu_item_availability_log TO authenticated;
-GRANT ALL ON public.menu_item_availability_log TO service_role;
-GRANT USAGE, SELECT ON SEQUENCE public.menu_item_availability_log_id_seq TO service_role;
 
 /**
  * Trigger body: record a change of is_available.

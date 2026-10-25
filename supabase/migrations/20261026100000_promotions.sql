@@ -185,6 +185,14 @@ CREATE TABLE IF NOT EXISTS public.menu_combo_slots (
   label_ar text CHECK (label_ar IS NULL OR char_length(label_ar) <= 40),
   created_at timestamptz NOT NULL DEFAULT now()
 );
+
+-- Access first, then row level security and the policies below (Supabase no
+-- longer grants new tables to the API roles by default).
+REVOKE ALL ON public.menu_combo_slots FROM PUBLIC;
+GRANT SELECT ON public.menu_combo_slots TO anon, authenticated;
+GRANT INSERT, UPDATE, DELETE ON public.menu_combo_slots TO authenticated;
+GRANT ALL ON public.menu_combo_slots TO service_role;
+
 CREATE INDEX IF NOT EXISTS menu_combo_slots_combo_idx ON public.menu_combo_slots(combo_item_id, sort_order);
 
 CREATE TABLE IF NOT EXISTS public.menu_combo_options (
@@ -194,6 +202,14 @@ CREATE TABLE IF NOT EXISTS public.menu_combo_options (
   sort_order smallint NOT NULL DEFAULT 0,
   PRIMARY KEY (slot_id, item_id)
 );
+
+-- Access first, then row level security and the policies below (Supabase no
+-- longer grants new tables to the API roles by default).
+REVOKE ALL ON public.menu_combo_options FROM PUBLIC;
+GRANT SELECT ON public.menu_combo_options TO anon, authenticated;
+GRANT INSERT, UPDATE, DELETE ON public.menu_combo_options TO authenticated;
+GRANT ALL ON public.menu_combo_options TO service_role;
+
 CREATE INDEX IF NOT EXISTS menu_combo_options_item_idx ON public.menu_combo_options(item_id);
 
 ALTER TABLE public.menu_combo_slots ENABLE ROW LEVEL SECURITY;
@@ -219,15 +235,6 @@ CREATE POLICY "Admins manage combo options" ON public.menu_combo_options
   FOR ALL TO authenticated
   USING (public.has_role(auth.uid(), 'admin'::app_role))
   WITH CHECK (public.has_role(auth.uid(), 'admin'::app_role));
-
-REVOKE ALL ON public.menu_combo_slots FROM PUBLIC;
-GRANT SELECT ON public.menu_combo_slots TO anon, authenticated;
-GRANT INSERT, UPDATE, DELETE ON public.menu_combo_slots TO authenticated;
-GRANT ALL ON public.menu_combo_slots TO service_role;
-REVOKE ALL ON public.menu_combo_options FROM PUBLIC;
-GRANT SELECT ON public.menu_combo_options TO anon, authenticated;
-GRANT INSERT, UPDATE, DELETE ON public.menu_combo_options TO authenticated;
-GRANT ALL ON public.menu_combo_options TO service_role;
 
 /**
  * Every combo with its slots and each slot's choices, in one read.

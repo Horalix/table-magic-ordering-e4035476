@@ -114,6 +114,12 @@ CREATE TABLE IF NOT EXISTS public.reco_learning (
   last_at timestamptz NOT NULL DEFAULT now()
 );
 
+-- Access first, then row level security and the policies below (Supabase no
+-- longer grants new tables to the API roles by default).
+REVOKE ALL ON public.reco_learning FROM PUBLIC, anon;
+GRANT SELECT ON public.reco_learning TO authenticated;
+GRANT ALL ON public.reco_learning TO service_role;
+
 CREATE UNIQUE INDEX IF NOT EXISTS reco_learning_key
   ON public.reco_learning (ctx_level, ctx_key, (COALESCE(item_id, '00000000-0000-0000-0000-000000000000'::uuid)));
 
@@ -129,6 +135,12 @@ CREATE TABLE IF NOT EXISTS public.reco_learned_visits (
   PRIMARY KEY (visit_id, item_id)
 );
 
+-- Access first, then row level security and the policies below (Supabase no
+-- longer grants new tables to the API roles by default).
+REVOKE ALL ON public.reco_learned_visits FROM PUBLIC, anon;
+GRANT SELECT ON public.reco_learned_visits TO authenticated;
+GRANT ALL ON public.reco_learned_visits TO service_role;
+
 -- A visit's lines are found by order. Served lines had no index on order_id
 -- (only the partial one for open lines), and the learner, the ranker's
 -- session context and every report read served lines.
@@ -142,14 +154,6 @@ CREATE POLICY "Staff read reco learning" ON public.reco_learning
 DROP POLICY IF EXISTS "Staff read learned visits" ON public.reco_learned_visits;
 CREATE POLICY "Staff read learned visits" ON public.reco_learned_visits
   FOR SELECT TO authenticated USING (public.is_staff_member());
--- Explicit access (Supabase no longer grants new tables to the API roles by
--- default): matches the policy above; the server role keeps full access.
-REVOKE ALL ON public.reco_learning FROM PUBLIC, anon;
-GRANT SELECT ON public.reco_learning TO authenticated;
-GRANT ALL ON public.reco_learning TO service_role;
-REVOKE ALL ON public.reco_learned_visits FROM PUBLIC, anon;
-GRANT SELECT ON public.reco_learned_visits TO authenticated;
-GRANT ALL ON public.reco_learned_visits TO service_role;
 
 /** A counter's weight as of `_at`: halves every 45 days. */
 CREATE OR REPLACE FUNCTION public.reco_decayed(_w numeric, _w_at timestamptz, _at timestamptz)

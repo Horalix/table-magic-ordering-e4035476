@@ -61,6 +61,12 @@ CREATE TABLE IF NOT EXISTS public.printers (
   updated_at timestamptz NOT NULL DEFAULT now()
 );
 
+-- Access first, then row level security and the policies below (Supabase no
+-- longer grants new tables to the API roles by default).
+REVOKE ALL ON public.printers FROM PUBLIC, anon;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.printers TO authenticated;
+GRANT ALL ON public.printers TO service_role;
+
 COMMENT ON TABLE public.printers IS
   'Network ticket printers that poll the cloudprnt Edge Function (Star CloudPRNT / Epson Server Direct Print).';
 COMMENT ON COLUMN public.printers.poll_token IS
@@ -75,11 +81,6 @@ CREATE POLICY "Admins manage printers"
   ON public.printers FOR ALL TO authenticated
   USING (public.has_role(auth.uid(), 'admin'::public.app_role))
   WITH CHECK (public.has_role(auth.uid(), 'admin'::public.app_role));
-
-REVOKE ALL ON public.printers FROM anon;
-REVOKE ALL ON public.printers FROM PUBLIC;
-GRANT SELECT, INSERT, UPDATE, DELETE ON public.printers TO authenticated;
-GRANT ALL ON public.printers TO service_role;
 
 -- Deliberately NOT added to the realtime publication: a printer checks in
 -- every few seconds, and broadcasting each check-in to every staff device
