@@ -22,14 +22,14 @@ import { DIET_TAGS, DIET_BY_KEY, getItemTags, matchesDietFilter, useDietFilterSt
 import { merchBadges, unorderableReason, windowLabel } from '@/lib/availability';
 import { sectionSlug } from '@/lib/menu-sections';
 import { PriceTag, SaleBadge, NewBadge, ComboBadge } from '@/components/guest/PriceTag';
-import { useComboMap } from '@/lib/promotions-api';
+import { useComboMap, type PromoColumns } from '@/lib/promotions-api';
 import {
   comboRegularPrice, comboUnitPrice, fixedChoices, isNew, missingSlots, nextPriceChange, rememberPrices, saleView, type ComboDef,
 } from '@/lib/promotions';
 import type { Database } from '@/integrations/supabase/types';
 
 type CategoryRow = Database['public']['Tables']['categories']['Row'];
-type MenuItemRow = Database['public']['Tables']['menu_items']['Row'];
+type MenuItemRow = Database['public']['Tables']['menu_items']['Row'] & PromoColumns;
 type SubcategoryRow = Database['public']['Tables']['subcategories']['Row'];
 
 const categoryNameMap: Record<string, string> = {
