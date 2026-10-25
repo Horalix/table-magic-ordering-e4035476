@@ -194,6 +194,24 @@ export type Database = {
         }
         Relationships: []
       }
+      maintenance_runs: {
+        Row: {
+          job: string
+          last_result: Json
+          last_run_at: string
+        }
+        Insert: {
+          job: string
+          last_result?: Json
+          last_run_at?: string
+        }
+        Update: {
+          job?: string
+          last_result?: Json
+          last_run_at?: string
+        }
+        Relationships: []
+      }
       menu_item_affinity: {
         Row: {
           a_orders: number
@@ -2285,6 +2303,7 @@ export type Database = {
         Returns: boolean
       }
       is_staff_member: { Args: never; Returns: boolean }
+      is_trusted_caller: { Args: never; Returns: boolean }
       item_prep_estimate: {
         Args: { _item_id: string }
         Returns: {
@@ -2413,6 +2432,11 @@ export type Database = {
       }
       payment_status_rank: { Args: { _status: string }; Returns: number }
       prep_confidence_threshold: { Args: never; Returns: number }
+      prune_analytics_events: { Args: { _days?: number }; Returns: number }
+      prune_recommendation_decisions: {
+        Args: { _days?: number }
+        Returns: number
+      }
       rank_recommendations: {
         Args: {
           _cart_item_ids?: string[]
@@ -2521,6 +2545,8 @@ export type Database = {
       }
       rotate_table_qr_token: { Args: { _table_id: string }; Returns: string }
       rotate_venue_qr_token: { Args: never; Returns: string }
+      run_daily_maintenance: { Args: never; Returns: Json }
+      run_scheduled_maintenance: { Args: never; Returns: Json }
       sales_analytics: { Args: { _from?: string; _to?: string }; Returns: Json }
       session_context: {
         Args: { _session_id: string }
