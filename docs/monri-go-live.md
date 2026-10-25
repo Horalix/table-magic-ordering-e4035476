@@ -5,8 +5,8 @@ case below passes. Two independent switches enforce that:
 
 | Switch | Where | Effect |
 |---|---|---|
-| `VITE_MONRI_ENABLED` | Netlify env / `.env` | Whether the app *offers* the card button |
-| `restaurant_settings.online_card_enabled` | Admin → Service & suggestions | Whether the **database** accepts a card order at all |
+| `restaurant_settings.online_card_enabled` | Admin → Service & suggestions | Whether the **database** accepts a card order at all, and whether the app offers the button. Refuses to turn on until Monri is connected |
+| `VITE_MONRI_ENABLED=false` | build env | Emergency OFF only: a build with it never offers cards. Unset by default |
 
 The server-side one is authoritative. With it off, `guest_place_order` raises
 `feature_not_supported` for `card_online` and `monri_register_attempt` returns
@@ -52,14 +52,20 @@ MONRI_CURRENCY            = BAM
 ALLOWED_ORIGINS           = https://order.lasoul.net,http://localhost:8080
 ```
 
-Front-end (Netlify environment variables):
-
-```
-VITE_MONRI_ENABLED = false        # true only after §5 passes
-```
+No front-end variable is needed any more, and no rebuild: the card button
+follows the admin switch. `VITE_MONRI_ENABLED=false` remains as an emergency
+OFF for a build that must never offer cards.
 
 `ALLOWED_ORIGINS` matters: the payment-start function is CORS allow-listed
-rather than `*`, because it accepts a guest session token.
+rather than `*`, because it accepts a guest session token. Unset, it allows
+lasoul.net, www.lasoul.net, menu.lasoul.net, order.lasoul.net, the published
+Lovable address and localhost (`supabase/functions/_shared/http.ts`); set it
+only to change that list.
+
+**Admin → Service & suggestions** shows the state at any time: whether Monri
+is connected (the two secrets are set), test or production, the currency, and
+the callback URL to register in the Monri dashboard, with a copy button. The
+"Online card payment" switch refuses to turn on until Monri is connected.
 
 ---
 
@@ -72,7 +78,14 @@ supabase db push          # applies the payment-safety migrations
 ```
 
 Then, in the Monri dashboard, register the callback URL exactly as set in
-`MONRI_CALLBACK_URL`.
+`MONRI_CALLBACK_URL` — the one Admin → Service shows,
+`https://<project>.supabase.co/functions/v1/monri-webhook`.
+
+`supabase/config.toml` deploys `monri-webhook` with `verify_jwt = false`.
+Monri's servers sign their callback with `Authorization: WP3-callback
+<digest>`, not a Supabase JWT; with the gateway's JWT check on, every
+confirmation would bounce with 401 before the function could verify the
+digest itself. The function refuses anything whose digest does not match.
 
 ---
 

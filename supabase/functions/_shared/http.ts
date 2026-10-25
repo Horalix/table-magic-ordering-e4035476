@@ -7,8 +7,18 @@
  * back to the production domain plus localhost for development.
  */
 
+/**
+ * Where the app is actually served: the published Lovable address now, the
+ * La Soul domains later. With only order.lasoul.net here, a browser on any of
+ * these was refused by every function behind this list (card payment,
+ * Translate menu) unless ALLOWED_ORIGINS had been set by hand.
+ */
 const DEFAULT_ORIGINS = [
+  "https://lasoul.net",
+  "https://www.lasoul.net",
+  "https://menu.lasoul.net",
   "https://order.lasoul.net",
+  "https://table-magic-ordering.lovable.app",
   "http://localhost:8080",
   "http://localhost:5173",
 ];
@@ -26,7 +36,8 @@ export function corsHeaders(req: Request): Record<string, string> {
   return {
     "Access-Control-Allow-Origin": allow,
     "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    // GET: the Monri readiness check on Admin → Service.
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
     "Vary": "Origin",
   };
 }

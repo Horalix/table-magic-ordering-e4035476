@@ -11,8 +11,9 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { AlertTriangle, Plus, Trash2, Sparkles, PauseCircle, RefreshCw, ShieldAlert } from 'lucide-react';
+import { AlertTriangle, Plus, Trash2, Sparkles, PauseCircle, RefreshCw, ShieldAlert, CheckCircle2, CircleDashed, Copy } from 'lucide-react';
 import { toast } from 'sonner';
+import { cardPaymentStatus, type CardPaymentStatus } from '@/lib/payments';
 
 interface Settings {
   ordering_enabled: boolean;
@@ -113,6 +114,19 @@ const AdminService = () => {
   }, []);
 
   useEffect(() => { void load(); }, [load]);
+
+  /** Whether Monri is connected; undefined while asking, null if the function cannot be reached. */
+  const [monri, setMonri] = useState<CardPaymentStatus | null | undefined>(undefined);
+  useEffect(() => { void cardPaymentStatus().then(setMonri); }, []);
+
+  /** Card payments can only be switched on once Monri can actually take them. */
+  const setOnlineCard = (on: boolean) => {
+    if (on && !monri?.configured) {
+      toast.error('Monri is not connected yet. Add MONRI_MERCHANT_KEY and MONRI_AUTHENTICITY_TOKEN as Edge Function secrets first (docs/monri-go-live.md).');
+      return;
+    }
+    void patch({ online_card_enabled: on });
+  };
 
   const patch = async (changes: Partial<Settings>) => {
     setSettings((prev) => (prev ? { ...prev, ...changes } : prev));
@@ -255,8 +269,10 @@ const AdminService = () => {
                 shows the button.
               </p>
             </div>
-            <Switch id="card-online" checked={settings.online_card_enabled} onCheckedChange={(v) => patch({ online_card_enabled: v })} />
+            <Switch id="card-online" checked={settings.online_card_enabled === true} onCheckedChange={setOnlineCard} />
           </div>
+
+          <MonriReadiness status={monri} />
 
           {settings.online_card_enabled && (
             <div className="flex items-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs font-sans text-amber-700 dark:text-amber-400">
@@ -628,6 +644,52 @@ const AdminService = () => {
           </div>
         </CardContent>
       </Card>
+    </div>
+  );
+};
+
+/**
+ * Where online card payment stands, so going live with Monri is a checklist
+ * here rather than a code change: the secrets, the environment, and the
+ * callback URL to register in the Monri dashboard.
+ */
+const MonriReadiness = ({ status }: { status: CardPaymentStatus | null | undefined }) => {
+  if (status === undefined) return <Skeleton className="h-16 w-full" />;
+  if (status === null) {
+    return (
+      <p className="text-xs text-muted-foreground font-sans">
+        Could not reach the payment function to check Monri. It may not be deployed yet.
+      </p>
+    );
+  }
+  const copy = () => {
+    void navigator.clipboard?.writeText(status.webhookUrl).then(() => toast.success('Callback URL copied'));
+  };
+  return (
+    <div className="rounded-xl border border-border bg-muted/30 px-3 py-2.5 space-y-2 text-xs font-sans">
+      <div className="flex items-center gap-2">
+        {status.configured
+          ? <CheckCircle2 className="w-4 h-4 text-primary shrink-0" />
+          : <CircleDashed className="w-4 h-4 text-muted-foreground shrink-0" />}
+        <span className="font-semibold text-foreground">
+          {status.configured
+            ? `Monri connected · ${status.environment === 'production' ? 'live payments' : 'test (sandbox)'} · ${status.currency}`
+            : 'Monri not connected yet'}
+        </span>
+      </div>
+      {!status.configured && (
+        <p className="text-muted-foreground">
+          When Monri issues the online merchant account, add MONRI_MERCHANT_KEY, MONRI_AUTHENTICITY_TOKEN and
+          MONRI_ENVIRONMENT as Edge Function secrets — no rebuild needed. Then this switch can be turned on.
+        </p>
+      )}
+      <div className="flex items-center gap-2 min-w-0">
+        <span className="text-muted-foreground shrink-0">Callback URL for Monri</span>
+        <code className="truncate rounded bg-background px-1.5 py-0.5 border border-border">{status.webhookUrl}</code>
+        <Button type="button" variant="ghost" size="sm" className="h-7 px-2 shrink-0" onClick={copy} aria-label="Copy callback URL">
+          <Copy className="w-3.5 h-3.5" />
+        </Button>
+      </div>
     </div>
   );
 };

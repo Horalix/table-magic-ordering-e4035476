@@ -8,6 +8,18 @@ verify_jwt = true
 [functions.waiter-login]
 verify_jwt = false
 
+# Monri's servers call the webhook with `Authorization: WP3-callback <digest>`,
+# not a Supabase JWT, so the gateway must let them through; the function
+# verifies Monri's digest against MONRI_MERCHANT_KEY itself and refuses
+# anything else (401). With verify_jwt on, every payment confirmation bounced.
+[functions.monri-webhook]
+verify_jwt = false
+
+# Guests start a card payment with the anon key; the function checks their
+# table session token itself (monri_register_attempt).
+[functions.monri-create-payment]
+verify_jwt = true
+
 # cloudprnt is polled by a network thermal printer (no Supabase JWT); each
 # printer is identified by the secret last path segment of its own poll URL
 # (printers.poll_token, made in Admin -> Printing).

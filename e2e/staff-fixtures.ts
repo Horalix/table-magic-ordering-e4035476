@@ -470,6 +470,9 @@ export async function installStaffStubs(page: Page, state: StaffState) {
   await page.route('**/rest/v1/waiter_calls**', (route) => json(route, state.waiterCalls));
   await page.route('**/rest/v1/bill_requests**', (route) => json(route, state.billRequests));
   await page.route('**/rest/v1/restaurant_settings**', (route) => json(route, state.settings));
+  // Monri readiness (GET): not connected, as in production until Monri issues the account.
+  await page.route('**/functions/v1/monri-create-payment', (route) =>
+    json(route, { configured: false, environment: 'test', currency: 'BAM' }));
   await page.route('**/rest/v1/tables**', (route) => json(route, []));
   await page.route('**/rest/v1/table_sessions**', (route) => json(route, []));
   await page.route('**/rest/v1/order_ticket_events**', (route) => json(route, []));

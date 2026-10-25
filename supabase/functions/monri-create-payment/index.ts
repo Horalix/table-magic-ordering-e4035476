@@ -26,6 +26,18 @@ const CREATE_PATH = "/v2/payment/new";
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders(req) });
+
+  // Readiness, for Admin → Service & suggestions: whether Monri is connected
+  // and to which environment — never a secret's value. Lets the admin switch
+  // refuse to turn card payments on before they can work.
+  if (req.method === "GET") {
+    return json(req, {
+      configured: Boolean(Deno.env.get("MONRI_MERCHANT_KEY") && Deno.env.get("MONRI_AUTHENTICITY_TOKEN")),
+      environment: monriEnvironment(),
+      currency: (Deno.env.get("MONRI_CURRENCY") || "BAM").toUpperCase(),
+    });
+  }
+
   if (req.method !== "POST") return json(req, { error: "Method not allowed" }, 405);
 
   try {

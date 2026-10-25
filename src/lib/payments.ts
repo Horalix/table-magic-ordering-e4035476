@@ -24,8 +24,35 @@ export interface PayableOrder {
  * refuses a card order independently (restaurant_settings.online_card_enabled
  * and the Edge Function's own configuration check), so a stale build can never
  * take a payment we are not ready to take.
+ *
+ * VITE_MONRI_ENABLED used to have to be 'true' at build time as well, so going
+ * live with Monri meant rebuilding the app. It is an emergency OFF now: unless
+ * it is 'false', the button follows the admin switch — which refuses to turn on
+ * until Monri reports it is connected (cardPaymentStatus).
  */
-export const cardPaymentEnabledInBuild = import.meta.env.VITE_MONRI_ENABLED === 'true';
+export const cardPaymentEnabledInBuild = import.meta.env.VITE_MONRI_ENABLED !== 'false';
+
+export interface CardPaymentStatus {
+  /** MONRI_MERCHANT_KEY and MONRI_AUTHENTICITY_TOKEN are set as Edge Function secrets. */
+  configured: boolean;
+  environment: 'test' | 'production';
+  currency: string;
+  /** What to register as the callback URL in the Monri dashboard. */
+  webhookUrl: string;
+}
+
+/** Is Monri connected? Asks the payment function, which reveals no secret. Null when it cannot be reached. */
+export async function cardPaymentStatus(): Promise<CardPaymentStatus | null> {
+  const { data, error } = await supabase.functions.invoke('monri-create-payment', { method: 'GET' });
+  if (error || !data || typeof data !== 'object') return null;
+  const base = (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.replace(/\/+$/, '') ?? '';
+  return {
+    configured: (data as { configured?: unknown }).configured === true,
+    environment: (data as { environment?: unknown }).environment === 'production' ? 'production' : 'test',
+    currency: String((data as { currency?: unknown }).currency ?? 'BAM'),
+    webhookUrl: `${base}/functions/v1/monri-webhook`,
+  };
+}
 
 export async function startCardPayment(order: PayableOrder): Promise<CardPaymentResult> {
   if (!cardPaymentEnabledInBuild) {
