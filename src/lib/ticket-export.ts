@@ -1,6 +1,6 @@
 import type { PrintOutcome } from '@/lib/print-outcome';
 import {
-  buildTicket, foldToAscii, paperColumns, ticketIsEmpty, ticketToEscPos, ticketToText,
+  buildTicket, foldToAscii, paperColumns, partItemIds, ticketIsEmpty, ticketToEscPos, ticketToText, withPartAllergens,
   type TicketComponent, type TicketLine, type TicketOrder,
 } from '../../supabase/functions/_shared/ticket-layout.ts';
 
@@ -178,11 +178,15 @@ export const buildKitchenTicketBytes = (
   settings: KitchenPrintSettings = DEFAULT_SETTINGS,
 ): Uint8Array => ticketToEscPos(buildKitchenTicketLines(order, settings), { copies: getCopies(settings.copies) });
 
-/** Whether a station has anything on this order. Print nothing then. */
+/**
+ * Whether a station has anything on this order — a line of its own or a combo
+ * part made there (the drink of a burger combo is the bar's). Print nothing
+ * when it has not.
+ */
 export const ticketHasLines = (order: KitchenTicketOrder, station?: 'kitchen' | 'bar' | null) =>
   !ticketIsEmpty(toTicketOrder(order), station ?? null);
 
-export { foldToAscii, paperColumns };
+export { foldToAscii, paperColumns, partItemIds, withPartAllergens };
 
 const escapeCsv = (value: unknown) => {
   const text = String(value ?? '');

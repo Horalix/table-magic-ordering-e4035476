@@ -1,4 +1,4 @@
-import { test, expect, anOrder, aHeldOrder, clearStaffSession } from './staff-fixtures';
+import { test, expect, anOrder, aComboOrder, aHeldOrder, clearStaffSession } from './staff-fixtures';
 
 /**
  * The kitchen board and the floor screens.
@@ -136,6 +136,130 @@ test.describe('advancing work', () => {
     await page.goto('/kitchen');
     await expect(page.getByRole('group', { name: 'View' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'All day' })).toBeVisible();
+  });
+});
+
+test.describe('a combo on the bar', () => {
+  /*
+   * A combo is one KITCHEN line; its drink is the bar's. Before, an order of
+   * one burger combo never appeared on the bar's board at all, and the drink
+   * depended on someone carrying the kitchen's ticket over.
+   */
+  const station = (page: import('@playwright/test').Page, name: 'All' | 'Kitchen' | 'Bar') =>
+    page.getByRole('group', { name: 'Station' }).getByRole('button', { name, exact: true }).click();
+
+  test('the Bar view shows the combo’s drink as a line of its own', async ({ staff, page }) => {
+    staff.orders = [aComboOrder()];
+    staff.menuItems = [{ id: 'item-lemonade', allergens: ['sulphites'] }];
+    await page.goto('/kitchen');
+    await station(page, 'Bar');
+
+    const card = page.locator('#ticket-order-combo');
+    await expect(card).toBeVisible();
+    const drink = card.getByTestId('combo-part-line');
+    await expect(drink).toHaveCount(1);
+    await expect(drink).toContainText('1× Strawberry Lemonade · part of Chicken Burger Combo');
+    // The note is the combo's — and this one is about the drink.
+    await expect(drink).toContainText('lemonade without ice');
+    // The drink's own allergens, not the burger's.
+    await expect(drink).toContainText('Allergens: sulphites');
+    await expect(drink).not.toContainText('gluten');
+    // Where the combo is, so the drink goes out with it.
+    await expect(drink).toContainText('Kitchen: not started');
+    // Only the drink: the burger and fries are not the bar's.
+    await expect(card).not.toContainText('Fries');
+
+    // Counted: the header and the column, and no "No drinks waiting".
+    await expect(page.getByText('1 orders')).toBeVisible();
+    await expect(page.getByText('No drinks waiting')).toHaveCount(0);
+  });
+
+  test('the drink cannot be bumped from the bar, and the order stays the kitchen’s', async ({ staff, page }) => {
+    staff.orders = [aComboOrder()];
+    await page.goto('/kitchen');
+    await station(page, 'Bar');
+    const card = page.locator('#ticket-order-combo');
+    await expect(card.getByTestId('combo-part-line')).toBeVisible();
+
+    // No per-item action, no "Start all" / "All ready" on the bar.
+    await expect(card.getByTestId('combo-part-line').getByRole('button')).toHaveCount(0);
+    await expect(card.getByRole('button', { name: /Mark .* as |Start all|All ready|Mark served/ })).toHaveCount(0);
+
+    // A bump-bar Enter on it does nothing either: it would start the burger.
+    // (Off the toolbar first: Enter on a focused button keeps its own meaning.)
+    const bump = async () => {
+      await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+      await page.keyboard.press('1');
+      await expect(card).toHaveAttribute('data-selected', 'true');
+      await page.keyboard.press('Enter');
+    };
+    await bump();
+    await page.waitForTimeout(500);
+    expect(staff.itemWrites).toEqual([]);
+    expect(staff.statusWrites).toEqual([]);
+
+    // The same key on the kitchen's screen starts the combo: the bar's no-op is a choice.
+    await station(page, 'Kitchen');
+    await bump();
+    await expect.poll(() => staff.itemWrites).toEqual([{ id: 'oi-combo', status: 'preparing' }]);
+  });
+
+  test('a ready combo is served by the kitchen, not from the bar', async ({ staff, page }) => {
+    staff.orders = [aComboOrder({ status: 'ready', ready_at: new Date().toISOString() }, { status: 'ready' })];
+    await page.goto('/kitchen');
+    await station(page, 'Bar');
+    const card = page.locator('#ticket-order-combo');
+    await expect(card.getByTestId('combo-part-line')).toContainText('Kitchen: up');
+    await expect(card.getByRole('button', { name: /Mark served/ })).toHaveCount(0);
+    await expect(card.getByRole('button', { name: /Undo ready/ })).toHaveCount(0);
+
+    await station(page, 'Kitchen');
+    await expect(card.getByRole('button', { name: /Mark served/ })).toBeVisible();
+  });
+
+  test('the Kitchen view is unchanged: the combo, with every part under it', async ({ staff, page }) => {
+    staff.orders = [aComboOrder()];
+    await page.goto('/kitchen');
+    await station(page, 'Kitchen');
+    const card = page.locator('#ticket-order-combo');
+    await expect(card.getByText('Chicken Burger Combo')).toBeVisible();
+    await expect(card.getByText('Strawberry Lemonade')).toBeVisible();
+    await expect(card.getByTestId('combo-part-line')).toHaveCount(0);
+    await expect(card.getByRole('button', { name: 'Mark Chicken Burger Combo as preparing' })).toBeVisible();
+  });
+
+  test('"All" flags that a drink is coming too', async ({ staff, page }) => {
+    staff.orders = [aComboOrder()];
+    await page.goto('/kitchen');
+    await station(page, 'All');
+    await expect(page.locator('#ticket-order-combo')).toContainText('+ bar');
+  });
+
+  test('a combo with nothing for the bar stays off the bar’s board', async ({ staff, page }) => {
+    staff.orders = [aComboOrder({}, {
+      components: [{ slot_label: 'Side', item_id: 'item-fries', name: 'Fries', station: 'kitchen' }],
+    })];
+    await page.goto('/kitchen');
+    await station(page, 'Bar');
+    await expect(page.getByText('No drinks waiting')).toBeVisible();
+    await expect(page.locator('#ticket-order-combo')).toHaveCount(0);
+  });
+
+  test('all day: a count that is only combo drinks has no bump buttons', async ({ page }) => {
+    await page.route('**/rest/v1/rpc/kds_all_day**', (route) => route.fulfill({
+      status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' },
+      body: JSON.stringify([{
+        menu_item_id: 'item-lemonade', name: 'Strawberry Lemonade', station: 'bar', qty_pending: 2, qty_preparing: 0,
+        qty_ready: 0, oldest_at: new Date().toISOString(), pending_ids: [], open_ids: [],
+      }]),
+    }));
+    await page.goto('/kitchen');
+    await station(page, 'Bar');
+    await page.getByRole('button', { name: 'All day' }).click();
+    await expect(page.getByText('Strawberry Lemonade')).toBeVisible();
+    await expect(page.getByText(/in combos, moves with the combo/)).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Start all' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'All up' })).toHaveCount(0);
   });
 });
 

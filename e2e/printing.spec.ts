@@ -1,4 +1,4 @@
-import { test, expect, anOrder, aHeldOrder } from './staff-fixtures';
+import { test, expect, anOrder, aComboOrder, aHeldOrder } from './staff-fixtures';
 import type { Page, Route } from '@playwright/test';
 
 /**
@@ -210,5 +210,50 @@ test.describe('station tickets on the board', () => {
     await expect(page.getByText('Burger menu')).toBeVisible();
     await expect(page.getByText('Pomfrit')).toBeVisible();
     await expect(page.getByText('Coca-Cola')).toBeVisible();
+  });
+});
+
+test.describe('a combo’s drink at the bar', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.addInitScript(() => {
+      localStorage.setItem('kitchen:isPrinter', 'true');
+      localStorage.setItem('kitchen:station', 'bar');
+      // Headless print dialogs: report "closed" at once.
+      window.print = () => { window.dispatchEvent(new Event('afterprint')); };
+      // Keep every ticket handed to the print frame, read off the frame's
+      // srcdoc from the top window: WebKit does not run init scripts inside
+      // a srcdoc frame, so a capture from in there sees nothing.
+      const srcdoc = Object.getOwnPropertyDescriptor(HTMLIFrameElement.prototype, 'srcdoc');
+      if (window === window.top && srcdoc?.set) {
+        Object.defineProperty(HTMLIFrameElement.prototype, 'srcdoc', {
+          ...srcdoc,
+          set(value: string) {
+            const w = window as Window & { __printed?: string[] };
+            w.__printed = [...(w.__printed ?? []), String(value)];
+            srcdoc.set!.call(this, value);
+          },
+        });
+      }
+    });
+  });
+
+  test('a bar tablet prints the bar ticket of a combo-only order, the drink on it', async ({ staff, page }) => {
+    staff.orders = [aComboOrder()];
+    staff.menuItems = [{ id: 'item-lemonade', allergens: ['sulphites'] }];
+    // What 20261026130000 queues for it: a bar ticket, though no line is the bar's.
+    await stubTickets(page, () => [ticketRow({ id: 't-bar', order_id: 'order-combo', ticket_type: 'bar' })]);
+    await page.goto('/kitchen');
+    await expect(page.getByText('Bar Display')).toBeVisible();
+
+    await expect.poll(() => staff.printClaims, { timeout: 10_000 }).toContain('order-combo');
+    const printed = () => page.evaluate(() => ((window as Window & { __printed?: string[] }).__printed ?? []).join('\n'));
+    await expect.poll(printed, { timeout: 10_000 }).toContain('1 x Strawberry Lemonade');
+    const ticket = await printed();
+    expect(ticket).toContain('BAR ORDER');
+    expect(ticket).toContain('(part of Chicken Burger Combo)');
+    expect(ticket).toContain('! lemonade without ice');
+    expect(ticket).toContain('ALLERGENS: SULPHITES');
+    expect(ticket).not.toContain('x Chicken Burger Combo');
+    expect(ticket).not.toContain('Fries');
   });
 });

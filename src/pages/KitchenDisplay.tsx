@@ -18,7 +18,11 @@ import {
 } from '@/lib/kitchen-sounds';
 import { useWakeLock } from '@/lib/wake-lock';
 import { boardSequence, keyCommand, keysBelongToBoard, nextBump, SHORTCUTS, type KeyCommand } from '@/lib/kds-actions';
-import { buildKitchenTicketBytes, downloadKitchenTicketCsv, downloadKitchenTicketJson, printKitchenTicket, ticketHasLines, type KitchenPrintSettings } from '@/lib/ticket-export';
+import {
+  buildKitchenTicketBytes, downloadKitchenTicketCsv, downloadKitchenTicketJson, partItemIds, printKitchenTicket, ticketHasLines,
+  withPartAllergens, type KitchenPrintSettings,
+} from '@/lib/ticket-export';
+import { stationLines, stationParts, worksAt } from '@/lib/station-lines';
 import { isBluetoothConnected, tryReconnectBluetoothPrinter, printBytesBluetooth, printerStatusCapable } from '@/lib/printer-connect';
 import { enqueuePrint, retryPrintQueue, usePrintQueue } from '@/lib/print-queue';
 import { isDirectConnected, printBytesDirect, tryReconnectSerialPrinter, tryReconnectUsbPrinter } from '@/lib/printer-direct';
@@ -142,6 +146,9 @@ interface PrintJob {
 
 /** Only orders released this recently count as "new" for the chime. */
 const NEW_ORDER_WINDOW_MS = 2 * 60 * 1000;
+
+/** How long a combo part's looked-up allergens are trusted before asking again. */
+const PART_ALLERGENS_TTL_MS = 5 * 60 * 1000;
 
 /**
  * How far back the board looks.
@@ -333,6 +340,8 @@ const KitchenDisplay = () => {
 
   /** Orders already on the board, so a chime means "this is new", not "this refetched". */
   const knownOrderIds = useRef<Set<string> | null>(null);
+  /** menu item id → its allergens, for combo parts (the order line does not store them). */
+  const partAllergensRef = useRef<{ at: number; byId: Record<string, string[] | null> }>({ at: 0, byId: {} });
   const beginOrders = useLatestRequest();
   const beginPrintable = useLatestRequest();
   const beginCalls = useLatestRequest();
@@ -647,6 +656,33 @@ const KitchenDisplay = () => {
   }), []);
 
   /**
+   * Give every combo part its own allergens.
+   *
+   * The drink of a burger combo shows on the bar's board and prints on the
+   * bar's ticket as a line of its own, and its allergen band has to be the
+   * drink's, not the burger's. order_items.components does not carry them,
+   * so they are looked up from menu_items — once per few minutes, and only
+   * for boards that have combos at all. A failed lookup shows the line
+   * without the band rather than holding the board back.
+   */
+  const withPartAllergensLoaded = useCallback(async (list: KitchenOrder[]): Promise<KitchenOrder[]> => {
+    const ids = partItemIds(list.flatMap((o) => o.items));
+    if (ids.length === 0) return list;
+    const cache = partAllergensRef.current;
+    if (Date.now() - cache.at > PART_ALLERGENS_TTL_MS) partAllergensRef.current = { at: Date.now(), byId: {} };
+    const known = partAllergensRef.current.byId;
+    const missing = ids.filter((id) => !(id in known));
+    if (missing.length > 0) {
+      const { data, error } = await supabase.from('menu_items').select('id, allergens').in('id', missing);
+      if (!error && Array.isArray(data)) {
+        for (const id of missing) known[id] = null;
+        for (const row of data as { id: string; allergens: string[] | null }[]) known[row.id] = row.allergens ?? null;
+      }
+    }
+    return list.map((o) => ({ ...o, items: withPartAllergens(o.items, known) }));
+  }, []);
+
+  /**
    * The print queue for this device, independent of the visible tab.
    *
    * Auto-print used to iterate the same list the board renders, so leaving the
@@ -685,7 +721,9 @@ const KitchenDisplay = () => {
       // Food already up, served or voided is not printed again by itself.
       .in('status', ['pending', 'confirmed', 'preparing']);
     if (ordersError || !isLatest()) return;
-    const byId = new Map(((ordersData || []) as KitchenOrderRow[]).map((o) => [o.id, mapOrderRow(o)]));
+    const printable = await withPartAllergensLoaded(((ordersData || []) as KitchenOrderRow[]).map(mapOrderRow));
+    if (!isLatest()) return;
+    const byId = new Map(printable.map((o) => [o.id, o]));
     setPrintJobs(rows.flatMap((r) => {
       const order = byId.get(r.order_id);
       if (!order || (r.ticket_type !== 'kitchen' && r.ticket_type !== 'bar')) return [];
@@ -694,7 +732,7 @@ const KitchenDisplay = () => {
         key: `${r.order_id}:${r.ticket_type}:${r.updated_at}`,
       }];
     }));
-  }, [mapOrderRow, beginPrintable]);
+  }, [mapOrderRow, beginPrintable, withPartAllergensLoaded]);
 
   /** Print state of every ticket on the board, from the database. */
   const fetchTicketStates = useCallback(async () => {
@@ -754,7 +792,8 @@ const KitchenDisplay = () => {
     }
     setLoadError(false);
 
-    const mapped = ((ordersData || []) as KitchenOrderRow[]).map(mapOrderRow);
+    const mapped = await withPartAllergensLoaded(((ordersData || []) as KitchenOrderRow[]).map(mapOrderRow));
+    if (!isLatest()) return;
 
     /*
      * The new-order chime, decided from data rather than from an INSERT event.
@@ -769,11 +808,12 @@ const KitchenDisplay = () => {
       const known = knownOrderIds.current;
       const now = Date.now();
       const st = stationRef.current;
-      // New to THIS screen: the bar is not chimed for a steak.
+      // New to THIS screen: the bar is not chimed for a steak — but is for
+      // the drink of a burger combo.
       const arrived = known === null ? [] : mapped.filter((o) =>
         !known.has(o.id) && o.status === 'pending'
         && now - new Date(kitchenStart(o)).getTime() < NEW_ORDER_WINDOW_MS
-        && (st === 'all' || o.items.some((i) => i.station === st)));
+        && worksAt(o.items, st));
       if (arrived.length > 0) {
         if (soundEnabledRef.current) playNewOrderAlert();
         vibrate([300, 120, 300]);
@@ -789,7 +829,7 @@ const KitchenDisplay = () => {
 
     setOrders(mapped);
     setTruncated(mapped.length >= HARD_ROW_CAP);
-  }, [historyView, mapOrderRow, beginOrders]);
+  }, [historyView, mapOrderRow, beginOrders, withPartAllergensLoaded]);
 
   const fetchWaiterCalls = useCallback(async () => {
     const isLatest = beginCalls();
@@ -1075,12 +1115,14 @@ const KitchenDisplay = () => {
    * What this screen is responsible for.
    *
    * An order with nothing for this station is not "empty", it is not this
-   * screen's problem — showing it would invite the barman to bump food.
+   * screen's problem — showing it would invite the barman to bump food. An
+   * order whose only bar item is the drink of a kitchen combo IS the bar's:
+   * the drink shows as a read-only line (station-lines.ts).
    */
   const visible = useMemo(() => {
     const mine = orders
       .filter((o) => sectionFilter === 'all' || o.section_id === sectionFilter)
-      .filter((o) => station === 'all' || o.items.some((i) => i.station === station));
+      .filter((o) => worksAt(o.items, station));
     // History reads newest-first, like any log. The live board is a queue:
     // oldest at the top of each column, because that is the ticket to cook
     // next — newest-first buried the late table under the one that just came in.
@@ -1100,7 +1142,9 @@ const KitchenDisplay = () => {
       const next = prev.filter((f) => {
         const o = orders.find((x) => x.id === f.id);
         if (!o || now - f.at > FRESH_MS) return false;
-        const mine = station === 'all' ? o.items : o.items.filter((i) => i.station === station);
+        // A combo part moves with its line: the bar's NEW clears when the
+        // kitchen starts the combo, or when someone taps "Got it".
+        const mine = [...stationLines(o.items, station), ...stationParts(o.items, station)];
         return mine.every((i) => i.status === 'pending');
       });
       return next.length === prev.length ? prev : next;

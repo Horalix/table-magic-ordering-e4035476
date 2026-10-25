@@ -11,9 +11,10 @@
  *
  * The combo LINE has one station (the combo dish's own, usually kitchen), but
  * its parts may be made elsewhere — the drink of a burger combo is the bar's.
- * Such a part is marked with its station so whoever reads the kitchen ticket
- * knows to pass it on. Routing parts to their own station's board and printer
- * is a separate change.
+ * Such a part is marked with its station on the combo's own ticket, and also
+ * reaches its own station: the bar ticket lists it as a line of its own
+ * (20261026130000_combo_station_tickets.sql, ticket-layout.ts) and the bar's
+ * board shows it read-only (station-lines.ts).
  */
 
 export interface OrderComponent {

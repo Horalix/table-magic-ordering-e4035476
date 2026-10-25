@@ -28,6 +28,16 @@ describe('one bump', () => {
     const o = order('a', 'pending', 0, [{ id: 'steak', status: 'pending' }, { id: 'cola', status: 'pending', station: 'bar' }]);
     expect(nextBump(o, 'bar')).toEqual({ kind: 'start', itemIds: ['cola'], label: 'Start all (1)' });
   });
+
+  it('does nothing on the bar for an order it only has a combo’s drink on', () => {
+    // The combo line is the kitchen's; serving it from the bar would send the
+    // burger out before anyone looked at it.
+    const pending = order('a', 'pending', 0, [{ id: 'combo', status: 'pending' }]);
+    const ready = order('b', 'ready', 0, [{ id: 'combo', status: 'ready' }]);
+    expect(nextBump(pending, 'bar')).toBeNull();
+    expect(nextBump(ready, 'bar')).toBeNull();
+    expect(nextBump(ready, 'kitchen')).toEqual({ kind: 'served', label: 'Mark served' });
+  });
 });
 
 describe('the order the highlight walks', () => {

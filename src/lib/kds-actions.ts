@@ -23,9 +23,14 @@ export type BumpAction =
  * What one bump does to a ticket — the same step the big button on the card
  * offers: start everything not started, else make everything ready, else the
  * plates went out.
+ *
+ * Nothing on a station view with no line of its own: an order that is on the
+ * bar's board only for the drink of a kitchen combo is the kitchen's to
+ * start, ready and serve.
  */
 export function nextBump(order: BumpOrder, station: Station): BumpAction | null {
   const mine = station === 'all' ? order.items : order.items.filter((i) => i.station === station);
+  if (station !== 'all' && mine.length === 0) return null;
   const pending = mine.filter((i) => i.status === 'pending');
   if (pending.length > 0) return { kind: 'start', itemIds: pending.map((i) => i.id), label: `Start all (${pending.length})` };
   const notReady = mine.filter((i) => i.status === 'pending' || i.status === 'preparing');

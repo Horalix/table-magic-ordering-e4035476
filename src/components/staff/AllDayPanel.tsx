@@ -18,6 +18,11 @@ import type { StationFilter } from '@/components/staff/KitchenOrderCard';
  * missing order card is obvious, an undercounted "8× Fries" is not. So the
  * count comes from a SQL aggregate over every open order, and the ids come back
  * with it so "all fries up" is one round trip against exactly what was shown.
+ *
+ * A station's count includes combo parts made there under a combo line made
+ * elsewhere — the bar counts the lemonade of a burger combo. Those move with
+ * their combo line, so the database never returns their ids: the buttons act
+ * on real lines only, and a row that is nothing but combo parts has none.
  */
 
 interface Props {
@@ -89,11 +94,13 @@ const AllDayPanel = ({ station, onChanged }: Props) => {
       {rows.map((row) => {
         const outstanding = row.qty_pending + row.qty_preparing;
         const ageMs = Math.max(0, now - new Date(row.oldest_at).getTime());
+        /** All of what is outstanding is combo parts, which the combo's own station moves. */
+        const onlyCombos = outstanding > 0 && row.open_ids.length === 0;
         const urgency = outstanding > 0 ? orderUrgency(ageMs) : 'fresh';
 
         return (
           <div
-            key={`${row.menu_item_id}-${row.station}`}
+            key={`${row.menu_item_id ?? row.name}-${row.station}`}
             className="flex items-center gap-3 rounded-xl border border-border bg-card px-4 py-3 min-h-[64px]"
           >
             <span className="font-sans text-2xl font-semibold tabular-nums text-foreground w-14 shrink-0">
@@ -112,11 +119,12 @@ const AllDayPanel = ({ station, onChanged }: Props) => {
                 <span className={urgencyText(urgency)}>
                   {urgencyMark(urgency)} oldest {formatMinutes(ageMs)}
                 </span>
+                {onlyCombos && <> · in combos, moves with the combo</>}
               </p>
             </div>
 
             <div className="flex gap-2 shrink-0">
-              {row.qty_pending > 0 && (
+              {row.qty_pending > 0 && row.pending_ids.length > 0 && (
                 <Button
                   variant="outline"
                   size="sm"
@@ -127,7 +135,7 @@ const AllDayPanel = ({ station, onChanged }: Props) => {
                   Start all
                 </Button>
               )}
-              {outstanding > 0 && (
+              {outstanding > 0 && row.open_ids.length > 0 && (
                 <Button
                   size="sm"
                   disabled={busy === `${row.menu_item_id}:ready`}

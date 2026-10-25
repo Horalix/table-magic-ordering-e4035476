@@ -163,6 +163,11 @@ export interface StaffState {
   analytics: AdminAnalyticsFixtures;
   /** Rows the UI inserted into menu_item_recommendations ("Suggest it"). */
   curated: Record<string, unknown>[];
+  /**
+   * menu_items rows answered to a lookup BY ID (`id=in.(…)`) — what the board
+   * reads a combo part's allergens from. Any other menu_items read gets [].
+   */
+  menuItems: Record<string, unknown>[];
 }
 
 const iso = (minutesAgo: number) => new Date(Date.now() - minutesAgo * 60_000).toISOString();
@@ -199,6 +204,29 @@ export const anOrder = (over: Partial<Record<string, unknown>> = {}) => ({
       menu_items: { name: 'Espresso', name_bs: 'Espresso', prep_minutes: 2 },
     },
   ],
+  ...over,
+});
+
+/**
+ * An order of one combo and nothing else: a single KITCHEN line whose drink
+ * is the bar's (order_items.components, 20261026100000_promotions.sql). The
+ * bar has nothing of its own on it — only the drink, through the combo.
+ */
+export const aComboOrder = (over: Partial<Record<string, unknown>> = {}, line: Partial<Record<string, unknown>> = {}) => anOrder({
+  id: 'order-combo',
+  order_code: '061',
+  total: 23,
+  order_items: [{
+    id: 'oi-combo', order_id: 'order-combo', menu_item_id: 'item-combo', quantity: 1,
+    unit_price: 23, notes: 'lemonade without ice', status: 'pending', station: 'kitchen',
+    components: [
+      { slot_label: 'Burger', item_id: 'item-chicken', name: 'Chicken Burger', station: 'kitchen' },
+      { slot_label: 'Side', item_id: 'item-fries', name: 'Fries', station: 'kitchen' },
+      { slot_label: 'Drink', item_id: 'item-lemonade', name: 'Strawberry Lemonade', station: 'bar' },
+    ],
+    menu_items: { name: 'Chicken Burger Combo', allergens: ['gluten'] },
+    ...line,
+  }],
   ...over,
 });
 
@@ -244,6 +272,7 @@ export const defaultStaffState = (): StaffState => ({
   rpcCalls: [],
   analytics: adminAnalyticsFixtures(),
   curated: [],
+  menuItems: [],
 });
 
 const json = (route: Route, body: unknown, status = 200) =>
@@ -440,7 +469,12 @@ export async function installStaffStubs(page: Page, state: StaffState) {
   await page.route('**/rest/v1/table_sessions**', (route) => json(route, []));
   await page.route('**/rest/v1/order_ticket_events**', (route) => json(route, []));
   await page.route('**/rest/v1/waiters**', (route) => json(route, []));
-  await page.route('**/rest/v1/menu_items**', (route) => json(route, []));
+  await page.route('**/rest/v1/menu_items**', (route) => {
+    const ids = new URL(route.request().url()).searchParams.get('id') ?? '';
+    if (!ids.startsWith('in.(')) return json(route, []);
+    const wanted = ids.slice(4, -1).split(',').map((s) => s.replace(/"/g, ''));
+    return json(route, state.menuItems.filter((m) => wanted.includes(String(m.id))));
+  });
   await page.route('**/rest/v1/menu_item_recommendations**', (route) => {
     if (route.request().method() === 'POST') {
       const body = route.request().postDataJSON();

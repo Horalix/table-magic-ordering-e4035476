@@ -10,6 +10,7 @@ import PaymentBadge from '@/components/PaymentBadge';
 import { useNow } from '@/lib/clock';
 import { formatMinutes, orderUrgency, urgencyMark, urgencyText, formatClock } from '@/lib/timing';
 import { kitchenStart, orderStatusLabel } from '@/components/staff/order-status';
+import { stationParts, stationsInvolved, type StationPart } from '@/lib/station-lines';
 import type { Database } from '@/integrations/supabase/types';
 
 export type OrderStatus = Database['public']['Enums']['order_status'];
@@ -27,8 +28,13 @@ export interface KitchenItem {
   ready_at: string | null;
   menu_item_name: string;
   allergens: string[] | null;
-  /** Combo parts (order_items.components); absent on older rows. */
-  components?: { slot_label?: string | null; item_id?: string | null; name: string; station?: string | null }[] | null;
+  /**
+   * Combo parts (order_items.components); absent on older rows. `allergens`
+   * is the part's own, looked up by the board — not stored on the order.
+   */
+  components?: {
+    slot_label?: string | null; item_id?: string | null; name: string; station?: string | null; allergens?: string[] | null;
+  }[] | null;
 }
 
 export interface KitchenOrder {
@@ -87,6 +93,55 @@ const ITEM_PREV: Record<OrderItemStatus, OrderItemStatus | null> = {
 const ITEM_ACTION: Record<OrderItemStatus, string> = {
   pending: 'Start', preparing: 'Ready', ready: 'Up', served: 'Served',
 };
+
+/** Where a combo is, said from the station that is waiting on it. */
+const PART_PROGRESS: Record<OrderItemStatus, string> = {
+  pending: 'not started', preparing: 'in prep', ready: 'up', served: 'served',
+};
+const stationWord = (s: string) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : 'Kitchen');
+
+/**
+ * A combo part made here, under a combo line made at another station: the
+ * lemonade of a burger combo, on the bar's board.
+ *
+ * Read-only on purpose. It has no status of its own — it moves with its combo
+ * line — so a Start or Ready here would start or ready the whole combo,
+ * burger and all, from the bar. What the barman gets instead is where the
+ * combo is, so the drink goes out with the food.
+ */
+function PartLine({ part }: { part: StationPart<OrderItemStatus> }) {
+  return (
+    <div
+      data-testid="combo-part-line"
+      className={`flex items-center gap-2 rounded-lg px-2 py-1.5 min-h-[52px] border border-dashed border-border ${
+        part.status === 'ready' ? 'bg-primary/10' : part.status === 'preparing' ? 'bg-accent/10' : 'bg-muted/40'
+      }`}
+    >
+      <div className="flex-1 min-w-0">
+        <p className={`text-base md:text-xl font-sans font-medium leading-snug ${part.status === 'ready' ? 'text-muted-foreground' : 'text-foreground'}`}>
+          <span className="tabular-nums font-bold">{part.quantity}×</span> {part.name}
+          <span className="text-sm md:text-base font-normal text-muted-foreground"> · part of {part.partOf}</span>
+        </p>
+        {part.notes && (
+          <p className="mt-1 inline-block rounded-md bg-amber-200 text-amber-950 dark:bg-amber-300 dark:text-black font-sans font-bold text-sm md:text-base px-2 py-0.5">
+            ⚠ {part.notes}
+          </p>
+        )}
+        {part.allergens && part.allergens.length > 0 && (
+          <p className="mt-1 inline-block rounded-md bg-destructive text-destructive-foreground font-sans font-bold uppercase tracking-wide text-xs md:text-sm px-2 py-0.5">
+            Allergens: {part.allergens.join(', ')}
+          </p>
+        )}
+      </div>
+      <span
+        className="text-xs md:text-sm font-sans text-muted-foreground text-right px-2 shrink-0 max-w-[96px] leading-tight"
+        title={`Moves with the ${part.partOf} — the ${part.lineStation} starts, readies and serves it`}
+      >
+        {stationWord(part.lineStation)}: {PART_PROGRESS[part.status] ?? part.status}
+      </span>
+    </div>
+  );
+}
 
 const statusColors: Partial<Record<OrderStatus, string>> = {
   pending: 'bg-destructive/10 text-destructive border-destructive/20',
@@ -211,6 +266,9 @@ const KitchenOrderCard = ({
     () => (station === 'all' ? order.items : order.items.filter((i) => i.station === station)),
     [order.items, station],
   );
+  /** Combo parts made here under a combo line made elsewhere: shown, never bumped. */
+  const parts = useMemo(() => stationParts(order.items, station), [order.items, station]);
+  const involved = useMemo(() => stationsInvolved(order.items), [order.items]);
 
   const ageMs = Math.max(0, now - new Date(kitchenStart(order)).getTime());
   const urgency = order.status === 'ready' || order.status === 'served' || order.status === 'cancelled'
@@ -221,8 +279,14 @@ const KitchenOrderCard = ({
   const pending = items.filter((i) => i.status === 'pending');
   const working = items.filter((i) => i.status === 'preparing');
   const notReady = items.filter((i) => i.status === 'pending' || i.status === 'preparing');
-  const hasBar = order.items.some((i) => i.station === 'bar');
-  const hasKitchen = order.items.some((i) => i.station === 'kitchen');
+  // A combo's drink counts: the runner needs to know a drink is coming too.
+  const hasBar = involved.has('bar');
+  const hasKitchen = involved.has('kitchen');
+  /**
+   * Whether this screen moves the order itself. A bar screen showing an order
+   * only for a combo's drink does not: ready and served stay with the kitchen.
+   */
+  const ownsOrder = station === 'all' || items.length > 0;
 
   /** Which stamp, if any, the order-level undo is timed against. */
   const revertFrom: { to: OrderStatus; since: string | null } | null =
@@ -401,7 +465,9 @@ const KitchenOrderCard = ({
           );
         })}
 
-        {items.length === 0 && (
+        {parts.map((part) => <PartLine key={part.key} part={part} />)}
+
+        {items.length === 0 && parts.length === 0 && (
           <p className="px-2 py-3 text-xs text-muted-foreground font-sans">Nothing for this station.</p>
         )}
       </div>
@@ -454,7 +520,7 @@ const KitchenOrderCard = ({
               All ready ({notReady.length})
             </Button>
           )}
-          {notReady.length === 0 && order.status === 'ready' && (
+          {ownsOrder && notReady.length === 0 && order.status === 'ready' && (
             <Button
               size="sm"
               disabled={busy.has('served')}
@@ -493,7 +559,7 @@ const KitchenOrderCard = ({
             </DropdownMenuContent>
           </DropdownMenu>
 
-          {revertFrom && (
+          {ownsOrder && revertFrom && (
             <UndoButton
               since={revertFrom.since}
               windowSeconds={undoSeconds}
