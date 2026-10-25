@@ -2,8 +2,17 @@
 
 Copy everything between the rules into Lovable. Nothing else needs to be said.
 
-Last updated: **26 October 2026**, for thirty-five migrations from
-`20260804090400` to `20261026130000`.
+Last updated: **26 October 2026**, for thirty-four migrations from
+`20260804090500` to `20261026130000`.
+
+> **Also applied: `20260804090400_session_affinity.sql`.** Lovable applied it
+> and stopped at the next file, `20260804090500_maintenance.sql`, with
+> `permission denied to set parameter "lasoul.scheduled_job"` (42501); that
+> file rolled back whole. Two scheduler functions set their mark as a
+> function attribute (`SET lasoul.scheduled_job = 'on'`), which needs a
+> superuser. Since `0b946b2` they set it at run time with `set_config`, and
+> `supabase/tests/migration-privileges.test.ts` applies the whole batch as an
+> ordinary owner role, as Lovable does. The batch now starts at maintenance.
 
 > **Already applied: `20260804090300_session_context.sql`.** Lovable's
 > preflight on 25 October showed its four replaced search texts gone, and the
@@ -56,13 +65,14 @@ whose search text is not in the live function — send it back before going on.
 
 ## Step 2 — the prompt
 
-> **Task: apply thirty-five existing migration files to Supabase, in order. Do not
+> **Task: apply thirty-four existing migration files to Supabase, in order. Do not
 > write any new SQL.**
 >
-> These files are already in the repository under `supabase/migrations/`:
+> `20260804090300_session_context.sql` and `20260804090400_session_affinity.sql`
+> are already applied — do not run them again. These files are already in the
+> repository under `supabase/migrations/`:
 >
 > ```
-> 20260804090400_session_affinity.sql
 > 20260804090500_maintenance.sql
 > 20260804090600_app_impact.sql
 > 20260804090700_guest_profiles.sql
@@ -99,11 +109,11 @@ whose search text is not in the live function — send it back before going on.
 > 20261026130000_combo_station_tickets.sql
 > ```
 >
-> **First confirm the checkout is current** (commit `5b64aa5` or later): in
-> `20260804090400_session_affinity.sql` the `GRANT SELECT ON
-> public.session_item_affinity` line comes *before* `ALTER TABLE
-> public.session_item_affinity ENABLE ROW LEVEL SECURITY`. If it comes after,
-> the checkout is stale — stop and say so.
+> **First confirm the checkout is current** (commit `0b946b2` or later): in
+> `20260804090500_maintenance.sql`, `run_scheduled_maintenance()` has no
+> `SET lasoul.scheduled_job = 'on'` line and calls
+> `set_config('lasoul.scheduled_job', 'on', true)` in its body instead. If it
+> still has the `SET` line, the checkout is stale — stop and say so.
 >
 > **Run each file, in that exact order, exactly as written.** Read each one from
 > disk and execute its contents. Do not retype it, summarise it, "clean it up",
