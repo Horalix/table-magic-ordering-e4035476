@@ -19,7 +19,6 @@ export const DIET_TAGS: DietTag[] = [
   { key: 'gluten_free', labelKey: 'diet_gluten_free', emoji: '🌾' },
   { key: 'dairy_free', labelKey: 'diet_dairy_free', emoji: '🥛' },
   { key: 'contains_nuts', labelKey: 'diet_contains_nuts', emoji: '🥜' },
-  { key: 'halal', labelKey: 'diet_halal', emoji: '☪️' },
 ];
 
 export const DIET_BY_KEY: Record<string, DietTag> = Object.fromEntries(DIET_TAGS.map((d) => [d.key, d]));
@@ -39,9 +38,11 @@ export const getItemTags = (item: unknown): string[] => {
  * while suggestions only knew about the two filters that map to an allergen.
  */
 export const matchesDietFilter = (item: unknown, activeDiets: readonly string[]): boolean => {
-  if (activeDiets.length === 0) return true;
   const tags = getItemTags(item);
-  return activeDiets.every((d) => tags.includes(d));
+  // Only filters that still exist count. "halal" was one until it became
+  // clear everything here is halal; a phone that saved it must not hide
+  // every untagged dish forever.
+  return activeDiets.every((d) => !DIET_BY_KEY[d] || tags.includes(d));
 };
 
 /* ---- The guest's active filter -------------------------------------- */
@@ -63,7 +64,15 @@ export const useDietFilterStore = create<{
   setActiveDiets: (next) => set((state) => ({
     activeDiets: typeof next === 'function' ? next(state.activeDiets) : next,
   })),
-}), { name: 'lasoul-diet-filter' }));
+}), {
+  name: 'lasoul-diet-filter',
+  // Drop filters that no longer exist ("halal": everything here is) on load.
+  merge: (persisted, current) => ({
+    ...current,
+    activeDiets: ((persisted as { activeDiets?: unknown })?.activeDiets as string[] | undefined ?? [])
+      .filter((d) => typeof d === 'string' && Boolean(DIET_BY_KEY[d])),
+  }),
+}));
 
 /**
  * Allergens implied by the active filters.

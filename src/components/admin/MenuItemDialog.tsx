@@ -60,7 +60,6 @@ const MEAL_ROLES: { key: string; label: string }[] = [
   { key: 'dessert', label: 'Dessert' },
   { key: 'hot_drink', label: 'Hot drink' },
   { key: 'cold_drink', label: 'Cold drink' },
-  { key: 'alcohol', label: 'Alcohol' },
 ];
 
 const MERCH_TAGS: { key: string; label: string }[] = [
