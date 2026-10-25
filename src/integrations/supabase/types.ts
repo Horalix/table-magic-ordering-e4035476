@@ -2074,6 +2074,7 @@ export type Database = {
         Args: { _session_id: string }
         Returns: string
       }
+      bandit_readiness: { Args: never; Returns: Json }
       cancel_order: {
         Args: { _order_id: string; _reason: string }
         Returns: Json

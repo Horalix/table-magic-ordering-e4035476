@@ -29,6 +29,13 @@
       "when": 1792941708359,
       "tag": "0003_guest_profiles",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1792941735344,
+      "tag": "0004_bandit_readiness",
+      "breakpoints": true
     }
   ]
 }
