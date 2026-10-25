@@ -60,7 +60,8 @@ test.describe('menu and discovery', () => {
     const sheet = page.getByRole('dialog');
     await expect(sheet).toBeVisible();
     await expect(sheet.getByText(/Allergens|Alergeni/i)).toBeVisible();
-    await expect(sheet.getByText('gluten, dairy')).toBeVisible();
+    // Named in the guest's language, never as raw codes like 'gluten, dairy'.
+    await expect(sheet.getByText('Gluten and Milk & dairy')).toBeVisible();
     await expect(sheet.getByText(/220 g/)).toBeVisible();
     await expect(sheet.getByText(/~12 min/)).toBeVisible();
     await expect(sheet.getByText(/tell your waiter|obavijestite konobara/i)).toBeVisible();

@@ -8,7 +8,7 @@ import { useCartStore } from '@/lib/cart-store';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
-import { useT, useLanguageStore, getLocalizedName } from '@/lib/i18n';
+import { useT, useLanguageStore, getLocalizedName, useI18n } from '@/lib/i18n';
 import ReviewPrompt from '@/components/guest/ReviewPrompt';
 import { useSessionHeartbeat } from '@/hooks/useSessionHeartbeat';
 import { staggerContainer, fadeUp, useCountUp } from '@/lib/motion';
@@ -29,6 +29,7 @@ const RunningTabPage = () => {
   const [splitOpen, setSplitOpen] = useState(false);
   const billRequestRef = useRef(false);
   const t = useT();
+  const { price, plural, list } = useI18n();
   const locale = useLanguageStore((s) => s.locale);
 
   const table = searchParams.get('table');
@@ -85,8 +86,8 @@ const RunningTabPage = () => {
     if (status === 'served' || status === 'cancelled') return null;
     const mins = Math.floor((Date.now() - new Date(createdAt).getTime()) / 60000);
     if (mins < 1) return t('just_now');
-    if (mins < 60) return `${mins} ${t('minutes_short')}`;
-    return `${Math.floor(mins / 60)}${t('hours_short')} ${mins % 60}${t('minutes_short')}`;
+    if (mins < 60) return plural('minutes_count', mins);
+    return t('hours_minutes', { h: Math.floor(mins / 60), m: mins % 60 });
   };
 
   const requestBill = async () => {
@@ -149,7 +150,7 @@ const RunningTabPage = () => {
           <h1 className="flex-1 font-serif text-[22px] font-semibold text-foreground tracking-tight ps-1">{t('your_tab')}</h1>
           {table && (
             <span className="text-xs font-sans px-3 py-1.5 rounded-full bg-primary/10 text-primary font-semibold">
-              {t('table')} {table}
+              {t('table_n', { n: table })}
             </span>
           )}
         </div>
@@ -186,10 +187,10 @@ const RunningTabPage = () => {
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="text-sm font-sans text-muted-foreground">{billRequested ? t('bill_requested') : t('to_pay')}</p>
-                <p className="font-sans text-[34px] leading-tight font-semibold text-foreground tabular-nums">{displayGrandTotal.toFixed(2)} KM</p>
+                <p className="font-sans text-[34px] leading-tight font-semibold text-foreground tabular-nums">{price(displayGrandTotal)}</p>
                 <p className="text-sm font-sans text-muted-foreground mt-0.5">
-                  {billable.length} {billable.length === 1 ? t('orders_count_one') : t('orders_count_other')}
-                  {members.length > 0 && <> · {members.join(', ')}</>}
+                  {plural('orders_count', billable.length)}
+                  {members.length > 0 && <> · {list(members)}</>}
                 </p>
               </div>
               <button
@@ -265,7 +266,7 @@ const RunningTabPage = () => {
                         </span>
                       )}
                     </div>
-                    <span className={`text-[15px] font-sans font-semibold text-foreground tabular-nums shrink-0 ${cancelled ? 'line-through' : ''}`}>{Number(order.total).toFixed(2)} KM</span>
+                    <span className={`text-[15px] font-sans font-semibold text-foreground tabular-nums shrink-0 ${cancelled ? 'line-through' : ''}`}>{price(Number(order.total))}</span>
                   </div>
                   <ul className="mt-2.5 space-y-1.5">
                     {items.map((oi) => (

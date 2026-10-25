@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Minus, Plus, Users, Loader2, ReceiptText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { useT } from '@/lib/i18n';
+import { useT, useI18n } from '@/lib/i18n';
 import { useDialog } from '@/lib/use-dialog';
 import { fade, sheetUp } from '@/lib/motion';
 
@@ -18,11 +18,10 @@ interface Props {
   onClose: () => void;
 }
 
-const km = (n: number) => `${n.toFixed(2)} KM`;
-
 const SplitBillSheet = ({ open, total, orders, members, myName, billRequested, requesting, onSettle, onClose }: Props) => {
   const { dialogProps } = useDialog({ open, onClose, labelledBy: 'split-bill-title' });
   const t = useT();
+  const { price, plural } = useI18n();
   const [mode, setMode] = useState<'even' | 'person'>('even');
   /**
    * How many ways to split.
@@ -72,7 +71,7 @@ const SplitBillSheet = ({ open, total, orders, members, myName, billRequested, r
             <h2 id="split-bill-title" className="font-serif text-xl font-bold text-foreground text-center flex items-center justify-center gap-2">
               <ReceiptText className="w-5 h-5 text-primary" /> {t('split_bill')}
             </h2>
-            <p className="text-center text-2xl font-sans font-semibold text-foreground mt-1 tabular-nums">{km(total)}</p>
+            <p className="text-center text-2xl font-sans font-semibold text-foreground mt-1 tabular-nums">{price(total)}</p>
 
             {/* Mode toggle */}
             <div className="mt-4 grid grid-cols-2 gap-2 p-1 rounded-full bg-muted">
@@ -93,13 +92,13 @@ const SplitBillSheet = ({ open, total, orders, members, myName, billRequested, r
                   <button onClick={() => setN((v) => Math.max(1, v - 1))} className="w-11 h-11 rounded-full bg-muted grid place-items-center tap-sm" aria-label={t('fewer_people')}><Minus className="w-5 h-5" /></button>
                   <div>
                     <p className="font-sans text-2xl font-semibold text-foreground tabular-nums">{n}</p>
-                    <p className="text-[11px] text-muted-foreground font-sans flex items-center gap-1 justify-center"><Users className="w-3 h-3" />{t('people')}</p>
+                    <p className="text-[11px] text-muted-foreground font-sans flex items-center gap-1 justify-center"><Users className="w-3 h-3" aria-hidden />{plural('people_word', n)}</p>
                   </div>
                   <button onClick={() => setN((v) => Math.min(20, v + 1))} className="w-11 h-11 rounded-full bg-muted grid place-items-center tap-sm" aria-label={t('more_people')}><Plus className="w-5 h-5" /></button>
                 </div>
                 <div className="mt-5 rounded-2xl bg-primary/5 border border-primary/15 py-4">
-                  <p className="text-xs uppercase tracking-wide text-muted-foreground font-sans">{t('each_pays')}</p>
-                  <p className="font-sans text-3xl font-semibold text-foreground tabular-nums mt-0.5">{km(evenShare)}</p>
+                  <p className="text-xs uppercase tracking-wide rtl:tracking-normal text-muted-foreground font-sans">{t('each_pays')}</p>
+                  <p className="font-sans text-3xl font-semibold text-foreground tabular-nums mt-0.5">{price(evenShare)}</p>
                 </div>
               </div>
             ) : (
@@ -111,12 +110,12 @@ const SplitBillSheet = ({ open, total, orders, members, myName, billRequested, r
                       <span className="font-sans text-sm font-medium text-foreground truncate">
                         {p.name}{mine && <span className="text-primary"> · {t('your_share')}</span>}
                       </span>
-                      <span className="font-sans font-semibold text-foreground tabular-nums">{km(p.amount)}</span>
+                      <span className="font-sans font-semibold text-foreground tabular-nums">{price(p.amount)}</span>
                     </div>
                   );
                 })}
                 {myName && myShare > 0 && (
-                  <p className="text-center text-xs text-muted-foreground font-sans pt-1">{t('your_share')}: <span className="font-semibold text-primary">{km(myShare)}</span></p>
+                  <p className="text-center text-xs text-muted-foreground font-sans pt-1">{t('your_share')}: <span className="font-semibold text-primary">{price(myShare)}</span></p>
                 )}
               </div>
             )}

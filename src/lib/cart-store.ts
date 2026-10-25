@@ -155,6 +155,8 @@ export const useCartStore = create<CartStore>()(persist((set, get) => ({
       const id = buildCartLineId(menuItemId, notes);
       const existing = state.items.find((i) => getMenuItemId(i) === menuItemId && normalizeNotes(i.notes) === notes);
       if (existing) {
+        // Silently capping at 10 made the eleventh tap look broken.
+        if (existing.quantity >= 10) toast(t('max_quantity_reached'));
         return {
           checkoutKey: null,
           items: state.items.map((i) =>
@@ -208,7 +210,7 @@ export const useCartStore = create<CartStore>()(persist((set, get) => ({
       get().removeItem(id);
       return;
     }
-    if (quantity > 10) return; // Max 10 per item
+    if (quantity > 10) { toast(t('max_quantity_reached')); return; } // Max 10 per item
     set((state) => ({
       checkoutKey: null,
       items: state.items.map((i) => (i.id === id ? { ...i, quantity } : i)),

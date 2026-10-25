@@ -67,7 +67,7 @@ const ReviewPrompt = ({ open, onClose, sessionId, sessionToken }: ReviewPromptPr
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="sm:max-w-md rounded-2xl">
+      <DialogContent className="sm:max-w-md rounded-2xl" closeLabel={t('close')}>
         <DialogHeader>
           <DialogTitle className="font-serif text-center text-xl">
             {step === 'final' ? t('thank_you_feedback') : t('how_was_experience')}
@@ -87,6 +87,7 @@ const ReviewPrompt = ({ open, onClose, sessionId, sessionToken }: ReviewPromptPr
                 onMouseEnter={() => setHoveredStar(star)}
                 onMouseLeave={() => setHoveredStar(0)}
                 onClick={() => submitOverall(star)}
+                aria-label={t('rate_n_stars', { n: star })}
                 className="p-1 min-w-[44px] min-h-[44px] flex items-center justify-center"
               >
                 <Star

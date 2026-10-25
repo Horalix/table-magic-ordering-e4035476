@@ -88,7 +88,7 @@ const TablePresence = () => {
               </Button>
             </div>
             {pending.length > 1 && (
-              <p className="text-[11px] text-muted-foreground mt-3 font-sans tabular-nums">+{pending.length - 1} {t('more_waiting')}</p>
+              <p className="text-[11px] text-muted-foreground mt-3 font-sans tabular-nums">{t('more_waiting_n', { n: pending.length - 1 })}</p>
             )}
           </motion.div>
         </motion.div>

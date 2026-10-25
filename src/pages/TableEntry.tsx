@@ -202,8 +202,8 @@ const TableEntry = () => {
   if (phase === 'loading') {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-center">
-          <Loader2 className="w-8 h-8 animate-spin text-primary mx-auto" />
+        <div className="text-center" role="status">
+          <Loader2 className="w-8 h-8 animate-spin text-primary mx-auto" aria-hidden />
           <p className="text-muted-foreground font-sans mt-4 text-sm">{t('setting_up_table')}</p>
         </div>
       </div>
@@ -230,7 +230,7 @@ const TableEntry = () => {
           </div>
           <h2 className="font-serif text-2xl font-bold text-foreground">{t('waiting_to_join')}</h2>
           <p className="text-muted-foreground font-sans text-sm mt-2 leading-relaxed">{t('waiting_to_join_sub')}</p>
-          <Loader2 className="w-5 h-5 animate-spin text-primary/60 mx-auto mt-6" />
+          <Loader2 className="w-5 h-5 animate-spin text-primary/60 mx-auto mt-6" aria-hidden />
           <button
             onClick={() => navigate('/menu')}
             className="mt-8 text-xs text-muted-foreground underline underline-offset-4 font-sans"

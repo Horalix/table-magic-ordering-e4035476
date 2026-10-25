@@ -58,7 +58,7 @@ const OrderEta = ({ orderId, active = true }: Props) => {
     >
       <Clock className="w-3.5 h-3.5" aria-hidden />
       <span>
-        {t('ready_in')} <span className="font-semibold text-foreground tabular-nums">{low}–{high} {t('minutes_short')}</span>
+        <span className="font-semibold text-foreground tabular-nums">{t('eta_range', { low, high })}</span>
       </span>
       {/* Say when the estimate is shakier than usual rather than presenting
           every forecast with the same confidence. */}

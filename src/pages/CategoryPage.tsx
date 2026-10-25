@@ -13,7 +13,7 @@ import SmartImage from '@/components/ui/SmartImage';
 import CartBar from '@/components/guest/CartBar';
 import MenuItemDetail from '@/components/guest/MenuItemDetail';
 import LanguageSelector from '@/components/guest/LanguageSelector';
-import { useT, useLanguageStore, getLocalizedName, getLocalizedDescription } from '@/lib/i18n';
+import { useT, useLanguageStore, getLocalizedName, getLocalizedDescription, useI18n } from '@/lib/i18n';
 import { useSessionHeartbeat } from '@/hooks/useSessionHeartbeat';
 import { springPill } from '@/lib/motion';
 import { DIET_TAGS, DIET_BY_KEY, getItemTags, matchesDietFilter, useDietFilterStore } from '@/lib/dietary';
@@ -89,6 +89,7 @@ const CategoryPage = () => {
   const storeSessionToken = useCartStore((s) => s.sessionToken);
   const storeTableNumber = useCartStore((s) => s.tableNumber);
   const t = useT();
+  const { price } = useI18n();
   const locale = useLanguageStore((s) => s.locale);
 
   // The session lives in the store, not the URL — see the note in GuestMenu.
@@ -316,7 +317,7 @@ const CategoryPage = () => {
       return (
         <button
           type="button"
-          aria-label={`${t('add_to_order')} ${name}`}
+          aria-label={t('add_item_to_order', { name })}
           onClick={(e) => { stop(e); quickAdd(item, source); }}
           className={`w-11 h-11 rounded-full ${shell} flex items-center justify-center active:scale-90 transition-transform focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring`}
         >
@@ -328,7 +329,7 @@ const CategoryPage = () => {
       <div role="group" aria-label={name} onClick={stop} className={`flex items-center h-11 rounded-full ${shell}`}>
         <button
           type="button"
-          aria-label={`${t('decrease')} ${name}`}
+          aria-label={t('decrease_item', { name })}
           onClick={() => { if (qty <= 1) removeItem(inCart!.id, 'menu_stepper'); else updateQuantity(inCart!.id, qty - 1); }}
           className="w-10 h-11 rounded-full flex items-center justify-center active:scale-90 transition-transform"
         >
@@ -337,7 +338,7 @@ const CategoryPage = () => {
         <span className="min-w-[18px] text-center text-[15px] font-sans font-semibold tabular-nums" aria-live="polite">{qty}</span>
         <button
           type="button"
-          aria-label={`${t('increase')} ${name}`}
+          aria-label={t('increase_item', { name })}
           disabled={qty >= 10}
           onClick={() => updateQuantity(inCart!.id, qty + 1)}
           className="w-10 h-11 rounded-full flex items-center justify-center active:scale-90 transition-transform disabled:opacity-40"
@@ -397,7 +398,7 @@ const CategoryPage = () => {
             <button type="button" className={`text-start font-serif text-[15px] font-semibold line-clamp-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded ${blocked ? 'text-muted-foreground' : 'text-foreground'}`}>{name}</button>
           </h3>
           {renderBadges(item, false)}
-          <p className={`text-[15px] font-sans font-semibold mt-0.5 tabular-nums ${blocked ? 'text-muted-foreground' : 'text-foreground'}`}>{Number(item.price).toFixed(2)} KM</p>
+          <p className={`text-[15px] font-sans font-semibold mt-0.5 tabular-nums ${blocked ? 'text-muted-foreground' : 'text-foreground'}`}>{price(Number(item.price))}</p>
         </div>
       </ImpressionCard>
     );
@@ -409,7 +410,7 @@ const CategoryPage = () => {
     const blocked = blockedLabel(item);
     const tags = getItemTags(item).slice(0, 3).filter((k) => DIET_BY_KEY[k]);
     const meta = [
-      item.prep_minutes != null && !blocked ? `~${item.prep_minutes} ${t('minutes_short')}` : null,
+      item.prep_minutes != null && !blocked ? t('prep_about', { n: item.prep_minutes }) : null,
       item.portion_note,
     ].filter(Boolean).join(' · ');
     return (
@@ -428,7 +429,7 @@ const CategoryPage = () => {
           {renderBadges(item, isSearch)}
           {localizedDesc && <p className="text-sm leading-relaxed text-muted-foreground font-sans mt-1 line-clamp-2">{localizedDesc}</p>}
           <div className="flex items-center gap-2 mt-2 flex-wrap">
-            <p className={`text-[15px] font-sans font-semibold tabular-nums ${blocked ? 'text-muted-foreground' : 'text-foreground'}`}>{Number(item.price).toFixed(2)} KM</p>
+            <p className={`text-[15px] font-sans font-semibold tabular-nums ${blocked ? 'text-muted-foreground' : 'text-foreground'}`}>{price(Number(item.price))}</p>
             {meta && <span className="text-xs font-sans text-muted-foreground">{meta}</span>}
             {tags.map((k) => (
               <span key={k} className="text-sm leading-none" title={t(DIET_BY_KEY[k].labelKey)} aria-label={t(DIET_BY_KEY[k].labelKey)}>{DIET_BY_KEY[k].emoji}</span>
@@ -582,8 +583,8 @@ const CategoryPage = () => {
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Escape') closeSearch(); }}
-                placeholder={`${t('search_in')} ${localizedCategory}…`}
-                aria-label={`${t('search_in')} ${localizedCategory}`}
+                placeholder={t('search_in_category', { category: localizedCategory })}
+                aria-label={t('search_in_category', { category: localizedCategory }).replace('…', '')}
                 className="w-full h-11 ps-9 pe-11 rounded-full bg-muted/70 border border-border/60 text-base font-sans text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
               />
               <button onClick={closeSearch} aria-label={t('clear_search')} className="absolute end-0 top-1/2 -translate-y-1/2 w-11 h-11 rounded-full flex items-center justify-center text-muted-foreground">
@@ -593,7 +594,7 @@ const CategoryPage = () => {
           ) : (
             <>
               <h1 className="flex-1 min-w-0 truncate font-serif text-xl font-semibold text-foreground ps-1">{localizedCategory}</h1>
-              <button onClick={() => setSearchOpen(true)} aria-label={`${t('search_in')} ${localizedCategory}`} className={iconButton}>
+              <button onClick={() => setSearchOpen(true)} aria-label={t('search_in_category', { category: localizedCategory }).replace('…', '')} className={iconButton}>
                 <Search className="w-5 h-5" aria-hidden />
               </button>
               <button

@@ -69,13 +69,13 @@ export function unorderableReason(item: OrderableItem, at: Date = new Date()): U
 export const isOrderable = (item: OrderableItem, at: Date = new Date()) =>
   unorderableReason(item, at) === null;
 
-/** "from 07:00", "until 11:30", "07:00–11:30" — whichever bounds exist. */
+/** "Available from 07:00", "Available until 11:30", "Available 07:00–11:30" — whichever bounds exist. */
 export function windowLabel(item: OrderableItem): string | null {
   const from = item.available_from?.slice(0, 5);
   const to = item.available_to?.slice(0, 5);
-  if (from && to) return `${from}–${to}`;
-  if (from) return `${t('available_from_time')} ${from}`;
-  if (to) return `${t('available_until_time')} ${to}`;
+  if (from && to) return t('available_between', { from, to });
+  if (from) return t('available_from_x', { time: from });
+  if (to) return t('available_until_x', { time: to });
   return null;
 }
 

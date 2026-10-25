@@ -106,6 +106,7 @@ const SmartImage = ({
       <div
         className={cn('flex items-center justify-center bg-primary/5 text-primary/40 font-serif', wrapperClassName)}
         style={{ aspectRatio: `${width}/${height}` }}
+        role="img"
         aria-label={alt}
       >
         <span className="text-2xl">{(fallbackText || alt || '?')[0]}</span>

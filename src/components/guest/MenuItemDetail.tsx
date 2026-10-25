@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import SmartImage from '@/components/ui/SmartImage';
 import CartSuggestion from '@/components/guest/CartSuggestion';
-import { useT, useLanguageStore, getLocalizedName, getLocalizedDescription } from '@/lib/i18n';
+import { useT, useLanguageStore, getLocalizedName, getLocalizedDescription, useI18n } from '@/lib/i18n';
 import { sheetUp, fade } from '@/lib/motion';
 import { track } from '@/lib/analytics';
 
@@ -48,6 +48,7 @@ const MenuItemDetail = ({ item, onClose, canOrder = true, unavailableLabel = nul
   const [notes, setNotes] = useState('');
   const { addItem } = useCartStore();
   const t = useT();
+  const { price, list } = useI18n();
   const locale = useLanguageStore((s) => s.locale);
   // Dragging the whole sheet fought the notes field and the scroll; only the
   // handle drags now, the way the other sheets work.
@@ -142,7 +143,7 @@ const MenuItemDetail = ({ item, onClose, canOrder = true, unavailableLabel = nul
 
           <div className="p-6 pb-4">
             <h2 id="item-detail-title" className="font-serif text-2xl font-bold text-foreground">{localizedName}</h2>
-            <p className="text-lg font-sans font-semibold text-foreground mt-1.5 tabular-nums">{item.price.toFixed(2)} KM</p>
+            <p className="text-lg font-sans font-semibold text-foreground mt-1.5 tabular-nums">{price(item.price)}</p>
             {localizedDesc && (
               <p className="text-[15px] text-muted-foreground font-sans mt-3 leading-relaxed">{localizedDesc}</p>
             )}
@@ -152,7 +153,7 @@ const MenuItemDetail = ({ item, onClose, canOrder = true, unavailableLabel = nul
             {(item.portion_note || item.prep_minutes) && (
               <p className="text-sm text-muted-foreground font-sans mt-2 flex items-center gap-1.5">
                 {item.prep_minutes ? <Clock className="w-3.5 h-3.5" aria-hidden /> : null}
-                {[item.portion_note, item.prep_minutes ? `~${item.prep_minutes} ${t('minutes_short')}` : null]
+                {[item.portion_note, item.prep_minutes ? t('prep_about', { n: item.prep_minutes }) : null]
                   .filter(Boolean)
                   .join(' · ')}
               </p>
@@ -168,10 +169,10 @@ const MenuItemDetail = ({ item, onClose, canOrder = true, unavailableLabel = nul
                 abbreviated, never behind a tap. */}
             {item.allergens && item.allergens.length > 0 && (
               <div className="mt-4 rounded-xl border border-accent/25 bg-accent/5 p-3">
-                <p className="text-xs uppercase tracking-wide font-sans font-semibold text-accent flex items-center gap-1.5">
+                <p className="text-xs uppercase tracking-wide rtl:tracking-normal font-sans font-semibold text-accent flex items-center gap-1.5">
                   <AlertTriangle className="w-3.5 h-3.5" aria-hidden /> {t('allergens')}
                 </p>
-                <p className="text-sm font-sans text-foreground mt-1">{item.allergens.join(', ')}</p>
+                <p className="text-sm font-sans text-foreground mt-1">{list(item.allergens.map((a) => t(`allergen_${a}`) === `allergen_${a}` ? a : t(`allergen_${a}`)))}</p>
                 <p className="text-xs font-sans text-muted-foreground mt-1">{t('allergens_ask_staff')}</p>
               </div>
             )}
@@ -220,7 +221,7 @@ const MenuItemDetail = ({ item, onClose, canOrder = true, unavailableLabel = nul
             <div className="flex items-center gap-1 bg-muted rounded-full p-0.5" role="group" aria-label={localizedName}>
               <button
                 onClick={() => setQuantity(Math.max(1, quantity - 1))}
-                aria-label={`${t('decrease')} ${localizedName}`}
+                aria-label={t('decrease_item', { name: localizedName })}
                 disabled={quantity <= 1}
                 className="w-11 h-11 rounded-full flex items-center justify-center hover:bg-card transition-colors tap-sm disabled:opacity-40"
               >
@@ -229,7 +230,7 @@ const MenuItemDetail = ({ item, onClose, canOrder = true, unavailableLabel = nul
               <span className="text-base font-sans font-semibold w-6 text-center tabular-nums" aria-live="polite">{quantity}</span>
               <button
                 onClick={() => setQuantity(Math.min(10, quantity + 1))}
-                aria-label={`${t('increase')} ${localizedName}`}
+                aria-label={t('increase_item', { name: localizedName })}
                 className="w-11 h-11 rounded-full flex items-center justify-center hover:bg-card transition-colors tap-sm disabled:opacity-40"
                 disabled={quantity >= 10}
               >
@@ -241,7 +242,7 @@ const MenuItemDetail = ({ item, onClose, canOrder = true, unavailableLabel = nul
               onClick={handleAdd}
               className="flex-1 h-12 rounded-full bg-primary text-primary-foreground font-sans font-semibold text-base hover:bg-sage-dark hover:shadow-lg hover:shadow-primary/30 transition-all duration-200 tap tabular-nums"
             >
-              {t('add_to_order')} · {(item.price * quantity).toFixed(2)} KM
+              {t('add_to_order')} · {price((item.price * quantity))}
             </Button>
           </div>
         )}

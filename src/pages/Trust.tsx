@@ -20,9 +20,9 @@ const SECTIONS: { icon: React.ElementType; title: L; body: L[] }[] = [
     icon: Lock,
     title: { en: 'Your data is protected', bs: 'Vaši podaci su zaštićeni', ar: 'بياناتك محمية' },
     body: [{
-      en: 'Ordering happens through a secure session tied to your table’s QR code. Each session is access-controlled and protected by row-level security, so only you and the restaurant’s staff can see your order.',
-      bs: 'Naručivanje se odvija kroz sigurnu sesiju vezanu za QR kod vašeg stola. Svaka sesija je kontrolisanog pristupa i zaštićena sigurnošću na nivou reda, tako da samo vi i osoblje restorana vidite vašu narudžbu.',
-      ar: 'يتم الطلب عبر جلسة آمنة مرتبطة برمز QR الخاص بطاولتك. كل جلسة محمية بالتحكم في الوصول وبأمان على مستوى الصفوف، بحيث لا يرى طلبك سواك وطاقم المطعم.',
+      en: 'Ordering happens through a secure session tied to your table’s QR code. Each session is locked to your table, so only the people at your table and our staff can see your order.',
+      bs: 'Naručivanje se odvija kroz sigurnu sesiju vezanu za QR kod vašeg stola. Svaka sesija je vezana samo za vaš sto, tako da vašu narudžbu vidite samo vi za stolom i naše osoblje.',
+      ar: 'يتم الطلب عبر جلسة آمنة مرتبطة برمز QR الخاص بطاولتك. كل جلسة مقفلة على طاولتك، فلا يرى طلبك إلا من يجلس معك وطاقمنا.',
     }],
   },
   {
@@ -30,8 +30,8 @@ const SECTIONS: { icon: React.ElementType; title: L; body: L[] }[] = [
     title: { en: 'What we collect', bs: 'Šta prikupljamo', ar: 'ما الذي نجمعه' },
     body: [{
       en: 'Only what’s needed to serve you: the items you order, an optional first name you choose, your table, and timing. We do not require an account, email address or phone number to order.',
-      bs: 'Samo ono što je potrebno da vas uslužimo: stavke koje naručite, opcionalno ime koje odaberete, vaš sto i vrijeme. Za naručivanje nisu potrebni nalog, e-mail ni broj telefona.',
-      ar: 'فقط ما يلزم لخدمتك: العناصر التي تطلبها، واسمٌ أول اختياري تختاره، وطاولتك، والوقت. لا نطلب حسابًا أو بريدًا إلكترونيًا أو رقم هاتف للطلب.',
+      bs: 'Samo ono što je potrebno da vas uslužimo: stavke koje naručite, ime koje sami odaberete (nije obavezno), vaš sto i vrijeme. Za naručivanje nije potreban korisnički račun, e-mail ni broj telefona.',
+      ar: 'فقط ما يلزم لخدمتك: الأصناف التي تطلبها، واسمٌ أول اختياري تختاره، وطاولتك، والوقت. لا نطلب حسابًا أو بريدًا إلكترونيًا أو رقم هاتف للطلب.',
     }],
   },
   {

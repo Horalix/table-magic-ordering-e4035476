@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { CreditCard, Banknote, Loader2, ChevronRight, ShieldCheck, Smartphone } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { useT } from '@/lib/i18n';
+import { useT, useI18n } from '@/lib/i18n';
 import { fade, sheetUp } from '@/lib/motion';
 import { Input } from '@/components/ui/input';
 import { TIP_PRESETS, computeTip } from '@/lib/tip';
@@ -63,6 +63,7 @@ const PayOption = ({ icon, title, subtitle, primary, busy, disabled, onClick }: 
  */
 const CheckoutSheet = ({ open, total, submitting, onlineCardEnabled, payAtTableEnabled, onChoose, onClose }: Props) => {
   const t = useT();
+  const { price } = useI18n();
   const [preset, setPreset] = useState<number | 'custom'>(0);
   const [custom, setCustom] = useState('');
   const panelRef = useRef<HTMLDivElement>(null);
@@ -112,7 +113,7 @@ const CheckoutSheet = ({ open, total, submitting, onlineCardEnabled, payAtTableE
                     aria-pressed={preset === p}
                     className={`min-h-[44px] px-1 leading-tight rounded-xl text-[13px] font-sans font-semibold transition-all tap-sm ${preset === p ? 'bg-foreground text-background' : 'bg-muted text-foreground hover:bg-muted/70'}`}
                   >
-                    {p === 0 ? t('no_tip') : `${p}%`}
+                    {p === 0 ? t('no_tip') : t('percent_n', { n: p })}
                   </button>
                 ))}
                 <button
@@ -144,16 +145,16 @@ const CheckoutSheet = ({ open, total, submitting, onlineCardEnabled, payAtTableE
             {/* Totals — itemised so nothing is a surprise. */}
             <div className="mt-4 rounded-2xl bg-muted/50 p-3.5 space-y-1.5" aria-live="polite">
               <div className="flex justify-between text-sm font-sans text-muted-foreground tabular-nums">
-                <span>{t('subtotal')}</span><span>{total.toFixed(2)} KM</span>
+                <span>{t('subtotal')}</span><span>{price(total)}</span>
               </div>
               {tip > 0 && (
                 <div className="flex justify-between text-sm font-sans text-muted-foreground tabular-nums">
-                  <span>{t('tip')}</span><span>{tip.toFixed(2)} KM</span>
+                  <span>{t('tip')}</span><span>{price(tip)}</span>
                 </div>
               )}
               <div className="flex justify-between items-baseline pt-1.5 border-t border-border/60">
                 <span className="font-sans font-semibold text-foreground">{t('total')}</span>
-                <span className="text-2xl font-sans font-semibold text-foreground tabular-nums">{grand.toFixed(2)} KM</span>
+                <span className="text-2xl font-sans font-semibold text-foreground tabular-nums">{price(grand)}</span>
               </div>
             </div>
 

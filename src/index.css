@@ -156,6 +156,19 @@
 @layer utilities {
   .font-serif { font-family: 'Lora', serif; }
   .font-sans { font-family: 'Inter', sans-serif; }
+
+  /* Arabic. Lora and Inter have no Arabic letters, so headings fell back to
+     the platform's serif and body text to its sans: two unrelated Arabic
+     faces on one screen. One Arabic system face for both instead, with Inter
+     first so prices, codes and brand names keep their Latin shapes. Small
+     uppercase-style labels get a readable minimum: Arabic at 10px is a smudge. */
+  html:lang(ar) body,
+  html:lang(ar) h1, html:lang(ar) h2, html:lang(ar) h3, html:lang(ar) h4,
+  html:lang(ar) .font-serif,
+  html:lang(ar) .font-sans {
+    font-family: 'Inter', 'SF Arabic', 'Geeza Pro', 'Noto Sans Arabic', 'Segoe UI', Tahoma, sans-serif;
+  }
+  html:lang(ar) .text-\[10px\], html:lang(ar) .text-\[11px\] { font-size: 12px; }
   /* [ART] Frosted glass effect */
   .glass {
     @apply bg-card/80 backdrop-blur-xl border-b border-border/50;

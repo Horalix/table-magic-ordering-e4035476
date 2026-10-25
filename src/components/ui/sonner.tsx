@@ -1,15 +1,18 @@
 import { useTheme } from "next-themes";
 import { Toaster as Sonner, toast } from "sonner";
+import { useT } from "@/lib/i18n";
 
 type ToasterProps = React.ComponentProps<typeof Sonner>;
 
 const Toaster = ({ ...props }: ToasterProps) => {
   const { theme = "system" } = useTheme();
+  const t = useT();
 
   return (
     <Sonner
       theme={theme as ToasterProps["theme"]}
       className="toaster group"
+      containerAriaLabel={t("notifications")}
       // Top of the screen: at the bottom, "Added to order" sat exactly on top
       // of the cart bar and the Send button it was confirming.
       position="top-center"

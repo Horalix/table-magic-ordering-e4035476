@@ -5,7 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useCartStore } from '@/lib/cart-store';
 import SmartImage from '@/components/ui/SmartImage';
-import { useT, useLanguageStore, getLocalizedName } from '@/lib/i18n';
+import { useT, useLanguageStore, getLocalizedName, useI18n } from '@/lib/i18n';
 import { forgetRecentItems, getRecentItems, getUsualItem } from '@/lib/recent-items';
 import { supabase as sb } from '@/integrations/supabase/client';
 import { track } from '@/lib/analytics';
@@ -32,6 +32,7 @@ interface LiveItem {
  */
 const RecentOrdersRow = () => {
   const t = useT();
+  const { price } = useI18n();
   const locale = useLanguageStore((s) => s.locale);
   const addItem = useCartStore((s) => s.addItem);
   const clientId = useCartStore((s) => s.clientId);
@@ -92,14 +93,14 @@ const RecentOrdersRow = () => {
             fallbackText={getLocalizedName(usualLive, locale)}
           />
           <div className="flex-1 min-w-0">
-            <p className="text-[11px] font-sans font-semibold text-primary uppercase tracking-wider">
+            <p className="text-[11px] font-sans font-semibold text-primary uppercase tracking-wider rtl:tracking-normal">
               {t('your_usual')}
             </p>
             <p className="font-serif text-base font-semibold text-foreground truncate">
               {getLocalizedName(usualLive, locale)}
             </p>
             <p className="text-sm font-sans font-bold text-primary tabular-nums">
-              {usualLive.price.toFixed(2)} KM
+              {price(usualLive.price)}
             </p>
           </div>
           <button
@@ -109,6 +110,8 @@ const RecentOrdersRow = () => {
                 id: usualLive.id,
                 menuItemId: usualLive.id,
                 name: usualLive.name,
+                name_bs: usualLive.name_bs,
+                name_ar: usualLive.name_ar,
                 price: usualLive.price,
                 image_url: usualLive.image_url || undefined,
               });
@@ -123,7 +126,7 @@ const RecentOrdersRow = () => {
       )}
 
       <div className="flex items-baseline justify-between gap-2 px-1 mb-2">
-        <p className="text-[11px] font-sans font-semibold text-muted-foreground uppercase tracking-wider">
+        <p className="text-[11px] font-sans font-semibold text-muted-foreground uppercase tracking-wider rtl:tracking-normal">
           {t('order_again')}
         </p>
         {/*
@@ -165,15 +168,15 @@ const RecentOrdersRow = () => {
               onClick={() => {
                 // menuItemId set so this merges with the same dish added from
                 // the menu rather than creating a second, separate line.
-                addItem({ id: it.id, menuItemId: it.id, name: it.name, price: it.price, image_url: it.image_url || undefined });
+                addItem({ id: it.id, menuItemId: it.id, name: it.name, name_bs: it.name_bs, name_ar: it.name_ar, price: it.price, image_url: it.image_url || undefined });
                 track('reorder_tapped', { item_id: it.id });
                 toast.success(t('added_to_order'), { description: name, duration: 1400 });
                 if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
                   try { navigator.vibrate(8); } catch { /* gesture-gated */ }
                 }
               }}
-              className="relative shrink-0 w-28 text-left tap-sm"
-              aria-label={`${t('add_to_order')} ${name}`}
+              className="relative shrink-0 w-28 text-start tap-sm"
+              aria-label={t('add_item_to_order', { name })}
             >
               <div className="card-lux card-lux-hover overflow-hidden">
                 <SmartImage
@@ -188,11 +191,11 @@ const RecentOrdersRow = () => {
                 <div className="p-2">
                   <p className="text-xs font-serif font-semibold text-foreground line-clamp-1">{name}</p>
                   <p className="text-[11px] font-sans font-bold text-primary mt-0.5 tabular-nums">
-                    {it.price.toFixed(2)} KM
+                    {price(it.price)}
                   </p>
                 </div>
               </div>
-              <span className="absolute top-1.5 right-1.5 w-7 h-7 rounded-full bg-primary text-primary-foreground flex items-center justify-center shadow-md">
+              <span className="absolute top-1.5 end-1.5 w-7 h-7 rounded-full bg-primary text-primary-foreground flex items-center justify-center shadow-md">
                 <Plus className="w-3.5 h-3.5" aria-hidden />
               </span>
             </button>

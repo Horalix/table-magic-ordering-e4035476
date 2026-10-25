@@ -45,6 +45,8 @@ const ServerRatingStep = ({ waiterName, onSubmit, onSkip }: ServerRatingStepProp
             onMouseEnter={() => setHover(star)}
             onMouseLeave={() => setHover(0)}
             onClick={() => setRating(star)}
+            aria-label={t('rate_n_stars', { n: star })}
+            aria-pressed={star <= rating}
             className="p-1 min-w-[40px] min-h-[40px] flex items-center justify-center"
           >
             <Star

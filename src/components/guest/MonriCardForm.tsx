@@ -109,13 +109,16 @@ const MonriCardForm = ({ open, clientSecret, authenticityToken, environment, amo
             cardRef.current = card;
             setPhase('ready');
           } catch (e) {
-            setError(e instanceof Error ? e.message : t('payment_failed'));
+            // The SDK speaks English to developers; the guest gets a sentence in their language.
+            console.warn('[monri] mount failed', e);
+            setError(t('card_form_unavailable'));
             setPhase('ready');
           }
         });
       } catch (e) {
         if (!cancelled) {
-          setError(e instanceof Error ? e.message : t('payment_failed'));
+          console.warn('[monri] sdk failed', e);
+          setError(t('card_form_unavailable'));
           setPhase('ready');
         }
       }
@@ -139,12 +142,15 @@ const MonriCardForm = ({ open, clientSecret, authenticityToken, environment, amo
       // A hard client-side error (bad card number, 3-D Secure abandoned) is
       // safe to show inline and retry without a server round-trip.
       if (res.error) {
-        setError(res.error.message || t('payment_failed'));
+        // Monri's own field messages ("invalid card number") are useful and come
+        // localised for en/bs; it has no Arabic, so Arabic gets ours.
+        setError(locale === 'ar' ? t('payment_failed') : res.error.message || t('payment_failed'));
         setPhase('ready');
         return;
       }
       if (status && status !== 'approved') {
-        setError(res.result?.['response-message'] || t('payment_declined'));
+        console.warn('[monri] declined', res.result?.['response-message']);
+        setError(t('payment_declined'));
         setPhase('ready');
         return;
       }
@@ -183,7 +189,7 @@ const MonriCardForm = ({ open, clientSecret, authenticityToken, environment, amo
             <p className="text-center text-2xl font-sans font-semibold text-foreground mt-2 tabular-nums">{amountLabel}</p>
             {orderCode && (
               <p className="text-center text-xs font-sans text-muted-foreground mt-1">
-                {t('order_number')} <span className="font-semibold tabular-nums tracking-wider">{orderCode}</span>
+                {t('order_number')} <span dir="ltr" className="font-semibold tabular-nums tracking-wider">{orderCode}</span>
               </p>
             )}
 

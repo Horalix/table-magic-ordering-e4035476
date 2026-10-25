@@ -6,7 +6,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useCartStore, type CartItem } from '@/lib/cart-store';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
-import { useT, useLanguageStore, getLocalizedName } from '@/lib/i18n';
+import { useT, useLanguageStore, getLocalizedName, useI18n } from '@/lib/i18n';
 import { supabase } from '@/integrations/supabase/client';
 import { unorderableReason } from '@/lib/availability';
 import { useSessionHeartbeat } from '@/hooks/useSessionHeartbeat';
@@ -59,6 +59,7 @@ const CartPage = () => {
   const submittingRef = useRef(false);
   const undoTimer = useRef<ReturnType<typeof setTimeout>>();
   const t = useT();
+  const { price } = useI18n();
   const locale = useLanguageStore((s) => s.locale);
   const displayTotal = useCountUp(total());
 
@@ -346,7 +347,7 @@ const CartPage = () => {
   };
 
   const isLargeOrder = itemCount() > LARGE_ORDER_THRESHOLD;
-  const amountLabel = `${(resolvedOrder?.total ?? pendingPayment?.total ?? total()).toFixed(2)} KM`;
+  const amountLabel = `${price((resolvedOrder?.total ?? pendingPayment?.total ?? total()))}`;
 
   // ---------------------------------------------------------------------
 
@@ -384,7 +385,7 @@ const CartPage = () => {
           <h1 className="font-serif text-[22px] font-semibold text-foreground tracking-tight">{t('your_order')}</h1>
           {table && (
             <span className="ms-auto text-xs font-sans px-3 py-1 rounded-full bg-primary/10 text-primary font-medium">
-              {t('table')} {table}
+              {t('table_n', { n: table })}
             </span>
           )}
         </div>
@@ -416,7 +417,7 @@ const CartPage = () => {
             onClick={undoRemove}
             className="w-full flex items-center justify-center gap-2 p-3 rounded-xl border border-dashed border-border text-sm font-sans text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors min-h-[44px]"
           >
-            <Undo2 className="w-4 h-4" aria-hidden /> {t('undo_remove')} — {getLocalizedName(lastRemoved, locale)}
+            <Undo2 className="w-4 h-4 rtl:-scale-x-100" aria-hidden /> {t('undo_removed', { name: getLocalizedName(lastRemoved, locale) })}
           </button>
         </div>
       )}
@@ -469,12 +470,12 @@ const CartPage = () => {
                 )}
                 <div className="flex-1 min-w-0">
                   <h3 className="font-serif text-base font-semibold text-foreground leading-snug">{name}</h3>
-                  {item.notes && <p className="text-[13px] text-muted-foreground mt-0.5 line-clamp-2">“{item.notes}”</p>}
+                  {item.notes && <p className="text-[13px] text-muted-foreground mt-0.5 line-clamp-2">{t('quoted', { text: item.notes })}</p>}
                   {blocked
                     ? <p className="text-[13px] font-sans font-medium text-destructive mt-0.5">{t('item_unavailable_now')}</p>
                     : (
                       <p className="text-sm font-sans font-semibold text-foreground mt-1 tabular-nums">
-                        {(item.price * item.quantity).toFixed(2)} KM
+                        {price((item.price * item.quantity))}
                         {item.quantity > 1 && <span className="ms-1.5 text-xs font-normal text-muted-foreground">{item.quantity} × {item.price.toFixed(2)}</span>}
                       </p>
                     )}
@@ -484,7 +485,7 @@ const CartPage = () => {
                 <div className="flex items-center h-10 rounded-full border border-border bg-background shrink-0">
                   <button
                     onClick={() => (item.quantity <= 1 ? removeWithUndo(item) : updateQuantity(item.id, item.quantity - 1))}
-                    aria-label={item.quantity <= 1 ? `${t('remove')} ${name}` : `${t('decrease')} ${name}`}
+                    aria-label={item.quantity <= 1 ? t('remove_item', { name }) : t('decrease_item', { name })}
                     className="w-10 h-10 rounded-full flex items-center justify-center text-foreground active:scale-90 transition-transform"
                   >
                     {item.quantity <= 1 ? <Trash2 className="w-4 h-4 text-muted-foreground" aria-hidden /> : <Minus className="w-4 h-4" aria-hidden />}
@@ -493,7 +494,7 @@ const CartPage = () => {
                   <button
                     onClick={() => updateQuantity(item.id, item.quantity + 1)}
                     disabled={item.quantity >= 10 || blocked}
-                    aria-label={`${t('increase')} ${name}`}
+                    aria-label={t('increase_item', { name })}
                     className="w-10 h-10 rounded-full flex items-center justify-center text-primary active:scale-90 transition-transform disabled:opacity-40"
                   >
                     <Plus className="w-4 h-4" strokeWidth={2.5} aria-hidden />
@@ -521,7 +522,7 @@ const CartPage = () => {
 
           <div className="mx-4 mt-5 px-1 flex justify-between items-baseline">
             <span className="font-sans text-[15px] text-muted-foreground">{t('total')}</span>
-            <span className="font-sans text-2xl font-semibold text-foreground tabular-nums">{displayTotal.toFixed(2)} KM</span>
+            <span className="font-sans text-2xl font-semibold text-foreground tabular-nums">{price(displayTotal)}</span>
           </div>
 
           <div className="fixed bottom-0 left-0 right-0 z-40 p-4 pb-safe bg-background/80 backdrop-blur-xl border-t border-border/50">
@@ -535,7 +536,7 @@ const CartPage = () => {
             >
               <span className="flex items-center gap-2">
                 <Send className="w-4 h-4 rtl:-scale-x-100" aria-hidden />
-                {t('send_order')} · {displayTotal.toFixed(2)} KM
+                {t('send_order')} · {price(displayTotal)}
               </span>
             </Button>
             {(!sessionId || !sessionToken) && (

@@ -7,6 +7,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { lazy, Suspense } from "react";
 import StaffGate from "./components/auth/StaffGate";
 import { ClockProvider } from "./lib/clock";
+import LocaleShell from "./components/LocaleShell";
 
 // Code-split route bundles so guests, staff, and admin screens load only when needed.
 const GuestMenu = lazy(() => import("./pages/GuestMenu"));
@@ -75,6 +76,7 @@ const App = () => (
       <Toaster />
       <Sonner />
       <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+      <LocaleShell>
         <Suspense fallback={null}>
           {/* Guest-only: shows a join-approval prompt whenever this device is
               in an active table session. No-op for staff/admin (no sessionId). */}
@@ -124,6 +126,7 @@ const App = () => (
             <Route path="*" element={<NotFound />} />
           </Routes>
         </Suspense>
+      </LocaleShell>
       </BrowserRouter>
     </TooltipProvider>
     </MotionConfig>

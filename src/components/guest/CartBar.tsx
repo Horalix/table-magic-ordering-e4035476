@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { ShoppingBag, Receipt } from 'lucide-react';
 import { useCartStore } from '@/lib/cart-store';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { useT } from '@/lib/i18n';
+import { useT, useI18n } from '@/lib/i18n';
 import { springSnappy, useCountUp } from '@/lib/motion';
 
 /**
@@ -24,6 +24,7 @@ const CartBar = () => {
   const [searchParams] = useSearchParams();
   const count = itemCount();
   const t = useT();
+  const { price } = useI18n();
   const displayTotal = useCountUp(total());
 
   // The session lives in the store, not the URL. The PWA start_url is /menu
@@ -95,7 +96,7 @@ const CartBar = () => {
                 <span className="font-sans font-semibold text-base truncate">{t('view_order')}</span>
               </span>
               <span className="font-sans font-bold text-base tabular-nums shrink-0">
-                {displayTotal.toFixed(2)} KM
+                {price(displayTotal)}
               </span>
             </motion.button>
           )}

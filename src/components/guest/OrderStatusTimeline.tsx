@@ -37,7 +37,7 @@ const OrderStatusTimeline = ({ status }: { status: string }) => {
         aria-valuemin={1}
         aria-valuemax={STAGES.length}
         aria-valuenow={current + 1}
-        aria-valuetext={`${STAGES[current]?.key ?? 'pending'} — step ${current + 1} of ${STAGES.length}`}
+        aria-valuetext={t('progress_step', { status: t(STAGES[current]?.labelKey ?? 'status_pending'), n: current + 1, total: STAGES.length })}
       >
         {STAGES.map((s, i) => {
           const reached = i <= current;

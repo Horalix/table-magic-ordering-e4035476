@@ -47,7 +47,7 @@ const OrderCode = ({ code }: { code: string | null }) => {
   return (
     <p className="mt-3 inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-muted text-foreground font-sans text-sm">
       <span className="text-muted-foreground">{t('order_number')}</span>
-      <span className="font-semibold tabular-nums tracking-wider">{code}</span>
+      <span dir="ltr" className="font-semibold tabular-nums tracking-wider">{code}</span>
     </p>
   );
 };

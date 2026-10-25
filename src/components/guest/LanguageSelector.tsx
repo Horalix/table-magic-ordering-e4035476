@@ -41,7 +41,7 @@ const LanguageSelector = ({ variant = 'default' }: Props) => {
             onClick={() => setLocale(l)}
             className={`font-sans text-sm cursor-pointer ${locale === l ? 'bg-primary/10 text-primary' : ''}`}
           >
-            <span className="mr-2">{localeFlags[l]}</span>
+            <span className="me-2">{localeFlags[l]}</span>
             {localeLabels[l]}
           </DropdownMenuItem>
         ))}

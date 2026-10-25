@@ -2,7 +2,7 @@ import React, { useDeferredValue, useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Search, X, Plus } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
-import { useT, useLanguageStore, getLocalizedName, getLocalizedDescription } from '@/lib/i18n';
+import { useT, useLanguageStore, getLocalizedName, getLocalizedDescription, useI18n } from '@/lib/i18n';
 import { useCartStore } from '@/lib/cart-store';
 import { toast } from 'sonner';
 import SmartImage from '@/components/ui/SmartImage';
@@ -43,6 +43,7 @@ interface Props {
  */
 const MenuSearch = ({ canOrder }: Props) => {
   const t = useT();
+  const { price } = useI18n();
   const locale = useLanguageStore((s) => s.locale);
   const addItem = useCartStore((s) => s.addItem);
   const [query, setQuery] = useState('');
@@ -138,7 +139,7 @@ const MenuSearch = ({ canOrder }: Props) => {
                       )}
                     </div>
                     <div className="text-end shrink-0">
-                      <p className="text-sm font-sans font-semibold text-foreground tabular-nums">{item.price.toFixed(2)} KM</p>
+                      <p className="text-sm font-sans font-semibold text-foreground tabular-nums">{price(item.price)}</p>
                       {!item.is_available ? (
                         <span className="text-xs font-sans font-medium text-muted-foreground">{t('sold_out')}</span>
                       ) : canOrder ? (
