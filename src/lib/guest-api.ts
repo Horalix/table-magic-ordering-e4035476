@@ -39,6 +39,14 @@ export interface GuestOrderItemInput {
    * measured in money rather than clicks. It cannot influence the total.
    */
   from_suggestion?: { source_item_id: string | null; placement: string; decision_id?: string | null } | null;
+  /** For a combo: one dish per part (20261026100000_promotions.sql validates them). */
+  choices?: { slot_id: string; item_id: string }[];
+  /**
+   * The unit price the guest's screen showed. The server refuses the order
+   * ('Prices changed') when it would charge something else, instead of
+   * quietly charging it. Older servers ignore it.
+   */
+  unit_price_seen?: number;
 }
 
 /**
@@ -263,6 +271,32 @@ export const unavailableItemIds = (err: unknown): string[] => {
   }
 };
 
+/** One line the server would have charged differently from what the screen showed. */
+export interface PriceChange {
+  /** Index into the order's items, as sent. */
+  line: number;
+  menu_item_id: string;
+  unit_price: number;
+  regular_unit_price?: number;
+}
+
+/**
+ * The new prices, when the server refused an order because the guest's screen
+ * was out of date (a sale ended, a price changed). Empty for any other error.
+ */
+export const priceChanges = (err: unknown): PriceChange[] => {
+  const e = err as { message?: string; details?: string | null } | null;
+  if (!e || !/^Prices changed/.test(e.message ?? '') || !e.details) return [];
+  try {
+    const rows = JSON.parse(e.details);
+    return Array.isArray(rows)
+      ? rows.filter((r): r is PriceChange => r && typeof r.line === 'number' && typeof r.menu_item_id === 'string')
+      : [];
+  } catch {
+    return [];
+  }
+};
+
 /**
  * A guest-readable translation key for a failed order. Server messages are
  * English and written for staff; the guest only needs to know what to do.
@@ -271,6 +305,7 @@ export const orderErrorKey = (err: unknown): string => {
   const e = err as { code?: string; message?: string } | null;
   const message = e?.message ?? '';
   if (unavailableItemIds(err).length > 0) return 'some_items_unavailable';
+  if (/^Prices changed/.test(message)) return 'prices_changed_check';
   if (/paused/i.test(message)) return 'ordering_paused_title';
   if (/too many orders|wait a moment|maximum orders/i.test(message)) return 'slow_down';
   // Over twenty lines or sixty portions. Retrying the same cart cannot work.

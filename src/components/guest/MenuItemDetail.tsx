@@ -1,7 +1,7 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { motion, useDragControls, useReducedMotion, useIsPresent, MotionConfig, type Variants } from 'framer-motion';
-import { X, Plus, Minus, QrCode, UtensilsCrossed, AlertTriangle, Clock } from 'lucide-react';
-import { useCartStore } from '@/lib/cart-store';
+import { X, Plus, Minus, QrCode, UtensilsCrossed, AlertTriangle, Clock, Check, Tag } from 'lucide-react';
+import { useCartStore, type CartComboComponent } from '@/lib/cart-store';
 import { useDialog } from '@/lib/use-dialog';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -13,6 +13,14 @@ import { track } from '@/lib/analytics';
 import { haptic } from '@/lib/haptics';
 import { emitAdd } from '@/lib/cart-fx';
 import RollingNumber from '@/components/guest/RollingNumber';
+import { PriceTag, SaleBadge, NewBadge, ComboBadge } from '@/components/guest/PriceTag';
+import { useComboMap } from '@/lib/promotions-api';
+import { unorderableReason } from '@/lib/availability';
+import {
+  comboRegularPrice, comboSaving, comboUnitPrice, fixedChoices, isFixedSlot, isNew, missingSlots,
+  saleEndsPhrase, saleView, type ComboChoices, type ComboDef, type ComboSlot, type NewFields, type SaleFields,
+} from '@/lib/promotions';
+import type { Locale } from '@/lib/i18n';
 
 /** The server keeps the first 500 characters of a note; say so up front. */
 const NOTE_MAX = 500;
@@ -24,8 +32,12 @@ const reducedFade: Variants = {
   exit: { opacity: 0, transition: { ...exitTransition, duration: duration.fast } },
 };
 
+/** A combo part's name in the guest's language. */
+const slotLabel = (slot: ComboSlot, locale: Locale) =>
+  (locale === 'bs' && slot.label_bs) || (locale === 'ar' && slot.label_ar) || slot.label;
+
 interface Props {
-  item: {
+  item: Partial<Omit<SaleFields, 'price'>> & NewFields & {
     id: string;
     name: string;
     name_ar?: string | null;
@@ -79,21 +91,71 @@ const MenuItemDetail = ({ item, onClose, onAdded, canOrder = true, unavailableLa
   const localizedDesc = getLocalizedDescription(item, locale);
   const orderable = canOrder && !unavailableLabel;
 
+  // ---- Sale, new, combo ------------------------------------------------
+  // Read once when the sheet opens: a sale ending under an open sheet is
+  // caught by the cart, which re-prices at that moment, and by the server.
+  const [openedAt] = useState(() => Date.now());
+  const sale = saleView(item, openedAt);
+  const fresh = isNew(item, openedAt);
+  const combo: ComboDef | undefined = useComboMap().get(item.id);
+  const [choices, setChoices] = useState<ComboChoices>({});
+  // Single-dish parts are filled in for the guest as soon as the combo is known.
+  useEffect(() => { if (combo) setChoices((c) => ({ ...fixedChoices(combo), ...c })); }, [combo]);
+  const [attempted, setAttempted] = useState(false);
+  const slotRefs = useRef<Record<string, HTMLElement | null>>({});
+  const missing = combo ? missingSlots(combo, choices) : [];
+  const unit = combo ? comboUnitPrice(item, combo, choices, openedAt) : sale ? sale.price : item.price;
+  const regular = combo
+    ? (sale ? comboRegularPrice(item, combo, choices) : null)
+    : (sale ? sale.regular : null);
+  const saving = combo && missing.length === 0 ? comboSaving(item, combo, choices, openedAt) : null;
+  const endsPhrase = sale ? saleEndsPhrase(sale.endsAt, openedAt) : null;
+
+  const components = useMemo((): CartComboComponent[] => (combo
+    ? combo.slots.map((slot) => {
+      const opt = slot.options.find((o) => o.item_id === choices[slot.id]);
+      const part: CartComboComponent | null = opt ? {
+        slot_id: slot.id, slot_label: slot.label, slot_label_bs: slot.label_bs ?? null, slot_label_ar: slot.label_ar ?? null,
+        item_id: opt.item_id, name: opt.name, name_bs: opt.name_bs ?? null, name_ar: opt.name_ar ?? null,
+        surcharge: Number(opt.surcharge),
+      } : null;
+      return part;
+    }).filter((c): c is CartComboComponent => c !== null)
+    : []), [combo, choices]);
+
+  const choose = (slot: ComboSlot, itemId: string) => {
+    haptic('tick');
+    setChoices((c) => ({ ...c, [slot.id]: itemId }));
+  };
+
   const handleAdd = () => {
     if (!orderable) return;
+    if (combo && missing.length > 0) {
+      // Show what is missing instead of a disabled button that says nothing.
+      setAttempted(true);
+      haptic('tick');
+      slotRefs.current[missing[0].id]?.scrollIntoView({ behavior: reduced ? 'auto' : 'smooth', block: 'center' });
+      return;
+    }
     for (let i = 0; i < quantity; i++) {
       addItem({
         id: item.id,
         name: item.name,
         name_bs: item.name_bs ?? null,
         name_ar: item.name_ar ?? null,
-        price: item.price,
+        price: unit,
+        regularPrice: regular ?? undefined,
+        saleLabel: sale ? (item.sale_label ?? '') : undefined,
         image_url: item.image_url,
         notes: notes.trim() || undefined,
+        ...(combo ? { combo: { components } } : {}),
       });
     }
     // Only ids and counts — the note itself is never sent to analytics.
-    track('item_added', { item_id: item.id, quantity, source: 'detail', has_note: notes.trim().length > 0 });
+    track('item_added', {
+      item_id: item.id, quantity, source: 'detail', has_note: notes.trim().length > 0,
+      ...(combo ? { combo: true } : {}), ...(sale ? { on_sale: true } : {}),
+    });
     haptic('add');
     // The sheet gets out of the way first (200 ms on the exit curve), then
     // the photo flies from the Add button into the bag.
@@ -173,8 +235,22 @@ const MenuItemDetail = ({ item, onClose, onAdded, canOrder = true, unavailableLa
           )}
 
           <div className="p-6 pb-4">
+            {(sale || fresh || combo) && (
+              <div className="flex flex-wrap items-center gap-1.5 mb-2">
+                {sale && <SaleBadge label={item.sale_label} percentOff={sale.percentOff} />}
+                {combo && <ComboBadge />}
+                {fresh && <NewBadge />}
+              </div>
+            )}
             <h2 id="item-detail-title" className="font-serif text-2xl font-bold text-foreground">{localizedName}</h2>
-            <p className="text-lg font-sans font-semibold text-foreground mt-1.5 tabular-nums">{price(item.price)}</p>
+            <p className="text-lg font-sans font-semibold text-foreground mt-1.5">
+              <PriceTag price={unit} regular={regular} bare={false} />
+            </p>
+            {endsPhrase && (
+              <p className="mt-1 text-sm font-sans font-medium text-sale flex items-center gap-1.5">
+                <Tag className="w-3.5 h-3.5" aria-hidden /> {t(endsPhrase.key, endsPhrase.vars)}
+              </p>
+            )}
             {localizedDesc && (
               <p className="text-[15px] text-muted-foreground font-sans mt-3 leading-relaxed">{localizedDesc}</p>
             )}
@@ -205,6 +281,103 @@ const MenuItemDetail = ({ item, onClose, onAdded, canOrder = true, unavailableLa
                 </p>
                 <p className="text-sm font-sans text-foreground mt-1">{list(item.allergens.map((a) => t(`allergen_${a}`) === `allergen_${a}` ? a : t(`allergen_${a}`)))}</p>
                 <p className="text-xs font-sans text-muted-foreground mt-1">{t('allergens_ask_staff')}</p>
+              </div>
+            )}
+
+            {combo && (
+              <div className="mt-5 space-y-5" aria-label={t('combo_choose_for', { name: localizedName })} role="group">
+                {combo.slots.map((slot) => {
+                  const label = slotLabel(slot, locale);
+                  const fixed = isFixedSlot(slot);
+                  const flagged = attempted && !fixed && !choices[slot.id];
+                  return (
+                    <section
+                      key={slot.id}
+                      ref={(el) => { slotRefs.current[slot.id] = el; }}
+                      aria-labelledby={`slot-${slot.id}`}
+                      data-combo-slot={slot.label}
+                      className={`rounded-2xl transition-colors ${flagged ? 'ring-2 ring-destructive/60 ring-offset-4 ring-offset-card' : ''}`}
+                    >
+                      <div className="flex items-baseline justify-between gap-3">
+                        <h3 id={`slot-${slot.id}`} className="font-serif text-lg font-semibold text-foreground">{label}</h3>
+                        {fixed ? (
+                          <span className="text-xs font-sans font-medium text-muted-foreground">{t('combo_included')}</span>
+                        ) : (
+                          <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-sans font-semibold ${
+                            choices[slot.id] ? 'bg-primary/10 text-primary'
+                              : flagged ? 'bg-destructive text-destructive-foreground' : 'bg-muted text-foreground'}`}
+                          >
+                            {choices[slot.id] ? <Check className="inline w-3 h-3 -mt-0.5" aria-label={t('combo_required')} /> : t('combo_required')}
+                          </span>
+                        )}
+                      </div>
+                      {!fixed && <p className="text-[13px] font-sans text-muted-foreground mt-0.5">{t('combo_choose_one')}</p>}
+                      <div role={fixed ? undefined : 'radiogroup'} aria-labelledby={`slot-${slot.id}`} className="mt-2 grid gap-2">
+                        {slot.options.map((opt) => {
+                          const name = getLocalizedName(opt, locale);
+                          const gone = unorderableReason(opt) !== null;
+                          const selected = choices[slot.id] === opt.item_id;
+                          const extra = Number(opt.surcharge);
+                          const body = (
+                            <>
+                              <SmartImage
+                                src={opt.image_url || undefined}
+                                id={opt.item_id}
+                                alt=""
+                                width={44}
+                                height={44}
+                                square
+                                sizes="44px"
+                                fallbackText={name}
+                                wrapperClassName={`w-11 h-11 rounded-xl shrink-0 ${gone ? 'opacity-50 saturate-50' : ''}`}
+                              />
+                              <span className={`flex-1 min-w-0 text-start text-[15px] font-sans font-medium leading-snug ${gone ? 'text-muted-foreground' : 'text-foreground'}`}>
+                                {name}
+                                {gone && <span className="block text-xs font-normal">{t('sold_out')}</span>}
+                              </span>
+                              {extra > 0 && (
+                                <span className="shrink-0 text-sm font-sans font-semibold text-foreground tabular-nums">{t('plus_amount', { amount: price(extra) })}</span>
+                              )}
+                            </>
+                          );
+                          if (fixed) {
+                            return (
+                              <div key={opt.item_id} className="flex items-center gap-3 p-2 rounded-xl bg-muted/50">
+                                {body}
+                                <Check className="w-5 h-5 text-primary shrink-0" aria-hidden />
+                              </div>
+                            );
+                          }
+                          return (
+                            <button
+                              key={opt.item_id}
+                              type="button"
+                              role="radio"
+                              aria-checked={selected}
+                              disabled={gone}
+                              onClick={() => choose(slot, opt.item_id)}
+                              className={`flex items-center gap-3 p-2 min-h-[56px] rounded-xl border text-start transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed ${
+                                selected ? 'border-primary bg-primary/5' : 'border-border bg-card hover:bg-muted/50'}`}
+                            >
+                              {body}
+                              <span
+                                aria-hidden
+                                className={`w-5 h-5 shrink-0 rounded-full border-2 flex items-center justify-center ${selected ? 'border-primary bg-primary' : 'border-muted-foreground/40'}`}
+                              >
+                                {selected && <span className="w-2 h-2 rounded-full bg-primary-foreground" />}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </section>
+                  );
+                })}
+                {saving !== null && (
+                  <p className="flex items-center gap-2 rounded-xl bg-primary/10 px-3 py-2.5 text-sm font-sans font-semibold text-primary" role="status">
+                    <Tag className="w-4 h-4 shrink-0" aria-hidden /> {t('combo_you_save', { amount: price(saving) })}
+                  </p>
+                )}
               </div>
             )}
 
@@ -243,9 +416,12 @@ const MenuItemDetail = ({ item, onClose, onAdded, canOrder = true, unavailableLa
                   already interested in one dish and has not yet committed to a
                   total, so an add-on reads as help rather than as an upsell.
                 */}
-                <div className="mt-5">
-                  <CartSuggestion placement="item" forItemIds={[item.id]} />
-                </div>
+                {/* A combo already comes with its drink and its side. */}
+                {!combo && (
+                  <div className="mt-5">
+                    <CartSuggestion placement="item" forItemIds={[item.id]} />
+                  </div>
+                )}
               </>
             )}
 
@@ -287,7 +463,9 @@ const MenuItemDetail = ({ item, onClose, onAdded, canOrder = true, unavailableLa
               onClick={handleAdd}
               className="flex-1 h-12 rounded-full bg-primary text-primary-foreground font-sans font-semibold text-base hover:bg-sage-dark hover:shadow-lg hover:shadow-primary/30 transition-all duration-200 tap tabular-nums"
             >
-              {t('add_to_order')} · {price((item.price * quantity))}
+              {combo && missing.length > 0
+                ? t('combo_choose_slot', { slot: slotLabel(missing[0], locale) })
+                : `${t('add_to_order')} · ${price(Math.round(unit * 100) * quantity / 100)}`}
             </Button>
           </div>
         )}

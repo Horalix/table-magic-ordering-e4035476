@@ -4,11 +4,11 @@ import { ArrowLeft, Minus, Plus, Trash2, Send, ShoppingBag, UtensilsCrossed, Und
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useCartStore, type CartItem } from '@/lib/cart-store';
+import { PriceTag, SaleBadge } from '@/components/guest/PriceTag';
+import { useCartLivePrices } from '@/lib/promotions-api';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import { useT, useLanguageStore, getLocalizedName, useI18n } from '@/lib/i18n';
-import { supabase } from '@/integrations/supabase/client';
-import { unorderableReason } from '@/lib/availability';
 import { useSessionHeartbeat } from '@/hooks/useSessionHeartbeat';
 import SmartImage from '@/components/ui/SmartImage';
 import { fadeUpCapped, useCountUp } from '@/lib/motion';
@@ -21,7 +21,7 @@ import CartSuggestion from '@/components/guest/CartSuggestion';
 import { startCardPayment, waitForPaymentConfirmation, classifyPayment, cardPaymentEnabledInBuild } from '@/lib/payments';
 import {
   placeGuestOrder, touchSession, getServiceStatus, getOrderPayment, switchToPayAtTable,
-  unavailableItemIds, orderErrorKey, type PaymentMethod,
+  unavailableItemIds, orderErrorKey, priceChanges, type PaymentMethod,
 } from '@/lib/guest-api';
 import { addRecentItems } from '@/lib/recent-items';
 import { track, flushNow } from '@/lib/analytics';
@@ -36,7 +36,7 @@ const CartPage = () => {
     items, total, updateQuantity, removeItem, addItem, clearCart,
     sessionId, sessionToken, guestName, setLastOrderTime, itemCount, tableNumber,
     pendingPayment, setPendingPayment,
-    beginCheckout, finishCheckout, unavailableIds, setUnavailable, reprice,
+    beginCheckout, finishCheckout, unavailableIds, setUnavailable, applyServerPrices,
   } = useCartStore();
 
   const [submitting, setSubmitting] = useState<PaymentMethod | null>(null);
@@ -94,26 +94,12 @@ const CartPage = () => {
 
   // Prices are frozen when a line is added and the cart is persisted, so a
   // guest whose visit spans a menu update would see one total and be charged
-  // another (the server always prices from the menu). Re-read the live menu
-  // once on arrival, and mark anything that sold out or is out of hours.
-  const cartIdsKey = items.map((i) => i.menuItemId ?? i.id).sort().join(',');
-  useEffect(() => {
-    if (!cartIdsKey) return;
-    let cancelled = false;
-    (async () => {
-      const { data, error } = await supabase
-        .from('menu_items')
-        .select('id, price, name, name_bs, name_ar, is_available, available_from, available_to')
-        .in('id', cartIdsKey.split(','));
-      if (cancelled || error || !data) return;
-      if (reprice(data.map((d) => ({ ...d, price: Number(d.price) })))) toast.info(t('prices_updated'));
-      setUnavailable(data.filter((d) => unorderableReason(d) !== null).map((d) => d.id));
-    })();
-    return () => { cancelled = true; };
-    // Once per distinct set of items, not per quantity change.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cartIdsKey]);
-  const blockedLines = items.filter((i) => unavailableIds.includes(i.menuItemId ?? i.id));
+  // another. The live menu is re-read on arrival and the cart re-priced —
+  // including at the moment a sale in it starts or ends — and anything that
+  // sold out or is out of hours is marked. See useCartLivePrices.
+  useCartLivePrices();
+  const isBlocked = (i: CartItem) => unavailableIds.includes(i.menuItemId ?? i.id) || unavailableIds.includes(i.id);
+  const blockedLines = items.filter(isBlocked);
 
   // Completes the funnel: menu_viewed → item_viewed → item_added → cart_viewed
   // → checkout_opened → order_placed. Without this step the drop-off between
@@ -183,6 +169,9 @@ const CartPage = () => {
         name_bs: lastRemoved.name_bs,
         name_ar: lastRemoved.name_ar,
         price: lastRemoved.price,
+        regularPrice: lastRemoved.regularPrice,
+        saleLabel: lastRemoved.saleLabel,
+        combo: lastRemoved.combo,
         notes: lastRemoved.notes,
         image_url: lastRemoved.image_url,
       });
@@ -225,6 +214,8 @@ const CartPage = () => {
     track('checkout_submitted', { method, item_count: itemCount(), tip_selected: tip > 0 });
     // Same key for every retry of this checkout; see cart-store.
     const clientOrderId = beginCheckout();
+    // The lines as sent, so a 'Prices changed' answer can be matched back.
+    const sentLineIds = items.map((item) => item.id);
 
     try {
       const isActive = await touchSession(sessionId, sessionToken);
@@ -236,6 +227,9 @@ const CartPage = () => {
           menu_item_id: item.menuItemId ?? item.id,
           quantity: item.quantity,
           notes: item.notes || null,
+          ...(item.combo ? { choices: item.combo.components.map((c) => ({ slot_id: c.slot_id, item_id: c.item_id })) } : {}),
+          // What this screen showed. The server charges it or refuses; never something else.
+          unit_price_seen: item.price,
           // Priced server-side regardless; this only records what earned what.
           from_suggestion: item.fromSuggestion
             ? {
@@ -252,7 +246,8 @@ const CartPage = () => {
 
       finishCheckout();
       setLastOrderTime();
-      addRecentItems(items.map((it) => ({ id: it.menuItemId ?? it.id, name: it.name, price: it.price, image_url: it.image_url })));
+      // A combo needs its choices, which "order again" cannot ask for.
+      addRecentItems(items.filter((it) => !it.combo).map((it) => ({ id: it.menuItemId ?? it.id, name: it.name, price: it.price, image_url: it.image_url })));
       setCheckoutOpen(false);
       setResolvedOrder({
         code: order.order_code, total: Number(order.total), payLater: !order.awaiting_payment, held: order.held === true,
@@ -287,6 +282,15 @@ const CartPage = () => {
       // seconds, by which time the phone is often back in a pocket.
       flushNow();
     } catch (err: unknown) {
+      const changed = priceChanges(err);
+      if (changed.length > 0) {
+        // Nothing was placed. Show the prices the restaurant will charge and
+        // let the guest send again; never charge what they did not see.
+        applyServerPrices(changed, sentLineIds);
+        track('order_failed', { method, reason: 'prices_changed' });
+        toast.info(t('prices_changed_check'));
+        return;
+      }
       const blocked = unavailableItemIds(err);
       if (blocked.length > 0) setUnavailable(blocked);
       const key = orderErrorKey(err);
@@ -464,8 +468,9 @@ const CartPage = () => {
             className="mx-4 mt-4 rounded-3xl bg-card border border-border/70 shadow-[0_1px_2px_rgba(20,30,25,0.04)] divide-y divide-border/70 overflow-hidden"
           >
             {items.map((item, index) => {
-              const blocked = unavailableIds.includes(item.menuItemId ?? item.id);
+              const blocked = isBlocked(item);
               const name = getLocalizedName(item, locale);
+              const onSale = item.regularPrice != null && Math.round(item.regularPrice * 100) > Math.round(item.price * 100);
               return (
               <motion.div key={item.id} variants={fadeUpCapped} custom={index} className={`flex items-center gap-3.5 px-4 py-3.5 ${blocked ? 'bg-destructive/5' : ''}`}>
                 {item.image_url ? (
@@ -484,14 +489,35 @@ const CartPage = () => {
                 )}
                 <div className="flex-1 min-w-0">
                   <h3 className="font-serif text-base font-semibold text-foreground leading-snug">{name}</h3>
+                  {item.combo && item.combo.components.length > 0 && (
+                    // What is in it, as the kitchen will read it.
+                    <ul className="mt-0.5 text-[13px] font-sans text-muted-foreground leading-snug" data-combo-parts>
+                      {item.combo.components.map((c) => (
+                        <li key={c.slot_id}>
+                          {t('combo_part', {
+                            slot: (locale === 'bs' && c.slot_label_bs) || (locale === 'ar' && c.slot_label_ar) || c.slot_label,
+                            name: getLocalizedName(c, locale),
+                          })}
+                          {c.surcharge > 0 && <span className="ms-1 tabular-nums">({t('plus_amount', { amount: price(c.surcharge) })})</span>}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                   {item.notes && <p className="text-[13px] text-muted-foreground mt-0.5 line-clamp-2">{t('quoted', { text: item.notes })}</p>}
                   {blocked
                     ? <p className="text-[13px] font-sans font-medium text-destructive mt-0.5">{t('item_unavailable_now')}</p>
                     : (
-                      <p className="text-sm font-sans font-semibold text-foreground mt-1 tabular-nums">
-                        {price((item.price * item.quantity))}
-                        {item.quantity > 1 && <span className="ms-1.5 text-xs font-normal text-muted-foreground">{item.quantity} × {item.price.toFixed(2)}</span>}
-                      </p>
+                      <div className="flex items-center flex-wrap gap-x-1.5 gap-y-1 mt-1">
+                        {onSale && <SaleBadge label={item.saleLabel} percentOff={Math.round((1 - item.price / item.regularPrice!) * 100)} />}
+                        <p className="text-sm font-sans font-semibold text-foreground">
+                          <PriceTag
+                            price={Math.round(item.price * 100) * item.quantity / 100}
+                            regular={onSale ? Math.round(item.regularPrice! * 100) * item.quantity / 100 : null}
+                            bare={false}
+                          />
+                          {item.quantity > 1 && <span className="ms-1.5 text-xs font-normal text-muted-foreground tabular-nums">{item.quantity} × {item.price.toFixed(2)}</span>}
+                        </p>
+                      </div>
                     )}
                 </div>
                 {/* At one, the minus becomes a bin: removing is the same gesture

@@ -89,7 +89,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS menu_items_featured_rank_key
 COMMENT ON COLUMN public.menu_items.sale_kind IS
   'percent | price. NULL = not on sale. Priced by menu_item_sale_price().';
 COMMENT ON COLUMN public.menu_items.sale_label IS
-  'Key from the guest app''s fixed list (happy_hour, weekend_offer, lunch_deal, ramadan_offer, opening_offer). NULL shows "Sale".';
+  'Key from the guest app''s fixed list (happy_hour, weekend_offer, lunch_deal, ramadan_offer, intro_price). NULL shows "Sale".';
 COMMENT ON COLUMN public.menu_items.new_until IS
   'Last trading day (business_day) the "new" badge shows. NULL with the badge = no end.';
 

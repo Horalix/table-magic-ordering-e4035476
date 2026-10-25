@@ -68,6 +68,14 @@
     --destructive: 0 72% 51%;
     --destructive-foreground: 0 0% 100%;
 
+    /*
+     * Sale: terracotta, 5.1:1 with white text and 4.8:1 as text on cream.
+     * Not the accent gold, which already means "allergen" and "popular", and
+     * not red, which means something went wrong.
+     */
+    --sale: 12 65% 45%;
+    --sale-foreground: 0 0% 100%;
+
     --border: 40 12% 90%;
     --input: 40 12% 88%;
     --ring: 140 12% 53%;
@@ -123,6 +131,9 @@
 
     --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 0 0% 100%;
+
+    --sale: 12 60% 58%;
+    --sale-foreground: 150 10% 8%;
 
     --border: 150 10% 20%;
     --input: 150 10% 20%;
