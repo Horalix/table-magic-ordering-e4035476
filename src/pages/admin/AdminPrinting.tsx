@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -6,11 +6,13 @@ import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Printer, Loader2 } from 'lucide-react';
+import { Printer, Loader2, Tablet } from 'lucide-react';
 import { toast } from 'sonner';
-import { printKitchenTicket } from '@/lib/ticket-export';
+import { buildKitchenTicketLines, printKitchenTicket, type KitchenTicketOrder } from '@/lib/ticket-export';
 import PrinterSetupGuide from '@/components/admin/PrinterSetupGuide';
+import CloudPrinters from '@/components/admin/CloudPrinters';
+import PrintQueue from '@/components/admin/PrintQueue';
+import TicketPreview from '@/components/admin/TicketPreview';
 
 interface PrintConfig {
   print_enabled: boolean;
@@ -50,10 +52,48 @@ const pickPrintFields = (row: Record<string, unknown>): PrintConfig => {
   return picked;
 };
 
+/** Every kind of line a real ticket has, so the preview shows them all. */
+const SAMPLE: KitchenTicketOrder = {
+  id: 'test-0000-0000', order_code: '047', status: 'pending', total: 45, tip_amount: 0,
+  payment_method: 'cash', payment_status: 'unpaid',
+  notes: 'Bring the mains together', created_at: new Date().toISOString(), table_number: 7,
+  guest_name: 'Amina', section_name: 'Terasa', waiter_name: 'Marko',
+  items: [
+    {
+      quantity: 2, notes: 'no onions, well done', menu_item_name: 'La Soul Burger', unit_price: 18,
+      station: 'kitchen', allergens: ['gluten', 'sesame'],
+      components: [{ slot_label: 'Side', name: 'Pomfrit', station: 'kitchen' }, { slot_label: 'Drink', name: 'Coca-Cola', station: 'bar' }],
+    },
+    { quantity: 1, notes: null, menu_item_name: 'Ćevapi (10 kom)', unit_price: 6, station: 'kitchen', allergens: ['gluten'] },
+    { quantity: 2, notes: 'extra hot', menu_item_name: 'Espresso', unit_price: 1.5, station: 'bar' },
+  ],
+};
+
+type PreviewStation = 'kitchen' | 'bar';
+
+/** A small row of pills — one tap to pick, and the choice is always visible. */
+const Segmented = ({ value, options, onChange, label }: {
+  value: string | number; options: { value: string | number; label: string }[];
+  onChange: (v: string | number) => void; label: string;
+}) => (
+  <div className="inline-flex rounded-full border border-border overflow-hidden" role="group" aria-label={label}>
+    {options.map((o) => (
+      <button
+        key={String(o.value)} type="button" aria-pressed={value === o.value} onClick={() => onChange(o.value)}
+        className={`px-3 min-h-[40px] text-sm font-sans tabular-nums ${value === o.value ? 'bg-foreground text-background' : 'bg-card text-muted-foreground'}`}
+      >
+        {o.label}
+      </button>
+    ))}
+  </div>
+);
+
+
 const AdminPrinting = () => {
   const [cfg, setCfg] = useState<PrintConfig>(DEFAULTS);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [previewStation, setPreviewStation] = useState<PreviewStation>('kitchen');
 
   const load = useCallback(async () => {
     const { data } = await supabase
@@ -76,16 +116,19 @@ const AdminPrinting = () => {
     toast.success('Printing settings saved');
   };
 
+  const settings = useMemo(() => ({
+    paperWidth: cfg.print_paper_width, header: cfg.print_header, footer: cfg.print_footer,
+    showPrices: cfg.print_show_prices, copies: cfg.print_copies,
+  }), [cfg]);
+
+  const previewLines = useMemo(
+    () => buildKitchenTicketLines({ ...SAMPLE, created_at: new Date().toISOString() }, { ...settings, station: previewStation }),
+    [settings, previewStation],
+  );
+
+  /** Browser print of the sample — for a printer attached to this device. */
   const testPrint = async () => {
-    const outcome = await printKitchenTicket({
-      id: 'test-0000-0000', status: 'pending', total: 27.5, tip_amount: 2.5, payment_method: 'card',
-      notes: 'Allergy: nuts', created_at: new Date().toISOString(), table_number: 5, guest_name: 'Test',
-      section_name: 'Terrace',
-      items: [
-        { quantity: 1, notes: 'no onions', menu_item_name: 'La Soul Burger', unit_price: 18 },
-        { quantity: 2, notes: null, menu_item_name: 'Espresso', unit_price: 3.5 },
-      ],
-    }, { paperWidth: cfg.print_paper_width, header: cfg.print_header, footer: cfg.print_footer, showPrices: cfg.print_show_prices, copies: cfg.print_copies });
+    const outcome = await printKitchenTicket(SAMPLE, { ...settings, station: 'kitchen', test: true });
     // A browser print dialog can only ever tell us it closed, never that paper
     // came out — so this says what it actually knows.
     if (!outcome.ok) toast.error(outcome.reason);
@@ -103,70 +146,88 @@ const AdminPrinting = () => {
   );
 
   return (
-    <div className="max-w-3xl mx-auto">
-      <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
-        <h1 className="font-serif text-3xl font-bold text-foreground flex items-center gap-2"><Printer className="w-7 h-7 text-primary" /> Kitchen Printing</h1>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={testPrint} className="gap-1.5"><Printer className="w-4 h-4" /> Test print</Button>
-          <Button onClick={save} disabled={saving || loading}>{saving ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Save'}</Button>
+    <div className="max-w-5xl mx-auto space-y-4">
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <h1 className="font-serif text-3xl font-bold text-foreground flex items-center gap-2"><Printer className="w-7 h-7 text-primary" /> Printing</h1>
+          <p className="text-sm text-muted-foreground font-sans mt-1">Kitchen and bar tickets. The fiscal receipt printer (Tring) is separate.</p>
         </div>
+        <Button onClick={save} disabled={saving || loading} className="min-h-[44px] min-w-[96px]">
+          {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Save settings'}
+        </Button>
       </div>
 
-      {loading ? (
-        <Skeleton className="h-80 w-full rounded-xl" />
-      ) : (
-        <>
-          <Card className="mb-4">
-            <CardContent className="p-5">
-              <Row label="Printing enabled" hint="Master switch for all kitchen tickets">
-                <Switch checked={cfg.print_enabled} onCheckedChange={(v) => setCfg({ ...cfg, print_enabled: v })} />
-              </Row>
-              <Row label="Auto-print new orders" hint="Print automatically the moment an order arrives (on the designated kitchen device)">
-                <Switch checked={cfg.print_auto} onCheckedChange={(v) => setCfg({ ...cfg, print_auto: v })} />
-              </Row>
-              <Row label="Show prices on ticket">
-                <Switch checked={cfg.print_show_prices} onCheckedChange={(v) => setCfg({ ...cfg, print_show_prices: v })} />
-              </Row>
-              <Row label="Paper width">
-                <Select value={String(cfg.print_paper_width)} onValueChange={(v) => setCfg({ ...cfg, print_paper_width: Number(v) })}>
-                  <SelectTrigger className="w-[120px] h-9"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="58">58 mm</SelectItem>
-                    <SelectItem value="80">80 mm</SelectItem>
-                  </SelectContent>
-                </Select>
-              </Row>
-              <Row label="Copies per ticket">
-                <Select value={String(cfg.print_copies)} onValueChange={(v) => setCfg({ ...cfg, print_copies: Number(v) })}>
-                  <SelectTrigger className="w-[100px] h-9"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {[1, 2, 3].map((n) => <SelectItem key={n} value={String(n)}>{n}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </Row>
-            </CardContent>
-          </Card>
+      <CloudPrinters />
+      <PrintQueue />
 
-          <Card className="mb-4">
-            <CardHeader><CardTitle className="font-serif text-lg">Ticket header & footer</CardTitle></CardHeader>
-            <CardContent className="p-5 pt-0 space-y-3">
-              <div>
-                <Label className="text-xs text-muted-foreground">Header (top of ticket)</Label>
-                <Input value={cfg.print_header} onChange={(e) => setCfg({ ...cfg, print_header: e.target.value })} className="mt-1" placeholder="La Soul" />
-              </div>
-              <div>
-                <Label className="text-xs text-muted-foreground">Footer (bottom of ticket)</Label>
-                <Input value={cfg.print_footer} onChange={(e) => setCfg({ ...cfg, print_footer: e.target.value })} className="mt-1" placeholder="Hvala / Thank you" />
-              </div>
-            </CardContent>
-          </Card>
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,420px)] items-start">
+        {loading ? (
+          <Skeleton className="h-80 w-full rounded-xl" />
+        ) : (
+          <div className="space-y-4">
+            <Card>
+              <CardContent className="p-4 sm:p-5">
+                <Row label="Printing on" hint="Master switch for every kitchen and bar ticket">
+                  <Switch checked={cfg.print_enabled} onCheckedChange={(v) => setCfg({ ...cfg, print_enabled: v })} aria-label="Printing on" />
+                </Row>
+                <Row label="Print new orders by themselves" hint="On the tablet set as printer. Network printers always print. Held orders print only once a waiter confirms them.">
+                  <Switch checked={cfg.print_auto} onCheckedChange={(v) => setCfg({ ...cfg, print_auto: v })} aria-label="Print new orders by themselves" />
+                </Row>
+                <Row label="Prices on full tickets" hint="Kitchen and bar tickets never show money">
+                  <Switch checked={cfg.print_show_prices} onCheckedChange={(v) => setCfg({ ...cfg, print_show_prices: v })} aria-label="Prices on full tickets" />
+                </Row>
+                <Row label="Paper width" hint="Tablet printing. Each network printer has its own.">
+                  <Segmented label="Paper width" value={cfg.print_paper_width} onChange={(v) => setCfg({ ...cfg, print_paper_width: Number(v) })}
+                    options={[{ value: 80, label: '80 mm' }, { value: 58, label: '58 mm' }]} />
+                </Row>
+                <Row label="Copies per ticket">
+                  <Segmented label="Copies per ticket" value={cfg.print_copies} onChange={(v) => setCfg({ ...cfg, print_copies: Number(v) })}
+                    options={[1, 2, 3].map((n) => ({ value: n, label: String(n) }))} />
+                </Row>
+              </CardContent>
+            </Card>
 
-          <PrinterSetupGuide
-            settings={{ paperWidth: cfg.print_paper_width, header: cfg.print_header, footer: cfg.print_footer, showPrices: cfg.print_show_prices, copies: cfg.print_copies }}
-            onTestPrint={testPrint}
-          />
-        </>
-      )}
+            <Card>
+              <CardHeader className="pb-2"><CardTitle className="font-serif text-lg">Top and bottom of the ticket</CardTitle></CardHeader>
+              <CardContent className="p-4 sm:p-5 pt-0 space-y-3">
+                <div>
+                  <Label htmlFor="print-header" className="text-xs text-muted-foreground">Top line</Label>
+                  <Input id="print-header" value={cfg.print_header} onChange={(e) => setCfg({ ...cfg, print_header: e.target.value })} className="mt-1 h-11" placeholder="La Soul" />
+                </div>
+                <div>
+                  <Label htmlFor="print-footer" className="text-xs text-muted-foreground">Bottom line</Label>
+                  <Input id="print-footer" value={cfg.print_footer} onChange={(e) => setCfg({ ...cfg, print_footer: e.target.value })} className="mt-1 h-11" placeholder="Hvala / Thank you" />
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
+        <Card className="lg:sticky lg:top-4">
+          <CardContent className="p-4 sm:p-5 space-y-3">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <h2 className="font-serif text-lg font-semibold text-foreground">What prints</h2>
+              <Segmented label="Preview station" value={previewStation} onChange={(v) => setPreviewStation(v as PreviewStation)}
+                options={[{ value: 'kitchen', label: 'Kitchen' }, { value: 'bar', label: 'Bar' }]} />
+            </div>
+            <TicketPreview lines={previewLines} paperWidth={cfg.print_paper_width} />
+            <p className="text-[11px] text-muted-foreground font-sans">
+              Notes and allergens print white on black. Bosnian letters print as c, z, s, dj — thermal printers do not have č, ć, ž, š, đ.
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="pt-2">
+        <h2 className="font-serif text-xl font-semibold text-foreground flex items-center gap-2 mb-2">
+          <Tablet className="w-5 h-5 text-primary" /> Or print from a tablet
+        </h2>
+        <p className="text-sm text-muted-foreground font-sans mb-3">
+          For a USB or Bluetooth printer next to the kitchen tablet. The tablet has to stay on with the Kitchen screen open.
+          If a network printer above is online for a station, the tablet leaves that station to it.
+        </p>
+        <PrinterSetupGuide settings={settings} onTestPrint={testPrint} />
+      </div>
     </div>
   );
 };

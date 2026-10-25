@@ -12,13 +12,15 @@ import {
 import {
   playOrderAlert, playWaiterCallAlert, playBillRequestAlert, unlockAudio, audioReady, playTestTone, useReminderChime,
 } from '@/lib/kitchen-sounds';
-import { buildKitchenTicketBytes, downloadKitchenTicketCsv, downloadKitchenTicketJson, printKitchenTicket, type KitchenPrintSettings } from '@/lib/ticket-export';
+import { buildKitchenTicketBytes, downloadKitchenTicketCsv, downloadKitchenTicketJson, printKitchenTicket, ticketHasLines, type KitchenPrintSettings } from '@/lib/ticket-export';
 import { isBluetoothConnected, tryReconnectBluetoothPrinter, printBytesBluetooth, printerStatusCapable } from '@/lib/printer-connect';
 import { enqueuePrint, retryPrintQueue, usePrintQueue } from '@/lib/print-queue';
 import type { PrintOutcome } from '@/lib/print-outcome';
+import { printerHealth, type PrinterHealth } from '@/lib/printers-api';
+import { cloudCoveredTypes, printerFor, printerSummary, ticketStateLabel, type TicketState } from '@/lib/print-routing';
 import ConnectionPill from '@/components/staff/ConnectionPill';
 import KitchenOrderCard, {
-  type KitchenOrder, type OrderItemStatus, type OrderStatus, type StationFilter,
+  type KitchenItem, type KitchenOrder, type OrderItemStatus, type OrderStatus, type PrintStateLine, type StationFilter,
 } from '@/components/staff/KitchenOrderCard';
 import { kitchenStart } from '@/components/staff/order-status';
 import AllDayPanel from '@/components/staff/AllDayPanel';
@@ -107,6 +109,16 @@ const toFloorAlert = (row: WaiterCallQueryRow | BillRequestQueryRow): FloorAlert
   acknowledged_by: (row as { acknowledged_by?: string | null }).acknowledged_by ?? null,
   acknowledged_at: (row as { acknowledged_at?: string | null }).acknowledged_at ?? null,
 });
+
+/** A ticket the database has queued and nobody has printed yet. */
+interface PrintJob {
+  order: KitchenOrder;
+  type: TicketType;
+  /** When the original printed, if this is a reprint (survives across devices). */
+  reprintOf: string | null;
+  /** Changes when the ticket is requeued, so a Retry prints again. */
+  key: string;
+}
 
 /** Only orders released this recently count as "new" for the chime. */
 const NEW_ORDER_WINDOW_MS = 2 * 60 * 1000;
@@ -219,7 +231,15 @@ const KitchenDisplay = () => {
    * screen to suggest it. Printing is a background duty of this device and must
    * not depend on what someone last tapped.
    */
-  const [printable, setPrintable] = useState<KitchenOrder[]>([]);
+  const [printJobs, setPrintJobs] = useState<PrintJob[]>([]);
+  /**
+   * Network printers and whether each is alive. A station an online printer
+   * covers is left to it; one whose printer has gone quiet falls back to this
+   * tablet by itself.
+   */
+  const [cloudPrinters, setCloudPrinters] = useState<PrinterHealth[]>([]);
+  /** What the database says happened to each ticket: order id → type → state. */
+  const [ticketStates, setTicketStates] = useState<Record<string, Partial<Record<TicketType, TicketState>>>>({});
   /** True when the row cap was hit — the board is not showing everything. */
   const [truncated, setTruncated] = useState(false);
 
@@ -252,6 +272,8 @@ const KitchenDisplay = () => {
   const [isAdmin, setIsAdmin] = useState(false);
   /** auth user id → display name, for "Marko is going". */
   const [staffNames, setStaffNames] = useState<Record<string, string>>({});
+  /** waiters.id → display name, for the waiter line on a ticket. */
+  const waiterNamesRef = useRef<Record<string, string>>({});
 
   /** Orders already on the board, so a chime means "this is new", not "this refetched". */
   const knownOrderIds = useRef<Set<string> | null>(null);
@@ -288,12 +310,15 @@ const KitchenDisplay = () => {
       const { data: admin } = await supabase.rpc('has_role', { _user_id: session.user.id, _role: 'admin' });
       if (!cancelled) setIsAdmin(admin === true);
     })();
-    void supabase.from('waiters').select('user_id, display_name').then(({ data }) => {
+    void supabase.from('waiters').select('id, user_id, display_name').then(({ data }) => {
       if (cancelled || !Array.isArray(data)) return;
       const names: Record<string, string> = {};
-      for (const w of data as { user_id: string | null; display_name: string }[]) {
+      const byWaiter: Record<string, string> = {};
+      for (const w of data as { id: string; user_id: string | null; display_name: string }[]) {
         if (w.user_id) names[w.user_id] = w.display_name;
+        if (w.id) byWaiter[w.id] = w.display_name;
       }
+      waiterNamesRef.current = byWaiter;
       setStaffNames(names);
     });
     return () => { cancelled = true; };
@@ -329,7 +354,7 @@ const KitchenDisplay = () => {
     const settings = { ...toPrintSettings(printConfig), station: type, reprintOf };
     // An order with nothing for this station has no ticket. Printing a blank
     // one teaches staff to ignore that printer.
-    if (!order.items.some((i) => i.station === type)) return;
+    if (!ticketHasLines(order, type)) return;
 
     enqueuePrint({
       id: `${order.id}:${type}`,
@@ -362,31 +387,41 @@ const KitchenDisplay = () => {
   }, [printConfig]);
 
   /**
-   * Auto-print newly-released orders.
+   * Auto-print what the database has queued for this device's stations.
    *
-   * The database owns the claim: claim_ticket_print() moves the ticket to
-   * `claimed` atomically and tells us whether THIS device won. Two kitchen
-   * screens, or one screen reloaded inside the window, cannot both print the
-   * same ticket.
+   * Driven by the ticket queue rather than by "orders released in the last
+   * minute": a ticket a manager pressed Retry on, a reprint asked for from
+   * another screen, or one queued while this tablet was reloading all print
+   * here too. The database owns the claim — claim_ticket_print() moves the
+   * ticket to `claimed` atomically and tells us whether THIS device won — so
+   * two tablets, or a tablet and a network printer, cannot both print it.
+   *
+   * Held orders never reach the queue until someone confirms them, so they
+   * cannot print early from here either.
    */
   useEffect(() => {
     if ((!isPrinter && !isBluetoothConnected()) || !printConfig.print_enabled || !printConfig.print_auto) return;
-    const now = Date.now();
+    const mine = new Set(ticketTypes());
+    const cloud = cloudCoveredTypes(cloudPrinters);
 
-    for (const order of printable) {
-      if (order.status !== 'pending' || printedRef.current.has(order.id)) continue;
-      // Skip the backlog on first load — only print genuinely fresh orders.
-      // Fresh means freshly RELEASED: a card order created three minutes ago
-      // whose payment cleared just now is new to the kitchen, and measuring
-      // from created_at meant it never printed at all.
-      if (now - new Date(kitchenStart(order)).getTime() > 60_000) {
-        printedRef.current.add(order.id);
-        continue;
-      }
-      printedRef.current.add(order.id);
-      for (const type of ticketTypes()) printTicket(order, type);
+    for (const job of printJobs) {
+      if (printedRef.current.has(job.key)) continue;
+      if (!mine.has(job.type) || cloud.has(job.type)) continue;
+      printedRef.current.add(job.key);
+      printTicket(job.order, job.type, job.reprintOf);
     }
-  }, [printable, isPrinter, printConfig, btName, printTicket, ticketTypes]);
+  }, [printJobs, isPrinter, printConfig, btName, printTicket, ticketTypes, cloudPrinters]);
+
+  /** Network printer health, every half minute. A dead printer must show before the next ticket. */
+  useEffect(() => {
+    let cancelled = false;
+    const load = () => {
+      void printerHealth().then((rows) => { if (!cancelled) setCloudPrinters(rows); }).catch(() => {});
+    };
+    load();
+    const id = setInterval(load, 30_000);
+    return () => { cancelled = true; clearInterval(id); };
+  }, []);
 
   /**
    * Sweep claims nobody reported on.
@@ -407,13 +442,23 @@ const KitchenDisplay = () => {
     return () => clearInterval(id);
   }, []);
 
-  /** Put a ticket back in the queue and print it again, marked as a reprint. */
+  /**
+   * Put a ticket back in the queue and print it again, marked as a reprint.
+   *
+   * A station with an online network printer just requeues: the printer picks
+   * it up within seconds, at the pass, with REPRINT and the original time on
+   * it. Otherwise this device prints it — through the claim, like any ticket.
+   */
   const reprint = async (order: KitchenOrder) => {
     try {
       for (const type of ticketTypes()) {
-        if (!order.items.some((i) => i.station === type)) continue;
+        if (!ticketHasLines(order, type)) continue;
         const result = await requeueTicketPrint(order.id, type);
-        printedRef.current.delete(order.id);
+        const cloud = printerFor(cloudPrinters, type);
+        if (cloud?.online) {
+          toast.success(`Reprinting on ${cloud.name}`);
+          continue;
+        }
         printTicket(order, type, result?.previous_printed_at ?? null);
       }
     } catch (error) {
@@ -498,6 +543,7 @@ const KitchenDisplay = () => {
     section_id: o.table_sessions?.tables?.section_id || null,
     section_name: o.table_sessions?.tables?.sections?.name || null,
     section_color: o.table_sessions?.tables?.sections?.color || null,
+    waiter_name: waiterNamesRef.current[(o.table_sessions as { assigned_waiter_id?: string | null } | null)?.assigned_waiter_id ?? ''] ?? null,
     items: (o.order_items || []).map((oi) => ({
       id: oi.id,
       quantity: oi.quantity,
@@ -509,34 +555,77 @@ const KitchenDisplay = () => {
       ready_at: (oi as { ready_at?: string | null }).ready_at ?? null,
       menu_item_name: oi.menu_items?.name || 'Unknown',
       allergens: oi.menu_items?.allergens ?? null,
+      components: Array.isArray((oi as { components?: unknown }).components)
+        ? ((oi as { components?: KitchenItem['components'] }).components ?? null) : null,
     })),
   }), []);
 
   /**
-   * Orders eligible for auto-print, independent of the visible tab.
+   * The print queue for this device, independent of the visible tab.
    *
-   * Only the last few minutes: anything older was either already printed or is
-   * backlog this device should not spew on a reload.
+   * Auto-print used to iterate the same list the board renders, so leaving the
+   * screen on History silently stopped every ticket printing. Printing is a
+   * background duty of this device and must not depend on what someone last
+   * tapped.
+   *
+   * Ten minutes back: a reload catches up on what never printed, without
+   * printing the history of the evening.
    */
-  const fetchPrintable = useCallback(async () => {
+  const fetchPrintQueue = useCallback(async () => {
     const isLatest = beginPrintable();
-    const { data, error } = await supabase
+    const { data: queued, error } = await supabase
+      .from('order_ticket_events')
+      .select('*')
+      .eq('status', 'queued')
+      .in('ticket_type', ['kitchen', 'bar'])
+      .gte('updated_at', new Date(Date.now() - 10 * 60 * 1000).toISOString())
+      .order('updated_at', { ascending: true })
+      .limit(50);
+    if (error || !isLatest()) return;
+    const rows = (Array.isArray(queued) ? queued : []) as {
+      order_id: string; ticket_type: string; updated_at: string; original_printed_at?: string | null;
+    }[];
+    const ids = [...new Set(rows.map((r) => r.order_id))];
+    if (ids.length === 0) { setPrintJobs([]); return; }
+
+    const { data: ordersData, error: ordersError } = await supabase
       .from('orders')
       .select(`
         *,
-        table_sessions!inner(tables!inner(table_number, section_id, sections(name, color))),
+        table_sessions!inner(assigned_waiter_id, tables!inner(table_number, section_id, sections(name, color))),
         order_items(*, menu_items(name, allergens))
       `)
-      .eq('status', 'pending')
-      // By release, not creation: a card order reaches the kitchen when its
-      // payment clears, which can be well over five minutes after it was placed.
-      .gte('released_to_kitchen_at', new Date(Date.now() - 5 * 60 * 1000).toISOString())
-      .order('released_to_kitchen_at', { ascending: false })
-      .limit(50);
-
-    if (error || !isLatest()) return;
-    setPrintable(((data || []) as KitchenOrderRow[]).map(mapOrderRow));
+      .in('id', ids)
+      // Food already up, served or voided is not printed again by itself.
+      .in('status', ['pending', 'confirmed', 'preparing']);
+    if (ordersError || !isLatest()) return;
+    const byId = new Map(((ordersData || []) as KitchenOrderRow[]).map((o) => [o.id, mapOrderRow(o)]));
+    setPrintJobs(rows.flatMap((r) => {
+      const order = byId.get(r.order_id);
+      if (!order || (r.ticket_type !== 'kitchen' && r.ticket_type !== 'bar')) return [];
+      return [{
+        order, type: r.ticket_type, reprintOf: r.original_printed_at ?? null,
+        key: `${r.order_id}:${r.ticket_type}:${r.updated_at}`,
+      }];
+    }));
   }, [mapOrderRow, beginPrintable]);
+
+  /** Print state of every ticket on the board, from the database. */
+  const fetchTicketStates = useCallback(async () => {
+    const { data, error } = await supabase
+      .from('order_ticket_events')
+      .select('*')
+      .gte('created_at', new Date(Date.now() - ACTIVE_WINDOW_MS).toISOString())
+      .order('created_at', { ascending: false })
+      .limit(HARD_ROW_CAP * 2);
+    if (error || !Array.isArray(data)) return;
+    const map: Record<string, Partial<Record<TicketType, TicketState>>> = {};
+    for (const row of data as (TicketState & { order_id: string; ticket_type: string })[]) {
+      if (row.ticket_type !== 'kitchen' && row.ticket_type !== 'bar') continue;
+      (map[row.order_id] ??= {})[row.ticket_type] = row;
+    }
+    setTicketStates(map);
+  }, []);
 
   const historyView = view === 'history';
 
@@ -547,6 +636,7 @@ const KitchenDisplay = () => {
       .select(`
         *,
         table_sessions!inner(
+          assigned_waiter_id,
           tables!inner(table_number, section_id, sections(name, color))
         ),
         order_items(
@@ -640,14 +730,15 @@ const KitchenDisplay = () => {
 
     void kitchenLoad().then(setLoad).catch(() => {});
 
-    Promise.all([fetchOrders(), fetchPrintable(), fetchWaiterCalls(), fetchBillRequests()]).then(() => {
+    void fetchTicketStates();
+    Promise.all([fetchOrders(), fetchPrintQueue(), fetchWaiterCalls(), fetchBillRequests()]).then(() => {
       initialLoadDone.current = true;
     });
 
     // Data lives here; the shared realtime module decides WHEN to refetch.
     // It coalesces bursts, invalidates only what changed, keeps one channel
     // per tab, and polls whenever the socket is not subscribed.
-  }, [fetchOrders, fetchPrintable, fetchWaiterCalls, fetchBillRequests]);
+  }, [fetchOrders, fetchPrintQueue, fetchTicketStates, fetchWaiterCalls, fetchBillRequests]);
 
   /*
    * Refetch on live events — coalesced.
@@ -658,9 +749,12 @@ const KitchenDisplay = () => {
    * runs once; `useLatestRequest` drops anything that still arrives late.
    */
   const refetchOrders = useCoalesced(useCallback(() => {
-    void fetchOrders(); void fetchPrintable();
+    void fetchOrders(); void fetchPrintQueue(); void fetchTicketStates();
     void kitchenLoad().then(setLoad).catch(() => {});
-  }, [fetchOrders, fetchPrintable]));
+  }, [fetchOrders, fetchPrintQueue, fetchTicketStates]));
+  const refetchTickets = useCoalesced(useCallback(() => {
+    void fetchPrintQueue(); void fetchTicketStates();
+  }, [fetchPrintQueue, fetchTicketStates]));
   const refetchCalls = useCoalesced(useCallback(() => { void fetchWaiterCalls(); }, [fetchWaiterCalls]));
   const refetchBills = useCoalesced(useCallback(() => { void fetchBillRequests(); }, [fetchBillRequests]));
 
@@ -671,9 +765,10 @@ const KitchenDisplay = () => {
   useStaffRealtimeEvent(
     useCallback((table: string) => {
       if (table === 'orders' || table === 'order_items') refetchOrders();
+      if (table === 'order_ticket_events') refetchTickets();
       if (table === 'waiter_calls') refetchCalls();
       if (table === 'bill_requests') refetchBills();
-    }, [refetchOrders, refetchCalls, refetchBills]),
+    }, [refetchOrders, refetchTickets, refetchCalls, refetchBills]),
   );
 
   /*
@@ -860,6 +955,19 @@ const KitchenDisplay = () => {
     return [...mine].sort((a, b) => new Date(kitchenStart(a)).getTime() - new Date(kitchenStart(b)).getTime());
   }, [orders, sectionFilter, station, historyView]);
 
+  /** This screen's stations' tickets for an order, in words. */
+  const printStatesFor = (order: KitchenOrder): PrintStateLine[] =>
+    (['kitchen', 'bar'] as const)
+      .filter((t) => station === 'all' || station === t)
+      .flatMap((t) => {
+        const state = ticketStates[order.id]?.[t];
+        return state ? [{ type: t, ...ticketStateLabel(state) }] : [];
+      });
+
+  /** Printers that serve this screen's stations. */
+  const myPrinters = cloudPrinters.filter((p) => p.enabled
+    && (station === 'all' || p.station === 'all' || p.station === station));
+
   const renderCard = (order: KitchenOrder, showStatus: boolean) => (
     <KitchenOrderCard
       key={order.id}
@@ -868,6 +976,7 @@ const KitchenDisplay = () => {
       undoSeconds={undoSeconds}
       showStatus={showStatus}
       failedPrint={failedPrints.includes(order.id)}
+      printStates={showStatus ? [] : printStatesFor(order)}
       onBumpItem={bumpItem}
       onBumpMany={bumpMany}
       onAdvanceOrder={advanceOrder}
@@ -924,6 +1033,26 @@ const KitchenDisplay = () => {
                     {Number(l.load_factor) >= 1 && ' behind'}
                   </span>
                 ))}
+
+              {/* Network printers, by name. An offline one is loud: the next
+                  ticket for its station would otherwise vanish silently — this
+                  tablet only takes over if it is set up to print. */}
+              {myPrinters.map((p) => {
+                const summary = printerSummary(p);
+                return (
+                  <span
+                    key={p.id}
+                    role="status"
+                    className={`inline-flex items-center gap-1 text-[11px] font-sans font-semibold px-2 py-0.5 rounded-full ${
+                      summary.tone === 'ok' ? 'bg-primary/10 text-primary' : 'bg-destructive text-destructive-foreground'
+                    }`}
+                    title={p.last_status ? `Printer status: ${p.last_status}` : undefined}
+                  >
+                    <Printer className="w-3 h-3" /> {p.name}: {summary.label}
+                    {p.waiting > 0 && summary.tone !== 'ok' && ` · ${p.waiting} waiting`}
+                  </span>
+                );
+              })}
 
               {/* A stuck queue is the loudest thing on this screen. Everything
                   behind it is waiting for a person, not for a retry. */}

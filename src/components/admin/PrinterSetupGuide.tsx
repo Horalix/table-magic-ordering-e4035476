@@ -16,8 +16,6 @@ import {
  */
 
 const origin = typeof window !== 'undefined' ? window.location.origin : 'https://menu.lasoul.net';
-const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL as string | undefined) ?? 'https://YOUR-PROJECT.supabase.co';
-const cloudPrntUrl = `${supabaseUrl}/functions/v1/cloudprnt?token=YOUR_TOKEN`;
 const winShortcut = `"C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe" --kiosk-printing ${origin}/kitchen`;
 const macShortcut = `open -a "Google Chrome" --args --kiosk-printing ${origin}/kitchen`;
 const PRINTER_KEY = 'kitchen:isPrinter';
@@ -150,9 +148,9 @@ const PrinterSetupGuide = ({ settings, onTestPrint }: { settings: KitchenPrintSe
       <CardContent className="p-5 space-y-4">
         <div>
           <h2 className="font-serif text-lg font-semibold text-foreground flex items-center gap-2">
-            <Printer className="w-5 h-5 text-primary" /> Connect your kitchen printer
+            <Printer className="w-5 h-5 text-primary" /> Tablet printing
           </h2>
-          <p className="text-xs text-muted-foreground font-sans mt-1">For the printer that prints <span className="text-foreground/80">kitchen tickets</span>. The <span className="text-foreground/80">fiscal receipt</span> printer (Tring) is set up separately via fiscalization.</p>
+          <p className="text-xs text-muted-foreground font-sans mt-1">Set up on the tablet that runs the Kitchen screen. The <span className="text-foreground/80">fiscal receipt</span> printer (Tring) is set up separately via fiscalization.</p>
         </div>
 
         {recommend === 'bluetooth' && (
@@ -165,7 +163,7 @@ const PrinterSetupGuide = ({ settings, onTestPrint }: { settings: KitchenPrintSe
         <div className={`grid gap-2 ${btOk ? 'grid-cols-1 sm:grid-cols-3' : 'grid-cols-1 sm:grid-cols-2'}`}>
           {btOk && <MethodButton active={method === 'bluetooth'} onClick={() => setMethod('bluetooth')} icon={Bluetooth} title="Bluetooth" sub="Pair once, prints automatically" recommended={recommend === 'bluetooth'} />}
           <MethodButton active={method === 'device'} onClick={() => setMethod('device')} icon={Monitor} title="This device" sub="USB printer on this tablet/PC" recommended={recommend === 'device'} />
-          <MethodButton active={method === 'network'} onClick={() => setMethod('network')} icon={Wifi} title="Network" sub="Wi-Fi/LAN — no computer" />
+          <MethodButton active={method === 'network'} onClick={() => setMethod('network')} icon={Wifi} title="Network" sub="LAN printer — no tablet needed" />
         </div>
 
         {/* BLUETOOTH */}
@@ -264,18 +262,19 @@ const PrinterSetupGuide = ({ settings, onTestPrint }: { settings: KitchenPrintSe
           </div>
         )}
 
-        {/* NETWORK */}
+        {/* NETWORK — now its own section with per-printer addresses. */}
         {method === 'network' && (
           <div className="space-y-3 pt-1">
-            <Step n={1}>Set a secret password: in <span className="font-medium text-foreground">Supabase → Edge Functions → Secrets</span>, add <code className="text-xs bg-muted px-1 rounded">CLOUDPRNT_TOKEN</code> with any strong value.</Step>
-            <Step n={2}>
-              Open your Wi-Fi/LAN printer's setup page and paste this as the <span className="font-medium text-foreground">Server / Poll URL</span> (replace <code className="text-xs bg-muted px-1 rounded">YOUR_TOKEN</code>):
-              <CopyField value={cloudPrntUrl} />
-            </Step>
-            <Step n={3}>Save on the printer. It checks for new orders every few seconds and <span className="font-medium text-foreground">prints them automatically — no tablet or computer needed.</span></Step>
-            <p className="text-[11px] text-muted-foreground font-sans flex items-start gap-1.5 rounded-lg bg-muted/40 border border-border p-2.5">
-              <Wifi className="w-3.5 h-3.5 mt-0.5 shrink-0" /> Uses the Star CloudPRNT standard (Star/Epson network printers). Confirm the exact field name on your model with your installer the first time.
+            <p className="flex items-start gap-2 rounded-lg bg-primary/5 border border-primary/20 px-3 py-2.5 text-sm font-sans text-foreground/80">
+              <Wifi className="w-4 h-4 mt-0.5 shrink-0 text-primary" />
+              <span>
+                A network printer does not need this tablet at all. Add it under <span className="font-semibold text-foreground">Network printers</span> at
+                the top of this page — it gets its own address to paste into the printer, and shows here when it is online.
+              </span>
             </p>
+            <Button variant="outline" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} className="gap-1.5">
+              <Wifi className="w-4 h-4" /> Go to Network printers
+            </Button>
           </div>
         )}
       </CardContent>

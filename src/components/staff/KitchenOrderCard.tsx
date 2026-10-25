@@ -27,6 +27,8 @@ export interface KitchenItem {
   ready_at: string | null;
   menu_item_name: string;
   allergens: string[] | null;
+  /** Combo parts (order_items.components); absent on older rows. */
+  components?: { slot_label?: string | null; item_id?: string | null; name: string; station?: string | null }[] | null;
 }
 
 export interface KitchenOrder {
@@ -57,7 +59,16 @@ export interface KitchenOrder {
   section_id: string | null;
   section_name: string | null;
   section_color: string | null;
+  /** Who has the table, for the ticket. */
+  waiter_name?: string | null;
   items: KitchenItem[];
+}
+
+/** One station's ticket, as the database last saw it. */
+export interface PrintStateLine {
+  type: 'kitchen' | 'bar';
+  tone: 'ok' | 'busy' | 'bad' | 'idle';
+  label: string;
 }
 
 /**
@@ -146,6 +157,8 @@ interface Props {
   undoSeconds: number;
   showStatus: boolean;
   failedPrint: boolean;
+  /** What the database says happened to this order's tickets. */
+  printStates?: PrintStateLine[];
   onBumpItem: (itemId: string, status: OrderItemStatus) => Promise<void>;
   onBumpMany: (itemIds: string[], status: OrderItemStatus) => Promise<void>;
   onAdvanceOrder: (orderId: string, status: OrderStatus) => Promise<void>;
@@ -156,7 +169,7 @@ interface Props {
 }
 
 const KitchenOrderCard = ({
-  order, station, undoSeconds, showStatus, failedPrint,
+  order, station, undoSeconds, showStatus, failedPrint, printStates = [],
   onBumpItem, onBumpMany, onAdvanceOrder, onRevertOrder, onCancel, onPrint, onExport,
 }: Props) => {
   const now = useNow();
@@ -298,6 +311,20 @@ const KitchenOrderCard = ({
                     <CupSoda className="inline w-4 h-4 ml-1 text-muted-foreground" aria-label="bar" />
                   )}
                 </p>
+                {item.components && item.components.length > 0 && (
+                  <ul className="mt-0.5 space-y-0.5">
+                    {item.components.map((part, i) => (
+                      <li key={`${part.item_id ?? part.name}-${i}`} className="text-sm md:text-base font-sans text-foreground/80 leading-snug">
+                        <span aria-hidden>+ </span>
+                        {part.slot_label ? <span className="text-muted-foreground">{part.slot_label}: </span> : null}
+                        <span className="font-semibold">{part.name}</span>
+                        {part.station && part.station !== item.station && (
+                          <span className="ml-1 text-[10px] uppercase px-1 py-0.5 rounded bg-muted text-muted-foreground align-middle">{part.station}</span>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                )}
                 {/* Notes and allergens are what get a dish sent back or a guest
                     hurt. Small italic grey was the least legible text on the
                     card; they are solid, bold blocks now. */}
@@ -355,10 +382,21 @@ const KitchenOrderCard = ({
         </div>
       )}
 
-      {failedPrint && (
-        <div className="mx-4 mb-2 px-3 py-2 rounded-lg bg-destructive/10 border border-destructive/25">
-          <p className="text-xs font-sans text-destructive">This ticket did not print. Use Reprint below.</p>
+      {(failedPrint || printStates.some((p) => p.tone === 'bad')) ? (
+        <div role="alert" className="mx-3 mb-2 px-3 py-2 rounded-lg bg-destructive text-destructive-foreground">
+          <p className="text-sm font-sans font-semibold">
+            {printStates.find((p) => p.tone === 'bad')?.label ?? 'This ticket did not print'} — tap Reprint
+          </p>
         </div>
+      ) : printStates.length > 0 && (
+        <p className="px-4 pb-1 text-xs font-sans text-muted-foreground flex flex-wrap gap-x-3" aria-label="Print status">
+          {printStates.map((p) => (
+            <span key={p.type} className={p.tone === 'busy' ? 'text-accent' : undefined}>
+              <Printer className="inline w-3 h-3 -mt-0.5 mr-1" aria-hidden />
+              {printStates.length > 1 ? `${p.type}: ` : ''}{p.label}
+            </span>
+          ))}
+        </p>
       )}
 
       <div className="px-3 pb-3 space-y-2">
@@ -401,7 +439,7 @@ const KitchenOrderCard = ({
 
         <div className="flex flex-wrap items-center gap-2">
           <Button variant="ghost" size="sm" className="min-h-[44px] rounded-lg gap-1.5 text-sm" onClick={() => onPrint(order)}>
-            <Printer className="w-4 h-4" /> {failedPrint ? 'Reprint' : 'Print'}
+            <Printer className="w-4 h-4" /> {failedPrint || printStates.some((p) => p.tone === 'bad' || p.tone === 'ok') ? 'Reprint' : 'Print'}
           </Button>
 
           {/* Exports are an integration/debugging tool, not service. Two
