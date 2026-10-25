@@ -99,9 +99,17 @@ const AdminImpact = () => {
   useEffect(() => { void load(); }, [load]);
 
   const startExperiment = async () => {
+    // Label the experiment with the ranking policy actually running. A
+    // hard-coded label would tie this holdout to a ranker that no longer
+    // exists, and every later comparison by policy would be wrong.
+    const { data: policy, error: policyErr } = await supabase.rpc('reco_policy_version' as never);
+    if (policyErr || typeof policy !== 'string' || !policy) {
+      toast.error(policyErr?.message ?? 'Could not read the current suggestion policy, so no holdout was started');
+      return;
+    }
     const { error: err } = await supabase.rpc('start_experiment' as never, {
       _name: `Suggestions ${new Date().toISOString().slice(0, 10)}`,
-      _policy_version: 'v1-fixed-ranker',
+      _policy_version: policy,
       _holdout_pct: 10,
     } as never);
     if (err) toast.error(err.message);

@@ -1,4 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
+import { detectTrends, type ItemTrendRow, type TrendAlert } from '@/lib/trends';
 
 /**
  * Read model for Admin → Menu Intelligence.
@@ -285,10 +286,264 @@ export function findDeadWeight(items: ItemPerformance[], days: number, now: Date
     .sort((a, b) => b.views - a.views);
 }
 
-/** Sells well and earns well — the dishes worth protecting and promoting. */
-export function findStars(items: ItemPerformance[]): ItemPerformance[] {
-  return items
-    .filter((i) => i.units > 0)
-    .sort((a, b) => (b.revenue * (b.margin_score || 50)) - (a.revenue * (a.margin_score || 50)))
-    .slice(0, 8);
+/* ---- Menu engineering ---------------------------------------------------- */
+
+/**
+ * Kasavana & Smith's four boxes, plus the honest fifth: "too close to call".
+ *
+ * Computed by `menu_engineering()` in
+ * supabase/migrations/20261025121000_menu_engineering.sql — per menu class
+ * (mains with mains, coffees with coffees), popularity by the 70% rule on the
+ * days the dish was actually on sale, profitability against the class's
+ * sales-weighted average contribution margin. This replaces the old "worth
+ * protecting" list, which multiplied revenue by a 0–100 hint and called the
+ * result money.
+ */
+export type Quadrant = 'star' | 'plowhorse' | 'puzzle' | 'dog' | 'insufficient';
+
+export interface MenuEngineeringRow {
+  item_id: string;
+  name: string;
+  /** meal_role, or 'other' when none is set. */
+  menu_class: string;
+  category_name: string | null;
+  is_available: boolean;
+  units: number;
+  lines: number;
+  revenue: number;
+  /** Trading days in the window on which the dish could be ordered. */
+  available_days: number;
+  trading_days: number;
+  /** 'assumed' when there is no availability history for the dish yet. */
+  availability_basis: 'logged' | 'assumed';
+  class_units: number;
+  class_lines: number;
+  class_items: number;
+  /** Share of its class's portions on the days it was on sale. */
+  menu_mix: number | null;
+  /** 80% interval on that share. */
+  mix_low: number;
+  mix_high: number;
+  /** 0.7 / items in the class. */
+  popularity_threshold: number;
+  price: number;
+  unit_cost: number;
+  /** Contribution margin per portion: price minus ingredient cost. */
+  unit_cm: number;
+  class_avg_cm: number;
+  /** True when the food cost is the default percentage, not a recorded cost. */
+  cost_estimated: boolean;
+  popularity: 'high' | 'low' | 'insufficient';
+  profitability: 'high' | 'low';
+  quadrant: Quadrant;
+  units_per_week: number;
+  class_units_per_week: number;
+}
+
+export const QUADRANTS: Record<Quadrant, { label: string; summary: string; action: string }> = {
+  star: {
+    label: 'Stars',
+    summary: 'Popular and profitable',
+    action: 'Protect it: keep its place and its photo, and do not discount it.',
+  },
+  plowhorse: {
+    label: 'Plowhorses',
+    summary: 'Popular, low margin',
+    action: 'Trim the plate cost or nudge the price up, and pair it with a high-margin side or drink.',
+  },
+  puzzle: {
+    label: 'Puzzles',
+    summary: 'Profitable, not popular',
+    action: 'Rename it, give it a better photo and move it up its section.',
+  },
+  dog: {
+    label: 'Dogs',
+    summary: 'Neither popular nor profitable',
+    action: 'Take it off, unless it is there on purpose as a cheaper anchor.',
+  },
+  insufficient: {
+    label: 'Too close to call',
+    summary: 'Its share is within noise of the popularity line',
+    action: 'Leave it for now: it needs more orders before it can be judged fairly.',
+  },
+};
+
+export const QUADRANT_ORDER: Quadrant[] = ['star', 'plowhorse', 'puzzle', 'dog', 'insufficient'];
+
+const MENU_CLASS_LABELS: Record<string, string> = {
+  starter: 'Starters', main: 'Mains', side: 'Sides', dessert: 'Desserts',
+  hot_drink: 'Hot drinks', cold_drink: 'Cold drinks', alcohol: 'Alcohol', other: 'Other',
+};
+
+export const menuClassLabel = (c: string) => MENU_CLASS_LABELS[c] ?? c;
+
+const num = (v: unknown): number => (v === null || v === undefined ? 0 : Number(v));
+
+/** Coerce PostgREST's numeric strings, so arithmetic on the page is arithmetic. */
+export function normaliseEngineering(rows: MenuEngineeringRow[]): MenuEngineeringRow[] {
+  return rows.map((r) => ({
+    ...r,
+    units: num(r.units), lines: num(r.lines), revenue: num(r.revenue),
+    available_days: num(r.available_days), trading_days: num(r.trading_days),
+    class_units: num(r.class_units), class_lines: num(r.class_lines), class_items: num(r.class_items),
+    menu_mix: r.menu_mix === null || r.menu_mix === undefined ? null : Number(r.menu_mix),
+    mix_low: num(r.mix_low), mix_high: num(r.mix_high), popularity_threshold: num(r.popularity_threshold),
+    price: num(r.price), unit_cost: num(r.unit_cost), unit_cm: num(r.unit_cm), class_avg_cm: num(r.class_avg_cm),
+    units_per_week: num(r.units_per_week), class_units_per_week: num(r.class_units_per_week),
+  }));
+}
+
+/** One list per box, busiest first, so the 2×2 reads like the textbook's. */
+export function groupByQuadrant(rows: MenuEngineeringRow[], menuClass?: string): Record<Quadrant, MenuEngineeringRow[]> {
+  const out: Record<Quadrant, MenuEngineeringRow[]> = { star: [], plowhorse: [], puzzle: [], dog: [], insufficient: [] };
+  for (const r of rows) {
+    if (menuClass && r.menu_class !== menuClass) continue;
+    out[r.quadrant]?.push(r);
+  }
+  for (const q of QUADRANT_ORDER) {
+    out[q].sort((a, b) => b.units - a.units || a.name.localeCompare(b.name));
+  }
+  return out;
+}
+
+export const getMenuEngineering = async (days = 28) =>
+  normaliseEngineering(await rpc<MenuEngineeringRow[]>('menu_engineering', { _days: days }));
+
+/* ---- One recommendation funnel ------------------------------------------ */
+
+export interface RecoFunnelRow {
+  placement: string;
+  week_start: string;
+  decisions: number;
+  with_suggestion: number;
+  seen: number;
+  tapped: number;
+  paid: number;
+  paid_km: number;
+  km_per_1000_seen: number | null;
+}
+
+export type FunnelTotals = Omit<RecoFunnelRow, 'week_start'> & { weeks: number };
+
+export const FUNNEL_STAGES = [
+  { key: 'decisions', label: 'Engine asked' },
+  { key: 'with_suggestion', label: 'Had a suggestion' },
+  { key: 'seen', label: 'Seen by the guest' },
+  { key: 'tapped', label: 'Tapped' },
+  { key: 'paid', label: 'Paid for' },
+] as const;
+
+/** Add the weeks up per placement. Ordered by what each placement took. */
+export function summariseFunnel(rows: RecoFunnelRow[]): FunnelTotals[] {
+  const by = new Map<string, FunnelTotals>();
+  for (const r of rows) {
+    const t = by.get(r.placement) ?? {
+      placement: r.placement, decisions: 0, with_suggestion: 0, seen: 0, tapped: 0, paid: 0,
+      paid_km: 0, km_per_1000_seen: null, weeks: 0,
+    };
+    t.decisions += num(r.decisions);
+    t.with_suggestion += num(r.with_suggestion);
+    t.seen += num(r.seen);
+    t.tapped += num(r.tapped);
+    t.paid += num(r.paid);
+    t.paid_km += num(r.paid_km);
+    t.weeks += 1;
+    by.set(r.placement, t);
+  }
+  return [...by.values()]
+    .map((t) => ({
+      ...t,
+      paid_km: Math.round(t.paid_km * 100) / 100,
+      km_per_1000_seen: t.seen > 0 ? Math.round(((1000 * t.paid_km) / t.seen) * 100) / 100 : null,
+    }))
+    .sort((a, b) => b.paid_km - a.paid_km || a.placement.localeCompare(b.placement));
+}
+
+export const getRecoFunnel = (days = 28) => rpc<RecoFunnelRow[]>('reco_funnel', { _days: days });
+
+/* ---- What to do next ----------------------------------------------------- */
+
+export type InsightKind =
+  | 'puzzle' | 'dog' | 'leak' | 'sold_out' | 'anomaly' | 'pairing' | 'retired'
+  | 'trend_up' | 'trend_down';
+
+export interface Insight {
+  kind: InsightKind;
+  item_id: string | null;
+  related_item_id: string | null;
+  headline: string;
+  why: string;
+  action: string;
+  /** Contribution margin a week at stake, in KM. For an anomaly: that day's gap. */
+  est_km_per_week: number;
+  confidence: 'high' | 'medium';
+  evidence: number;
+  evidence_label: string;
+  link: string;
+}
+
+/**
+ * The floor every card must clear. Mirrors the `_min_km` default of
+ * `management_insights()` (20261025126000_management_insights.sql).
+ */
+export const INSIGHT_MIN_KM_PER_WEEK = 20;
+
+export const getManagementInsights = (days = 28) =>
+  rpc<Insight[]>('management_insights', { _days: days });
+
+export const getItemTrends = () => rpc<ItemTrendRow[]>('item_trends');
+
+/** Trend alerts (tested in the browser) in the same shape as the server's cards. */
+export function trendInsights(alerts: TrendAlert[]): Insight[] {
+  return alerts.map((a) => ({
+    kind: a.direction === 'up' ? 'trend_up' : 'trend_down',
+    item_id: a.item_id,
+    related_item_id: null,
+    headline: a.message,
+    why: a.direction === 'up'
+      ? 'More tables are ordering it than chance explains, after allowing for every other dish on the menu.'
+      : 'Fewer tables are ordering it than chance explains, after allowing for every other dish on the menu.',
+    action: a.direction === 'up'
+      ? `Keep ${a.name} stocked and visible, and make sure the kitchen can keep up`
+      : `Taste ${a.name} and check what changed: recipe, price, photo or its place on the menu`,
+    est_km_per_week: a.km_per_week,
+    confidence: 'high',
+    evidence: a.visits,
+    evidence_label: 'visits',
+    link: '/admin/menu-intelligence#insights',
+  }));
+}
+
+/**
+ * Server cards and trend cards, as one list: anything under the floor out,
+ * worth first, then a fixed tie-break so the order never shuffles on reload.
+ */
+export function mergeInsights(server: Insight[], trends: Insight[], minKm = INSIGHT_MIN_KM_PER_WEEK): Insight[] {
+  return [...server, ...trends]
+    .map((i) => ({ ...i, est_km_per_week: Math.round(num(i.est_km_per_week)), evidence: num(i.evidence) }))
+    .filter((i) => i.est_km_per_week >= minKm)
+    .sort((a, b) => b.est_km_per_week - a.est_km_per_week
+      || a.kind.localeCompare(b.kind)
+      || a.headline.localeCompare(b.headline)
+      || (a.item_id ?? '').localeCompare(b.item_id ?? ''));
+}
+
+/** "Do X; worth about Y KM a week; based on Z visits." */
+export function insightSentence(i: Insight): string {
+  const km = Math.round(i.est_km_per_week).toLocaleString('en');
+  const worth = i.kind === 'anomaly'
+    ? `about ${km} KM away from a usual day`
+    : `worth about ${km} KM a week`;
+  return `${i.action}; ${worth}; based on ${num(i.evidence).toLocaleString('en')} ${i.evidence_label}.`;
+}
+
+/**
+ * Everything the "what to do next" cards need, in one call. A failed trend
+ * read does not cost the owner the other cards.
+ */
+export async function loadInsights(days = 28): Promise<{ insights: Insight[]; trendsFailed: boolean }> {
+  const [server, trends] = await Promise.allSettled([getManagementInsights(days), getItemTrends()]);
+  if (server.status === 'rejected') throw server.reason;
+  const trendCards = trends.status === 'fulfilled' ? trendInsights(detectTrends(trends.value ?? [])) : [];
+  return { insights: mergeInsights(server.value ?? [], trendCards), trendsFailed: trends.status === 'rejected' };
 }

@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { CalendarDays, AlertTriangle, Loader2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import SalesChangeCard from '@/components/admin/SalesChangeCard';
 
 /**
  * Sales analytics.
@@ -256,6 +257,9 @@ const AdminAnalytics = () => {
           />
         </div>
       </div>
+
+      {/* Why it moved, before what it was: the sentence a manager acts on. */}
+      <SalesChangeCard />
 
       {error && (
         <Card className="border-destructive/30 mb-6">

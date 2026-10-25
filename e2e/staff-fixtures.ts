@@ -15,6 +15,128 @@ import { test as base, expect, type Page, type Route } from '@playwright/test';
 
 const STAFF_ID = 'staff-user-1';
 
+/**
+ * What the owner-facing analytics read: insight cards, the menu-engineering
+ * matrix, the suggestion funnel, the sales decomposition and the service
+ * alerts. Shaped like the RPCs in 20261025120000–20261025126000 return them,
+ * so the admin pages render real content instead of skeletons.
+ */
+export interface AdminAnalyticsFixtures {
+  insights: Record<string, unknown>[];
+  trends: Record<string, unknown>[];
+  engineering: Record<string, unknown>[];
+  funnel: Record<string, unknown>[];
+  decomposition: Record<string, unknown> | null;
+  anomalies: Record<string, unknown> | null;
+  stations: Record<string, unknown> | null;
+  prepHistory: Record<string, unknown> | null;
+}
+
+const insight = (over: Record<string, unknown>) => ({
+  kind: 'leak', item_id: 'item-salad', related_item_id: null, headline: 'H', why: 'W', action: 'A',
+  est_km_per_week: 50, confidence: 'high', evidence: 100, evidence_label: 'visits', link: '/admin/menu-intelligence#leaks',
+  ...over,
+});
+
+const engineeringRow = (over: Record<string, unknown>) => ({
+  item_id: String(over.name ?? 'x'), name: 'Dish', menu_class: 'main', category_name: 'Food', is_available: true,
+  units: 100, lines: 100, revenue: 1800, available_days: 28, trading_days: 28, availability_basis: 'assumed',
+  class_units: 600, class_lines: 600, class_items: 5, menu_mix: 0.2, mix_low: 0.18, mix_high: 0.22,
+  popularity_threshold: 0.14, price: 18, unit_cost: 6, unit_cm: 12, class_avg_cm: 10, cost_estimated: false,
+  popularity: 'high', profitability: 'high', quadrant: 'star', units_per_week: 25, class_units_per_week: 150,
+  ...over,
+});
+
+/** A dish selling steadily at lunch and a little in the evening, ten weeks back. */
+const prepItem = (item_id: string, name: string, lunch: number[]) => ({
+  item_id, name, is_available: true, subcategory_id: 'sub-mains', subcategory: 'Mains',
+  unit_cm: 12, unit_cost: 6, cost_estimated: false,
+  series: { lunch, evening: lunch.map((v) => Math.round(v / 4)) },
+  last28: { lunch: lunch.slice(0, 4).reduce((a, b) => a + b, 0), evening: 20 },
+});
+
+const changeTerm = (key: string, current: number, compare: number) => ({
+  key, current, compare, dlog: Math.log(current / compare), change_pct: 100 * (current / compare - 1),
+});
+
+export const adminAnalyticsFixtures = (): AdminAnalyticsFixtures => ({
+  insights: [
+    insight({
+      kind: 'sold_out', item_id: 'item-cake', headline: 'Chocolate cake has been sold out',
+      why: 'While it was on, it took about 60 KM on a typical trading day.',
+      action: 'Bring Chocolate cake back, or replace it with something similar',
+      est_km_per_week: 100, confidence: 'medium', evidence: 10, evidence_label: 'trading days of sales', link: '/admin/menu',
+    }),
+    insight({
+      kind: 'leak', item_id: 'item-salad', headline: 'Quinoa salad is looked at but rarely ordered',
+      why: '300 looks and 1 order: 0.3% against 25.0% for a typical dish.',
+      action: 'Rewrite the description of Quinoa salad, re-photograph it, or check its price',
+      est_km_per_week: 167, evidence: 300, evidence_label: 'looks at the dish',
+    }),
+    insight({
+      kind: 'pairing', item_id: 'item-burger', related_item_id: 'item-cola', headline: 'Suggest Cola with La Soul Burger',
+      why: '2000 of 5000 orders with La Soul Burger also had Cola.',
+      action: 'Add Cola as a suggestion for La Soul Burger', est_km_per_week: 35, confidence: 'medium',
+      evidence: 5000, evidence_label: 'orders with La Soul Burger', link: '/admin/menu-intelligence#pairings',
+    }),
+    insight({
+      kind: 'dog', item_id: 'item-toast', headline: 'Plain toast sells little and earns little',
+      why: '2.1% of starters orders.', action: 'Take Plain toast off the menu, unless it is there on purpose as a cheaper anchor',
+      est_km_per_week: 24, evidence: 640, evidence_label: 'starters orders', link: '/admin/menu-intelligence#engineering',
+    }),
+  ],
+  trends: [],
+  engineering: [
+    engineeringRow({ name: 'La Soul Burger', quadrant: 'star', units: 180 }),
+    engineeringRow({ name: 'Ćevapi', quadrant: 'plowhorse', profitability: 'low', unit_cm: 7, units: 160 }),
+    engineeringRow({ name: 'Truffle risotto', quadrant: 'puzzle', popularity: 'low', menu_mix: 0.06, units: 30, cost_estimated: true }),
+    engineeringRow({ name: 'Plain toast', menu_class: 'starter', quadrant: 'dog', popularity: 'low', profitability: 'low', menu_mix: 0.021, unit_cm: 2, units: 12 }),
+    engineeringRow({ name: 'Tufahija', menu_class: 'dessert', quadrant: 'insufficient', popularity: 'insufficient', units: 7 }),
+  ],
+  funnel: [
+    { placement: 'cart', week_start: '2026-10-19', decisions: 400, with_suggestion: 380, seen: 300, tapped: 40, paid: 22, paid_km: 132, km_per_1000_seen: 440 },
+    { placement: 'cart', week_start: '2026-10-12', decisions: 380, with_suggestion: 360, seen: 280, tapped: 35, paid: 20, paid_km: 120, km_per_1000_seen: 428.57 },
+    { placement: 'item', week_start: '2026-10-19', decisions: 120, with_suggestion: 110, seen: 90, tapped: 6, paid: 3, paid_km: 12, km_per_1000_seen: 133.33 },
+  ],
+  decomposition: {
+    from: '2026-10-18', to: '2026-10-24', cmp_from: '2026-10-11', cmp_to: '2026-10-17', scale: 1, basis: 'visits',
+    current: { net: 2754, visits: 90, units: 275.4, covered_visits: 10, covers: 22 },
+    compare: { net: 3000, visits: 100, units: 300, covered_visits: 12, covers: 26 },
+    total: {
+      comparable: true, net: 2754, compare_net: 3000, change_pct: -8.2, dlog: Math.log(2754 / 3000),
+      terms: [changeTerm('visits', 90, 100), changeTerm('items_per_visit', 3.06, 3), changeTerm('net_per_item', 10, 10)],
+    },
+    dayparts: [
+      { daypart: 'lunch', visits: 50, compare_visits: 60, comparable: true, net: 1500, compare_net: 1800, change_pct: -16.7, terms: [] },
+      { daypart: 'evening', visits: 40, compare_visits: 40, comparable: true, net: 1254, compare_net: 1200, change_pct: 4.5, terms: [] },
+    ],
+  },
+  anomalies: {
+    today: {
+      day: '2026-10-25', so_far: 1240, history: 6, usual_so_far: 1100, usual_total: 2700, usual_share: 0.43,
+      pace: 1.13, projected: 2884, z: 1.2, status: 'normal', alert: false,
+    },
+    days: [
+      { day: '2026-10-22', weekday: 'Thursday', net: 600, traded: true, history: 6, median: 1000, z: -5.4, status: 'low', alert: true },
+      { day: '2026-10-21', weekday: 'Wednesday', net: 980, traded: true, history: 6, median: 1000, z: -0.4, status: 'normal', alert: false },
+    ],
+  },
+  stations: {
+    window_days: 28, daypart_now: 'lunch', baseline: [],
+    now: [
+      { station: 'kitchen', daypart: 'lunch', tickets: 14, p50: 11, p90: 18.2, baseline_p90: 12, baseline_tickets: 120, baseline_daypart: 'lunch', ratio: 1.52, status: 'slow', alert: true },
+      { station: 'bar', daypart: 'lunch', tickets: 22, p50: 3, p90: 5, baseline_p90: 5, baseline_tickets: 300, baseline_daypart: 'lunch', ratio: 1, status: 'normal', alert: false },
+    ],
+  },
+  prepHistory: {
+    day: '2026-10-26', weekday: 'Monday', weeks: [],
+    items: [
+      prepItem('item-burger', 'La Soul Burger', [22, 17, 21, 18, 24, 16, 20, 23, 17, 21]),
+      prepItem('item-cevapi', 'Ćevapi', [32, 27, 31, 28, 34, 26, 30, 33, 27, 31]),
+    ],
+  },
+});
+
 export interface StaffState {
   orders: Record<string, unknown>[];
   waiterCalls: Record<string, unknown>[];
@@ -37,6 +159,10 @@ export interface StaffState {
   closeOutstanding: number;
   /** Every RPC the UI called that touches tables, calls or money, in order. */
   rpcCalls: { fn: string; body: Record<string, unknown> }[];
+  /** What the owner-facing analytics RPCs answer. */
+  analytics: AdminAnalyticsFixtures;
+  /** Rows the UI inserted into menu_item_recommendations ("Suggest it"). */
+  curated: Record<string, unknown>[];
 }
 
 const iso = (minutesAgo: number) => new Date(Date.now() - minutesAgo * 60_000).toISOString();
@@ -116,6 +242,8 @@ export const defaultStaffState = (): StaffState => ({
   isAdmin: true,
   closeOutstanding: 0,
   rpcCalls: [],
+  analytics: adminAnalyticsFixtures(),
+  curated: [],
 });
 
 const json = (route: Route, body: unknown, status = 200) =>
@@ -228,6 +356,25 @@ export async function installStaffStubs(page: Page, state: StaffState) {
       case 'kds_all_day':
         return json(route, []);
 
+      // ---- owner-facing analytics ----
+      case 'management_insights':
+        return json(route, state.analytics.insights);
+      case 'item_trends':
+        return json(route, state.analytics.trends);
+      case 'menu_engineering':
+        return json(route, state.analytics.engineering);
+      case 'reco_funnel':
+        return json(route, state.analytics.funnel);
+      case 'sales_decomposition':
+        state.rpcCalls.push({ fn, body });
+        return json(route, state.analytics.decomposition);
+      case 'daily_anomalies':
+        return json(route, state.analytics.anomalies);
+      case 'station_timings':
+        return json(route, state.analytics.stations);
+      case 'prep_history':
+        return json(route, state.analytics.prepHistory);
+
       case 'staff_release_held_order': {
         state.rpcCalls.push({ fn, body });
         const order = state.orders.find((o) => o.id === body._order_id);
@@ -292,6 +439,14 @@ export async function installStaffStubs(page: Page, state: StaffState) {
   await page.route('**/rest/v1/order_ticket_events**', (route) => json(route, []));
   await page.route('**/rest/v1/waiters**', (route) => json(route, []));
   await page.route('**/rest/v1/menu_items**', (route) => json(route, []));
+  await page.route('**/rest/v1/menu_item_recommendations**', (route) => {
+    if (route.request().method() === 'POST') {
+      const body = route.request().postDataJSON();
+      state.curated.push(...(Array.isArray(body) ? body : [body]));
+      return json(route, [], 201);
+    }
+    return json(route, []);
+  });
 
   // Realtime refused on purpose: the 15-second polling fallback is what these
   // specs exercise, and it is the path that actually runs on restaurant wifi.

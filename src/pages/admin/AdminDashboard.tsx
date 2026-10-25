@@ -13,6 +13,8 @@ import {
 import { staggerContainer, fadeUp, useCountUp } from '@/lib/motion';
 import { orderStatusLabel } from '@/components/staff/order-status';
 import { getSuggestionImpact, type SuggestionImpact } from '@/lib/menu-intelligence';
+import InsightCards from '@/components/admin/InsightCards';
+import ServiceHealthCard from '@/components/admin/ServiceHealthCard';
 
 const SETUP_DISMISS_KEY = 'admin:setupDismissed';
 
@@ -357,6 +359,13 @@ const AdminDashboard = () => {
           ))}
         </motion.div>
       )}
+
+      {/* The three things most worth doing this week, in KM. */}
+      <div className="mb-8">
+        <InsightCards limit={3} showAllLink title="Top three things to do" />
+      </div>
+
+      <ServiceHealthCard />
 
       <SuggestionsCard />
 

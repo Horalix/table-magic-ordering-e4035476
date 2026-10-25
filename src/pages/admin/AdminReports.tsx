@@ -8,6 +8,7 @@ import { Download, Printer, CalendarDays, DollarSign, ShoppingBag, CreditCard, B
 import { useCountUp } from '@/lib/motion';
 import { dayReconciliation, type DayReconciliation } from '@/lib/staff-api';
 import ShiftClosePanel from '@/components/admin/ShiftClosePanel';
+import PrepForecastCard from '@/components/admin/PrepForecastCard';
 import { businessDayISO, businessDayRange } from '@/lib/reporting';
 
 interface DayOrder {
@@ -247,6 +248,9 @@ const AdminReports = () => {
               )}
             </CardContent>
           </Card>
+
+          {/* Tomorrow's prep, withheld unless it beats "same as last week". */}
+          <PrepForecastCard />
         </>
       )}
     </div>

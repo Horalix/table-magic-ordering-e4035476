@@ -164,3 +164,226 @@ export function summarise(values: (number | null)[], total: number) {
     total,
   };
 }
+
+/* ---- Why sales changed ------------------------------------------------- */
+
+/**
+ * One factor of net sales in two periods. `dlog` is ln(current / compare):
+ * the factors' dlogs add up exactly to net sales' dlog, which is what lets the
+ * page say "fewer tables" and "bigger spend" without a remainder.
+ */
+export interface ChangeTerm {
+  key: 'visits' | 'items_per_visit' | 'net_per_item' | 'guests_per_visit' | 'items_per_guest';
+  current: number;
+  compare: number;
+  dlog: number;
+  change_pct: number;
+}
+
+export interface ChangeTerms {
+  comparable: boolean;
+  net: number;
+  compare_net: number;
+  change_pct: number | null;
+  dlog?: number;
+  terms: ChangeTerm[];
+}
+
+/** `sales_decomposition()` — 20261025122000_sales_decomposition.sql. */
+export interface SalesDecomposition {
+  from: string;
+  to: string;
+  cmp_from: string;
+  cmp_to: string;
+  /** Current length over comparison length; the comparison's counts are multiplied by it. */
+  scale: number;
+  /** 'covers' when head counts were recorded on 70%+ of visits in both periods. */
+  basis: 'visits' | 'covers';
+  current: { net: number; visits: number; units: number; covered_visits: number; covers: number };
+  compare: { net: number; visits: number; units: number; covered_visits: number; covers: number };
+  total: ChangeTerms;
+  dayparts: (ChangeTerms & { daypart: string; visits: number; compare_visits: number })[];
+}
+
+const DAYPART_PHRASE: Record<string, string> = {
+  morning: 'in the morning',
+  lunch: 'at lunch',
+  afternoon: 'in the afternoon',
+  evening: 'in the evening',
+  late: 'late at night',
+};
+
+/** "+2%", "−8%" — a real minus sign, rounded to whole percent. */
+export function signedPct(fraction: number): string {
+  const n = Math.round(fraction * 100);
+  if (n === 0) return '0%';
+  return `${n > 0 ? '+' : '−'}${Math.abs(n)}%`;
+}
+
+/**
+ * Where most of a change in tables happened, if one daypart carries it.
+ *
+ * Daypart visits can overlap (a table that ordered at lunch and again in the
+ * afternoon counts in both), so this only names a daypart when it accounts for
+ * at least 60% of the movement in the same direction.
+ */
+function whereTablesMoved(d: SalesDecomposition): string {
+  const totalDelta = d.current.visits - d.compare.visits * Number(d.scale);
+  if (totalDelta === 0) return '';
+  const sign = Math.sign(totalDelta);
+  const moves = d.dayparts
+    .map((p) => ({ part: p.daypart, delta: Number(p.visits) - Number(p.compare_visits) }))
+    .filter((m) => Math.sign(m.delta) === sign);
+  const sum = moves.reduce((s, m) => s + Math.abs(m.delta), 0);
+  const top = moves.sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta))[0];
+  if (!top || sum <= 0 || Math.abs(top.delta) / sum < 0.6) return '';
+  return DAYPART_PHRASE[top.part] ? ` ${DAYPART_PHRASE[top.part]}` : '';
+}
+
+/**
+ * The one sentence: "Net sales −8% vs last week: 10% fewer tables at lunch;
+ * spend per table +2%." Parts are ordered by how much of the change each
+ * explains.
+ */
+export function describeSalesChange(d: SalesDecomposition, vs = 'last week'): string {
+  const total = d.total;
+  if (!total.comparable) {
+    if (Number(total.compare_net) <= 0) return `No sales to compare with ${vs} yet.`;
+    return `Net sales ${signedPct(Number(total.change_pct ?? 0) / 100)} vs ${vs}; too few sales to say why.`;
+  }
+
+  const term = (key: ChangeTerm['key']) => total.terms.find((t) => t.key === key);
+  const dlog = (key: ChangeTerm['key']) => Number(term(key)?.dlog ?? 0);
+  const parts: { text: string; weight: number }[] = [];
+
+  const tables = Math.exp(dlog('visits')) - 1;
+  parts.push({
+    text: Math.abs(tables) < 0.005
+      ? 'as many tables'
+      : `${Math.round(Math.abs(tables) * 100)}% ${tables < 0 ? 'fewer' : 'more'} tables${whereTablesMoved(d)}`,
+    weight: Math.abs(dlog('visits')),
+  });
+
+  if (d.basis === 'covers') {
+    const party = dlog('guests_per_visit');
+    if (Math.abs(Math.exp(party) - 1) >= 0.03) {
+      parts.push({
+        text: `parties ${Math.round(Math.abs(Math.exp(party) - 1) * 100)}% ${party < 0 ? 'smaller' : 'bigger'}`,
+        weight: Math.abs(party),
+      });
+    }
+    const spend = dlog('items_per_guest') + dlog('net_per_item');
+    parts.push({ text: `spend per guest ${signedPct(Math.exp(spend) - 1)}`, weight: Math.abs(spend) });
+  } else {
+    const spend = dlog('items_per_visit') + dlog('net_per_item');
+    parts.push({ text: `spend per table ${signedPct(Math.exp(spend) - 1)}`, weight: Math.abs(spend) });
+  }
+
+  const change = Math.exp(Number(total.dlog ?? 0)) - 1;
+  const head = Math.abs(change) < 0.005 ? `Net sales flat vs ${vs}` : `Net sales ${signedPct(change)} vs ${vs}`;
+  return `${head}: ${parts.sort((a, b) => b.weight - a.weight).map((p) => p.text).join('; ')}.`;
+}
+
+/** Plain names for the factors, for the chips under the sentence. */
+export const CHANGE_TERM_LABELS: Record<ChangeTerm['key'], string> = {
+  visits: 'Tables',
+  items_per_visit: 'Items per table',
+  guests_per_visit: 'Guests per table',
+  items_per_guest: 'Items per guest',
+  net_per_item: 'Net per item',
+};
+
+/* ---- Is today normal? ---------------------------------------------------- */
+
+export interface DayAnomaly {
+  day: string;
+  weekday: string;
+  net: number;
+  traded: boolean;
+  /** Same-weekday trading days the baseline rests on (up to six). */
+  history: number;
+  median: number | null;
+  z: number | null;
+  status: 'closed' | 'learning' | 'normal' | 'low' | 'high';
+  alert: boolean;
+}
+
+export interface TodayPace {
+  day: string;
+  so_far: number;
+  history: number;
+  usual_so_far: number | null;
+  usual_total: number | null;
+  usual_share: number | null;
+  pace: number | null;
+  projected: number | null;
+  z: number | null;
+  status: 'learning' | 'too_early' | 'normal' | 'behind' | 'ahead';
+  alert: boolean;
+}
+
+/** `daily_anomalies()` — 20261025124000_service_alerts.sql. */
+export interface DailyAnomalies {
+  today: TodayPace;
+  days: DayAnomaly[];
+}
+
+export interface StationNow {
+  station: string;
+  daypart: string;
+  tickets: number;
+  p50: number | null;
+  p90: number | null;
+  baseline_p90: number | null;
+  baseline_tickets: number;
+  baseline_daypart: string;
+  ratio: number | null;
+  status: 'learning' | 'too_few_tickets' | 'normal' | 'slow';
+  alert: boolean;
+}
+
+/** `station_timings()` — 20261025124000_service_alerts.sql. */
+export interface StationTimings {
+  window_days: number;
+  daypart_now: string;
+  baseline: { station: string; daypart: string; tickets: number; p50: number; p90: number }[];
+  now: StationNow[];
+}
+
+const kmWhole = (n: number | null | undefined) => `${Math.round(Number(n ?? 0)).toLocaleString('en')} KM`;
+
+const weekdayOf = (day: string) =>
+  new Date(`${day}T12:00:00`).toLocaleDateString('en', { weekday: 'long' });
+
+/** Today so far against the same moment of the last six same weekdays. */
+export function describePace(t: TodayPace): string {
+  const so = kmWhole(t.so_far);
+  const weekday = weekdayOf(t.day);
+  if (t.status === 'learning') {
+    return `${so} so far. Pace needs four ${weekday}s of history; there ${t.history === 1 ? 'is' : 'are'} ${t.history}.`;
+  }
+  if (t.status === 'too_early' || t.usual_so_far === null || t.pace === null) {
+    return `${so} so far. Too early in the day to judge the pace.`;
+  }
+  const pace = Math.round(Number(t.pace) * 100);
+  const projected = t.projected === null ? '' : ` — on course for about ${kmWhole(t.projected)}`;
+  return `${so} so far, ${pace}% of a usual ${weekday} by this time${projected} (a usual ${weekday} takes ${kmWhole(t.usual_total)}).`;
+}
+
+/** One past day that broke from its weekday. */
+export function describeAnomaly(a: DayAnomaly): string {
+  const pct = a.median ? Math.round(Math.abs(a.net / a.median - 1) * 100) : 0;
+  const label = new Date(`${a.day}T12:00:00`).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'short' });
+  return `${label}: ${kmWhole(a.net)}, ${pct}% ${a.net < Number(a.median) ? 'below' : 'above'} a usual ${a.weekday} (${kmWhole(a.median)}).`;
+}
+
+const STATION_NAMES: Record<string, string> = { kitchen: 'Kitchen', bar: 'Bar' };
+
+/** "Kitchen: slowest 1 in 10 tickets 18 min in the last 2 hours, usually 12 (1.5×)." */
+export function describeStation(s: StationNow): string {
+  const name = STATION_NAMES[s.station] ?? s.station;
+  if (s.status === 'learning') return `${name}: still learning what a normal service looks like.`;
+  if (s.status === 'too_few_tickets') return `${name}: ${s.tickets} ticket${s.tickets === 1 ? '' : 's'} in the last 2 hours — too few to judge.`;
+  const ratio = s.ratio === null ? '' : ` (${Number(s.ratio).toFixed(1)}×)`;
+  return `${name}: slowest 1 in 10 tickets ${Math.round(Number(s.p90))} min in the last 2 hours, usually ${Math.round(Number(s.baseline_p90))}${ratio}.`;
+}

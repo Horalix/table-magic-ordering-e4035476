@@ -1,8 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { formatStamp } from '@/lib/timing';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import PrepAccuracyPanel from '@/components/admin/PrepAccuracyPanel';
+import InsightCards from '@/components/admin/InsightCards';
+import MenuEngineeringCard from '@/components/admin/MenuEngineeringCard';
+import RecoFunnelCard from '@/components/admin/RecoFunnelCard';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -16,7 +19,7 @@ import {
   getEngineHealth, getHoldoutComparison, getItemPerformance, getPairings,
   getSoldOutImpact, getSuggestionImpact, getSuggestionPerformance, getPlacementImpact,
   refreshIntelligence, curatePairing, placementLabel,
-  findDeadWeight, findLeaks, findStars, LEAK_MIN_VIEWS,
+  findDeadWeight, findLeaks, LEAK_MIN_VIEWS,
   type EngineHealth, type HoldoutComparison, type ItemPerformance, type Pairing,
   type PlacementImpact, type SoldOutRow, type SuggestionImpact, type SuggestionRow, type SuggestionStatus,
 } from '@/lib/menu-intelligence';
@@ -236,6 +239,13 @@ const AdminMenuIntelligence = () => {
 
   useEffect(() => { void load(); }, [load]);
 
+  // A link from the dashboard ("All 7", a card's "Open") lands on its section.
+  const location = useLocation();
+  useEffect(() => {
+    if (!location.hash || loading) return;
+    document.getElementById(location.hash.slice(1))?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, [location.hash, loading]);
+
   const recompute = async () => {
     setRefreshing(true);
     try {
@@ -262,7 +272,6 @@ const AdminMenuIntelligence = () => {
   const itemRows = useMemo(() => items.data ?? [], [items.data]);
   const leaks = useMemo(() => findLeaks(itemRows), [itemRows]);
   const dead = useMemo(() => findDeadWeight(itemRows, days), [itemRows, days]);
-  const stars = useMemo(() => findStars(itemRows), [itemRows]);
   const mostViewed = useMemo(() => [...itemRows].sort((a, b) => b.views - a.views).slice(0, 10), [itemRows]);
 
   const firstLoad = loading && !items.data && !items.error;
@@ -334,6 +343,11 @@ const AdminMenuIntelligence = () => {
           </CardContent>
         </Card>
       )}
+
+      {/* ---- What to do next: every card that passed its test, worth first ---- */}
+      <InsightCards id="insights" />
+
+      <MenuEngineeringCard />
 
       {/* ---- Is it earning its place? ---- */}
       {impact.error ? <SectionError title="suggestion figures" message={impact.error} /> : (
@@ -443,6 +457,8 @@ const AdminMenuIntelligence = () => {
           </CardContent>
         </Card>
       )}
+
+      <RecoFunnelCard holdout={holdout.data} />
 
       {/* ---- Which surface earns its space ---- */}
       {placements.error ? <SectionError title="placements" message={placements.error} /> : (placements.data?.length ?? 0) > 0 && (
@@ -591,7 +607,7 @@ const AdminMenuIntelligence = () => {
 
       {/* ---- Discovered pairings ---- */}
       {pairs.error ? <SectionError title="pairings" message={pairs.error} /> : (
-        <Card className="border-border">
+        <Card id="pairings" className="border-border">
           <CardHeader className="pb-3">
             <CardTitle className="font-serif text-lg flex items-center gap-2">
               <Link2 className="w-5 h-5 text-primary shrink-0" /> What actually goes together
@@ -643,7 +659,7 @@ const AdminMenuIntelligence = () => {
       {/* ---- Item funnel ---- */}
       {items.error ? <SectionError title="the per-dish figures" message={items.error} /> : (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <Card className="border-border">
+          <Card id="leaks" className="border-border">
             <CardHeader className="pb-3">
               <CardTitle className="font-serif text-lg flex items-center gap-2">
                 <TrendingDown className="w-5 h-5 text-destructive shrink-0" /> Looked at, not ordered
@@ -689,33 +705,6 @@ const AdminMenuIntelligence = () => {
                       <span className="text-foreground min-w-0 truncate">{i.name}</span>
                       <span className="text-muted-foreground tabular-nums shrink-0">
                         {i.views} views · {km(i.revenue)}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </CardContent>
-          </Card>
-
-          <Card className="border-border">
-            <CardHeader className="pb-3">
-              <CardTitle className="font-serif text-lg flex items-center gap-2">
-                <TrendingUp className="w-5 h-5 text-primary shrink-0" /> Worth protecting
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm font-sans text-muted-foreground mb-3">
-                Highest item sales weighted by your margin score. Keep these in stock and on the first screen.
-              </p>
-              {stars.length === 0 ? (
-                <p className="text-sm text-muted-foreground font-sans py-4 text-center">No sales in this window.</p>
-              ) : (
-                <ul className="divide-y divide-border">
-                  {stars.map((i) => (
-                    <li key={i.item_id} className="flex flex-wrap items-center justify-between gap-x-3 py-2 text-sm font-sans">
-                      <span className="text-foreground min-w-0 truncate">{i.name}</span>
-                      <span className="text-muted-foreground tabular-nums shrink-0">
-                        {i.units} sold · {km(i.revenue)}
                       </span>
                     </li>
                   ))}
