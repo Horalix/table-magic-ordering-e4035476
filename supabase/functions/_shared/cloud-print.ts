@@ -206,7 +206,8 @@ async function starJob(url: URL, token: string, backend: CloudPrintBackend, now:
   }
 
   if (!plain && wanted.startsWith(STAR_STARPRNT)) {
-    return new Response(ticketToStarPrnt(rendered.lines), { headers: { 'Content-Type': STAR_STARPRNT } });
+    const bytes = new Uint8Array(ticketToStarPrnt(rendered.lines));
+    return new Response(bytes.buffer, { headers: { 'Content-Type': STAR_STARPRNT } });
   }
   // Plain text, folded to ASCII: a CloudPRNT text job uses the printer's own
   // code page, which has no č/ć/ž/š/đ.

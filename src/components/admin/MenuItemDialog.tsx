@@ -9,7 +9,7 @@ import { Switch } from '@/components/ui/switch';
 import SmartImage from '@/components/ui/SmartImage';
 import { ChefHat, CupSoda, Loader2, Upload, X } from 'lucide-react';
 import ComboBuilder from '@/components/admin/ComboBuilder';
-import { fetchCombos } from '@/lib/promotions-api';
+import { fetchCombos, type MenuItemRow } from '@/lib/promotions-api';
 import { SALE_LABELS, SALE_LABEL_NAMES } from '@/lib/promotions';
 import {
   defaultNewUntil, emptySale, saleColumns, saleDraftFromRow, saleEndPresets, salePreview, slotsFromCombo,
@@ -20,7 +20,6 @@ import { DIET_TAGS, getItemTags } from '@/lib/dietary';
 import { useT } from '@/lib/i18n';
 import type { Database } from '@/integrations/supabase/types';
 
-type MenuItemRow = Database['public']['Tables']['menu_items']['Row'];
 type MenuItemInsert = Database['public']['Tables']['menu_items']['Insert'];
 
 interface Props {
@@ -319,11 +318,13 @@ const MenuItemDialog = ({ open, onOpenChange, subcategoryId, item, onSaved, star
     // What the editor needs to know about the rest of the menu: which dishes
     // are featured, and which are combos (this one included).
     void (async () => {
-      const featured = await supabase.from('menu_items').select('id, name, featured_rank').not('featured_rank', 'is', null);
+      const featured = await supabase.from('menu_items').select('*').not('featured_rank', 'is', null);
       if (cancelled) return;
       if (!featured.error) {
         setPromoAvailable(true);
-        setFeaturedOthers(((featured.data ?? []) as { id: string; name: string; featured_rank: number }[]).filter((r) => r.id !== item?.id));
+        setFeaturedOthers((featured.data as MenuItemRow[] ?? []).flatMap((r) =>
+          r.id !== item?.id && r.featured_rank != null
+            ? [{ id: r.id, name: r.name, featured_rank: r.featured_rank }] : []));
       }
       const combos = await fetchCombos();
       if (cancelled || !combos) return;
@@ -474,8 +475,8 @@ const MenuItemDialog = ({ open, onOpenChange, subcategoryId, item, onSaved, star
     // manager could set tags, be told it worked, and find them gone.
     let savedId = item?.id ?? null;
     let error: { message: string } | null = null;
-    if (isEdit) {
-      ({ error } = await supabase.from('menu_items').update(payload).eq('id', item!.id));
+    if (isEdit && item) {
+      ({ error } = await supabase.from('menu_items').update(payload).eq('id', item.id));
     } else if (comboOn) {
       // A new combo needs its id for its parts.
       const res = await supabase.from('menu_items').insert({ ...payload, sort_order: nextSort }).select('id').single();
@@ -488,10 +489,10 @@ const MenuItemDialog = ({ open, onOpenChange, subcategoryId, item, onSaved, star
     if (error) { setSaving(false); toast.error(error.message); return; }
 
     if (savedId && (comboOn || wasCombo)) {
-      const { error: comboError } = await supabase.rpc('admin_save_combo', {
+      const { error: comboError } = await supabase.rpc('admin_save_combo' as never, {
         _combo_item_id: savedId,
         _slots: comboOn ? slotsPayload(slots) : [],
-      });
+      } as never);
       if (comboError) {
         setSaving(false);
         toast.error(`The dish is saved, but its combo parts are not: ${comboError.message}`);
