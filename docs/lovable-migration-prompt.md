@@ -12,6 +12,13 @@ Last updated: **26 October 2026**, for thirty-five migrations from
 > while the next files' functions (`business_day()`, `bandit_readiness()`)
 > do not. The batch therefore starts at `20260804090400_session_affinity.sql`.
 
+> **Grants, and their order.** Lovable refuses a table that relies on
+> Supabase's old default grants, and wants CREATE TABLE → GRANT/REVOKE →
+> ENABLE ROW LEVEL SECURITY → CREATE POLICY. Since `5b64aa5` every table these
+> files create states its access directly after its CREATE TABLE;
+> `supabase/tests/migration-grants.test.ts` enforces both. The preflight's
+> search texts are unaffected (81/81 on the run before that commit).
+
 > **What was live on 24 October.** Checked against the production API on
 > 24 October 2026: functions from the 3 August batch exist (for example
 > `reco_policy_version()`), but nothing from `20260804090300` onwards does —
@@ -92,9 +99,17 @@ whose search text is not in the live function — send it back before going on.
 > 20261026130000_combo_station_tickets.sql
 > ```
 >
+> **First confirm the checkout is current** (commit `5b64aa5` or later): in
+> `20260804090400_session_affinity.sql` the `GRANT SELECT ON
+> public.session_item_affinity` line comes *before* `ALTER TABLE
+> public.session_item_affinity ENABLE ROW LEVEL SECURITY`. If it comes after,
+> the checkout is stale — stop and say so.
+>
 > **Run each file, in that exact order, exactly as written.** Read each one from
 > disk and execute its contents. Do not retype it, summarise it, "clean it up",
-> or create files with new timestamps containing the same logic.
+> or create files with new timestamps containing the same logic. Every table
+> these files create already states its access (GRANT/REVOKE) right after its
+> CREATE TABLE, before row level security and its policies.
 >
 > Why this matters more than usual:
 >
@@ -183,6 +198,11 @@ whose search text is not in the live function — send it back before going on.
 > If check 6 or check 10's cron query errors because the `cron` schema does not
 > exist, that is not a failure of the migrations — report it and carry on with
 > the remaining checks.
+>
+> **Finally, deploy the `cloudprnt` Edge Function** from
+> `supabase/functions/cloudprnt/` (it is new; `supabase/config.toml` sets
+> `verify_jwt = false` for it, because printers poll it without a login) and
+> paste the deploy result.
 
 ---
 
