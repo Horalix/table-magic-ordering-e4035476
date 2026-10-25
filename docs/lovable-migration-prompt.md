@@ -2,8 +2,18 @@
 
 Copy everything between the rules into Lovable. Nothing else needs to be said.
 
-Last updated: **26 October 2026**, for thirty-four migrations from
-`20260804090500` to `20261026130000`.
+Last updated: **26 October 2026**, for twenty-nine migrations from
+`20260805090000` to `20261026130000`.
+
+> **Applied up to `20260804090900_thompson_sampling.sql`.** Lovable applied
+> maintenance through thompson_sampling (its `drizzle/migrations/0001`–`0005`
+> copies match the repository files exactly) and stopped at
+> `20260805090000_business_day.sql` with `"array_agg" is an aggregate
+> function` (42809); that file rolled back whole. Its rota rewrite filtered
+> `pg_proc` with `pg_get_functiondef(p.oid) LIKE …`, which the live planner
+> evaluated before the schema filter, on aggregates too. Since `b896eda` it
+> matches on `prosrc`, and `migration-privileges.test.ts` forbids
+> `pg_get_functiondef()` in a filter. The batch now starts at business_day.
 
 > **Also applied: `20260804090400_session_affinity.sql`.** Lovable applied it
 > and stopped at the next file, `20260804090500_maintenance.sql`, with
@@ -65,19 +75,14 @@ whose search text is not in the live function — send it back before going on.
 
 ## Step 2 — the prompt
 
-> **Task: apply thirty-four existing migration files to Supabase, in order. Do not
-> write any new SQL.**
+> **Task: apply twenty-nine existing migration files to Supabase, in order. Do
+> not write any new SQL.**
 >
-> `20260804090300_session_context.sql` and `20260804090400_session_affinity.sql`
-> are already applied — do not run them again. These files are already in the
+> Everything up to and including `20260804090900_thompson_sampling.sql` is
+> already applied — do not run any of it again. These files are already in the
 > repository under `supabase/migrations/`:
 >
 > ```
-> 20260804090500_maintenance.sql
-> 20260804090600_app_impact.sql
-> 20260804090700_guest_profiles.sql
-> 20260804090800_bandit_readiness.sql
-> 20260804090900_thompson_sampling.sql
 > 20260805090000_business_day.sql
 > 20260805090100_stale_orders.sql
 > 20261024120000_menu_prices_and_new_items.sql
@@ -109,11 +114,11 @@ whose search text is not in the live function — send it back before going on.
 > 20261026130000_combo_station_tickets.sql
 > ```
 >
-> **First confirm the checkout is current** (commit `0b946b2` or later): in
-> `20260804090500_maintenance.sql`, `run_scheduled_maintenance()` has no
-> `SET lasoul.scheduled_job = 'on'` line and calls
-> `set_config('lasoul.scheduled_job', 'on', true)` in its body instead. If it
-> still has the `SET` line, the checkout is stale — stop and say so.
+> **First confirm the checkout is current** (commit `b896eda` or later): in
+> `20260805090000_business_day.sql`, the rota-rewrite loop selects functions
+> with `p.prosrc LIKE '%shift_date = CURRENT_DATE%'`, not with
+> `pg_get_functiondef(p.oid) LIKE …`. If it still uses `pg_get_functiondef` in
+> that WHERE clause, the checkout is stale — stop and say so.
 >
 > **Run each file, in that exact order, exactly as written.** Read each one from
 > disk and execute its contents. Do not retype it, summarise it, "clean it up",
