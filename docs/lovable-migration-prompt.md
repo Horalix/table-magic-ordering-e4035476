@@ -2,7 +2,31 @@
 
 Copy everything between the rules into Lovable. Nothing else needs to be said.
 
-## Now: one migration and two functions (26 October 2026)
+## Now: redeploy two functions (no migration)
+
+Everything below is live, checked on 25 October: `staff_take_table` exists,
+both Monri functions run the new code, and `monri-webhook` runs without JWT
+verification. But Lovable deployed them from `a78ada4`, before
+`https://lasoulapp.netlify.app` joined their CORS list, so a card payment
+started on the Netlify site would be refused. Not urgent while card payment
+is off; it must be done before Monri goes live.
+
+---
+
+> **Task: redeploy two Edge Functions from the latest `main`. No migration, no
+> SQL, no other changes.**
+>
+> Make sure your checkout includes commit `d9c4b6c` (the latest `main`). Then
+> redeploy `monri-create-payment` and `monri-webhook` from
+> `supabase/functions/` with the settings in `supabase/config.toml`
+> (`monri-webhook` has `verify_jwt = false`). Paste the deploy result.
+>
+> Do not create or change any user account, password or credential, and do not
+> enable online card payments.
+
+---
+
+## Done: one migration and two functions (25 October 2026)
 
 The whole October batch is live (Lovable applied the 26 files through the
 runner on 25 October; all twelve checks passed). Pending:
