@@ -2,7 +2,7 @@
 
 Copy everything between the rules into Lovable. Nothing else needs to be said.
 
-Last updated: **25 October 2026**, for thirty-two migrations from
+Last updated: **25 October 2026**, for thirty-four migrations from
 `20260804090300` to `20261026110000`.
 
 > **What is actually live.** Checked against the production API on
@@ -42,7 +42,7 @@ whose search text is not in the live function — send it back before going on.
 
 ## Step 2 — the prompt
 
-> **Task: apply thirty-two existing migration files to Supabase, in order. Do not
+> **Task: apply thirty-four existing migration files to Supabase, in order. Do not
 > write any new SQL.**
 >
 > These files are already in the repository under `supabase/migrations/`:
@@ -79,6 +79,8 @@ whose search text is not in the live function — send it back before going on.
 > 20261025140000_menu_translations.sql
 > 20261025150000_menu_corrections.sql
 > 20261025160000_reco_profit.sql
+> 20261026100000_promotions.sql
+> 20261026100100_promotions_ordering.sql
 > 20261026110000_reco_adaptive.sql
 > ```
 >
