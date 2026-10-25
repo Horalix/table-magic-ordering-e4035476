@@ -11,6 +11,7 @@
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { UNKNOWN_STATUS, type PrintOutcome, type PrinterStatus } from '@/lib/print-outcome';
+import { foldToAscii } from '../../supabase/functions/_shared/ticket-layout.ts';
 
 const ESC_POS_SERVICE = 0x18f0;
 const ESC_POS_CHAR = 0x2af1;
@@ -255,31 +256,32 @@ async function ensureConnected() {
   throw new Error('No printer connected.');
 }
 
-/** Send one or more ESC/POS copies without allowing concurrent jobs to interleave. */
-async function writeTextBluetooth(text: string, copies: number): Promise<void> {
+/** Write raw bytes, MTU-chunked. Callers serialise through `bluetoothPrintQueue`. */
+async function writeBytesBluetooth(payload: Uint8Array): Promise<void> {
   await ensureConnected();
   if (!characteristic) throw new Error('Not connected.');
-  const enc = new TextEncoder();
-  const INIT = [0x1b, 0x40];           // ESC @  (reset)
-  const FEED_CUT = [0x0a, 0x0a, 0x0a, 0x1d, 0x56, 0x00]; // feed + full cut
-  const body = Array.from(enc.encode(text));
-  const payload = Uint8Array.from([...INIT, ...body, ...FEED_CUT]);
-  const copyCount = Math.max(1, Math.min(3, Math.floor(copies)));
-
   // BLE writes are MTU-limited; chunk to be safe.
   const CHUNK = 180;
-  for (let copy = 0; copy < copyCount; copy += 1) {
-    for (let i = 0; i < payload.length; i += CHUNK) {
-      const slice = payload.slice(i, i + CHUNK);
-      if (characteristic.properties.writeWithoutResponse) {
-        await characteristic.writeValueWithoutResponse(slice);
-      } else {
-        await characteristic.writeValue(slice);
-      }
-      await new Promise((resolve) => setTimeout(resolve, 18));
+  for (let i = 0; i < payload.length; i += CHUNK) {
+    const slice = payload.slice(i, i + CHUNK);
+    if (characteristic.properties.writeWithoutResponse) {
+      await characteristic.writeValueWithoutResponse(slice);
+    } else {
+      await characteristic.writeValue(slice);
     }
+    await new Promise((resolve) => setTimeout(resolve, 18));
   }
 }
+
+/** Plain text as ESC/POS: reset, the text folded to ASCII, feed and cut. */
+const textToEscPos = (text: string, copies: number): Uint8Array => {
+  const INIT = [0x1b, 0x40];           // ESC @  (reset)
+  const FEED_CUT = [0x0a, 0x0a, 0x0a, 0x1d, 0x56, 0x00]; // feed + full cut
+  const body = Array.from(foldToAscii(text), (c) => c.charCodeAt(0));
+  const one = [...INIT, ...body, ...FEED_CUT];
+  const copyCount = Math.max(1, Math.min(3, Math.floor(copies)));
+  return Uint8Array.from(Array.from({ length: copyCount }, () => one).flat());
+};
 
 /**
  * Print, and say honestly what happened.
@@ -292,13 +294,13 @@ async function writeTextBluetooth(text: string, copies: number): Promise<void> {
  * A device that cannot be queried still reports success, but flagged
  * `verified: false`. That is the truth, and the UI shows it.
  */
-export async function printTextBluetooth(text: string, copies = 1): Promise<PrintOutcome> {
+export async function printBytesBluetooth(payload: Uint8Array): Promise<PrintOutcome> {
   const job = bluetoothPrintQueue.then(async (): Promise<PrintOutcome> => {
     const before = await queryPrinterStatus();
     const beforeProblem = statusProblem(before);
     if (beforeProblem) return { ok: false, reason: beforeProblem };
 
-    await writeTextBluetooth(text, copies);
+    await writeBytesBluetooth(payload);
 
     const after = await queryPrinterStatus();
     const afterProblem = statusProblem(after);
@@ -309,6 +311,17 @@ export async function printTextBluetooth(text: string, copies = 1): Promise<Prin
 
   bluetoothPrintQueue = job.then(() => undefined, () => undefined);
   return job;
+}
+
+/**
+ * Plain-text printing, kept for callers that have only text.
+ *
+ * Prefer `printBytesBluetooth(buildKitchenTicketBytes(...))`: that is the
+ * ticket with the big table number and the inverse note bands. This sends the
+ * same words without any of the emphasis.
+ */
+export function printTextBluetooth(text: string, copies = 1): Promise<PrintOutcome> {
+  return printBytesBluetooth(textToEscPos(text, copies));
 }
 
 const statusProblem = (status: PrinterStatus): string | null => {

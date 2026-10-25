@@ -12,8 +12,8 @@ import {
 import {
   playOrderAlert, playWaiterCallAlert, playBillRequestAlert, unlockAudio, audioReady, playTestTone, useReminderChime,
 } from '@/lib/kitchen-sounds';
-import { buildKitchenTicketText, downloadKitchenTicketCsv, downloadKitchenTicketJson, printKitchenTicket, type KitchenPrintSettings } from '@/lib/ticket-export';
-import { isBluetoothConnected, tryReconnectBluetoothPrinter, printTextBluetooth, printerStatusCapable } from '@/lib/printer-connect';
+import { buildKitchenTicketBytes, downloadKitchenTicketCsv, downloadKitchenTicketJson, printKitchenTicket, type KitchenPrintSettings } from '@/lib/ticket-export';
+import { isBluetoothConnected, tryReconnectBluetoothPrinter, printBytesBluetooth, printerStatusCapable } from '@/lib/printer-connect';
 import { enqueuePrint, retryPrintQueue, usePrintQueue } from '@/lib/print-queue';
 import type { PrintOutcome } from '@/lib/print-outcome';
 import ConnectionPill from '@/components/staff/ConnectionPill';
@@ -344,7 +344,7 @@ const KitchenDisplay = () => {
         if (!won) return { ok: true, verified: false };
 
         const outcome = isBluetoothConnected()
-          ? await printTextBluetooth(buildKitchenTicketText(order, settings), printConfig.print_copies)
+          ? await printBytesBluetooth(buildKitchenTicketBytes(order, settings))
           : await printKitchenTicket(order, settings);
 
         await reportTicketPrint(order.id, outcome.ok, outcome.ok ? undefined : outcome.reason, type,

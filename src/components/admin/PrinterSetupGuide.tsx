@@ -3,10 +3,10 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Monitor, Wifi, Bluetooth, Copy, Check, Printer, ChevronDown, Loader2, CheckCircle2, AlertTriangle, Sparkles, HelpCircle } from 'lucide-react';
 import { toast } from 'sonner';
-import { buildKitchenTicketText, type KitchenPrintSettings } from '@/lib/ticket-export';
+import { buildKitchenTicketBytes, type KitchenPrintSettings } from '@/lib/ticket-export';
 import {
   bluetoothSupported, connectBluetoothPrinter, connectedPrinterName, disconnectBluetoothPrinter,
-  printTextBluetooth, inEmbeddedFrame, friendlyBluetoothError, tryReconnectBluetoothPrinter,
+  printBytesBluetooth, inEmbeddedFrame, friendlyBluetoothError, tryReconnectBluetoothPrinter,
   forgetBluetoothPrinter, rememberedPrinterName,
 } from '@/lib/printer-connect';
 
@@ -135,7 +135,7 @@ const PrinterSetupGuide = ({ settings, onTestPrint }: { settings: KitchenPrintSe
   const testBt = async () => {
     setBtBusy(true);
     try {
-      const outcome = await printTextBluetooth(buildKitchenTicketText(sampleOrder, settings), settings.copies);
+      const outcome = await printBytesBluetooth(buildKitchenTicketBytes(sampleOrder, { ...settings, test: true }));
       if (!outcome.ok) toast.error(outcome.reason);
       else if (outcome.verified) toast.success('Test ticket printed — the printer confirmed it');
       else toast.success('Test ticket sent. This printer cannot confirm — check the paper came out.');

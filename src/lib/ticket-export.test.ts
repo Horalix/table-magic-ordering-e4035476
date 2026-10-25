@@ -151,6 +151,7 @@ describe('reprints', () => {
   });
 
   it('bands the printed page as well as the text', () => {
-    expect(buildKitchenTicketHtml(order, reprint)).toContain('class="reprint"');
+    // Inverted ("i") and marked as the reprint band, on paper as on screen.
+    expect(buildKitchenTicketHtml(order, reprint)).toContain('class="l b i reprint"');
   });
 });
