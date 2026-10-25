@@ -74,7 +74,10 @@ const AdminPromotions = () => {
       .select('order_id, quantity, unit_price, regular_unit_price')
       .gte('created_at', since)
       .not('regular_unit_price', 'is', null);
-    const sold = (lines ?? []).filter((l) => Number(l.regular_unit_price) > Number(l.unit_price));
+    // The generated types do not know regular_unit_price until 20261026100000
+    // is applied; at runtime the query simply returns nothing then.
+    const sold = ((lines ?? []) as unknown as { order_id: string; quantity: number; unit_price: number | string; regular_unit_price: number | string }[])
+      .filter((l) => Number(l.regular_unit_price) > Number(l.unit_price));
     if (sold.length === 0) { setStats({ lines: 0, taken: 0, given: 0 }); return; }
     const { data: orders } = await supabase.from('orders').select('id, status').in('id', [...new Set(sold.map((l) => l.order_id))]);
     const real = new Set((orders ?? []).filter((o) => !['cancelled', 'awaiting_payment', 'payment_failed'].includes(String(o.status))).map((o) => o.id));

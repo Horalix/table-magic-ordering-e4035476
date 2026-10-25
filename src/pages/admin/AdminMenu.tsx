@@ -20,11 +20,12 @@ import MenuItemDialog from '@/components/admin/MenuItemDialog';
 import { DIET_BY_KEY, getItemTags } from '@/lib/dietary';
 import { Link } from 'react-router-dom';
 import { isNew, saleScheduled } from '@/lib/promotions';
+import { type PromoColumns } from '@/lib/promotions-api';
 import type { Database } from '@/integrations/supabase/types';
 
 type CategoryInsert = Database['public']['Tables']['categories']['Insert'];
 type SubcategoryInsert = Database['public']['Tables']['subcategories']['Insert'];
-type MenuItemRow = Database['public']['Tables']['menu_items']['Row'];
+type MenuItemRow = Database['public']['Tables']['menu_items']['Row'] & PromoColumns;
 type AdminSubcategory = Database['public']['Tables']['subcategories']['Row'] & { menu_items?: MenuItemRow[] | null };
 type AdminCategory = Database['public']['Tables']['categories']['Row'] & { subcategories?: AdminSubcategory[] | null };
 

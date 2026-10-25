@@ -491,7 +491,7 @@ const MenuItemDialog = ({ open, onOpenChange, subcategoryId, item, onSaved, star
       const { error: comboError } = await supabase.rpc('admin_save_combo' as never, {
         _combo_item_id: savedId,
         _slots: comboOn ? slotsPayload(slots) : [],
-      });
+      } as never);
       if (comboError) {
         setSaving(false);
         toast.error(`The dish is saved, but its combo parts are not: ${comboError.message}`);
