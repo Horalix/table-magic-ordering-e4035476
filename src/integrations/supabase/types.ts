@@ -1089,6 +1089,7 @@ export type Database = {
           reco_weight_observed: number
           recommendations_enabled: boolean
           session_idle_timeout_minutes: number
+          social_proof_min_sessions: number
           updated_at: string
           venue_qr_rotated_at: string
           venue_qr_token: string
@@ -1121,6 +1122,7 @@ export type Database = {
           reco_weight_observed?: number
           recommendations_enabled?: boolean
           session_idle_timeout_minutes?: number
+          social_proof_min_sessions?: number
           updated_at?: string
           venue_qr_rotated_at?: string
           venue_qr_token?: string
@@ -1153,6 +1155,7 @@ export type Database = {
           reco_weight_observed?: number
           recommendations_enabled?: boolean
           session_idle_timeout_minutes?: number
+          social_proof_min_sessions?: number
           updated_at?: string
           venue_qr_rotated_at?: string
           venue_qr_token?: string
@@ -1310,6 +1313,54 @@ export type Database = {
             columns: ["session_id"]
             isOneToOne: true
             referencedRelation: "table_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      session_item_affinity: {
+        Row: {
+          a_sessions: number
+          computed_at: string
+          confidence: number
+          confidence_low: number
+          item_a: string
+          item_b: string
+          lift: number
+          pair_sessions: number
+        }
+        Insert: {
+          a_sessions: number
+          computed_at?: string
+          confidence: number
+          confidence_low: number
+          item_a: string
+          item_b: string
+          lift: number
+          pair_sessions: number
+        }
+        Update: {
+          a_sessions?: number
+          computed_at?: string
+          confidence?: number
+          confidence_low?: number
+          item_a?: string
+          item_b?: string
+          lift?: number
+          pair_sessions?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "session_item_affinity_item_a_fkey"
+            columns: ["item_a"]
+            isOneToOne: false
+            referencedRelation: "menu_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "session_item_affinity_item_b_fkey"
+            columns: ["item_b"]
+            isOneToOne: false
+            referencedRelation: "menu_items"
             referencedColumns: ["id"]
           },
         ]
@@ -2412,6 +2463,10 @@ export type Database = {
       }
       refresh_menu_intelligence: { Args: never; Returns: Json }
       refresh_prep_stats: { Args: { _days?: number }; Returns: number }
+      refresh_session_affinity: {
+        Args: { _days?: number; _min_pair_sessions?: number }
+        Returns: number
+      }
       refresh_suggestion_stats: { Args: { _days?: number }; Returns: number }
       release_order_to_kitchen: {
         Args: { _order_id: string }
@@ -2551,6 +2606,10 @@ export type Database = {
         Returns: Json
       }
       stop_experiment: { Args: { _notes?: string }; Returns: Json }
+      suggestion_evidence: {
+        Args: { _recommended_item_id: string; _source_item_id: string }
+        Returns: Json
+      }
       suggestion_impact: { Args: { _days?: number }; Returns: Json }
       suggestion_impact_by_placement: {
         Args: { _days?: number }
@@ -2596,6 +2655,10 @@ export type Database = {
           _var_b: number
         }
         Returns: Json
+      }
+      wilson_lower: {
+        Args: { _successes: number; _trials: number; _z?: number }
+        Returns: number
       }
       write_audit: {
         Args: {
