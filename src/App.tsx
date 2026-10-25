@@ -38,6 +38,7 @@ const AdminWaiters = lazy(() => import("./pages/admin/AdminWaiters"));
 const AdminPerformance = lazy(() => import("./pages/admin/AdminPerformance"));
 const AdminAudit = lazy(() => import("./pages/admin/AdminAudit"));
 const AdminImpact = lazy(() => import("./pages/admin/AdminImpact"));
+const AdminPromotions = lazy(() => import("./pages/admin/AdminPromotions"));
 const KitchenDisplay = lazy(() => import("./pages/KitchenDisplay"));
 const WaiterDashboard = lazy(() => import("./pages/WaiterDashboard"));
 const WaiterLogin = lazy(() => import("./pages/WaiterLogin"));
@@ -102,6 +103,7 @@ const App = () => (
             <Route path="/admin" element={<ClockProvider><AdminLayout /></ClockProvider>}>
               <Route index element={<AdminDashboard />} />
               <Route path="menu" element={<AdminMenu />} />
+              <Route path="promotions" element={<AdminPromotions />} />
               <Route path="tables" element={<AdminTables />} />
               <Route path="orders" element={<AdminOrders />} />
               <Route path="analytics" element={<AdminAnalytics />} />

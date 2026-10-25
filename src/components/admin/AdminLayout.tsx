@@ -5,7 +5,7 @@ import { supabase } from '@/integrations/supabase/client';
 import {
   LayoutDashboard, UtensilsCrossed, TableProperties, ClipboardList,
   BarChart3, QrCode, LogOut, ChefHat, Menu, X, Layers, Users, Star, Monitor,
-  CalendarCheck, Printer, Receipt, Sparkles, Brain, ScrollText, TrendingUp,
+  CalendarCheck, Printer, Receipt, Sparkles, Brain, ScrollText, TrendingUp, Tag,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { springPill } from '@/lib/motion';
@@ -29,6 +29,7 @@ const navGroups = [
     heading: 'Menu & Setup',
     items: [
       { label: 'Menu', icon: UtensilsCrossed, path: '/admin/menu' },
+      { label: 'Promotions', icon: Tag, path: '/admin/promotions' },
       { label: 'Sections', icon: Layers, path: '/admin/sections' },
       { label: 'Waiters', icon: Users, path: '/admin/waiters' },
       { label: 'QR Codes', icon: QrCode, path: '/admin/qr-codes' },
