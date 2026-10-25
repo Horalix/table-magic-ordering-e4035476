@@ -20,6 +20,7 @@ const PaymentConfirm = ({
   detail,
   onCancel,
   onConfirm,
+  onConfirmAndFree,
 }: {
   tableNumber: number | string;
   amount: number;
@@ -29,6 +30,12 @@ const PaymentConfirm = ({
   detail?: string;
   onCancel: () => void;
   onConfirm: () => void;
+  /**
+   * "Received + free table" — offered where the guests asked for the bill, so
+   * paying and closing the table is one confirmation instead of a trip to the
+   * table list. The server still refuses to free a table that owes anything.
+   */
+  onConfirmAndFree?: () => void;
 }) => (
   <div
     role="alertdialog"
@@ -45,13 +52,23 @@ const PaymentConfirm = ({
     <p className="text-sm text-muted-foreground font-sans mt-1">
       {detail ? `${detail}. ` : ''}This goes into the end-of-day count and cannot be undone here.
     </p>
-    <div className="flex gap-2 mt-3">
-      <Button variant="outline" className="min-h-[44px] flex-1 text-sm" onClick={onCancel} disabled={busy}>
+    <div className="flex flex-wrap gap-2 mt-3">
+      <Button variant="outline" className="min-h-[48px] flex-1 text-sm" onClick={onCancel} disabled={busy}>
         Cancel
       </Button>
-      <Button className="min-h-[44px] flex-1 text-sm" onClick={onConfirm} disabled={busy}>
+      <Button
+        variant={onConfirmAndFree ? 'outline' : 'default'}
+        className="min-h-[48px] flex-1 text-sm"
+        onClick={onConfirm}
+        disabled={busy}
+      >
         {busy ? 'Recording…' : `Yes, ${km(amount)} received`}
       </Button>
+      {onConfirmAndFree && (
+        <Button className="min-h-[48px] basis-full text-sm font-semibold" onClick={onConfirmAndFree} disabled={busy}>
+          {busy ? 'Recording…' : `${km(amount)} received + free table ${tableNumber}`}
+        </Button>
+      )}
     </div>
   </div>
 );

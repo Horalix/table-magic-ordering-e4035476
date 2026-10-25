@@ -31,7 +31,7 @@ import {
 import { toast } from 'sonner';
 import { formatDuration, formatMinutes, useElapsed, useElapsedMinutes, waitBg, seatedBg } from '@/lib/timing';
 import {
-  canTakePayment, describePaymentResult, km, recordTablePayment,
+  canTakePayment, closeTableSession, describePaymentResult, km, recordTablePayment,
   resolveBillRequest as rpcResolveBillRequest, resolveWaiterCall as rpcResolveWaiterCall,
   updateOrderStatus as rpcUpdateOrderStatus, type TablePaymentMethod, type TablePaymentResult,
 } from '@/lib/staff-api';
@@ -39,7 +39,7 @@ import {
   useCoalesced, useLatestRequest, useStaffRealtime, useStaffRealtimeEvent, useStaffRefresh,
 } from '@/lib/realtime';
 import {
-  playBillRequestAlert, playWaiterCallAlert, useAudioUnlock, useReminderChime, vibrate,
+  playBillRequestAlert, playOrderAlert, playWaiterCallAlert, useAudioUnlock, useReminderChime, vibrate,
 } from '@/lib/kitchen-sounds';
 import ConnectionPill from '@/components/staff/ConnectionPill';
 import PaymentConfirm from '@/components/staff/PaymentConfirm';
@@ -312,8 +312,8 @@ const WaiterDashboard = () => {
    * already paid (typically online) are called out loudly — that is money the
    * waiter must NOT take — instead of being announced as "recorded".
    */
-  const confirmSettle = () => settle && once(`settle:${settle.sessionId}`, async () => {
-    const { orderIds, method, tableNumber } = settle;
+  const confirmSettle = (freeAfter = false) => settle && once(`settle:${settle.sessionId}`, async () => {
+    const { orderIds, method, tableNumber, sessionId } = settle;
     const results: { id: string; result: TablePaymentResult }[] = [];
     let failed = 0;
     for (const id of orderIds) {
@@ -337,8 +337,20 @@ const WaiterDashboard = () => {
         { duration: 10_000 },
       );
     }
-    if (recorded > 0 && failed === 0) {
+    if (recorded > 0 && failed === 0 && !freeAfter) {
       toast.success(`Table ${tableNumber}: ${describePaymentResult({ status: 'paid', payment_method: method }, method).message}`);
+    }
+
+    // Paid and leaving: free the table in the same breath. Not when anything
+    // went wrong above — that is a conversation at the table first.
+    if (freeAfter && failed === 0 && already.length === 0) {
+      try {
+        const result = await closeTableSession(sessionId);
+        if (result.closed) toast.success(`Table ${tableNumber}: ${km(settle.amount)} recorded, table is free`);
+        else toast.error(`Table ${tableNumber}: payment recorded, but it still owes ${km(result.outstanding)} — not freed`);
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : 'Payment recorded, but the table could not be freed');
+      }
     }
   });
 
@@ -361,7 +373,7 @@ const WaiterDashboard = () => {
   }, [bySession]);
 
   /** Ready plates are the most time-critical thing a waiter does; they lead. */
-  const readyToRun = orders.filter((o) => o.status === 'ready');
+  const readyToRun = useMemo(() => orders.filter((o) => o.status === 'ready'), [orders]);
   /** In the kitchen, not yet up. */
   const cooking = orders.filter((o) => isInKitchen(o.status) && !isHeld(o) && !['ready', 'served'].includes(o.status));
   /**
@@ -411,6 +423,23 @@ const WaiterDashboard = () => {
     if (newBill) playBillRequestAlert(); else playWaiterCallAlert();
   }, [waiterCalls, billRequests, soundOn, loading]);
 
+  /*
+   * Buzz when food for MY tables comes up. The pass rings a bell the waiter
+   * on the terrace cannot hear; the phone in the apron can. Same baseline
+   * rule as calls: nothing already up at the first load is "new".
+   */
+  const prevReady = useRef<Set<string> | null>(null);
+  useEffect(() => {
+    if (loading) return;
+    const ids = new Set(readyToRun.map((o) => o.id));
+    const prev = prevReady.current;
+    prevReady.current = ids;
+    if (prev === null) return;
+    if (![...ids].some((id) => !prev.has(id))) return;
+    vibrate([120, 80, 120, 80, 120]);
+    if (soundOn) playOrderAlert();
+  }, [readyToRun, soundOn, loading]);
+
   /* Again every ~75s while a table is waiting and nobody is on the way. */
   const alertsRef = useRef({ calls: waiterCalls, bills: billRequests });
   useEffect(() => { alertsRef.current = { calls: waiterCalls, bills: billRequests }; }, [waiterCalls, billRequests]);
@@ -439,7 +468,7 @@ const WaiterDashboard = () => {
     setSettle({ sessionId, tableNumber, method, orderIds: due.map((o) => o.id), amount });
   };
 
-  const settleRow = (sessionId: string, tableNumber: number | string) => {
+  const settleRow = (sessionId: string, tableNumber: number | string, offerFree = false) => {
     const { due, amount } = owedFor(sessionId);
     if (settle?.sessionId === sessionId) {
       return (
@@ -451,10 +480,21 @@ const WaiterDashboard = () => {
           detail={settle.orderIds.length > 1 ? `${settle.orderIds.length} orders` : undefined}
           onCancel={() => setSettle(null)}
           onConfirm={() => { void confirmSettle(); }}
+          onConfirmAndFree={offerFree ? () => { void confirmSettle(true); } : undefined}
         />
       );
     }
-    if (due.length === 0) return null;
+    if (due.length === 0) {
+      // Nothing owed (paid online, or just settled): the next thing is the
+      // table itself, so the button is right here rather than in "My tables".
+      if (!offerFree) return null;
+      const session = tables.find((t) => t.id === sessionId);
+      return session ? (
+        <Button className="w-full min-h-[48px] tap text-sm gap-1.5" onClick={() => setFreeing(session)}>
+          <PowerOff className="w-4 h-4" /> Nothing owed — free table {tableNumber}
+        </Button>
+      ) : null;
+    }
     return (
       <OwesRow
         amount={amount}
@@ -555,21 +595,16 @@ const WaiterDashboard = () => {
           ) : (
             <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
               <AnimatePresence mode="popLayout">
-                {billRequests.map((bill) => (
-                  <AlertCard
-                    key={bill.id}
-                    color="primary"
-                    icon={<CreditCard className="w-5 h-5" />}
-                    title={`Table ${tableOf(bill)}`}
-                    label="Wants the bill"
-                    alert={bill}
-                    claimedBy={bill.acknowledged_by ? staffNames[bill.acknowledged_by] ?? 'Someone' : null}
-                    doneLabel="Bill given"
-                    busy={busy.has(`bill:${bill.id}`)}
-                    onDone={() => { void resolveBill(bill.id); }}
-                  >
-                    {settleRow(bill.table_session_id, tableOf(bill))}
-                  </AlertCard>
+                {/* Food going cold first, then a guest waiting, then the bill. */}
+                {readyToRun.map((order) => (
+                  <motion.div key={order.id} layout initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.96 }}>
+                    <OrderCard
+                      order={order}
+                      busy={busy.has(`order:${order.id}`)}
+                      onUpdate={updateOrderStatus}
+                      highlight
+                    />
+                  </motion.div>
                 ))}
                 {waiterCalls.map((call) => (
                   <AlertCard
@@ -585,15 +620,21 @@ const WaiterDashboard = () => {
                     onDone={() => { void resolveCall(call.id); }}
                   />
                 ))}
-                {readyToRun.map((order) => (
-                  <motion.div key={order.id} layout initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.96 }}>
-                    <OrderCard
-                      order={order}
-                      busy={busy.has(`order:${order.id}`)}
-                      onUpdate={updateOrderStatus}
-                      highlight
-                    />
-                  </motion.div>
+                {billRequests.map((bill) => (
+                  <AlertCard
+                    key={bill.id}
+                    color="primary"
+                    icon={<CreditCard className="w-5 h-5" />}
+                    title={`Table ${tableOf(bill)}`}
+                    label="Wants the bill"
+                    alert={bill}
+                    claimedBy={bill.acknowledged_by ? staffNames[bill.acknowledged_by] ?? 'Someone' : null}
+                    doneLabel="Bill given"
+                    busy={busy.has(`bill:${bill.id}`)}
+                    onDone={() => { void resolveBill(bill.id); }}
+                  >
+                    {settleRow(bill.table_session_id, tableOf(bill), true)}
+                  </AlertCard>
                 ))}
               </AnimatePresence>
             </div>
@@ -801,15 +842,15 @@ const AlertCard = ({
             {icon}
           </div>
           <div className="min-w-0 flex-1">
-            <p className="font-sans font-bold text-base truncate">{title}</p>
-            <p className="text-sm text-muted-foreground truncate">
-              {label} | <Elapsed since={alert.created_at} />
+            <p className="font-sans font-bold text-xl leading-tight truncate">{title}</p>
+            <p className="text-sm font-medium text-foreground/80 truncate">
+              {label} · <Elapsed since={alert.created_at} />
             </p>
             {alert.status === 'acknowledged' && claimedBy && (
               <p className="text-sm font-medium text-foreground truncate"><Going name={claimedBy} since={alert.acknowledged_at} /></p>
             )}
           </div>
-          <Button variant="ghost" className="tap-sm shrink-0 min-h-[44px] text-sm" disabled={busy} onClick={onDone}>
+          <Button variant="outline" className="tap-sm shrink-0 min-h-[48px] text-sm font-semibold" disabled={busy} onClick={onDone}>
             <CheckCircle2 className="w-4 h-4 mr-1" /> {doneLabel}
           </Button>
         </div>
@@ -912,7 +953,7 @@ const OrderCard = ({ order, busy, onUpdate, highlight = false }: {
       <CardContent className="p-4">
         <div className="flex items-center justify-between mb-2.5 gap-2">
           <div className="flex items-center gap-2 min-w-0 flex-wrap">
-            <p className="font-serif text-lg font-bold shrink-0">T{tableNumber}</p>
+            <p className="font-serif text-2xl font-bold leading-none shrink-0">T{tableNumber}</p>
             <Badge variant="outline" className="text-xs gap-1.5">
               <span className={`w-1.5 h-1.5 rounded-full ${meta?.dot ?? ''}`} />
               {highlight ? 'Ready to run' : held ? 'Needs confirming' : orderStatusLabel(order.status)}
@@ -948,7 +989,7 @@ const OrderCard = ({ order, busy, onUpdate, highlight = false }: {
           <p className="text-sm text-accent font-semibold mb-3 -mt-2">Note: {order.notes}</p>
         )}
         {next && (
-          <Button className="w-full tap min-h-[44px] text-sm" disabled={busy} onClick={() => onUpdate(order.id, next.status)}>
+          <Button className="w-full tap min-h-[52px] text-base font-semibold" disabled={busy} onClick={() => onUpdate(order.id, next.status)}>
             {next.icon}{next.label}
           </Button>
         )}
