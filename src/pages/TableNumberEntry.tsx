@@ -99,7 +99,7 @@ const TableNumberEntry = () => {
         transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
         className="w-full max-w-sm text-center"
       >
-        <img src="/lasoul-logo.svg" alt="La Soul" className="w-24 h-24 object-contain brightness-0 invert mx-auto mb-6" />
+        <img src="/brand/lockup-white.webp" alt="La Soul" width={645} height={960} className="h-40 w-auto mx-auto mb-7" />
         <h1 className="font-serif text-2xl font-bold text-white">{t('which_table')}</h1>
         <p className="text-white/70 font-sans text-sm mt-2 leading-relaxed">{t('which_table_sub')}</p>
 

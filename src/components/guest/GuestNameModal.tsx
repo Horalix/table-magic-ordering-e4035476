@@ -46,9 +46,10 @@ const GuestNameModal = ({ onSubmit }: Props) => {
           initial={{ scale: 0 }}
           animate={{ scale: 1 }}
           transition={{ type: 'spring', damping: 12, stiffness: 200, delay: 0.2 }}
-          className="w-20 h-20 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-6"
+          className="w-24 h-24 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-6"
         >
-          <img src="/lasoul-logo.svg" alt="La Soul" className="w-12 h-12 object-contain" />
+          {/* Brand dark on the light dialog: the old white artwork vanished here. */}
+          <img src="/brand/emblem-dark.webp" alt="La Soul" width={480} height={480} className="w-16 h-16" />
         </motion.div>
 
         <h2 className="font-serif text-2xl font-bold text-foreground">{t('welcome')}</h2>
@@ -56,6 +57,7 @@ const GuestNameModal = ({ onSubmit }: Props) => {
 
         <div className="mt-6 space-y-3">
           <Input
+            aria-label={t('enter_your_name')}
             placeholder={t('name_placeholder')}
             value={name}
             onChange={(e) => { setName(e.target.value); setError(''); }}

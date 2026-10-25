@@ -167,31 +167,48 @@ const GuestMenu = () => {
         className="hero-depth relative overflow-hidden px-5 pt-[max(1.25rem,env(safe-area-inset-top))] pb-9"
         style={{ backgroundColor: 'hsl(140, 12%, 53%)' }}
       >
+        {/* The olive branch from the logo, as the band's artwork. Decorative,
+            and faint enough that the buttons over it stay the thing you see. */}
+        <img
+          src="/brand/branch-white.webp"
+          alt=""
+          aria-hidden
+          width={720}
+          height={670}
+          className="pointer-events-none select-none absolute -top-10 -end-20 w-64 opacity-[0.18] rtl:-scale-x-100"
+        />
+        {/* Row one is the brand and the language, nothing else, so the
+            wordmark can be big enough to read across a table. */}
         <div className="relative z-10 flex items-center justify-between gap-3">
-          <div dir="ltr" className="flex items-center gap-3 min-w-0">
-            <img src="/lasoul-logo.svg" alt="" aria-hidden className="w-11 h-11 object-contain brightness-0 invert shrink-0" />
-            <div className="min-w-0">
-              <p className="font-serif text-xl font-bold text-white tracking-[0.14em] leading-none">LA SOUL</p>
-              <p className="text-[10px] font-sans text-white/70 tracking-[0.3em] uppercase font-medium mt-1.5">{t('menu')}</p>
-            </div>
+          <div dir="ltr" className="min-w-0">
+            <img
+              src="/brand/wordmark-white.webp"
+              alt="La Soul"
+              width={960}
+              height={124}
+              {...{ fetchpriority: 'high' }}
+              className="h-7 w-auto drop-shadow-[0_1px_2px_rgba(0,0,0,0.15)]"
+            />
+            <p className="text-[10px] font-sans text-white/85 tracking-[0.34em] uppercase font-semibold mt-2.5 ps-0.5 rtl:tracking-normal rtl:text-xs">{t('menu')}</p>
           </div>
-          <div className="flex items-center gap-2 shrink-0">
-            <CallWaiterButton variant="hero" />
-            <LanguageSelector variant="hero" />
-          </div>
+          <LanguageSelector variant="hero" />
         </div>
 
-        {table && hasSession && (
-          <motion.button
-            initial={{ opacity: 0, y: 4 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.15, duration: 0.25 }}
-            onClick={onChangeTable}
-            className="relative z-10 mt-5 px-4 min-h-[36px] rounded-full border border-white/20 bg-white/10 text-xs font-sans font-medium text-white tracking-wider hover:bg-white/20 transition-colors"
-            title={t('not_your_table')}
-          >
-            {t('table')} {table} · <span className="underline underline-offset-2">{t('change_table')}</span>
-          </motion.button>
+        {/* Row two is the table: where you are, and the one thing you can ask of it. */}
+        {(table && hasSession) && (
+          <div className="relative z-10 mt-5 flex items-center justify-between gap-2">
+            <motion.button
+              initial={{ opacity: 0, y: 4 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.15, duration: 0.25 }}
+              onClick={onChangeTable}
+              className="px-4 min-h-[40px] rounded-full border border-white/25 bg-white/10 text-xs font-sans font-medium text-white tracking-wide rtl:tracking-normal hover:bg-white/20 transition-colors"
+              title={t('not_your_table')}
+            >
+              {t('table_n', { n: table })} · <span className="underline underline-offset-2">{t('change_table')}</span>
+            </motion.button>
+            <CallWaiterButton variant="hero" />
+          </div>
         )}
       </motion.header>
 
@@ -238,7 +255,7 @@ const GuestMenu = () => {
                 variants={fadeUp}
                 whileTap={{ scale: 0.98 }}
                 onClick={() => openCategory(cat.name)}
-                className="relative block w-full aspect-[16/9] overflow-hidden rounded-2xl bg-muted text-left shadow-sm tap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                className="relative block w-full aspect-[16/9] overflow-hidden rounded-2xl bg-muted text-start shadow-sm tap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
               >
                 {cover ? (
                   <img
@@ -284,7 +301,7 @@ const GuestMenu = () => {
               if (sections.length < 2) return null;
               return (
                 <div key={cat.id}>
-                  <p className="text-[11px] font-sans font-semibold uppercase tracking-[0.18em] text-muted-foreground mb-2">
+                  <p className="text-[11px] font-sans font-semibold uppercase tracking-[0.18em] rtl:tracking-normal text-muted-foreground mb-2">
                     {getLocalizedName(cat as CategoryRow, locale)}
                   </p>
                   <div className="flex flex-wrap gap-2">

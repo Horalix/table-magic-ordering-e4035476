@@ -91,11 +91,7 @@ const AdminLogin = () => {
       <div className="w-full max-w-sm">
         {/* [ART] Logo + branding on sage background */}
         <div className="text-center mb-8">
-          <img
-            src="/lasoul-logo.svg"
-            alt="La Soul"
-            className="w-20 h-20 object-contain brightness-0 invert mx-auto mb-4"
-          />
+          <img src="/brand/emblem-white.webp" alt="La Soul" width={480} height={480} className="w-24 h-24 mx-auto mb-4" />
           <h1 className="font-serif text-2xl font-bold text-white">La Soul Admin</h1>
           <p className="text-sm text-white/60 font-sans mt-1">Sign in to manage your restaurant</p>
         </div>

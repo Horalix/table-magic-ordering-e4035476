@@ -19,7 +19,7 @@ export default defineConfig(({ mode }) => ({
     VitePWA({
       registerType: "autoUpdate",
       injectRegister: "auto",
-      includeAssets: ["favicon.ico", "lasoul-logo.svg", "icons/apple-touch-icon.png"],
+      includeAssets: ["favicon.ico", "icons/apple-touch-icon.png", "brand/wordmark-white.webp", "brand/branch-white.webp"],
       manifest: {
         name: "La Soul",
         short_name: "La Soul",
