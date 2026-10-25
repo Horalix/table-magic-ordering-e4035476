@@ -33,7 +33,7 @@ export interface PayableOrder {
 export const cardPaymentEnabledInBuild = import.meta.env.VITE_MONRI_ENABLED !== 'false';
 
 export interface CardPaymentStatus {
-  /** MONRI_MERCHANT_KEY and MONRI_AUTHENTICITY_TOKEN are set as Edge Function secrets. */
+  /** Monri's merchant key and authenticity token are set as Edge Function secrets. */
   configured: boolean;
   environment: 'test' | 'production';
   currency: string;

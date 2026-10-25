@@ -122,7 +122,7 @@ const AdminService = () => {
   /** Card payments can only be switched on once Monri can actually take them. */
   const setOnlineCard = (on: boolean) => {
     if (on && !monri?.configured) {
-      toast.error('Monri is not connected yet. Add MONRI_MERCHANT_KEY and MONRI_AUTHENTICITY_TOKEN as Edge Function secrets first (docs/monri-go-live.md).');
+      toast.error('Monri is not connected yet. Add Monri’s merchant key and authenticity token as Edge Function secrets first (docs/monri-go-live.md).');
       return;
     }
     void patch({ online_card_enabled: on });
@@ -679,8 +679,9 @@ const MonriReadiness = ({ status }: { status: CardPaymentStatus | null | undefin
       </div>
       {!status.configured && (
         <p className="text-muted-foreground">
-          When Monri issues the online merchant account, add MONRI_MERCHANT_KEY, MONRI_AUTHENTICITY_TOKEN and
-          MONRI_ENVIRONMENT as Edge Function secrets — no rebuild needed. Then this switch can be turned on.
+          When Monri issues the online merchant account, add its merchant key, authenticity token and
+          environment as Edge Function secrets (docs/monri-go-live.md) — no rebuild needed. Then this switch can be
+          turned on.
         </p>
       )}
       <div className="flex items-center gap-2 min-w-0">
