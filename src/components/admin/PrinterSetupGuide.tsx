@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Monitor, Wifi, Bluetooth, Copy, Check, Printer, ChevronDown, Loader2, CheckCircle2, AlertTriangle, Sparkles, HelpCircle } from 'lucide-react';
+import { Monitor, Wifi, Bluetooth, Copy, Check, Printer, ChevronDown, Loader2, CheckCircle2, AlertTriangle, Sparkles, HelpCircle, Usb } from 'lucide-react';
 import { toast } from 'sonner';
 import { buildKitchenTicketBytes, type KitchenPrintSettings } from '@/lib/ticket-export';
 import {
@@ -9,6 +9,10 @@ import {
   printBytesBluetooth, inEmbeddedFrame, friendlyBluetoothError, tryReconnectBluetoothPrinter,
   forgetBluetoothPrinter, rememberedPrinterName,
 } from '@/lib/printer-connect';
+import {
+  connectSerialPrinter, connectUsbPrinter, directPrinterName, forgetDirectPrinters, printBytesDirect,
+  serialSupported, tryReconnectSerialPrinter, tryReconnectUsbPrinter, usbSupported,
+} from '@/lib/printer-direct';
 
 /**
  * Self-serve kitchen-ticket printer setup. Leads with the easiest method for the
@@ -93,7 +97,36 @@ const PrinterSetupGuide = ({ settings, onTestPrint }: { settings: KitchenPrintSe
   const btBlocked = inEmbeddedFrame();
   const recommend: 'device' | 'bluetooth' = btOk && !btBlocked ? 'bluetooth' : 'device';
 
-  const [method, setMethod] = useState<'device' | 'bluetooth' | 'network'>(recommend);
+  const [method, setMethod] = useState<'device' | 'bluetooth' | 'usb' | 'network'>(recommend);
+  const directOk = usbSupported() || serialSupported();
+  const [directName, setDirectName] = useState<string | null>(() => directPrinterName());
+  const [directBusy, setDirectBusy] = useState(false);
+
+  useEffect(() => {
+    if (!directOk) return;
+    void tryReconnectUsbPrinter().then((n) => { if (n) setDirectName(n); });
+    void tryReconnectSerialPrinter().then((n) => { if (n) setDirectName((prev) => prev ?? n); });
+  }, [directOk]);
+
+  const connectDirect = async (kind: 'usb' | 'serial') => {
+    setDirectBusy(true);
+    try {
+      const name = kind === 'usb' ? await connectUsbPrinter() : await connectSerialPrinter();
+      setDirectName(name);
+      toast.success(`Connected to ${name}`);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (!/No device selected|cancel/i.test(msg)) toast.error(msg);
+    } finally { setDirectBusy(false); }
+  };
+  const testDirect = async () => {
+    setDirectBusy(true);
+    try {
+      const outcome = await printBytesDirect(buildKitchenTicketBytes(sampleOrder, { ...settings, test: true }));
+      if (!outcome.ok) toast.error(outcome.reason);
+      else toast.success('Test ticket sent. This printer cannot confirm — check the paper came out.');
+    } finally { setDirectBusy(false); }
+  };
   const [showSilent, setShowSilent] = useState(false);
   const [isPrinter, setIsPrinter] = useState(() => typeof localStorage !== 'undefined' && localStorage.getItem(PRINTER_KEY) === 'true');
   const [btName, setBtName] = useState<string | null>(() => connectedPrinterName());
@@ -160,9 +193,10 @@ const PrinterSetupGuide = ({ settings, onTestPrint }: { settings: KitchenPrintSe
           </div>
         )}
 
-        <div className={`grid gap-2 ${btOk ? 'grid-cols-1 sm:grid-cols-3' : 'grid-cols-1 sm:grid-cols-2'}`}>
+        <div className={`grid gap-2 grid-cols-1 sm:grid-cols-2 ${btOk && directOk ? 'lg:grid-cols-4' : btOk || directOk ? 'lg:grid-cols-3' : ''}`}>
           {btOk && <MethodButton active={method === 'bluetooth'} onClick={() => setMethod('bluetooth')} icon={Bluetooth} title="Bluetooth" sub="Pair once, prints automatically" recommended={recommend === 'bluetooth'} />}
-          <MethodButton active={method === 'device'} onClick={() => setMethod('device')} icon={Monitor} title="This device" sub="USB printer on this tablet/PC" recommended={recommend === 'device'} />
+          {directOk && <MethodButton active={method === 'usb'} onClick={() => setMethod('usb')} icon={Usb} title="USB or classic Bluetooth" sub="Android tablet + USB cable; Bluetooth printers missing above" />}
+          <MethodButton active={method === 'device'} onClick={() => setMethod('device')} icon={Monitor} title="This device" sub="Print dialog — Windows/Mac printer" recommended={recommend === 'device'} />
           <MethodButton active={method === 'network'} onClick={() => setMethod('network')} icon={Wifi} title="Network" sub="LAN printer — no tablet needed" />
         </div>
 
@@ -219,6 +253,44 @@ const PrinterSetupGuide = ({ settings, onTestPrint }: { settings: KitchenPrintSe
               <>The printer must be a <span className="font-medium">Bluetooth ESC/POS</span> model and not already connected to another phone/tablet.</>,
               <>If it stopped after a while, tap <span className="font-medium">Reconnect</span> (or just reopen the Kitchen Display) — it pairs again without the popup.</>,
               <>iPhone/iPad don't support Bluetooth printing — use an Android/Windows tablet, or the Network option.</>,
+            ]} />
+          </div>
+        )}
+
+        {/* USB / SERIAL — straight to the printer, no dialog */}
+        {method === 'usb' && directOk && (
+          <div className="space-y-3 pt-1">
+            <div className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-sans ${directName ? 'bg-primary/10 text-primary' : 'bg-muted/50 text-muted-foreground'}`}>
+              {directName ? <CheckCircle2 className="w-4 h-4 shrink-0" /> : <Usb className="w-4 h-4 shrink-0" />}
+              {directName ? <span>Connected: <span className="font-semibold">{directName}</span> · reconnects automatically</span> : 'No USB or serial printer connected'}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {usbSupported() && (
+                <Button onClick={() => connectDirect('usb')} disabled={directBusy} variant={directName ? 'outline' : 'default'} className="gap-1.5">
+                  {directBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Usb className="w-4 h-4" />} Connect USB printer
+                </Button>
+              )}
+              {serialSupported() && (
+                <Button onClick={() => connectDirect('serial')} disabled={directBusy} variant="outline" className="gap-1.5">
+                  <Bluetooth className="w-4 h-4" /> Classic Bluetooth / serial
+                </Button>
+              )}
+              {directName && (
+                <>
+                  <Button variant="outline" onClick={testDirect} disabled={directBusy} className="gap-1.5"><Printer className="w-4 h-4" /> Send a test ticket</Button>
+                  <Button variant="ghost" onClick={() => { void forgetDirectPrinters().then(() => setDirectName(null)); }} className="text-muted-foreground">Forget</Button>
+                </>
+              )}
+            </div>
+            <div className="space-y-3 pt-1">
+              <Step n={1}><span className="font-medium text-foreground">Android tablet:</span> plug the printer in with a USB‑OTG cable, open this page in <span className="font-medium text-foreground">Chrome</span>, tap <span className="font-medium text-foreground">Connect USB printer</span> and pick it.</Step>
+              <Step n={2}><span className="font-medium text-foreground">Bluetooth printer that does not show up under Bluetooth:</span> pair it in the tablet’s own Bluetooth settings first (PIN is usually 0000 or 1234), then tap <span className="font-medium text-foreground">Classic Bluetooth / serial</span>.</Step>
+              <Step n={3}>Send a test ticket, then keep the <span className="font-medium text-foreground">Kitchen Display</span> open on this tablet — it reconnects on its own and prints every new order, with no print dialog.</Step>
+            </div>
+            <Troubleshoot tips={[
+              <>On Windows the printer’s own driver holds a USB printer — use <span className="font-medium">This device</span> (the print dialog) there instead.</>,
+              <>Classic Bluetooth needs Chrome 117+ on a computer or Chrome 137+ on Android.</>,
+              <>If tickets come out as strange characters, the printer may not be ESC/POS — check its manual or use a network printer.</>,
             ]} />
           </div>
         )}

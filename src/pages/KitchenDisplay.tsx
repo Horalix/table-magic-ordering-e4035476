@@ -21,6 +21,7 @@ import { boardSequence, keyCommand, keysBelongToBoard, nextBump, SHORTCUTS, type
 import { buildKitchenTicketBytes, downloadKitchenTicketCsv, downloadKitchenTicketJson, printKitchenTicket, ticketHasLines, type KitchenPrintSettings } from '@/lib/ticket-export';
 import { isBluetoothConnected, tryReconnectBluetoothPrinter, printBytesBluetooth, printerStatusCapable } from '@/lib/printer-connect';
 import { enqueuePrint, retryPrintQueue, usePrintQueue } from '@/lib/print-queue';
+import { isDirectConnected, printBytesDirect, tryReconnectSerialPrinter, tryReconnectUsbPrinter } from '@/lib/printer-direct';
 import type { PrintOutcome } from '@/lib/print-outcome';
 import { printerHealth, type PrinterHealth } from '@/lib/printers-api';
 import { cloudCoveredTypes, printerFor, printerSummary, ticketStateLabel, type TicketState } from '@/lib/print-routing';
@@ -335,8 +336,12 @@ const KitchenDisplay = () => {
   const beginCalls = useLatestRequest();
   const beginBills = useLatestRequest();
 
-  // Silently reconnect a previously-paired Bluetooth printer on load.
-  useEffect(() => { tryReconnectBluetoothPrinter().then((n) => { if (n) setBtName(n); }); }, []);
+  // Silently reconnect a previously-paired Bluetooth, USB or serial printer on load.
+  useEffect(() => {
+    void tryReconnectBluetoothPrinter().then((n) => { if (n) setBtName(n); });
+    void tryReconnectUsbPrinter().then((n) => { if (n) setBtName((prev) => prev ?? n); });
+    void tryReconnectSerialPrinter().then((n) => { if (n) setBtName((prev) => prev ?? n); });
+  }, []);
 
   // Load print settings + keep them live — through the shared channel, rather
   // than a second socket of this screen's own.
@@ -423,7 +428,9 @@ const KitchenDisplay = () => {
 
         const outcome = isBluetoothConnected()
           ? await printBytesBluetooth(buildKitchenTicketBytes(order, settings))
-          : await printKitchenTicket(order, settings);
+          : isDirectConnected()
+            ? await printBytesDirect(buildKitchenTicketBytes(order, settings))
+            : await printKitchenTicket(order, settings);
 
         await reportTicketPrint(order.id, outcome.ok, outcome.ok ? undefined : outcome.reason, type,
           outcome.ok ? outcome.verified : undefined).catch(() => {});
@@ -453,7 +460,7 @@ const KitchenDisplay = () => {
    * cannot print early from here either.
    */
   useEffect(() => {
-    if ((!isPrinter && !isBluetoothConnected()) || !printConfig.print_enabled || !printConfig.print_auto) return;
+    if ((!isPrinter && !isBluetoothConnected() && !isDirectConnected()) || !printConfig.print_enabled || !printConfig.print_auto) return;
     const mine = new Set(ticketTypes());
     const cloud = cloudCoveredTypes(cloudPrinters);
 
@@ -1270,7 +1277,7 @@ const KitchenDisplay = () => {
                   <span className="w-1.5 h-1.5 rounded-full bg-primary breathe" /> <Printer className="w-3 h-3" />
                   {btName ? `Printing · ${btName}` : 'Printing on this device'}
                   {/* Never call an unverifiable write "printed" without saying so. */}
-                  {btName && !printerStatusCapable() && <span className="text-muted-foreground"> (unverified)</span>}
+                  {btName && (isDirectConnected() || !printerStatusCapable()) && <span className="text-muted-foreground"> (unverified)</span>}
                   {printQueue.state === 'printing' && <span className="text-muted-foreground"> · {printQueue.current}</span>}
                 </span>
               )}
