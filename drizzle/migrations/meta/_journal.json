@@ -43,6 +43,20 @@
       "when": 1792941783686,
       "tag": "0005_thompson_sampling",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1792942733713,
+      "tag": "0006_business_day",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1792942782988,
+      "tag": "0007_stale_orders",
+      "breakpoints": true
     }
   ]
 }
