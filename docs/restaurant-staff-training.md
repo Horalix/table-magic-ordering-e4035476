@@ -5,6 +5,8 @@ copy by the pass. The staff screens are in English; guests see the menu in
 Bosnian, English or Arabic. Words in **bold** are exactly what is on the
 screen.
 
+Na bosanskom: [restaurant-staff-training.bs.md](restaurant-staff-training.bs.md).
+
 ---
 
 ## Your screens

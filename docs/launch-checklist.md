@@ -112,6 +112,9 @@ here is in the admin menu on the left (on a phone: **More**).
 - [ ] **Two guest phones**: one iPhone, one Android, at least one on mobile
       data rather than the restaurant Wi-Fi.
 - [ ] Every staff screen shows the green **Live** pill.
+- [ ] Every waiter and the kitchen have read the staff guide, in English
+      (`docs/restaurant-staff-training.md`) or Bosnian
+      (`docs/restaurant-staff-training.bs.md`).
 
 ### Before guests, not before the rehearsal
 

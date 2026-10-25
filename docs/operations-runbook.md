@@ -45,7 +45,7 @@ staff-facing "how do I do X", see `docs/restaurant-staff-training.md`.
 | Proving what the suggestions earned | `docs/measuring-upsell.md` |
 | Test suites and how to add to them | `docs/testing-guide.md` |
 | Step-by-step go-live and rollback | `docs/launch-checklist.md` |
-| Floor-staff guide (printable) | `docs/restaurant-staff-training.md` |
+| Floor-staff guide (printable) | `docs/restaurant-staff-training.md`, in Bosnian `docs/restaurant-staff-training.bs.md` |
 
 ---
 
