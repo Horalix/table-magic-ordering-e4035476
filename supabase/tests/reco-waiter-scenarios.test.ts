@@ -16,6 +16,10 @@
  * what they would never let through. Every row was read and judged; the
  * table it produces is in the report of 25 October 2026, and can be
  * regenerated with WAITER_REPORT=<file> npx vitest run <this file>.
+ *
+ * The rows marked H come after: the same judgement once tables have shown
+ * what they like (20261026110000_reco_adaptive.sql). Learning may change
+ * which good suggestion leads; it may never let a bad one through.
  */
 import { readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
@@ -255,6 +259,8 @@ beforeAll(async () => {
   await db.exec(`DROP FUNCTION IF EXISTS public.reco_role_fits(public.meal_role, text, text, boolean, uuid[], uuid, timestamptz)`);
   await db.exec(migration('20261025150000_menu_corrections.sql'));
   await db.exec(migration('20261025160000_reco_profit.sql'));
+  // Re-running the profit file restored its own ranker; the adaptive one comes after it.
+  await db.exec(migration('20261026110000_reco_adaptive.sql'));
   await db.exec(`
     UPDATE public.restaurant_settings
        SET recommendations_enabled = true, reco_holdout_pct = 0, reco_exploration = 0
@@ -278,7 +284,6 @@ describe('a good waiter at La Soul, on the real menu', () => {
   for (const [i, s] of SCENARIOS.entries()) {
     it(`#${i + 1} ${describeRow(s)}`, async () => {
       const got = await run(s);
-      const top = got.map((r) => names.get(r.id) ?? r.id);
 
       if (process.env.WAITER_REPORT) {
         const cell = (r: Suggestion | undefined) => {
@@ -290,20 +295,7 @@ describe('a good waiter at La Soul, on the real menu', () => {
         report.push(`| ${i + 1} | ${s.at} | ${s.placement} | ${describeRow(s).replace(/^[^:]+: /, '')} | ${cell(got[0])} | ${cell(got[1])} | ${cell(got[2])} |`);
       }
 
-      if (s.empty) {
-        expect(top).toEqual([]);
-        return;
-      }
-      expect(top.length).toBeGreaterThan(0);
-      if (s.oneOf) expect(s.oneOf).toContain(top[0]);
-      for (const bad of [...(s.never ?? []), ...NEVER_VOLUNTEERED]) expect(top).not.toContain(bad);
-      if (s.qty) expect(got[0].suggested_quantity).toBe(s.qty);
-
-      // Never what is already on the table this round.
-      for (const [n] of (s.cart ?? []).map(line)) expect(top).not.toContain(n);
-      // The tab and after the meal have narrow briefs.
-      if (s.placement === 'tab') for (const n of top) expect([...DRINKS_WITH_FOOD, ...HOT]).toContain(n);
-      if (s.placement === 'after_meal') for (const n of top) expect([...SWEET, ...HOT]).toContain(n);
+      judge(s, got);
     });
   }
 
@@ -315,4 +307,102 @@ describe('a good waiter at La Soul, on the real menu', () => {
       ...report,
     ].join('\n') + '\n');
   });
+});
+
+/** What a head waiter would accept, and what they would never let through. */
+function judge(s: Scenario, got: Suggestion[]) {
+  const top = got.map((r) => names.get(r.id) ?? r.id);
+  if (s.empty) {
+    expect(top).toEqual([]);
+    return;
+  }
+  expect(top.length).toBeGreaterThan(0);
+  if (s.oneOf) expect(s.oneOf).toContain(top[0]);
+  for (const bad of [...(s.never ?? []), ...NEVER_VOLUNTEERED]) expect(top).not.toContain(bad);
+  if (s.qty) expect(got[0].suggested_quantity).toBe(s.qty);
+
+  // Never what is already on the table this round.
+  for (const [n] of (s.cart ?? []).map(line)) expect(top).not.toContain(n);
+  // The tab and after the meal have narrow briefs.
+  if (s.placement === 'tab') for (const n of top) expect([...DRINKS_WITH_FOOD, ...HOT]).toContain(n);
+  if (s.placement === 'after_meal') for (const n of top) expect([...SWEET, ...HOT]).toContain(n);
+}
+
+/*
+ * The same waiter, once tables have shown what they like. Each row starts
+ * from a quiet month (thirty everyday tables, none of them with what the row
+ * is about), adds the tables it describes — today, so the orders themselves
+ * teach the engine, with no refresh — and asks. What tables chose may change
+ * WHICH good suggestion comes first; it may never make a bad one appear.
+ */
+interface WithHistory extends Scenario {
+  /** How many tables, each with these rounds. */
+  history: Array<[number, string[][]]>;
+}
+
+const BURGERS_WITH_PEACH: Array<[number, string[][]]> = [
+  'Volcano Beef Burger', 'Original Burger', 'Manhattan Burger', 'Classic Crispy Chicken Burger', 'Dynamite Chicken Burger',
+].map((b) => [2, [[b, 'Peach Lemonade']]]);
+
+const WITH_HISTORY: WithHistory[] = [
+  // Ten tables had the La Soul Burger with a Peach Lemonade: that is the drink now, not the house's.
+  { history: [[10, [['La Soul Burger', 'Peach Lemonade']]]],
+    at: '13:00', placement: 'cart', cart: ['La Soul Burger'], oneOf: ['Peach Lemonade'],
+    never: [...HOT, ...SWEET, ...SWEET_DRINKS, ...MAINS] },
+  // Two tables are not a trend.
+  { history: [[2, [['La Soul Burger', 'Peach Lemonade']]]],
+    at: '13:00', placement: 'cart', cart: ['La Soul Burger'], oneOf: ['Strawberry Lemonade'] },
+  // Never a second drink for it: with a cola in the cart it is still fries.
+  { history: [[10, [['La Soul Burger', 'Peach Lemonade']]]],
+    at: '13:00', placement: 'cart', cart: ['La Soul Burger', 'Coca-Cola'], oneOf: FRIES, never: [...DRINKS_WITH_FOOD, ...SWEET] },
+  // Burgers in general go with Peach Lemonade: a Mushroom Burger nobody has had yet inherits it, two for two.
+  { history: BURGERS_WITH_PEACH,
+    at: '20:15', placement: 'tab', ordered: [['Mushroom Burger', 2]], oneOf: ['Peach Lemonade'], never: [...HOT, ...FRIES, ...SWEET], qty: 2 },
+  // Twelve tables had a cake in the same round as the burger: still no cake next to a burger...
+  { history: [[12, [['La Soul Burger', 'Tiramisu Cup']]]],
+    at: '13:00', placement: 'cart', cart: ['La Soul Burger'], oneOf: DRINKS_WITH_FOOD, never: [...SWEET, ...HOT, ...MAINS] },
+  // ...after it, the cake those tables went on to have.
+  { history: [[12, [['La Soul Burger', 'Coca-Cola'], ['Lava Cake']]]],
+    at: '14:00', placement: 'after_meal', ordered: ['La Soul Burger', 'Coca-Cola'], oneOf: ['Lava Cake'], never: [...MAINS, ...FRIES, ...DRINKS_WITH_FOOD] },
+  // An energy drink, a breakfast or a second main, however often they came with the burger: never volunteered.
+  { history: [[12, [['La Soul Burger', 'Red Bull']]], [12, [['La Soul Burger', 'Turkish Egg']]], [12, [['La Soul Burger', 'Mushroom Burger']]]],
+    at: '20:00', placement: 'cart', cart: ['La Soul Burger'], oneOf: DRINKS_WITH_FOOD, never: ['Red Bull', 'Turkish Egg', ...SWEET, ...HOT, ...MAINS] },
+  // A breakfast regular's coffee stays a morning thing: at 09:00 yes, with a burger at lunch no.
+  { history: [[12, [['Turkish Egg', 'Flat White']]]],
+    at: '09:00', placement: 'cart', cart: ['Turkish Egg'], oneOf: ['Flat White'], never: [...SWEET, ...FRIES] },
+];
+
+const EVERYDAY: string[][] = [
+  ['Avocado on Toast', 'Fresh Orange Juice'], ['Cappuccino', 'Butter Croissant'], ['Truffle Pasta', 'Lemon Iced Tea'],
+  ['Caesar Salad', 'Sparkling Water'], ['Spanish Latte', 'Tiramisu Cup'], ['Pesto Risotto', 'Hibiscus Iced Tea'],
+];
+
+describe('the same waiter, once tables have shown what they like', () => {
+  const table = async (rounds: string[][]) => {
+    const session = crypto.randomUUID();
+    await db.query(
+      `INSERT INTO public.table_sessions(id, table_id, token, is_active, last_heartbeat_at)
+       VALUES ($1, '${TABLE}', $2, false, now())`, [session, `h-${session.slice(0, 8)}`]);
+    for (const round of rounds) {
+      // One round, one transaction: the order and its lines together, as the app writes them.
+      await db.query(
+        `WITH o AS (
+           INSERT INTO public.orders(table_session_id, total, status, payment_status, payment_method,
+                                     released_to_kitchen_at, created_at)
+           VALUES ($1, 0, 'served', 'paid', 'cash', now(), now()) RETURNING id)
+         INSERT INTO public.order_items(order_id, menu_item_id, quantity, unit_price, status)
+         SELECT o.id, mi.id, 1, mi.price, 'served' FROM o, public.menu_items mi WHERE mi.id = ANY($2::uuid[])`,
+        [session, round.map(idOf)]);
+    }
+  };
+
+  for (const [i, s] of WITH_HISTORY.entries()) {
+    const told = s.history.map(([n, rounds]) => `${n}× ${rounds.map((r) => r.join(' + ')).join(' then ')}`).join('; ');
+    it(`H${i + 1} after ${told} — ${describeRow(s)}`, async () => {
+      await db.exec(`TRUNCATE public.table_sessions, public.reco_learning, public.reco_learned_visits RESTART IDENTITY CASCADE`);
+      for (let k = 0; k < 5; k += 1) for (const visit of EVERYDAY) await table([visit]);
+      for (const [n, rounds] of s.history) for (let k = 0; k < n; k += 1) await table(rounds);
+      judge(s, await run(s));
+    });
+  }
 });

@@ -121,6 +121,21 @@ export interface EngineHealth {
   /** The window pairings and suggestion stats are rebuilt over, whatever range the page shows. */
   window_days?: number;
   orders_analysed: number;
+  /**
+   * What tables taught it (20261026110000_reco_adaptive.sql). Counted the
+   * moment each order reaches the kitchen; the rest is refreshed when due.
+   * Absent on a database that predates it.
+   */
+  learning?: {
+    tables: number;
+    /** Dish-to-dish pairs with at least three tables. */
+    dish_pairs: number;
+    /** Pairs a dish can inherit from its section or kind. */
+    family_pairs: number;
+    last_learned_at: string | null;
+    refreshed_at: string | null;
+    scheduler: string;
+  };
 }
 
 /**

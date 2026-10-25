@@ -335,8 +335,8 @@ const AdminMenuIntelligence = () => {
             <div className="text-sm font-sans">
               <p className="font-semibold text-foreground">Nothing to learn from yet.</p>
               <p className="text-muted-foreground mt-1">
-                These numbers fill in as guests use the app. Pairings need at least five orders
-                before the engine will claim anything; acceptance needs about twenty impressions
+                These numbers fill in as guests use the app. A pairing needs at least three tables
+                before the engine acts on it; acceptance needs about twenty impressions
                 per suggestion. Come back after a full service.
               </p>
             </div>
@@ -541,6 +541,16 @@ const AdminMenuIntelligence = () => {
               {engine.orders_analysed} orders in the last {windowDays} days. Pairings last recomputed{' '}
               {when(engine.affinity_computed_at)}; suggestion stats {when(engine.stats_updated_at)}.
             </p>
+            {engine.learning && (
+              <p className="text-xs font-sans text-muted-foreground">
+                <strong className="text-foreground">Learning from {engine.learning.tables} tables</strong>{' '}
+                as each order reaches the kitchen: {engine.learning.dish_pairs} dish pairs, and{' '}
+                {engine.learning.family_pairs} that similar dishes inherit. A table last taught it{' '}
+                {when(engine.learning.last_learned_at)}; fully refreshed {when(engine.learning.refreshed_at)}{' '}
+                (every 30 minutes during service, by {engine.learning.scheduler}). What enough tables choose can
+                overtake your pairings — never the rules above.
+              </p>
+            )}
           </CardContent>
         </Card>
       )}
@@ -613,18 +623,20 @@ const AdminMenuIntelligence = () => {
               <Link2 className="w-5 h-5 text-primary shrink-0" /> What actually goes together
             </CardTitle>
             <p className="text-xs font-sans text-muted-foreground">
-              Covers the last {windowDays} days of orders. Last recomputed {when(engine?.affinity_computed_at)}.
+              Learned from tables as they order; last learned {when(engine?.learning?.last_learned_at ?? engine?.affinity_computed_at)},
+              {' '}last refreshed {when(engine?.learning?.refreshed_at ?? engine?.affinity_computed_at)}.
             </p>
           </CardHeader>
           <CardContent>
             <p className="text-sm font-sans text-muted-foreground mb-4 leading-relaxed">
-              Found in real orders. <strong className="text-foreground">Lift</strong> is how much more
+              Found in real orders, and already used by the suggestions — no need to add them.{' '}
+              <strong className="text-foreground">Lift</strong> is how much more
               likely the second item is when someone orders the first — 2.0 means twice as likely as
               chance. A popular item that appears in everything scores about 1.0 and is not a pairing.
             </p>
             {(pairs.data?.length ?? 0) === 0 ? (
               <p className="text-sm text-muted-foreground font-sans py-6 text-center">
-                No pairings yet — needs at least five orders, and three for any single pair.
+                No pairings yet — a pair needs at least three tables, more often than chance.
               </p>
             ) : (
               <ul className="divide-y divide-border">
@@ -634,7 +646,7 @@ const AdminMenuIntelligence = () => {
                       <strong className="text-foreground">{p.name_a}</strong>
                       <span className="mx-1.5 text-muted-foreground">+</span>
                       <strong className="text-foreground">{p.name_b}</strong>
-                      <span className="text-muted-foreground"> · {p.pair_orders} orders together</span>
+                      <span className="text-muted-foreground"> · together {p.pair_orders}×</span>
                     </div>
                     <span className="text-sm font-sans font-bold text-primary tabular-nums shrink-0">
                       {Number(p.lift).toFixed(1)}×

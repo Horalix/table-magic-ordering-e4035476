@@ -376,6 +376,8 @@ const translations: Record<string, Record<Locale, string>> = {
   'forget_device': { en: 'Forget what this phone has ordered', bs: 'Zaboravi šta je ovaj telefon naručio', ar: 'انسَ ما طلبه هذا الهاتف' },
   'forget_device_done': { en: 'Forgotten. This phone starts fresh.', bs: 'Zaboravljeno. Ovaj telefon počinje ispočetka.', ar: 'تم المسح. يبدأ هذا الهاتف من جديد.' },
   'often_ordered_with': { en: 'Often ordered with this', bs: 'Često se naručuje uz ovo', ar: 'كثيرًا ما يُطلب مع هذا' },
+  // Learned from tables that had dishes like this one (its section or kind).
+  'often_ordered_with_similar': { en: 'Often ordered with dishes like this', bs: 'Često se naručuje uz slična jela', ar: 'كثيرًا ما يُطلب مع أطباق مشابهة' },
   'ordered_by_share': { en: '{pct}% of tables order this too', bs: '{pct}% stolova naručuje i ovo', ar: '{pct}% من الطاولات تطلب هذا أيضًا' },
   'no_thanks': { en: 'No thanks', bs: 'Ne, hvala', ar: 'لا، شكراً' },
   'add': { en: 'Add', bs: 'Dodaj', ar: 'أضف' },

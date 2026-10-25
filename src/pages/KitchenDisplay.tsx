@@ -25,6 +25,7 @@ import AllDayPanel from '@/components/staff/AllDayPanel';
 import FreeTableDialog from '@/components/staff/FreeTableDialog';
 import HeldOrdersCard from '@/components/staff/HeldOrdersCard';
 import { useStaffDocument } from '@/components/staff/useStaffDocument';
+import { useLearningHeartbeat } from '@/hooks/useLearningHeartbeat';
 import {
   useCoalesced, useLatestRequest, useStaffRealtime, useStaffRealtimeEvent, useStaffRefresh,
 } from '@/lib/realtime';
@@ -159,6 +160,7 @@ const Going = ({ name, since }: { name: string; since: string | null }) => {
 
 const KitchenDisplay = () => {
   useStaffDocument();
+  useLearningHeartbeat();
   const [orders, setOrders] = useState<KitchenOrder[]>([]);
   const [waiterCalls, setWaiterCalls] = useState<WaiterCall[]>([]);
   const [billRequests, setBillRequests] = useState<BillRequest[]>([]);

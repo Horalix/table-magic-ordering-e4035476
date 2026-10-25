@@ -303,12 +303,17 @@ export const headlineKeyFor = (placement: Placement, type?: RecommendationType, 
  * chance. `qualitative` is a wording claim. `quantified` carries a percentage
  * that has cleared a support threshold and is the CONSERVATIVE end of the
  * interval, not the point estimate: a number printed in front of a guest
- * should survive being wrong.
+ * should survive being wrong. `similar` means the tables that taught it had
+ * dishes LIKE this one (its section or kind), not this one, and the card
+ * says exactly that.
  */
 export interface SuggestionEvidence {
-  kind: 'none' | 'qualitative' | 'quantified';
+  kind: 'none' | 'qualitative' | 'quantified' | 'similar';
   percent?: number;
   sessions?: number;
+  /** For `similar`: how many tables, and whether by section or by kind. */
+  tables?: number;
+  level?: 'section' | 'kind';
 }
 
 export async function fetchSuggestionEvidence(
