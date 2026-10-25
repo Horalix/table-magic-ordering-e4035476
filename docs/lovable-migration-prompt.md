@@ -2,8 +2,8 @@
 
 Copy everything between the rules into Lovable. Nothing else needs to be said.
 
-Last updated: **26 October 2026**, for thirty-five migrations from
-`20260804090300` to `20261026120000`.
+Last updated: **26 October 2026**, for thirty-six migrations from
+`20260804090300` to `20261026130000`.
 
 > **What is actually live.** Checked against the production API on
 > 24 October 2026: functions from the 3 August batch exist (for example
@@ -42,7 +42,7 @@ whose search text is not in the live function — send it back before going on.
 
 ## Step 2 — the prompt
 
-> **Task: apply thirty-five existing migration files to Supabase, in order. Do not
+> **Task: apply thirty-six existing migration files to Supabase, in order. Do not
 > write any new SQL.**
 >
 > These files are already in the repository under `supabase/migrations/`:
@@ -83,6 +83,7 @@ whose search text is not in the live function — send it back before going on.
 > 20261026100100_promotions_ordering.sql
 > 20261026110000_reco_adaptive.sql
 > 20261026120000_cloud_printers.sql
+> 20261026130000_combo_station_tickets.sql
 > ```
 >
 > **Run each file, in that exact order, exactly as written.** Read each one from
