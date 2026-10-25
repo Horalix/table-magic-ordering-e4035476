@@ -140,9 +140,9 @@ export function saleEndPresets(now: number = Date.now()): { label: string; date:
   const todayIso = `${today.y}-${pad(today.m)}-${pad(today.d)}`;
   const toSunday = (7 - today.weekday) % 7;
   return [
-    { label: 'Tonight', date: today.hh >= 23 ? addDays(todayIso, 1) : todayIso, time: '23:00' },
-    { label: 'Sunday night', date: addDays(todayIso, toSunday === 0 && today.hh >= 23 ? 7 : toSunday), time: '23:00' },
-    { label: 'In a week', date: addDays(todayIso, 7), time: '23:00' },
+    { label: 'Ends tonight', date: today.hh >= 23 ? addDays(todayIso, 1) : todayIso, time: '23:00' },
+    { label: 'Ends Sunday night', date: addDays(todayIso, toSunday === 0 && today.hh >= 23 ? 7 : toSunday), time: '23:00' },
+    { label: 'Ends in a week', date: addDays(todayIso, 7), time: '23:00' },
   ];
 }
 

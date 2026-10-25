@@ -149,7 +149,7 @@ const AdminPromotions = () => {
       {/* Straight to the dish, from the one box. */}
       <div className="relative">
         <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-        <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Find a dish to put on sale, feature or mark as new…" aria-label="Find a dish" className="pl-9 pr-10 h-11" />
+        <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Find a dish to promote…" aria-label="Find a dish" className="pl-9 pr-10 h-11" />
         {query && (
           <button type="button" onClick={() => setQuery('')} aria-label="Clear search" className="absolute right-1 top-1/2 -translate-y-1/2 w-9 h-9 flex items-center justify-center text-muted-foreground"><X className="w-4 h-4" /></button>
         )}

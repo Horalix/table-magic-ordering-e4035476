@@ -106,6 +106,8 @@ export interface GuestTabOrderItem {
   unit_price: number;
   notes: string | null;
   status: string;
+  /** A combo's chosen parts; absent before 20261026100100, null for other lines. */
+  components?: unknown;
   menu_items: {
     name: string | null;
     name_ar: string | null;

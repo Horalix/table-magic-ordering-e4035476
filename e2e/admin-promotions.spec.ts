@@ -213,6 +213,7 @@ test.describe('combos', () => {
         { id: 's2', label: 'Drink', options: [opt('item-cola', 4), opt('item-lemonade', 5.5)] },
       ],
     }]);
+    await page.setViewportSize({ width: 390, height: 844 });
     await page.goto('/admin/promotions');
     await expect(page.locator('[data-combo-row="Burger Combo"]')).toContainText('20.00 KM · Burger + Drink · guests save 2.00–3.50 KM');
 
@@ -221,6 +222,9 @@ test.describe('combos', () => {
     await expect(dialog.getByRole('switch', { name: 'Combo' })).toBeChecked();
     await expect(dialog.locator('[data-combo-slot-editor]')).toHaveCount(2);
     await expect(dialog.getByRole('textbox', { name: 'Extra charge for Cheeseburger in Burger' })).toHaveValue('2.00');
+    // The editor fits a phone: a long dish name in a part used to widen the whole form.
+    const sideways = await dialog.evaluate((el) => el.scrollWidth - el.clientWidth);
+    expect(sideways).toBeLessThanOrEqual(0);
   });
 });
 

@@ -18,6 +18,7 @@ import OrderStatusTimeline from '@/components/guest/OrderStatusTimeline';
 import OrderEta from '@/components/guest/OrderEta';
 import CartSuggestion from '@/components/guest/CartSuggestion';
 import { track } from '@/lib/analytics';
+import { parseComponents } from '@/lib/order-components';
 
 const RunningTabPage = () => {
   const navigate = useNavigate();
@@ -293,6 +294,12 @@ const RunningTabPage = () => {
                         <span className="text-[15px] font-sans text-foreground">
                           <span className="text-muted-foreground tabular-nums me-1.5">{oi.quantity}×</span>
                           {oi.menu_items ? getLocalizedName(oi.menu_items, locale) : t('menu_item_fallback')}
+                          {/* What a combo contained (20261026100100 adds it to the tab). */}
+                          {parseComponents(oi.components).length > 0 && (
+                            <span className="block text-[13px] text-muted-foreground leading-snug">
+                              {list(parseComponents(oi.components).map((c) => getLocalizedName(c, locale)))}
+                            </span>
+                          )}
                         </span>
                         <span className="text-sm font-sans text-muted-foreground tabular-nums shrink-0">{(oi.quantity * Number(oi.unit_price)).toFixed(2)}</span>
                       </li>

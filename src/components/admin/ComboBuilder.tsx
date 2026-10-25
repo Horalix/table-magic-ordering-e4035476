@@ -144,7 +144,7 @@ const SlotEditor = ({
           placeholder="Part name, e.g. Drink"
           aria-label={`Name of part ${index + 1}`}
           maxLength={40}
-          className="h-9 flex-1"
+          className="h-9 flex-1 min-w-0"
         />
         <Button type="button" variant="ghost" size="icon" className="h-9 w-9" disabled={index === 0} aria-label={`Move ${name} up`} onClick={() => onMove(-1)}><ArrowUp className="w-4 h-4" /></Button>
         <Button type="button" variant="ghost" size="icon" className="h-9 w-9" disabled={index === count - 1} aria-label={`Move ${name} down`} onClick={() => onMove(1)}><ArrowDown className="w-4 h-4" /></Button>
@@ -162,17 +162,22 @@ const SlotEditor = ({
       )}
 
       {slot.options.length > 0 && (
+        <p className="flex justify-between text-[11px] font-sans text-muted-foreground pr-10" aria-hidden>
+          <span>Guests choose one of</span><span>extra charge</span>
+        </p>
+      )}
+      {slot.options.length > 0 && (
         <ul className="space-y-1" aria-label={`Choices for ${name}`}>
           {slot.options.map((o) => {
             const it = itemById.get(o.item_id);
             const bad = parseSurcharge(o.surcharge) === null;
             return (
               <li key={o.item_id} className="flex items-center gap-2 text-sm font-sans">
-                <span className={`flex-1 min-w-0 truncate ${it?.is_available === false ? 'text-muted-foreground line-through' : ''}`}>
-                  {it?.name ?? 'Removed dish'}
-                  <span className="text-xs text-muted-foreground tabular-nums"> · {it ? Number(it.price).toFixed(2) : '—'}</span>
+                <span className="flex-1 min-w-0">
+                  <span className={`block truncate ${it?.is_available === false ? 'text-muted-foreground line-through' : ''}`}>{it?.name ?? 'Removed dish'}</span>
+                  <span className="block text-[11px] text-muted-foreground tabular-nums">{it ? `${Number(it.price).toFixed(2)} KM on its own` : '—'}</span>
                 </span>
-                <span className="text-xs text-muted-foreground">extra</span>
+                <span className="text-xs text-muted-foreground" aria-hidden>+</span>
                 <Input
                   value={o.surcharge}
                   onChange={(e) => onChange({ options: slot.options.map((x) => (x.item_id === o.item_id ? { ...x, surcharge: e.target.value } : x)) })}

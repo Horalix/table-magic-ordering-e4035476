@@ -517,7 +517,8 @@ const MenuItemDialog = ({ open, onOpenChange, subcategoryId, item, onSaved, star
           <DialogTitle className="font-serif">{isEdit ? 'Edit item' : 'Add item'}</DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-3">
+        {/* min-w-0: the dialog is a grid, and one long dish name in a combo part would otherwise widen the whole form past a phone screen. */}
+        <div className="space-y-3 min-w-0">
           {/* Image */}
           <div>
             <Label className="text-xs text-muted-foreground">Photo</Label>
@@ -716,7 +717,7 @@ const MenuItemDialog = ({ open, onOpenChange, subcategoryId, item, onSaved, star
             <div className="flex flex-wrap gap-1.5" role="group" aria-label="Quick end">
               {saleEndPresets().map((p) => (
                 <Chip key={p.label} on={sale.endDate === p.date && sale.endTime === p.time} onClick={() => setSale((s) => ({ ...s, endDate: p.date, endTime: p.time }))}>
-                  Ends {p.label.toLowerCase()}
+                  {p.label}
                 </Chip>
               ))}
               {(sale.startDate || sale.endDate) && (

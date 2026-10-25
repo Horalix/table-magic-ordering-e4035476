@@ -336,7 +336,8 @@ const MenuItemDetail = ({ item, onClose, onAdded, canOrder = true, unavailableLa
                                 {gone && <span className="block text-xs font-normal">{t('sold_out')}</span>}
                               </span>
                               {extra > 0 && (
-                                <span className="shrink-0 text-sm font-sans font-semibold text-foreground tabular-nums">{t('plus_amount', { amount: price(extra) })}</span>
+                                // Isolated left-to-right, or Arabic reads it as "KM 1.00+".
+                                <span dir="ltr" className="shrink-0 text-sm font-sans font-semibold text-foreground tabular-nums">{t('plus_amount', { amount: price(extra) })}</span>
                               )}
                             </>
                           );
@@ -461,11 +462,23 @@ const MenuItemDetail = ({ item, onClose, onAdded, canOrder = true, unavailableLa
             <Button
               ref={addRef}
               onClick={handleAdd}
-              className="flex-1 h-12 rounded-full bg-primary text-primary-foreground font-sans font-semibold text-base hover:bg-sage-dark hover:shadow-lg hover:shadow-primary/30 transition-all duration-200 tap tabular-nums"
+              // min-w-0 + wrapping: in Bosnian or Arabic "Add to order · 24.00 KM" is wider than the
+              // bar on a phone. It used to push past the screen edge; cutting it short would hide the
+              // price. Instead the price drops to a second line.
+              className="flex-1 min-w-0 px-4 h-12 rounded-full bg-primary text-primary-foreground font-sans font-semibold text-base hover:bg-sage-dark hover:shadow-lg hover:shadow-primary/30 transition-all duration-200 tap tabular-nums"
             >
-              {combo && missing.length > 0
-                ? t('combo_choose_slot', { slot: slotLabel(missing[0], locale) })
-                : `${t('add_to_order')} · ${price(Math.round(unit * 100) * quantity / 100)}`}
+              {combo && missing.length > 0 ? (
+                <span className="truncate min-w-0">{t('combo_choose_slot', { slot: slotLabel(missing[0], locale) })}</span>
+              ) : (
+                <>
+                  <span className="sr-only">{`${t('add_to_order')} · ${price(Math.round(unit * 100) * quantity / 100)}`}</span>
+                  <span aria-hidden className="flex flex-wrap items-baseline justify-center gap-x-1.5 whitespace-normal leading-tight text-center">
+                    <span>{t('add_to_order')}</span>
+                    <span>·</span>
+                    <span className="whitespace-nowrap">{price(Math.round(unit * 100) * quantity / 100)}</span>
+                  </span>
+                </>
+              )}
             </Button>
           </div>
         )}

@@ -498,7 +498,7 @@ const CartPage = () => {
                             slot: (locale === 'bs' && c.slot_label_bs) || (locale === 'ar' && c.slot_label_ar) || c.slot_label,
                             name: getLocalizedName(c, locale),
                           })}
-                          {c.surcharge > 0 && <span className="ms-1 tabular-nums">({t('plus_amount', { amount: price(c.surcharge) })})</span>}
+                          {c.surcharge > 0 && <span className="ms-1 tabular-nums">(<span dir="ltr">{t('plus_amount', { amount: price(c.surcharge) })}</span>)</span>}
                         </li>
                       ))}
                     </ul>
