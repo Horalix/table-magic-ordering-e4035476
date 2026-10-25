@@ -6,39 +6,82 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-type TranslationTargetType = "category" | "subcategory" | "item";
+/**
+ * translate-menu — fills in Bosnian and Arabic for the menu.
+ *
+ * Body (all optional):
+ *   force: false     only fields that are empty are translated (Auto-Translate).
+ *   force: true      also refreshes fields that still hold exactly what this
+ *                    function wrote last time (Re-translate All). A field a
+ *                    person has edited is never touched. What the function wrote
+ *                    is kept in public.menu_machine_translations; if that table
+ *                    is not there yet, force behaves like a plain run.
+ *   overwrite: true  with force, replaces every translation, hand edits
+ *                    included. Not offered in the admin UI on purpose.
+ *
+ * Response: { message, count } as before, plus { fields, skipped }.
+ */
 
-interface TranslatableRow {
+type TargetType = "category" | "subcategory" | "item";
+type TableName = "categories" | "subcategories" | "menu_items";
+type Field = "name_bs" | "name_ar" | "description_bs" | "description_ar";
+
+const TABLE: Record<TargetType, TableName> = { category: "categories", subcategory: "subcategories", item: "menu_items" };
+const NAME_FIELDS: Field[] = ["name_bs", "name_ar"];
+const DESCRIPTION_FIELDS: Field[] = ["description_bs", "description_ar"];
+const BATCH_SIZE = 25;
+
+interface Row {
   id: string;
   name: string;
   description?: string | null;
-  name_ar?: string | null;
   name_bs?: string | null;
+  name_ar?: string | null;
+  description_bs?: string | null;
+  description_ar?: string | null;
 }
 
-interface TranslationTarget {
-  type: TranslationTargetType;
-  id: string;
-  name: string;
-  description?: string;
-  needs_ar: boolean;
-  needs_bs: boolean;
+interface Target {
+  type: TargetType;
+  row: Row;
+  fields: Field[];
 }
 
-interface TranslationResult {
-  id: string;
-  name_ar?: string;
-  name_bs?: string;
-  description_ar?: string;
-  description_bs?: string;
+type TranslationResult = { id: string } & Partial<Record<Field, string>>;
+
+const SYSTEM_PROMPT = `You translate the menu of La Soul, a café, restaurant and bar in Sarajevo, from English into Bosnian and Arabic. English is the source of truth for meaning.
+
+BOSNIAN
+- Standard Bosnian as used in Sarajevo cafés: ijekavica (mlijeko, svježe, bijelo, hljeb, pecivo, cvjetni), Latin script.
+- Bosnian, not Croatian or Serbian word choices: kafa (never kava), hljeb (never kruh), sos (not umak), narandža (not naranča or pomorandža), paradajz (not rajčica), krompir (not krumpir), sto (not stol), šoljica, kašika, inspirisan (not inspiriran), kombinuje.
+- Sentence case in names: only the first word and proper nouns are capitalised ("Ledeni čaj od breskve", not "Ledeni Čaj Od Breskve").
+- No English words mixed into Bosnian: low-fat → sa smanjenim udjelom masti; light → lagani; healthy → fit; combo → meni; mocktail → bezalkoholni koktel; shot → espresso or doza; cherry tomato → čeri paradajz; iceberg lettuce → ajsberg salata; bun → pecivo (brioche bun → brioš pecivo); beef patty → juneća pljeskavica; jalapeño → jalapeño papričice; cup (dessert) → u čaši.
+- Correct case, gender and number agreement.
+
+ARABIC
+- Warm, natural Modern Standard Arabic as on good Gulf and Levant café menus. Concise, like the English. No word-for-word calques.
+- Latin digits only: 0-9 and %. Never ٠١٢٣٤٥٦٧٨٩ or ٪. Prices stay in KM, e.g. "+2 KM".
+- Fixed spellings, used every time: برجر، إسبريسو، كابتشينو، لاتيه، موهيتو، ماتشا، فرابيه، بودينغ، كرواسون، موزاريلا، شيدر، كيمكس.
+- poached egg = بيضة بوشيه (boiled egg is بيض مسلوق — different thing); iceberg lettuce = خس آيسبرغ; pita bread = خبز عربي; mocktail = موكتيل خالٍ من الكحول.
+
+BOTH LANGUAGES
+- Real product and brand names are names, not text to translate: La Soul, Espresso, Cappuccino, Americano, Cortado, Piccolo, Flat White, Caffe Latte, Mojito, Matcha Latte, Frappe, Cold Brew, V60, Chemex, Coca-Cola, Fanta, Sprite, Red Bull, Nutella, Oreo. In Bosnian keep them exactly as written. In Arabic transliterate them (إسبريسو، كابتشينو), except "La Soul" and "V60", which stay in Latin letters.
+- Descriptive names ARE translated: "Fresh Orange Juice" → "Svježi sok od narandže" / "عصير برتقال طازج"; "Chicken Salad" → "Pileća salata" / "سلطة دجاج"; "Chemex Hot" → "Chemex topli" / "كيمكس ساخن". Translating a product name is as wrong as leaving a descriptive name in English.
+- Allergy and diet facts keep their exact meaning: never drop nuts, peanuts, sesame, eggs, dairy, gluten, margarine, alcohol-free or vegetarian; never turn "dairy" into "lactose"; never add a fact the English does not state.
+- The same ingredient gets the same word everywhere.
+- Category and subcategory names are menu section headings (plural where natural: "Deserti", "Topli napici", "عصائر طازجة").`;
+
+const ARABIC_INDIC = /[٠-٩۰-۹٪]/g;
+function latinDigits(s: string): string {
+  return s.replace(ARABIC_INDIC, (ch) => {
+    if (ch === "٪") return "%";
+    const code = ch.charCodeAt(0);
+    return String(code >= 0x06f0 ? code - 0x06f0 : code - 0x0660);
+  });
 }
 
-interface TranslationUpdates {
-  name_ar?: string;
-  name_bs?: string;
-  description_ar?: string;
-  description_bs?: string;
-}
+const isBlank = (v: string | null | undefined) => !v || !v.trim();
+const logKey = (table: TableName, id: string, field: Field) => `${table}:${id}:${field}`;
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
@@ -78,134 +121,176 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: "Admin access required" }), { status: 403, headers: corsHeaders });
     }
 
-    // Parse body for force param
     let force = false;
+    let overwrite = false;
     try {
       const body = await req.json();
       force = body?.force === true;
+      overwrite = force && body?.overwrite === true;
     } catch { /* no body is fine */ }
 
-    // Fetch items needing translation (both AR and BS)
-    let itemsQuery = supabase.from("menu_items").select("id, name, description");
-    let categoriesQuery = supabase.from("categories").select("id, name");
-    let subcategoriesQuery = supabase.from("subcategories").select("id, name");
+    const [catRes, subRes, itemRes] = await Promise.all([
+      supabase.from("categories").select("id, name, name_bs, name_ar"),
+      supabase.from("subcategories").select("id, name, name_bs, name_ar"),
+      supabase.from("menu_items").select("id, name, description, name_bs, name_ar, description_bs, description_ar"),
+    ]);
+    for (const r of [catRes, subRes, itemRes]) if (r.error) throw r.error;
 
-    if (!force) {
-      // Get items where EITHER ar or bs is missing
-      itemsQuery = supabase.from("menu_items").select("id, name, description, name_ar, name_bs");
-      categoriesQuery = supabase.from("categories").select("id, name, name_ar, name_bs");
-      subcategoriesQuery = supabase.from("subcategories").select("id, name, name_ar, name_bs");
+    // What this function wrote last time. Missing table (migration not applied
+    // yet) means nothing is known to be machine output, so nothing non-empty
+    // is replaced without overwrite.
+    const machine = new Map<string, string>();
+    let machineLogAvailable = false;
+    {
+      const { data, error } = await supabase
+        .from("menu_machine_translations")
+        .select("source_table, row_id, field, value");
+      if (!error) {
+        machineLogAvailable = true;
+        for (const m of (data ?? []) as { source_table: TableName; row_id: string; field: Field; value: string }[]) {
+          machine.set(logKey(m.source_table, m.row_id, m.field), m.value);
+        }
+      } else {
+        console.warn("menu_machine_translations unavailable; force will only fill empty fields:", error.message);
+      }
     }
 
-    const { data: items } = await itemsQuery;
-    const { data: categories } = await categoriesQuery;
-    const { data: subcategories } = await subcategoriesQuery;
+    let skipped = 0; // non-empty fields left alone because a person wrote them
+    const needs = (table: TableName, row: Row, field: Field): boolean => {
+      const source = field.startsWith("description") ? row.description : row.name;
+      if (isBlank(source)) return false;            // nothing to translate from
+      const current = row[field];
+      if (isBlank(current)) return true;            // gap: always fill
+      if (!force) return false;
+      if (overwrite) return true;
+      if (machine.get(logKey(table, row.id, field)) === current) return true; // still our own output
+      skipped++;
+      return false;
+    };
 
-    const toTranslate: TranslationTarget[] = [];
+    const targets: Target[] = [];
+    const collect = (type: TargetType, rows: Row[] | null) => {
+      const table = TABLE[type];
+      const candidates = type === "item" ? [...NAME_FIELDS, ...DESCRIPTION_FIELDS] : NAME_FIELDS;
+      for (const row of rows ?? []) {
+        const fields = candidates.filter((f) => needs(table, row, f));
+        if (fields.length) targets.push({ type, row, fields });
+      }
+    };
+    collect("category", catRes.data as Row[]);
+    collect("subcategory", subRes.data as Row[]);
+    collect("item", itemRes.data as Row[]);
 
-    ((categories ?? []) as TranslatableRow[]).forEach((c) => {
-      const needs_ar = force || !c.name_ar;
-      const needs_bs = force || !c.name_bs;
-      if (needs_ar || needs_bs) toTranslate.push({ type: "category", id: c.id, name: c.name, needs_ar, needs_bs });
-    });
-    ((subcategories ?? []) as TranslatableRow[]).forEach((s) => {
-      const needs_ar = force || !s.name_ar;
-      const needs_bs = force || !s.name_bs;
-      if (needs_ar || needs_bs) toTranslate.push({ type: "subcategory", id: s.id, name: s.name, needs_ar, needs_bs });
-    });
-    ((items ?? []) as TranslatableRow[]).forEach((i) => {
-      const needs_ar = force || !i.name_ar;
-      const needs_bs = force || !i.name_bs;
-      if (needs_ar || needs_bs) toTranslate.push({ type: "item", id: i.id, name: i.name, description: i.description || undefined, needs_ar, needs_bs });
-    });
-
-    if (toTranslate.length === 0) {
-      return new Response(JSON.stringify({ message: "All items already translated", count: 0 }), {
+    if (targets.length === 0) {
+      return new Response(JSON.stringify({ message: "All items already translated", count: 0, fields: 0, skipped }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    // Build prompt for both AR and BS
-    const prompt = `Translate the following restaurant menu items. For each item, provide Arabic and Bosnian translations.
-
-CRITICAL RULES:
-- Do NOT translate brand names like "La Soul", "LA SOUL" — keep them as-is in all languages
-- Keep translations natural for a restaurant menu context
-- Arabic should use proper Arabic script
-- Bosnian should use Latin script (not Cyrillic)
-
-Items to translate:
-${JSON.stringify(toTranslate.map((t) => ({ id: t.id, type: t.type, name: t.name, description: t.description })))}
-
-Return ONLY a JSON array where each object has:
-- id (same as input)
-- name_ar (Arabic translation of name)
-- name_bs (Bosnian translation of name)  
-- description_ar (Arabic translation of description, only if original had description)
-- description_bs (Bosnian translation of description, only if original had description)
-
-No markdown, no explanation, ONLY the JSON array.`;
-
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
-        messages: [
-          { role: "system", content: "You are a professional translator specializing in restaurant menus. Translate English to Arabic and Bosnian naturally. Never translate brand names." },
-          { role: "user", content: prompt },
-        ],
-      }),
-    });
-
-    if (!response.ok) {
-      const errText = await response.text();
-      console.error("AI gateway error:", response.status, errText);
-      throw new Error(`AI gateway error: ${response.status}`);
-    }
-
-    const aiResult = await response.json();
-    let content = aiResult.choices?.[0]?.message?.content || "";
-
-    // Clean markdown code fences if present
-    content = content.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
-
-    let translated: TranslationResult[];
-    try {
-      const parsed = JSON.parse(content) as unknown;
-      if (!Array.isArray(parsed)) throw new Error("Translation response was not an array");
-      translated = parsed as TranslationResult[];
-    } catch {
-      console.error("Failed to parse AI response:", content);
-      throw new Error("Failed to parse translation response");
-    }
-
-    // Apply translations
     let updated = 0;
-    for (const t of translated) {
-      const original = toTranslate.find((o) => o.id === t.id);
-      if (!original) continue;
+    let fieldsWritten = 0;
 
-      const updates: TranslationUpdates = {};
-      if (original.needs_ar && t.name_ar) updates.name_ar = t.name_ar;
-      if (original.needs_bs && t.name_bs) updates.name_bs = t.name_bs;
+    for (let start = 0; start < targets.length; start += BATCH_SIZE) {
+      const batch = targets.slice(start, start + BATCH_SIZE);
+      const payload = batch.map((t) => ({
+        id: t.row.id,
+        type: t.type,
+        name: t.row.name.trim(),
+        ...(t.row.description?.trim() ? { description: t.row.description.trim() } : {}),
+        // Existing translations give the model context for consistency.
+        ...(t.row.name_bs && !t.fields.includes("name_bs") ? { existing_name_bs: t.row.name_bs } : {}),
+        ...(t.row.name_ar && !t.fields.includes("name_ar") ? { existing_name_ar: t.row.name_ar } : {}),
+        return_fields: t.fields,
+      }));
 
-      if (original.type === "item") {
-        if (original.needs_ar && t.description_ar) updates.description_ar = t.description_ar;
-        if (original.needs_bs && t.description_bs) updates.description_bs = t.description_bs;
+      const prompt = `Translate these menu entries. For each entry return ONLY the keys listed in its "return_fields" (name_bs, name_ar, description_bs, description_ar), translated from "name" and "description".
+
+Entries:
+${JSON.stringify(payload)}
+
+Return ONLY a JSON array of objects: { "id": <same id>, <each requested field>: <translation> }.
+No markdown, no explanation.`;
+
+      const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${LOVABLE_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "google/gemini-2.5-flash",
+          messages: [
+            { role: "system", content: SYSTEM_PROMPT },
+            { role: "user", content: prompt },
+          ],
+        }),
+      });
+
+      if (!response.ok) {
+        const errText = await response.text();
+        console.error("AI gateway error:", response.status, errText);
+        throw new Error(`AI gateway error: ${response.status}`);
       }
 
-      if (Object.keys(updates).length === 0) continue;
+      const aiResult = await response.json();
+      let content: string = aiResult.choices?.[0]?.message?.content || "";
+      content = content.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
 
-      const table = original.type === "category" ? "categories" : original.type === "subcategory" ? "subcategories" : "menu_items";
-      await supabase.from(table).update(updates).eq("id", t.id);
-      updated++;
+      let translated: TranslationResult[];
+      try {
+        const parsed = JSON.parse(content) as unknown;
+        if (!Array.isArray(parsed)) throw new Error("Translation response was not an array");
+        translated = parsed as TranslationResult[];
+      } catch {
+        console.error("Failed to parse AI response:", content);
+        throw new Error("Failed to parse translation response");
+      }
+
+      for (const t of translated) {
+        const target = batch.find((b) => b.row.id === t?.id);
+        if (!target) continue;
+        const table = TABLE[target.type];
+
+        const updates: Partial<Record<Field, string>> = {};
+        for (const f of target.fields) {
+          const raw = t[f];
+          if (typeof raw !== "string" || !raw.trim()) continue;
+          updates[f] = f.endsWith("_ar") ? latinDigits(raw.trim()) : raw.trim();
+        }
+        const written = Object.keys(updates) as Field[];
+        if (written.length === 0) continue;
+
+        // Only write while each field still holds what we read, so an edit made
+        // in Admin -> Menu during the AI call is not overwritten.
+        let query = supabase.from(table).update(updates).eq("id", target.row.id);
+        for (const f of written) {
+          const seen = target.row[f];
+          query = seen === null || seen === undefined ? query.is(f, null) : query.eq(f, seen);
+        }
+        const { data: hit, error: updateError } = await query.select("id");
+        if (updateError) { console.error("update failed", table, target.row.id, updateError.message); continue; }
+        if (!hit?.length) { skipped += written.length; continue; }
+
+        updated++;
+        fieldsWritten += written.length;
+
+        if (machineLogAvailable) {
+          const { error: logError } = await supabase.from("menu_machine_translations").upsert(
+            written.map((f) => ({ source_table: table, row_id: target.row.id, field: f, value: updates[f]!, produced_at: new Date().toISOString() })),
+            { onConflict: "source_table,row_id,field" },
+          );
+          if (logError) console.warn("could not record machine translation:", logError.message);
+        }
+      }
     }
 
-    return new Response(JSON.stringify({ message: `Translated ${updated} items to Arabic & Bosnian`, count: updated }), {
+    const keptNote = skipped ? `; kept ${skipped} hand-edited field${skipped === 1 ? "" : "s"}` : "";
+    return new Response(JSON.stringify({
+      message: `Translated ${updated} items to Arabic & Bosnian (${fieldsWritten} fields${keptNote})`,
+      count: updated,
+      fields: fieldsWritten,
+      skipped,
+    }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {
