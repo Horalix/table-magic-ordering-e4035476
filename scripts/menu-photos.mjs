@@ -209,6 +209,11 @@ async function importPhotos(dirName = 'improved') {
   await importHeroes(IMPROVED);
   const { rows } = await loadMenu();
   const byPrefix = new Map(rows.map((r) => [r.id.slice(0, 8), r.id]));
+  const imageUrlById = new Map(rows.map((r) => [r.id, r.image_url ?? null]));
+  // Which uploaded photo each prepared file replaces (see fetch-images.mjs).
+  const overridesPath = join(SOURCES, 'overrides.json');
+  let overrides = {};
+  try { overrides = JSON.parse(readFileSync(overridesPath, 'utf8')); } catch { /* none yet */ }
   const files = [];
   const walk = async (d) => {
     for (const e of await readdir(d, { withFileTypes: true })) {
@@ -230,7 +235,12 @@ async function importPhotos(dirName = 'improved') {
     // Image tools hand back 2-3 MB PNGs; the repository keeps a near-lossless
     // WebP (about a tenth of the size) as the source for the image ladder.
     await sharp(f).rotate().webp({ quality: 92, smartSubsample: true }).toFile(join(SOURCES, `${id}.webp`));
+    if (imageUrlById.get(id)) overrides[id] = imageUrlById.get(id);
     done++;
+  }
+  if (done) {
+    const sorted = Object.fromEntries(Object.entries(overrides).sort(([a], [b]) => a.localeCompare(b)));
+    await writeFile(overridesPath, JSON.stringify(sorted, null, 2) + '\n', 'utf8');
   }
   console.log(`  ✓ ${done} improved photo(s) → scripts/image-sources/`);
   if (skipped.length) console.log(`  ! skipped:\n    ${skipped.join('\n    ')}`);

@@ -119,17 +119,41 @@ function localSource(id) {
   return null;
 }
 
+/*
+ * Which uploaded photo each prepared original replaced (id → image_url).
+ * A prepared file stands in for THAT photo only: once someone uploads a new
+ * photo in Admin → Menu, image_url changes and the upload wins. Without this
+ * the prepared file was used forever and a manager's new photo never showed.
+ * Files from before this record existed adopt the current image_url.
+ */
+const OVERRIDES_PATH = resolve(SOURCES_DIR, 'overrides.json');
+let overrides = {};
+try { overrides = JSON.parse(readFileSync(OVERRIDES_PATH, 'utf8')); } catch { /* none yet */ }
+let overridesChanged = false;
+
+function currentOverride(id, imageUrl) {
+  const file = localSource(id);
+  if (!file) return null;
+  if (!(id in overrides)) { overrides[id] = imageUrl; overridesChanged = true; }
+  if (overrides[id] !== imageUrl) {
+    console.log(`\n  · ${id}: a new photo was uploaded in the admin; the prepared one is no longer used`);
+    return null;
+  }
+  return file;
+}
+
 /** Process a single row → writes assets, returns manifest entry or null. */
 async function processRow(row, manifest, counters) {
   const { id, image_url } = row;
   if (!image_url) return;
 
-  const override = localSource(id);
+  const override = currentOverride(id, image_url);
   const hash = override ? sha1(`file:${sha1(readFileSync(override).toString('base64'))}`) : sha1(image_url);
   const dir = resolve(OUT_DIR, id);
 
   // Skip if unchanged AND assets already present.
   if (!FORCE && manifest[id] && (await readHash(id)) === hash && existsSync(dir)) {
+    manifest[id].src = image_url;
     counters.skipped++;
     return;
   }
@@ -205,7 +229,9 @@ async function processRow(row, manifest, counters) {
 
     await writeFile(resolve(dir, '.hash'), hash, 'utf8');
 
-    manifest[id] = { widths, squares, blur, ext: 'webp' };
+    // `src`: the image_url these files were built for. The app only uses
+    // them while the row still points at that photo (see SmartImage).
+    manifest[id] = { widths, squares, blur, ext: 'webp', src: image_url };
     counters.downloaded++;
     process.stdout.write('.');
   } catch (e) {
@@ -258,6 +284,11 @@ async function main() {
       delete manifest[id];
       await rm(resolve(OUT_DIR, id), { recursive: true, force: true });
     }
+  }
+
+  if (overridesChanged) {
+    const sortedOverrides = Object.fromEntries(Object.entries(overrides).sort(([a], [b]) => a.localeCompare(b)));
+    await writeFile(OVERRIDES_PATH, JSON.stringify(sortedOverrides, null, 2) + '\n', 'utf8');
   }
 
   // Stable key order keeps the committed manifest diff-friendly.

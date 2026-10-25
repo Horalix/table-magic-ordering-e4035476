@@ -33,6 +33,8 @@ interface SmartImageProps extends Omit<React.ImgHTMLAttributes<HTMLImageElement>
 
 interface ManifestEntry {
   widths: number[];
+  /** The image_url the local files were built for. */
+  src?: string;
   /** Square crops (sq-<n>.webp), cut around the dish. Absent on old builds. */
   squares?: number[];
   blur: string;
@@ -99,7 +101,11 @@ const SmartImage = ({
     if (el && el.complete && el.naturalWidth > 0) setLoaded(true);
   }, [src, id]);
 
-  const local = id && !forceRemote ? manifest[id] : undefined;
+  // The local files stand in for the photo they were built from. When a new
+  // photo is uploaded in the admin, `src` changes and the upload is shown
+  // (through the CDN) until the next image build picks it up.
+  const entry = id && !forceRemote ? manifest[id] : undefined;
+  const local = entry && (!entry.src || !src || entry.src === src) ? entry : undefined;
 
   if ((!src && !local) || errored) {
     return (

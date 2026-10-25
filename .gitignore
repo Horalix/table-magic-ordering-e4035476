@@ -38,3 +38,6 @@ blob-report/
 # Menu photo working folder (npm run photos:export). Improved photos that
 # matter are copied into scripts/image-sources/ by photos:import.
 assets/menu-photos/
+
+# Agent worktrees (parallel work branches; merged through git, never committed)
+.claude/worktrees/
