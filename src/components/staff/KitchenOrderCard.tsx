@@ -11,6 +11,7 @@ import { useNow } from '@/lib/clock';
 import { formatMinutes, orderUrgency, urgencyMark, urgencyText, formatClock } from '@/lib/timing';
 import { kitchenStart, orderStatusLabel } from '@/components/staff/order-status';
 import type { Database } from '@/integrations/supabase/types';
+import { formatComponents } from '@/lib/order-components';
 
 export type OrderStatus = Database['public']['Enums']['order_status'];
 export type OrderItemStatus = Database['public']['Enums']['order_item_status'];
@@ -27,6 +28,8 @@ export interface KitchenItem {
   ready_at: string | null;
   menu_item_name: string;
   allergens: string[] | null;
+  /** A combo's chosen parts (order_items.components); null otherwise. */
+  components?: unknown;
 }
 
 export interface KitchenOrder {
@@ -298,6 +301,9 @@ const KitchenOrderCard = ({
                     <CupSoda className="inline w-4 h-4 ml-1 text-muted-foreground" aria-label="bar" />
                   )}
                 </p>
+                {formatComponents(item.components, item.station).map((part) => (
+                  <p key={part} className="text-sm md:text-base font-sans text-foreground/80 leading-snug pl-6">– {part}</p>
+                ))}
                 {/* Notes and allergens are what get a dish sent back or a guest
                     hurt. Small italic grey was the least legible text on the
                     card; they are solid, bold blocks now. */}

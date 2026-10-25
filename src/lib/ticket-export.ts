@@ -1,4 +1,5 @@
 import type { PrintOutcome } from '@/lib/print-outcome';
+import { formatComponents } from '@/lib/order-components';
 
 export interface KitchenTicketOrder {
   id: string;
@@ -20,6 +21,8 @@ export interface KitchenTicketOrder {
     unit_price?: number | null;
     station?: string | null;
     allergens?: string[] | null;
+    /** A combo's chosen parts (order_items.components); null otherwise. */
+    components?: unknown;
   }[];
 }
 
@@ -156,6 +159,9 @@ const itemTextLines = (
     ? [description.padEnd(columns - price.length) + price]
     : [...wrapText(description, columns), ...(price ? [price.padStart(columns)] : [])];
 
+  for (const part of formatComponents(item.components, item.station)) {
+    lines.push(...wrapText(`- ${part}`, columns - 2).map((line) => `  ${line}`));
+  }
   if (item.notes) lines.push(...wrapText(`! ${item.notes}`, columns).map((line) => `  ${line}`.slice(0, columns)));
   // Against the dish, not as a banner across the top. Banding every ticket
   // that happens to contain a sesame bun trains staff to ignore the band;
@@ -266,6 +272,8 @@ const buildItemsMarkup = (order: KitchenTicketOrder, settings: KitchenPrintSetti
     const amount = showMoney(settings) && item.unit_price != null
       ? `<span class="item__amount">${money(item.quantity * Number(item.unit_price))}</span>`
       : '';
+    const parts = formatComponents(item.components, item.station)
+      .map((part) => `<div class="item__part">&ndash; ${escapeHtml(part)}</div>`).join('');
     const note = item.notes
       ? `<div class="item__note"><strong>NOTE</strong> ${escapeHtml(item.notes)}</div>`
       : '';
@@ -274,7 +282,7 @@ const buildItemsMarkup = (order: KitchenTicketOrder, settings: KitchenPrintSetti
       : '';
     return `<li class="item">
     <div class="item__main"><span class="item__quantity">${item.quantity}&times;</span><span class="item__name">${escapeHtml(item.menu_item_name)}</span>${amount}</div>
-    ${note}${allergens}
+    ${parts}${note}${allergens}
   </li>`;
   }).join('');
 
@@ -347,6 +355,7 @@ const buildTicketStyles = (paperWidth: number) => `
   .item__quantity { font-size: 13pt; line-height: 1.15; font-weight: 900; }
   .item__name { font-size: 11pt; line-height: 1.22; font-weight: 900; overflow-wrap: anywhere; }
   .item__amount { font-size: 8.5pt; line-height: 1.2; font-weight: 700; padding-left: 1mm; white-space: nowrap; }
+  .item__part { margin: 0.6mm 0 0 9mm; font-size: 9.5pt; line-height: 1.25; overflow-wrap: anywhere; }
   .item__note { margin: 1.4mm 0 0 9mm; padding: 1.2mm 1.5mm; border: 0.35mm solid #000; font-size: 9pt; line-height: 1.25; overflow-wrap: anywhere; }
   .item__note strong { font-size: 7.5pt; letter-spacing: 0.08em; }
   .order-note { margin-top: 2.3mm; padding: 1.8mm; border: 0.55mm solid #000; break-inside: avoid; page-break-inside: avoid; }

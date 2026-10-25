@@ -509,6 +509,7 @@ const KitchenDisplay = () => {
       ready_at: (oi as { ready_at?: string | null }).ready_at ?? null,
       menu_item_name: oi.menu_items?.name || 'Unknown',
       allergens: oi.menu_items?.allergens ?? null,
+      components: (oi as { components?: unknown }).components ?? null,
     })),
   }), []);
 
