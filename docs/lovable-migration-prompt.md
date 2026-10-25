@@ -2,6 +2,47 @@
 
 Copy everything between the rules into Lovable. Nothing else needs to be said.
 
+## Now: one migration and two functions (26 October 2026)
+
+The whole October batch is live (Lovable applied the 26 files through the
+runner on 25 October; all twelve checks passed). Pending:
+`20261027090000_waiter_take_table.sql` (a waiter can take a table nobody has;
+"several tables at once" holds from 8 tables instead of 3), and a redeploy of
+`monri-create-payment` and `monri-webhook` (the webhook must run with
+`verify_jwt = false`, and both share the new CORS list).
+
+---
+
+> **Task: apply one migration with `docs/migration-runner.sql`, then redeploy two
+> Edge Functions. Do not retype the migration file and do not write new SQL.**
+>
+> Make sure your checkout includes the latest `main`. Everything up to and
+> including `20261026130000_combo_station_tickets.sql` is already applied — do
+> not run any of it again.
+>
+> 1. Run `docs/migration-preflight.sql` (read-only) and paste the result; every
+>    row should be true.
+> 2. Run `docs/migration-runner.sql` step by step, each step as its own query:
+>    Step 0 (pg_net installed), Step 1 (queue the download), Step 2 (expect one
+>    row, `arrived_exactly = true`), Step 3 (the one apply block). If anything
+>    fails, stop and report the exact error.
+> 3. Check, and paste the raw output:
+>    ```sql
+>    SELECT to_regprocedure('public.staff_take_table(uuid)') IS NOT NULL AS take_table,
+>           (SELECT hold_burst_sessions FROM public.restaurant_settings WHERE id = 1) AS burst;
+>    ```
+>    Expect `true` and `8` (or whatever value was set by hand before).
+> 4. Redeploy the Edge Functions `monri-create-payment` and `monri-webhook` from
+>    `supabase/functions/` with the settings in `supabase/config.toml`
+>    (`monri-webhook` has `verify_jwt = false`). Paste the deploy result.
+>
+> Do not create or change any user account, password or credential, and do not
+> enable online card payments.
+
+---
+
+## History
+
 Last updated: **26 October 2026**, for twenty-six migrations from
 `20261024130000` to `20261026130000`, applied through
 `docs/migration-runner.sql`.
