@@ -301,7 +301,14 @@ const CartSuggestion = ({ placement, disabled, forItemIds }: Props) => {
               {t('often_ordered_with')}
             </p>
           )}
-          {offered === 1 && evidence?.kind !== 'quantified' && evidence?.kind !== 'qualitative' && sourceLine && (
+          {/* Learned from tables that had dishes like this one, not this one. */}
+          {offered === 1 && evidence?.kind === 'similar' && (
+            <p className="text-[11px] font-sans text-muted-foreground mt-0.5">
+              {t('often_ordered_with_similar')}
+            </p>
+          )}
+          {offered === 1 && evidence?.kind !== 'quantified' && evidence?.kind !== 'qualitative'
+            && evidence?.kind !== 'similar' && sourceLine && (
             <p className="text-xs font-sans text-muted-foreground mt-0.5 truncate">
               {t('goes_with_your', { name: getLocalizedName(sourceLine, locale) })}
             </p>
