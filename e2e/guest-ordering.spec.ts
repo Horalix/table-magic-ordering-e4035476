@@ -20,7 +20,7 @@ test.describe('menu and discovery', () => {
     await page.goto('/menu');
     await page.getByRole('heading', { level: 2, name: /Food|Hrana/ }).click();
 
-    await expect(page).toHaveURL(/\/menu\/food/);
+    await expect(page).toHaveURL(/\/menu\/lasoul\/food/);
     await expect(page.getByRole('heading', { level: 2, name: /Burgers|Burgeri/ })).toBeVisible();
     await expect(page.getByText('La Soul Burger').first()).toBeVisible();
   });
@@ -136,7 +136,7 @@ test.describe('menu and discovery', () => {
     await page.goBack();
 
     await expect(sheet).toBeHidden();
-    await expect(page).toHaveURL(/\/menu\/food/);
+    await expect(page).toHaveURL(/\/menu\/lasoul\/food/);
     await expect(page.getByRole('heading', { level: 2, name: /Burgers|Burgeri/ })).toBeVisible();
   });
 
@@ -188,7 +188,7 @@ test.describe('adding to the order', () => {
     await expect(page.locator('[data-sonner-toast]')).toHaveCount(0);
     // Closing by Add took the sheet's history entry back out: Back now leaves
     // the page as it normally would, instead of re-closing a sheet.
-    await expect(page).toHaveURL(/\/menu\/food/);
+    await expect(page).toHaveURL(/\/menu\/lasoul\/food/);
   });
 });
 
