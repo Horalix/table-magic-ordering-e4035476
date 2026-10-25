@@ -19,6 +19,7 @@ import OrderEta from '@/components/guest/OrderEta';
 import CartSuggestion from '@/components/guest/CartSuggestion';
 import { track } from '@/lib/analytics';
 import { parseComponents } from '@/lib/order-components';
+import { menuHome } from '@/lib/venues';
 
 const RunningTabPage = () => {
   const navigate = useNavigate();
@@ -84,7 +85,7 @@ const RunningTabPage = () => {
     const params = new URLSearchParams();
     if (table) params.set('table', table);
     if (token) params.set('token', token);
-    navigate(`/menu?${params.toString()}`);
+    navigate(menuHome(params));
   };
 
   // Restaurant time, 24-hour: "01:45 AM" read as a foreign app in Sarajevo.

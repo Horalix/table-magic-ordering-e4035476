@@ -19,6 +19,7 @@ import MonriCardForm from '@/components/guest/MonriCardForm';
 import PaymentStatus, { type PaymentPhase } from '@/components/guest/PaymentStatus';
 import CartSuggestion from '@/components/guest/CartSuggestion';
 import { startCardPayment, waitForPaymentConfirmation, classifyPayment, cardPaymentEnabledInBuild } from '@/lib/payments';
+import { menuHome } from '@/lib/venues';
 import {
   placeGuestOrder, touchSession, getServiceStatus, getOrderPayment, switchToPayAtTable,
   unavailableItemIds, orderErrorKey, priceChanges, type PaymentMethod,
@@ -116,7 +117,7 @@ const CartPage = () => {
     if (table) params.set('table', table);
     if (token) params.set('token', token);
     const query = params.toString();
-    return query ? `/menu?${query}` : '/menu';
+    return menuHome(query);
   }, [table, token]);
 
   // ---------------------------------------------------------------------

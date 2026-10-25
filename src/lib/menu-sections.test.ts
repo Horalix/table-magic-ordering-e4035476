@@ -12,15 +12,15 @@ describe('menu sections', () => {
   });
 
   it('routes the three categories to their pages', () => {
-    expect(categoryPath('Drinks')).toBe('/menu/drinks');
-    expect(categoryPath('Desserts')).toBe('/menu/desserts');
-    expect(categoryPath('Brunch Specials')).toBe('/menu/brunch-specials');
+    expect(categoryPath('Drinks')).toBe('/menu/lasoul/drinks');
+    expect(categoryPath('Desserts')).toBe('/menu/lasoul/desserts');
+    expect(categoryPath('Brunch Specials')).toBe('/menu/lasoul/brunch-specials');
   });
 
   it('keeps the table and token on the link, and drops them when absent', () => {
     expect(menuHref('Food', { section: 'Burgers', table: '7', token: 'abc' }))
-      .toBe('/menu/food?section=burgers&table=7&token=abc');
-    expect(menuHref('Food')).toBe('/menu/food');
+      .toBe('/menu/lasoul/food?section=burgers&table=7&token=abc');
+    expect(menuHref('Food')).toBe('/menu/lasoul/food');
   });
 
   // The old menu.lasoul.net pages redirect here. A slug that drifted from the

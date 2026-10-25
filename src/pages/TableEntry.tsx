@@ -7,6 +7,7 @@ import { Loader2, AlertCircle, Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import GuestNameModal from '@/components/guest/GuestNameModal';
 import { useT } from '@/lib/i18n';
+import { menuBase, menuHome } from '@/lib/venues';
 import {
   autoApproveJoinRequest,
   getJoinRequest,
@@ -47,7 +48,7 @@ const TableEntry = () => {
     setGuestName(name);
     startHeartbeat();
     const params = new URLSearchParams({ table: tableNumber, token });
-    navigate(`/menu?${params.toString()}`, { replace: true });
+    navigate(menuHome(params), { replace: true });
   }, [navigate, setGuestName, setSession, setTable, startHeartbeat, tableNumber, token]);
 
   // 1. Validate QR and resolve whether this device is host / returning / joiner.
@@ -234,7 +235,7 @@ const TableEntry = () => {
           <p className="text-muted-foreground font-sans text-sm mt-2 leading-relaxed">{t('waiting_to_join_sub')}</p>
           <Loader2 className="w-5 h-5 animate-spin text-primary/60 mx-auto mt-6" aria-hidden />
           <button
-            onClick={() => navigate('/menu')}
+            onClick={() => navigate(menuBase())}
             className="mt-8 text-xs text-muted-foreground underline underline-offset-4 font-sans"
           >
             {t('browse_menu')}
@@ -259,7 +260,7 @@ const TableEntry = () => {
             >
               {t('try_again')}
             </Button>
-            <Button onClick={() => navigate('/menu')} variant="outline" className="rounded-full">
+            <Button onClick={() => navigate(menuBase())} variant="outline" className="rounded-full">
               {t('browse_menu')}
             </Button>
           </div>
@@ -276,7 +277,7 @@ const TableEntry = () => {
           <AlertCircle className="w-8 h-8 text-destructive" />
         </div>
         <h2 className="font-serif text-xl font-bold text-foreground">{error}</h2>
-        <Button onClick={() => navigate('/menu')} variant="outline" className="mt-6 rounded-full">
+        <Button onClick={() => navigate(menuBase())} variant="outline" className="mt-6 rounded-full">
           {t('browse_menu')}
         </Button>
       </div>

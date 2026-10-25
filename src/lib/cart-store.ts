@@ -5,6 +5,7 @@ import { touchSession } from '@/lib/guest-api';
 import { track } from '@/lib/analytics';
 import { t } from '@/lib/i18n';
 import { knownPrices, unitPrice, salePrice, type ComboDef, type SaleFields } from '@/lib/promotions';
+import { menuBase } from '@/lib/venues';
 
 /** Where a cart line came from, when it came from a suggestion. */
 export interface SuggestionOrigin {
@@ -417,7 +418,7 @@ export const useCartStore = create<CartStore>()(persist((set, get) => ({
           clearInterval(heartbeatInterval);
           heartbeatInterval = null;
         }
-        window.location.href = '/menu';
+        window.location.href = menuBase();
       }
     }, 60000);
   },

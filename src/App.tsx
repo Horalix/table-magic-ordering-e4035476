@@ -3,11 +3,13 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MotionConfig } from "framer-motion";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useLocation, useParams } from "react-router-dom";
 import { lazy, Suspense } from "react";
 import StaffGate from "./components/auth/StaffGate";
 import { ClockProvider } from "./lib/clock";
 import LocaleShell from "./components/LocaleShell";
+import { menuBase, venueBySlug } from "./lib/venues";
+import { AppUpdater } from "./lib/app-update";
 
 // Code-split route bundles so guests, staff, and admin screens load only when needed.
 const GuestMenu = lazy(() => import("./pages/GuestMenu"));
@@ -62,6 +64,32 @@ const RouteFallback = () => (
   </div>
 );
 
+/*
+ * Each restaurant's menu lives under /menu/<venue> (src/lib/venues.ts). The
+ * addresses that came before — /menu, /menu/drinks, the old static site's
+ * pages via public/_redirects — keep working: printed QR codes, saved home
+ * screen icons and search results all point at them.
+ */
+const LEGACY_CATEGORIES = new Set(['drinks', 'food', 'desserts']);
+
+const MenuRedirect = () => {
+  const { search } = useLocation();
+  return <Navigate to={`${menuBase()}${search}`} replace />;
+};
+
+const VenueMenu = () => {
+  const { venue } = useParams<{ venue: string }>();
+  const { search } = useLocation();
+  if (venueBySlug(venue)) return <PageTransition><GuestMenu /></PageTransition>;
+  if (venue && LEGACY_CATEGORIES.has(venue)) return <Navigate to={`${menuBase()}/${venue}${search}`} replace />;
+  return <NotFound />;
+};
+
+const VenueCategory = () => {
+  const { venue } = useParams<{ venue: string }>();
+  return venueBySlug(venue) ? <PageTransition><CategoryPage /></PageTransition> : <NotFound />;
+};
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     {/*
@@ -81,6 +109,7 @@ const App = () => (
       <Suspense fallback={null}><FlyToCart /></Suspense>
       <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
       <LocaleShell>
+        <AppUpdater />
         <Suspense fallback={null}>
           {/* Guest-only: shows a join-approval prompt whenever this device is
               in an active table session. No-op for staff/admin (no sessionId). */}
@@ -90,8 +119,9 @@ const App = () => (
           <Routes>
             {/* Guest routes wrapped in soft page transition. */}
             <Route path="/" element={<PageTransition><GuestMenu /></PageTransition>} />
-            <Route path="/menu" element={<PageTransition><GuestMenu /></PageTransition>} />
-            <Route path="/menu/:type" element={<PageTransition><CategoryPage /></PageTransition>} />
+            <Route path="/menu" element={<MenuRedirect />} />
+            <Route path="/menu/:venue" element={<VenueMenu />} />
+            <Route path="/menu/:venue/:type" element={<VenueCategory />} />
             <Route path="/cart" element={<PageTransition><CartPage /></PageTransition>} />
             <Route path="/tab" element={<PageTransition><RunningTabPage /></PageTransition>} />
             <Route path="/table/:tableNumber" element={<TableEntry />} />

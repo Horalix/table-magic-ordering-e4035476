@@ -2,6 +2,7 @@ import { createRoot } from "react-dom/client";
 import * as Sentry from "@sentry/react";
 import App from "./App.tsx";
 import "./index.css";
+import { startAppUpdates } from "./lib/app-update";
 
 // Error monitoring — only active when a DSN is configured, so dev/local runs
 // are unaffected.
@@ -15,6 +16,8 @@ if (dsn) {
     replaysOnErrorSampleRate: 1.0,
   });
 }
+
+startAppUpdates();
 
 createRoot(document.getElementById("root")!).render(
   <Sentry.ErrorBoundary

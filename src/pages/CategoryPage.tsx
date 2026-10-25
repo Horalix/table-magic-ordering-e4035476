@@ -23,6 +23,7 @@ import { merchBadges, unorderableReason, windowLabel } from '@/lib/availability'
 import { sectionSlug } from '@/lib/menu-sections';
 import { PriceTag, SaleBadge, NewBadge, ComboBadge } from '@/components/guest/PriceTag';
 import { useComboMap } from '@/lib/promotions-api';
+import { menuBase, menuHome } from '@/lib/venues';
 import {
   comboRegularPrice, comboUnitPrice, fixedChoices, isNew, missingSlots, nextPriceChange, rememberPrices, saleView, type ComboDef,
 } from '@/lib/promotions';
@@ -412,7 +413,7 @@ const CategoryPage = () => {
     if (table) params.set('table', table);
     if (token) params.set('token', token);
     const qs = params.toString();
-    navigate(qs ? `/menu?${qs}` : '/menu');
+    navigate(menuHome(qs));
   };
 
   // Keeps the table and token, and replaces history so Back still goes home.
@@ -423,7 +424,7 @@ const CategoryPage = () => {
     if (token) params.set('token', token);
     const qs = params.toString();
     window.scrollTo({ top: 0 });
-    navigate(`/menu/${c.name.toLowerCase()}${qs ? `?${qs}` : ''}`, { replace: true, state: location.state });
+    navigate(`${menuBase()}/${c.name.toLowerCase()}${qs ? `?${qs}` : ''}`, { replace: true, state: location.state });
   };
 
   const closeSearch = () => { setSearch(''); setSearchOpen(false); };

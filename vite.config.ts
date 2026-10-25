@@ -17,8 +17,10 @@ export default defineConfig(({ mode }) => ({
     react(),
     mode === "development" && componentTagger(),
     VitePWA({
-      registerType: "autoUpdate",
-      injectRegister: "auto",
+      // Registered and updated by src/lib/app-update.ts, which applies a new
+      // version at a safe moment instead of leaving the old one on screen.
+      registerType: "prompt",
+      injectRegister: false,
       includeAssets: ["favicon.ico", "icons/apple-touch-icon.png", "brand/wordmark-white.webp", "brand/branch-white.webp"],
       manifest: {
         name: "La Soul",
@@ -27,7 +29,7 @@ export default defineConfig(({ mode }) => ({
         theme_color: "#7E9B79",
         background_color: "#F7F4EC",
         display: "standalone",
-        start_url: "/menu",
+        start_url: "/menu/lasoul",
         scope: "/",
         icons: [
           { src: "/icons/icon-192.png", sizes: "192x192", type: "image/png" },
@@ -39,6 +41,7 @@ export default defineConfig(({ mode }) => ({
         globPatterns: ["**/*.{js,css,html,woff2}"],
         globIgnores: ["**/menu/**"], // huge optimized image set — runtime-cache instead
         maximumFileSizeToCacheInBytes: 3 * 1024 * 1024,
+        cleanupOutdatedCaches: true,
         navigateFallback: "index.html",
         navigateFallbackDenylist: [/^\/admin/, /^\/kitchen/, /^\/waiter/],
         runtimeCaching: [
