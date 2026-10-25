@@ -29,6 +29,16 @@ export interface StubState {
   holdOrders: boolean;
   /** What guest_get_tab lists as the table's orders. */
   tabOrders: Record<string, unknown>[];
+  /** What guest_get_combos returns (20261026100000_promotions.sql). */
+  combos: Record<string, unknown>[];
+  /** Every guest_place_order request body, in order — what the cart actually sent. */
+  orderRequests: Record<string, unknown>[];
+  /**
+   * When set, the next guest_place_order is refused with 'Prices changed' and
+   * these new prices in DETAIL, as price_order_lines() does when the guest's
+   * screen was out of date. Cleared after one refusal.
+   */
+  pricesChanged: Record<string, unknown>[] | null;
 }
 
 const MENU_ITEM = {
@@ -74,6 +84,9 @@ export const defaultState = (): StubState => ({
   menuItems: [MENU_ITEM],
   holdOrders: false,
   tabOrders: [],
+  combos: [],
+  orderRequests: [],
+  pricesChanged: null,
 });
 
 
@@ -128,7 +141,16 @@ export async function installSupabaseStubs(page: Page, state: StubState) {
       case 'touch_session':
         return jsonRoute(route, true);
 
+      case 'guest_get_combos':
+        return jsonRoute(route, state.combos);
+
       case 'guest_place_order': {
+        state.orderRequests.push(body);
+        if (state.pricesChanged) {
+          const details = JSON.stringify(state.pricesChanged);
+          state.pricesChanged = null;
+          return jsonRoute(route, { code: 'P0001', message: 'Prices changed', details, hint: null }, 400);
+        }
         const card = body._payment_method === 'card_online';
         const order = {
           order_id: `order-${state.placedOrders.length + 1}`,

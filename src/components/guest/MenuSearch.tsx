@@ -122,7 +122,7 @@ const MenuSearch = ({ canOrder, onOpenItem }: Props) => {
             </div>
           ) : (
             <>
-            <ul className="space-y-2">
+            <ul className="space-y-2" data-search-results>
               {grouped.map((item) => {
                 const name = getLocalizedName(item, locale);
                 const description = getLocalizedDescription(item, locale);
