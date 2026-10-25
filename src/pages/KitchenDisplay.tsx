@@ -2,7 +2,10 @@ import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react'
 import { Link } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Check, ChefHat, CreditCard, CupSoda, Hand, LayoutList, Printer, Settings, Volume2, VolumeX, X } from 'lucide-react';
+import {
+  BellRing, Check, ChefHat, CreditCard, CupSoda, Hand, Keyboard, LayoutList, Maximize2, Minimize2, Printer, RotateCcw,
+  Settings, Volume2, VolumeX, WifiOff, X,
+} from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -10,8 +13,11 @@ import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
 import {
-  playOrderAlert, playWaiterCallAlert, playBillRequestAlert, unlockAudio, audioReady, playTestTone, useReminderChime,
+  playNewOrderAlert, playWaiterCallAlert, playBillRequestAlert, unlockAudio, audioReady, playTestTone, useReminderChime,
+  vibrate,
 } from '@/lib/kitchen-sounds';
+import { useWakeLock } from '@/lib/wake-lock';
+import { boardSequence, keyCommand, keysBelongToBoard, nextBump, SHORTCUTS, type KeyCommand } from '@/lib/kds-actions';
 import { buildKitchenTicketBytes, downloadKitchenTicketCsv, downloadKitchenTicketJson, printKitchenTicket, ticketHasLines, type KitchenPrintSettings } from '@/lib/ticket-export';
 import { isBluetoothConnected, tryReconnectBluetoothPrinter, printBytesBluetooth, printerStatusCapable } from '@/lib/printer-connect';
 import { enqueuePrint, retryPrintQueue, usePrintQueue } from '@/lib/print-queue';
@@ -30,7 +36,8 @@ import { useStaffDocument } from '@/components/staff/useStaffDocument';
 import {
   useCoalesced, useLatestRequest, useStaffRealtime, useStaffRealtimeEvent, useStaffRefresh,
 } from '@/lib/realtime';
-import { useElapsedMinutes, formatMinutes } from '@/lib/timing';
+import { useElapsedMinutes, formatMinutes, formatClock } from '@/lib/timing';
+import { useNow } from '@/lib/clock';
 import {
   bumpOrderItem, bumpOrderItems, cancelOrder, claimTicketPrint, deviceId, reportTicketPrint,
   kitchenLoad, requeueStaleTicketPrints, requeueTicketPrint, revertOrderStatus,
@@ -110,6 +117,17 @@ const toFloorAlert = (row: WaiterCallQueryRow | BillRequestQueryRow): FloorAlert
   acknowledged_at: (row as { acknowledged_at?: string | null }).acknowledged_at ?? null,
 });
 
+/** An order that just arrived and nobody has touched: the banner and the NEW flag. */
+interface FreshOrder { id: string; table: number; code: string | null; at: number }
+
+/** The last bump, so one tap (or Backspace on a bump bar) can take it back. */
+type LastBump =
+  | { kind: 'start' | 'ready'; orderId: string; table: number; itemIds: string[]; at: number }
+  | { kind: 'served'; orderId: string; table: number; at: number };
+
+/** How long a new order stays flagged if nobody starts it. */
+const FRESH_MS = 3 * 60 * 1000;
+
 /** A ticket the database has queued and nobody has printed yet. */
 interface PrintJob {
   order: KitchenOrder;
@@ -169,13 +187,47 @@ const Going = ({ name, since }: { name: string; since: string | null }) => {
   return <>{name} is going{since ? ` (${Math.max(0, Math.floor(ms / 60_000))}m)` : ''}</>;
 };
 
+/** "Undo: table 7 served (82s)" — the last bump, while the database still allows it. */
+const UndoLastChip = ({ bump, windowSeconds, onUndo }: { bump: LastBump; windowSeconds: number; onUndo: () => void }) => {
+  const now = useNow();
+  const left = Math.ceil((bump.at + windowSeconds * 1000 - now) / 1000);
+  if (left <= 0) return null;
+  const what = bump.kind === 'served' ? 'served' : bump.kind === 'ready' ? 'ready' : 'started';
+  return (
+    <button
+      type="button"
+      onClick={onUndo}
+      className="inline-flex items-center gap-1.5 text-xs font-sans font-semibold px-3 min-h-[32px] rounded-full bg-foreground text-background hover:opacity-90"
+      aria-label={`Undo: table ${bump.table} ${what}, ${left} seconds left`}
+    >
+      <RotateCcw className="w-3.5 h-3.5" /> Undo: T{bump.table} {what} <span className="tabular-nums opacity-70">{left}s</span>
+    </button>
+  );
+};
+
 const KitchenDisplay = () => {
   useStaffDocument();
   const [orders, setOrders] = useState<KitchenOrder[]>([]);
+  /** Latest board, for callbacks that must not be re-created on every refetch. */
+  const ordersRef = useRef<KitchenOrder[]>([]);
+  useEffect(() => { ordersRef.current = orders; }, [orders]);
   const [waiterCalls, setWaiterCalls] = useState<WaiterCall[]>([]);
   const [billRequests, setBillRequests] = useState<BillRequest[]>([]);
   const [view, setView] = useState<'active' | 'allday' | 'history'>('active');
-  const [sectionFilter, setSectionFilter] = useState<string>('all');
+  /** Remembered per device, like the station: the terrace screen stays the terrace screen. */
+  const [sectionFilter, setSectionFilter] = useState<string>(() => localStorage.getItem('kitchen:section') || 'all');
+  /** Orders that just arrived, until someone starts them or says "got it". */
+  const [fresh, setFresh] = useState<FreshOrder[]>([]);
+  /** The ticket the keyboard / bump bar is on. */
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [showKeys, setShowKeys] = useState(false);
+  const [lastBump, setLastBump] = useState<LastBump | null>(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  /** When the board last loaded for certain — what an offline banner can promise. */
+  const [lastLoadedAt, setLastLoadedAt] = useState<number | null>(null);
+  const [online, setOnline] = useState(() => (typeof navigator === 'undefined' ? true : navigator.onLine));
+  /** A dimmed tablet is a board nobody reads and a tab the browser throttles. */
+  const wake = useWakeLock(true);
   /**
    * Which station this screen belongs to.
    *
@@ -189,6 +241,7 @@ const KitchenDisplay = () => {
   const [sections, setSections] = useState<{ id: string; name: string; color: string }[]>([]);
   const [soundEnabled, setSoundEnabled] = useState(true);
   const soundEnabledRef = useRef(true);
+  const stationRef = useRef<StationFilter>('all');
   /**
    * Whether the browser will actually let us make a noise.
    *
@@ -470,6 +523,30 @@ const KitchenDisplay = () => {
   useEffect(() => {
     soundEnabledRef.current = soundEnabled;
   }, [soundEnabled]);
+  useEffect(() => { stationRef.current = station; }, [station]);
+
+  /* Network state, for the "no connection" banner. */
+  useEffect(() => {
+    const up = () => setOnline(true);
+    const down = () => setOnline(false);
+    window.addEventListener('online', up);
+    window.addEventListener('offline', down);
+    return () => { window.removeEventListener('online', up); window.removeEventListener('offline', down); };
+  }, []);
+
+  /* Full screen follows the browser, whichever way it was entered or left. */
+  useEffect(() => {
+    const sync = () => setIsFullscreen(!!document.fullscreenElement);
+    document.addEventListener('fullscreenchange', sync);
+    return () => document.removeEventListener('fullscreenchange', sync);
+  }, []);
+
+  const toggleFullscreen = useCallback(() => {
+    if (document.fullscreenElement) { void document.exitFullscreen().catch(() => {}); return; }
+    const el = document.documentElement as HTMLElement & { requestFullscreen?: () => Promise<void> };
+    if (!el.requestFullscreen) { toast.error('Full screen is not available here — use the browser menu, or add the board to the home screen'); return; }
+    void el.requestFullscreen().catch(() => toast.error('The browser refused full screen'));
+  }, []);
 
   /**
    * Unlock audio on the first interaction anywhere on the page.
@@ -682,12 +759,24 @@ const KitchenDisplay = () => {
     if (!historyView) {
       const known = knownOrderIds.current;
       const now = Date.now();
-      const arrived = known !== null && mapped.some((o) =>
+      const st = stationRef.current;
+      // New to THIS screen: the bar is not chimed for a steak.
+      const arrived = known === null ? [] : mapped.filter((o) =>
         !known.has(o.id) && o.status === 'pending'
-        && now - new Date(kitchenStart(o)).getTime() < NEW_ORDER_WINDOW_MS);
-      if (arrived && soundEnabledRef.current) playOrderAlert();
+        && now - new Date(kitchenStart(o)).getTime() < NEW_ORDER_WINDOW_MS
+        && (st === 'all' || o.items.some((i) => i.station === st)));
+      if (arrived.length > 0) {
+        if (soundEnabledRef.current) playNewOrderAlert();
+        vibrate([300, 120, 300]);
+        setFresh((prev) => [
+          ...prev,
+          ...arrived.filter((o) => !prev.some((f) => f.id === o.id))
+            .map((o) => ({ id: o.id, table: o.table_number, code: o.order_code, at: now })),
+        ]);
+      }
       knownOrderIds.current = new Set([...(known ?? []), ...mapped.map((o) => o.id)]);
     }
+    setLastLoadedAt(Date.now());
 
     setOrders(mapped);
     setTruncated(mapped.length >= HARD_ROW_CAP);
@@ -841,6 +930,11 @@ const KitchenDisplay = () => {
   }, [fetchOrders, patchItems]);
 
   const bumpMany = useCallback(async (itemIds: string[], status: OrderItemStatus) => {
+    // Remember it, so Undo (or Backspace on a bump bar) can take it back.
+    if (status === 'preparing' || status === 'ready') {
+      const owner = ordersRef.current.find((o) => o.items.some((i) => itemIds.includes(i.id)));
+      if (owner) setLastBump({ kind: status === 'preparing' ? 'start' : 'ready', orderId: owner.id, table: owner.table_number, itemIds, at: Date.now() });
+    }
     patchItems(itemIds, status);
     try {
       const result = await bumpOrderItems(itemIds, status);
@@ -852,10 +946,20 @@ const KitchenDisplay = () => {
   }, [fetchOrders, patchItems]);
 
   const advanceOrder = useCallback(async (orderId: string, status: OrderStatus) => {
+    const order = ordersRef.current.find((o) => o.id === orderId);
     try {
       // Goes through the state machine: an illegal move is rejected by the
       // database rather than silently corrupting the board.
       await rpcUpdateOrderStatus(orderId, status);
+      if (status === 'served' && order) {
+        // The card leaves the board at once. An accidental "served" used to
+        // mean digging through History before the undo window ran out.
+        setLastBump({ kind: 'served', orderId, table: order.table_number, at: Date.now() });
+        toast.success(`Table ${order.table_number} served`, {
+          duration: 10_000,
+          action: { label: 'Undo', onClick: () => { void revertOrderRef.current(orderId, 'ready'); } },
+        });
+      }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Failed to update order status');
     }
@@ -866,11 +970,31 @@ const KitchenDisplay = () => {
     try {
       await revertOrderStatus(orderId, status, 'kitchen undo');
       toast.success(`Back to ${status}`);
+      setLastBump((b) => (b?.orderId === orderId ? null : b));
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Could not undo');
     }
     await fetchOrders();
   }, [fetchOrders]);
+  const revertOrderRef = useRef(revertOrder);
+  useEffect(() => { revertOrderRef.current = revertOrder; }, [revertOrder]);
+
+  /** Take back the last bump, within the window the database allows. */
+  const undoLast = useCallback(async () => {
+    const b = lastBump;
+    if (!b || Date.now() - b.at > undoSeconds * 1000) { toast.info('Nothing to undo'); return; }
+    setLastBump(null);
+    if (b.kind === 'served') { await revertOrder(b.orderId, 'ready'); return; }
+    const back: OrderItemStatus = b.kind === 'start' ? 'pending' : 'preparing';
+    patchItems(b.itemIds, back);
+    try {
+      await bumpOrderItems(b.itemIds, back);
+      toast.success(`Table ${b.table}: undone`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Could not undo');
+    }
+    await fetchOrders();
+  }, [lastBump, undoSeconds, revertOrder, patchItems, fetchOrders]);
 
   const confirmVoid = async () => {
     if (!voiding || voidReason.trim().length < 3) return;
@@ -955,6 +1079,80 @@ const KitchenDisplay = () => {
     return [...mine].sort((a, b) => new Date(kitchenStart(a)).getTime() - new Date(kitchenStart(b)).getTime());
   }, [orders, sectionFilter, station, historyView]);
 
+  /*
+   * A new order stays flagged until someone starts a line of it, taps "Got
+   * it", or three minutes pass — whichever is first. Until then the chime
+   * repeats every 30 seconds: one chime over an extraction hood is easy to
+   * miss, and a ticket nobody noticed is a table that waits twenty minutes.
+   */
+  useEffect(() => {
+    setFresh((prev) => {
+      const now = Date.now();
+      const next = prev.filter((f) => {
+        const o = orders.find((x) => x.id === f.id);
+        if (!o || now - f.at > FRESH_MS) return false;
+        const mine = station === 'all' ? o.items : o.items.filter((i) => i.station === station);
+        return mine.every((i) => i.status === 'pending');
+      });
+      return next.length === prev.length ? prev : next;
+    });
+  }, [orders, station]);
+  useReminderChime(soundEnabled && fresh.length > 0, useCallback(() => { playNewOrderAlert(); }, []), 30_000);
+  const freshIds = useMemo(() => new Set(fresh.map((f) => f.id)), [fresh]);
+
+  /** The tickets the keyboard walks, in the order the board draws them. */
+  const sequence = useMemo(() => (view === 'active' ? boardSequence(visible) : []), [visible, view]);
+
+  /*
+   * Keyboard and bump bar. Digits pick a ticket, arrows move, Enter/Space
+   * bumps (start all → all ready → served), Backspace undoes. Ignored while
+   * typing or with a dialog open, and Enter/Space keep their meaning on a
+   * focused button.
+   */
+  const commandRef = useRef<(cmd: KeyCommand) => void>(() => {});
+  commandRef.current = (cmd: KeyCommand) => {
+    const index = sequence.findIndex((o) => o.id === selectedId);
+    const pick = (i: number) => {
+      const target = sequence[Math.max(0, Math.min(sequence.length - 1, i))];
+      if (!target) return;
+      setSelectedId(target.id);
+      document.getElementById(`ticket-${target.id}`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    };
+    switch (cmd.kind) {
+      case 'select': pick(cmd.index); break;
+      case 'move': pick(index < 0 ? 0 : index + cmd.by); break;
+      case 'bump': {
+        const target = sequence[index] ?? sequence[0];
+        if (!target) break;
+        setSelectedId(target.id);
+        const action = nextBump(target, station);
+        if (!action) break;
+        if (action.kind === 'served') void advanceOrder(target.id, 'served');
+        else void bumpMany(action.itemIds, action.kind === 'start' ? 'preparing' : 'ready');
+        break;
+      }
+      case 'undo': void undoLast(); break;
+      case 'reprint': { const target = sequence[index]; if (target) void reprint(target); break; }
+      case 'fullscreen': toggleFullscreen(); break;
+      case 'help': setShowKeys(true); break;
+      case 'dismiss': setFresh([]); setSelectedId(null); break;
+    }
+  };
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.altKey || e.repeat) return;
+      if (!keysBelongToBoard(e.target)) return;
+      const cmd = keyCommand(e.key);
+      if (!cmd) return;
+      const onControl = (e.target as HTMLElement | null)?.closest?.('button, a, select, [role="button"]');
+      if (cmd.kind === 'bump' && onControl) return;
+      e.preventDefault();
+      commandRef.current(cmd);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
   /** This screen's stations' tickets for an order, in words. */
   const printStatesFor = (order: KitchenOrder): PrintStateLine[] =>
     (['kitchen', 'bar'] as const)
@@ -977,6 +1175,9 @@ const KitchenDisplay = () => {
       showStatus={showStatus}
       failedPrint={failedPrints.includes(order.id)}
       printStates={showStatus ? [] : printStatesFor(order)}
+      isNew={!showStatus && freshIds.has(order.id)}
+      selected={!showStatus && selectedId === order.id}
+      slot={showStatus ? undefined : sequence.findIndex((o) => o.id === order.id) + 1 || undefined}
       onBumpItem={bumpItem}
       onBumpMany={bumpMany}
       onAdvanceOrder={advanceOrder}
@@ -1103,9 +1304,15 @@ const KitchenDisplay = () => {
                 </span>
               )}
 
-              {loadError && (
-                <span className="inline-flex items-center gap-1 text-[11px] font-sans font-medium px-2 py-0.5 rounded-full bg-destructive/10 text-destructive">
-                  Could not load orders — this board may be out of date
+              {/* The last bump, one tap from being taken back. */}
+              {lastBump && <UndoLastChip bump={lastBump} windowSeconds={undoSeconds} onUndo={() => { void undoLast(); }} />}
+
+              {wake === 'unsupported' && (
+                <span
+                  className="inline-flex items-center gap-1 text-[11px] font-sans font-medium px-2 py-0.5 rounded-full bg-accent/10 text-accent"
+                  title="This browser cannot keep the screen on. Set the tablet's screen timeout to Never, or keep it charging with 'stay awake' on."
+                >
+                  Screen may sleep — set the tablet to never sleep
                 </span>
               )}
             </div>
@@ -1131,7 +1338,7 @@ const KitchenDisplay = () => {
             {sections.length > 0 && (
               <select
                 value={sectionFilter}
-                onChange={(e) => setSectionFilter(e.target.value)}
+                onChange={(e) => { setSectionFilter(e.target.value); localStorage.setItem('kitchen:section', e.target.value); }}
                 className="rounded-full border border-border bg-card px-3 text-sm font-sans min-h-[44px]"
                 aria-label="Filter by section"
               >
@@ -1176,6 +1383,26 @@ const KitchenDisplay = () => {
             >
               Test sound
             </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={toggleFullscreen}
+              className="rounded-full min-h-[44px] min-w-[44px]"
+              aria-label={isFullscreen ? 'Leave full screen' : 'Full screen'}
+              title="Full screen (F)"
+            >
+              {isFullscreen ? <Minimize2 className="w-5 h-5" /> : <Maximize2 className="w-5 h-5" />}
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setShowKeys(true)}
+              className="rounded-full min-h-[44px] min-w-[44px] hidden md:inline-flex"
+              aria-label="Keyboard and bump bar shortcuts"
+              title="Keyboard and bump bar (?)"
+            >
+              <Keyboard className="w-5 h-5" />
+            </Button>
 
             <div className="inline-flex rounded-full border border-border overflow-hidden" role="group" aria-label="View">
               {([
@@ -1199,69 +1426,104 @@ const KitchenDisplay = () => {
         </div>
       </div>
 
-      {/* Above the calls: a held order is a guest waiting for food nobody is making. */}
-      <HeldOrdersCard soundEnabled={soundEnabled} className="mx-4 sm:mx-6 mt-3" onChanged={refetchOrders} />
+      {/* The connection, said in a sentence when it matters. Orders are safe
+          on the server either way — what this promises is how old the board
+          on the screen is. */}
+      {(loadError || !online) && (
+        <div role="alert" className="mx-4 sm:mx-6 mt-3 rounded-xl bg-destructive text-destructive-foreground px-4 py-3 flex items-center gap-3">
+          <WifiOff className="w-5 h-5 shrink-0" />
+          <p className="text-sm font-sans font-semibold">
+            No connection — this board was last updated {lastLoadedAt ? `at ${formatClock(new Date(lastLoadedAt))}` : 'a while ago'}.
+            Retrying every 15 seconds; no order is lost, they are waiting on the server.
+          </p>
+        </div>
+      )}
 
+      {/* A new order is impossible to miss: a banner that flashes, a chime
+          that repeats until someone says "got it" or starts cooking. */}
       <AnimatePresence>
-        {waiterCalls.length > 0 && (
-          <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="bg-accent/10 border-b border-accent/20 overflow-hidden">
-            <div className="px-6 py-3 space-y-2">
-              <p className="text-xs font-sans font-semibold text-accent uppercase tracking-wider flex items-center gap-2">
-                <Hand className="w-4 h-4" /> Waiter Calls ({waiterCalls.length})
+        {fresh.length > 0 && view === 'active' && (
+          <motion.div
+            initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
+            role="alert"
+            aria-live="assertive"
+            className="mx-4 sm:mx-6 mt-3 rounded-xl bg-primary text-primary-foreground px-4 py-3 flex items-center gap-3 shadow-lux-lg kds-flash"
+          >
+            <BellRing className="w-7 h-7 shrink-0" aria-hidden />
+            <div className="min-w-0 flex-1">
+              <p className="font-sans font-bold text-lg leading-tight">
+                {fresh.length === 1 ? 'New order' : `${fresh.length} new orders`}
               </p>
-              <div className="flex flex-wrap gap-2">
-                {waiterCalls.map((call) => (
-                  <motion.div key={call.id} initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="flex items-center gap-2 pl-4 pr-1 py-1 rounded-full bg-accent/15 border border-accent/25 min-h-[52px]">
-                    <span className="text-base font-sans font-bold text-accent">Table {call.table_number}</span>
-                    <span className="text-sm text-accent/80 font-sans">
-                      <Ago at={call.created_at} />
-                      {call.status === 'acknowledged' && (
-                        <> · <Going name={(call.acknowledged_by && staffNames[call.acknowledged_by]) || 'Someone'} since={call.acknowledged_at} /></>
-                      )}
-                    </span>
-                    <button
-                      onClick={() => resolveWaiterCall(call.id)}
-                      disabled={clearing.has(call.id)}
-                      className="w-11 h-11 rounded-full bg-accent/20 flex items-center justify-center hover:bg-accent/40 disabled:opacity-50 transition-colors"
-                      aria-label="Resolve call"
-                    >
-                      <X className="w-5 h-5 text-accent" />
-                    </button>
-                  </motion.div>
-                ))}
-              </div>
+              <p className="text-sm font-sans opacity-90 truncate">
+                {fresh.map((f) => `Table ${f.table}${f.code ? ` #${f.code}` : ''}`).join(' · ')}
+              </p>
             </div>
+            <Button
+              onClick={() => setFresh([])}
+              className="min-h-[52px] px-6 rounded-xl bg-primary-foreground text-primary hover:bg-primary-foreground/90 font-sans font-bold text-base"
+            >
+              Got it
+            </Button>
           </motion.div>
         )}
       </AnimatePresence>
 
+      {/* Above the calls: a held order is a guest waiting for food nobody is making. */}
+      <HeldOrdersCard soundEnabled={soundEnabled} className="mx-4 sm:mx-6 mt-3" onChanged={refetchOrders} />
+
+      {/* Calls and bill requests share one strip: on a tablet two stacked
+          strips pushed the first ticket below the fold. */}
       <AnimatePresence>
-        {billRequests.length > 0 && (
-          <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="bg-primary/10 border-b border-primary/20 overflow-hidden">
-            <div className="px-6 py-3 space-y-2">
-              <p className="text-xs font-sans font-semibold text-primary uppercase tracking-wider flex items-center gap-2">
-                <CreditCard className="w-4 h-4" /> Bill Requests ({billRequests.length})
-              </p>
-              <div className="flex flex-wrap gap-2">
-                {billRequests.map((req) => (
-                  <motion.div key={req.id} initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="flex items-center gap-2 pl-4 pr-1 py-1 rounded-full bg-primary/15 border border-primary/25 min-h-[52px]">
-                    <span className="text-base font-sans font-bold text-primary">Table {req.table_number}</span>
-                    <span className="text-sm text-primary/80 font-sans">
-                      <Ago at={req.created_at} />
-                      {req.status === 'acknowledged' && (
-                        <> · <Going name={(req.acknowledged_by && staffNames[req.acknowledged_by]) || 'Someone'} since={req.acknowledged_at} /></>
-                      )}
-                    </span>
-                    <button
-                      onClick={() => setFreeing(req)}
-                      className="w-11 h-11 rounded-full bg-primary/20 flex items-center justify-center hover:bg-primary/40 transition-colors"
-                      aria-label="Resolve bill request"
-                    >
-                      <Check className="w-5 h-5 text-primary" />
-                    </button>
-                  </motion.div>
-                ))}
-              </div>
+        {(waiterCalls.length > 0 || billRequests.length > 0) && (
+          <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="border-b border-border overflow-hidden">
+            <div className="px-4 sm:px-6 py-2.5 flex flex-wrap items-center gap-2">
+              {waiterCalls.length > 0 && (
+                <p className="text-xs font-sans font-semibold text-accent uppercase tracking-wider flex items-center gap-1.5 mr-1">
+                  <Hand className="w-4 h-4" /> Waiter Calls ({waiterCalls.length})
+                </p>
+              )}
+              {waiterCalls.map((call) => (
+                <motion.div key={call.id} initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="flex items-center gap-2 pl-4 pr-1 py-1 rounded-full bg-accent/15 border border-accent/25 min-h-[52px]">
+                  <span className="text-base font-sans font-bold text-accent">Table {call.table_number}</span>
+                  <span className="text-sm text-accent/80 font-sans">
+                    <Ago at={call.created_at} />
+                    {call.status === 'acknowledged' && (
+                      <> · <Going name={(call.acknowledged_by && staffNames[call.acknowledged_by]) || 'Someone'} since={call.acknowledged_at} /></>
+                    )}
+                  </span>
+                  <button
+                    onClick={() => resolveWaiterCall(call.id)}
+                    disabled={clearing.has(call.id)}
+                    className="w-11 h-11 rounded-full bg-accent/20 flex items-center justify-center hover:bg-accent/40 disabled:opacity-50 transition-colors"
+                    aria-label="Resolve call"
+                  >
+                    <X className="w-5 h-5 text-accent" />
+                  </button>
+                </motion.div>
+              ))}
+              {billRequests.length > 0 && (
+                <p className={`text-xs font-sans font-semibold text-primary uppercase tracking-wider flex items-center gap-1.5 mr-1 ${waiterCalls.length > 0 ? 'sm:ml-3' : ''}`}>
+                  <CreditCard className="w-4 h-4" /> Bill Requests ({billRequests.length})
+                </p>
+              )}
+              {billRequests.map((req) => (
+                <motion.div key={req.id} initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="flex items-center gap-2 pl-4 pr-1 py-1 rounded-full bg-primary/15 border border-primary/25 min-h-[52px]">
+                  <span className="text-base font-sans font-bold text-primary">Table {req.table_number}</span>
+                  <span className="text-sm text-primary/80 font-sans">
+                    <Ago at={req.created_at} />
+                    {req.status === 'acknowledged' && (
+                      <> · <Going name={(req.acknowledged_by && staffNames[req.acknowledged_by]) || 'Someone'} since={req.acknowledged_at} /></>
+                    )}
+                  </span>
+                  <button
+                    onClick={() => setFreeing(req)}
+                    className="w-11 h-11 rounded-full bg-primary/20 flex items-center justify-center hover:bg-primary/40 transition-colors"
+                    aria-label="Resolve bill request"
+                  >
+                    <Check className="w-5 h-5 text-primary" />
+                  </button>
+                </motion.div>
+              ))}
             </div>
           </motion.div>
         )}
@@ -1308,6 +1570,25 @@ const KitchenDisplay = () => {
           })}
         </div>
       )}
+
+      <Dialog open={showKeys} onOpenChange={setShowKeys}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="font-serif">Keyboard and bump bar</DialogTitle>
+            <DialogDescription>
+              Set a bump bar to send these keys. The number on each ticket is its key.
+            </DialogDescription>
+          </DialogHeader>
+          <dl className="divide-y divide-border">
+            {SHORTCUTS.map((k) => (
+              <div key={k.keys} className="flex items-center justify-between gap-4 py-2">
+                <dt><kbd className="font-mono text-sm px-2 py-1 rounded-md bg-muted border border-border whitespace-nowrap">{k.keys}</kbd></dt>
+                <dd className="text-sm font-sans text-muted-foreground text-right">{k.does}</dd>
+              </div>
+            ))}
+          </dl>
+        </DialogContent>
+      </Dialog>
 
       <FreeTableDialog
         open={freeing !== null}

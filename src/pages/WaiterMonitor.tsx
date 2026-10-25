@@ -18,6 +18,7 @@ import {
   playOrderAlert, playWaiterCallAlert, playBillRequestAlert, useAudioUnlock, useReminderChime,
 } from '@/lib/kitchen-sounds';
 import { useStaffDocument } from '@/components/staff/useStaffDocument';
+import { useWakeLock } from '@/lib/wake-lock';
 import { isHeld, isInKitchen, kitchenStart } from '@/components/staff/order-status';
 import HeldOrdersCard from '@/components/staff/HeldOrdersCard';
 import type { Database } from '@/integrations/supabase/types';
@@ -64,6 +65,8 @@ const IDLE_MS = 5 * 60 * 1000;
 
 const WaiterMonitor = () => {
   useStaffDocument();
+  // A wall or counter screen that dims is a floor nobody is watching.
+  useWakeLock(true);
   const [tables, setTables] = useState<TableRow[]>([]);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);

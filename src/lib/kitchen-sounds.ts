@@ -104,6 +104,35 @@ export function playOrderAlert(): boolean {
   });
 }
 
+/**
+ * New ticket, for the kitchen board: C5–E5–G5 twice, triangle wave, louder.
+ *
+ * The two-note sine chime above is pleasant and disappears under an
+ * extraction hood. This one is built to be heard over a busy line — a
+ * triangle wave carries further than a sine at the same volume — while
+ * staying a different shape from the call (three equal beeps) and the bill
+ * (falling), so nobody has to look up to know which it was.
+ */
+export function playNewOrderAlert(): boolean {
+  return withContext((ctx) => {
+    const notes = [523, 659, 784, 523, 659, 784];
+    notes.forEach((freq, i) => {
+      const start = ctx.currentTime + i * 0.13 + (i >= 3 ? 0.18 : 0);
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(freq, start);
+      gain.gain.setValueAtTime(0.0001, start);
+      gain.gain.exponentialRampToValueAtTime(0.5, start + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.01, start + 0.12);
+      osc.start(start);
+      osc.stop(start + 0.13);
+    });
+  });
+}
+
 /** Three sharp A5 beeps. A table needs someone. */
 export function playWaiterCallAlert(): boolean {
   return withContext((ctx) => {

@@ -159,6 +159,12 @@ interface Props {
   failedPrint: boolean;
   /** What the database says happened to this order's tickets. */
   printStates?: PrintStateLine[];
+  /** Arrived in the last minutes and nobody has started it: flagged NEW. */
+  isNew?: boolean;
+  /** Picked with the keyboard or bump bar. */
+  selected?: boolean;
+  /** Position on the board, 1-based, for the bump-bar digit keys. */
+  slot?: number;
   onBumpItem: (itemId: string, status: OrderItemStatus) => Promise<void>;
   onBumpMany: (itemIds: string[], status: OrderItemStatus) => Promise<void>;
   onAdvanceOrder: (orderId: string, status: OrderStatus) => Promise<void>;
@@ -169,7 +175,7 @@ interface Props {
 }
 
 const KitchenOrderCard = ({
-  order, station, undoSeconds, showStatus, failedPrint, printStates = [],
+  order, station, undoSeconds, showStatus, failedPrint, printStates = [], isNew = false, selected = false, slot,
   onBumpItem, onBumpMany, onAdvanceOrder, onRevertOrder, onCancel, onPrint, onExport,
 }: Props) => {
   const now = useNow();
@@ -231,12 +237,20 @@ const KitchenOrderCard = ({
       animate={{ opacity: 1, scale: 1 }}
       exit={{ opacity: 0, scale: 0.96 }}
       transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
-      className={`rounded-xl border bg-card overflow-hidden shadow-lux ${
+      id={`ticket-${order.id}`}
+      data-selected={selected || undefined}
+      className={`relative rounded-xl border bg-card overflow-hidden shadow-lux scroll-mt-28 ${
         urgency === 'critical' ? 'border-destructive/60 breathe breathe-urgent'
           : urgency === 'late' ? 'border-destructive/50'
-            : urgency === 'attention' ? 'border-accent/50' : 'border-border'
-      }`}
+            : urgency === 'attention' ? 'border-accent/50'
+              : isNew ? 'border-primary breathe' : 'border-border'
+      } ${selected ? 'ring-4 ring-foreground ring-offset-2 ring-offset-background' : ''}`}
     >
+      {/* Age as a colour band across the top, readable from across the
+          kitchen: none while fresh, amber when getting on, red when late. */}
+      {urgency !== 'fresh' && (
+        <div aria-hidden className={`h-1.5 ${urgency === 'attention' ? 'bg-accent' : 'bg-destructive'}`} />
+      )}
       <div className="flex items-center justify-between gap-2 px-4 py-3 border-b border-border">
         <div className="flex items-center gap-2 flex-wrap min-w-0">
           {order.section_name && (
@@ -249,7 +263,19 @@ const KitchenOrderCard = ({
           )}
           {/* Read from across a kitchen, not from arm's length: the table
               number is the one thing a runner must get right first time. */}
+          {slot != null && slot <= 9 && (
+            <span
+              className={`inline-flex items-center justify-center w-6 h-6 rounded-md text-xs font-sans font-bold tabular-nums ${selected ? 'bg-foreground text-background' : 'bg-muted text-muted-foreground'}`}
+              title={`Press ${slot} to pick this ticket`}
+              aria-hidden
+            >
+              {slot}
+            </span>
+          )}
           <span className="font-serif text-xl md:text-[28px] md:leading-8 font-bold text-foreground">Table {order.table_number}</span>
+          {isNew && (
+            <span className="text-[11px] font-sans font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-primary text-primary-foreground">New</span>
+          )}
           {order.order_code && (
             <span className="text-xs font-sans font-semibold tabular-nums tracking-wider px-1.5 py-0.5 rounded bg-muted text-foreground">
               #{order.order_code}
@@ -271,7 +297,11 @@ const KitchenOrderCard = ({
         {/* Urgency is spelled out, not only coloured — colour alone fails for
             colour-blind staff and for anyone glancing across a room. */}
         <div className="text-right shrink-0">
-          <span className={`text-sm md:text-lg font-sans font-semibold tabular-nums flex items-center justify-end gap-1 ${urgencyText(urgency)}`}>
+          <span className={`text-sm md:text-lg font-sans font-semibold tabular-nums inline-flex items-center justify-end gap-1 ${
+            urgency === 'late' || urgency === 'critical'
+              ? 'bg-destructive text-destructive-foreground rounded-md px-2'
+              : urgencyText(urgency)
+          }`}>
             {urgencyMark(urgency) && <span aria-hidden>{urgencyMark(urgency)}</span>}
             {formatMinutes(ageMs)}
             {urgency !== 'fresh' && <span className="sr-only"> — {urgency}</span>}
@@ -356,7 +386,7 @@ const KitchenOrderCard = ({
                   disabled={inFlight}
                   onClick={() => run(item.id, () => onBumpItem(item.id, next))}
                   aria-label={`Mark ${item.menu_item_name} as ${next}`}
-                  className="min-h-[44px] min-w-[76px] rounded-lg text-sm font-sans font-semibold shrink-0 active:scale-95 transition-transform"
+                  className="min-h-[48px] md:min-h-[56px] min-w-[80px] md:min-w-[96px] rounded-lg text-sm md:text-base font-sans font-semibold shrink-0 active:scale-95 transition-transform"
                 >
                   {ITEM_ACTION[item.status]}
                 </Button>
@@ -407,9 +437,9 @@ const KitchenOrderCard = ({
               size="sm"
               disabled={busy.has('start-all')}
               onClick={() => run('start-all', () => onBumpMany(pending.map((i) => i.id), 'preparing'))}
-              className="min-h-[44px] rounded-lg text-sm font-sans gap-1.5"
+              className="min-h-[48px] md:min-h-[56px] rounded-lg text-sm md:text-base font-sans gap-1.5"
             >
-              <ChefHat className="w-3.5 h-3.5" /> Start all ({pending.length})
+              <ChefHat className="w-4 h-4" /> Start all ({pending.length})
             </Button>
           )}
           {notReady.length > 0 && (
@@ -417,7 +447,7 @@ const KitchenOrderCard = ({
               size="sm"
               disabled={busy.has('all-ready')}
               onClick={() => run('all-ready', () => onBumpMany(notReady.map((i) => i.id), 'ready'))}
-              className="min-h-[44px] flex-1 min-w-[140px] rounded-lg bg-primary text-primary-foreground text-sm font-sans active:scale-95 transition-transform"
+              className="min-h-[48px] md:min-h-[56px] flex-1 min-w-[140px] rounded-lg bg-primary text-primary-foreground text-sm md:text-base font-sans font-semibold active:scale-95 transition-transform"
             >
               All ready ({notReady.length})
             </Button>
@@ -427,7 +457,7 @@ const KitchenOrderCard = ({
               size="sm"
               disabled={busy.has('served')}
               onClick={() => run('served', () => onAdvanceOrder(order.id, 'served'))}
-              className="min-h-[44px] flex-1 min-w-[140px] rounded-lg bg-primary text-primary-foreground text-sm font-sans active:scale-95 transition-transform"
+              className="min-h-[48px] md:min-h-[56px] flex-1 min-w-[140px] rounded-lg bg-primary text-primary-foreground text-sm md:text-base font-sans font-semibold active:scale-95 transition-transform"
             >
               <Utensils className="w-4 h-4 mr-1.5" /> Mark served
             </Button>
