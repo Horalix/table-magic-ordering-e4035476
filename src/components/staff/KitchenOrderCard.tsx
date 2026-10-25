@@ -244,7 +244,9 @@ const KitchenOrderCard = ({
           : urgency === 'late' ? 'border-destructive/50'
             : urgency === 'attention' ? 'border-accent/50'
               : isNew ? 'border-primary breathe' : 'border-border'
-      } ${selected ? 'ring-4 ring-foreground ring-offset-2 ring-offset-background' : ''}`}
+      } ${/* An outline, not a ring: .shadow-lux and the breathing glow both
+             own box-shadow, and a ring drawn with it simply vanished. */
+        selected ? 'outline outline-4 outline-offset-2 outline-foreground' : ''}`}
     >
       {/* Age as a colour band across the top, readable from across the
           kitchen: none while fresh, amber when getting on, red when late. */}

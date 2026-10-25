@@ -257,8 +257,12 @@ const PrinterCard = ({ printer, onChanged }: { printer: PrinterRow; onChanged: (
 };
 
 const AddPrinter = ({ existing, onAdded }: { existing: PrinterRow[]; onAdded: () => void }) => {
-  const suggested: PrinterStation = existing.some((p) => p.station !== 'bar') ? 'bar' : 'kitchen';
-  const [name, setName] = useState(suggested === 'bar' ? 'Bar printer' : 'Kitchen printer');
+  // Suggest whichever station has no printer yet; a spare once both do.
+  const covers = (s: 'kitchen' | 'bar') => existing.some((p) => p.station === s || p.station === 'all');
+  const suggested: PrinterStation = !covers('kitchen') ? 'kitchen' : !covers('bar') ? 'bar' : 'kitchen';
+  const [name, setName] = useState(
+    !covers('kitchen') ? 'Kitchen printer' : !covers('bar') ? 'Bar printer' : `Printer ${existing.length + 1}`,
+  );
   const [station, setStation] = useState<PrinterStation>(suggested);
   const [paper, setPaper] = useState<58 | 80>(80);
   const [busy, setBusy] = useState(false);
