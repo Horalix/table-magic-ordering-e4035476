@@ -28,12 +28,12 @@ describe('migration preflight', () => {
     expect(rows.filter((r) => !r.found).map((r) => r.rewrite)).toEqual([]);
   }, 180_000);
 
-  // Production now: everything up to thompson_sampling applied (Lovable
-  // stopped at business_day), nothing after. The texts session_context and
-  // thompson_sampling replaced are gone there by design; the preflight must
-  // still say every row is fine.
-  it('passes on production as it stands: up to thompson_sampling applied, the rest pending', async () => {
-    const db = await createTestDatabase({ quiet: true, until: '20260805090000' });
+  // Production now: everything up to the October prices applied (Lovable
+  // stopped before suggestion_guardrails), nothing after. The texts that
+  // session_context, thompson_sampling and business_day replaced are gone
+  // there by design; the preflight must still say every row is fine.
+  it('passes on production as it stands: up to the October prices applied, the rest pending', async () => {
+    const db = await createTestDatabase({ quiet: true, until: '20261024130000' });
     const sql = readFileSync(path.join(__dirname, '..', '..', 'docs', 'migration-preflight.sql'), 'utf8');
     const { rows } = await db.query<{ rewrite: string; found: boolean }>(sql);
     await db.close();

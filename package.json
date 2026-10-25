@@ -21,7 +21,8 @@
     "photos:export": "node scripts/menu-photos.mjs export",
     "photos:import": "node scripts/menu-photos.mjs import",
     "photos:prompts": "node scripts/photo-prompts.mjs",
-    "photos:round2": "node scripts/photo-prompts-v2.mjs"
+    "photos:round2": "node scripts/photo-prompts-v2.mjs",
+    "migrations:runner": "node scripts/migration-runner.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
