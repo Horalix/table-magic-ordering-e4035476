@@ -194,6 +194,36 @@ export type Database = {
         }
         Relationships: []
       }
+      guest_profiles: {
+        Row: {
+          client_id: string
+          computed_at: string
+          first_seen: string
+          last_seen: string
+          net_spend: number
+          orders: number
+          visits: number
+        }
+        Insert: {
+          client_id: string
+          computed_at?: string
+          first_seen: string
+          last_seen: string
+          net_spend?: number
+          orders?: number
+          visits?: number
+        }
+        Update: {
+          client_id?: string
+          computed_at?: string
+          first_seen?: string
+          last_seen?: string
+          net_spend?: number
+          orders?: number
+          visits?: number
+        }
+        Relationships: []
+      }
       maintenance_runs: {
         Row: {
           job: string
@@ -1104,6 +1134,7 @@ export type Database = {
           reco_holdout_pct: number
           reco_min_acceptance: number
           reco_retire_after_impressions: number
+          reco_sampling_enabled: boolean
           reco_weight_curated: number
           reco_weight_learned: number
           reco_weight_margin: number
@@ -1137,6 +1168,7 @@ export type Database = {
           reco_holdout_pct?: number
           reco_min_acceptance?: number
           reco_retire_after_impressions?: number
+          reco_sampling_enabled?: boolean
           reco_weight_curated?: number
           reco_weight_learned?: number
           reco_weight_margin?: number
@@ -1170,6 +1202,7 @@ export type Database = {
           reco_holdout_pct?: number
           reco_min_acceptance?: number
           reco_retire_after_impressions?: number
+          reco_sampling_enabled?: boolean
           reco_weight_curated?: number
           reco_weight_learned?: number
           reco_weight_margin?: number
@@ -2009,6 +2042,16 @@ export type Database = {
       }
     }
     Functions: {
+      acceptance_for_ranking: {
+        Args: {
+          _daypart: string
+          _item_id: string
+          _placement: string
+          _seed: string
+          _source_item_id: string
+        }
+        Returns: number
+      }
       admin_set_waiter_pin: {
         Args: { _pin: string; _waiter_id: string }
         Returns: undefined
@@ -2044,6 +2087,7 @@ export type Database = {
         Args: { _session_id: string }
         Returns: string
       }
+      bandit_readiness: { Args: never; Returns: Json }
       cancel_order: {
         Args: { _order_id: string; _reason: string }
         Returns: Json
@@ -2125,6 +2169,7 @@ export type Database = {
         Returns: Json
       }
       guest_check_venue_token: { Args: { _token: string }; Returns: Json }
+      guest_forget_me: { Args: { _client_id: string }; Returns: Json }
       guest_get_join_request: {
         Args: { _client_id: string; _request_id: string; _session_id: string }
         Returns: Json
@@ -2307,6 +2352,13 @@ export type Database = {
         }
         Returns: boolean
       }
+      hash_uniforms: {
+        Args: { _seed: string }
+        Returns: {
+          u1: number
+          u2: number
+        }[]
+      }
       is_staff_member: { Args: never; Returns: boolean }
       is_trusted_caller: { Args: never; Returns: boolean }
       item_prep_estimate: {
@@ -2339,6 +2391,7 @@ export type Database = {
           station: string
         }[]
       }
+      maybe_enable_sampling: { Args: never; Returns: Json }
       menu_item_orderable: {
         Args: {
           _at?: string
@@ -2486,6 +2539,7 @@ export type Database = {
         Args: { _method: string; _note?: string; _order_id: string }
         Returns: Json
       }
+      refresh_guest_profiles: { Args: never; Returns: number }
       refresh_menu_affinity: {
         Args: { _days?: number; _min_pair_orders?: number }
         Returns: number
@@ -2540,6 +2594,7 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      returning_guest_stats: { Args: { _days?: number }; Returns: Json }
       role_is_drink: {
         Args: { _role: Database["public"]["Enums"]["meal_role"] }
         Returns: boolean
@@ -2553,6 +2608,10 @@ export type Database = {
       run_daily_maintenance: { Args: never; Returns: Json }
       run_scheduled_maintenance: { Args: never; Returns: Json }
       sales_analytics: { Args: { _from?: string; _to?: string }; Returns: Json }
+      sample_acceptance: {
+        Args: { _accepted: number; _seed: string; _shown: number }
+        Returns: number
+      }
       session_context: {
         Args: { _session_id: string }
         Returns: {
