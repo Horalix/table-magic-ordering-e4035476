@@ -19,7 +19,7 @@ import { useSessionHeartbeat } from '@/hooks/useSessionHeartbeat';
 import { useSessionGuard } from '@/hooks/useSessionGuard';
 import { staggerContainer, fadeUp, duration, easeEnter, PRESS_SCALE } from '@/lib/motion';
 import { menuHref } from '@/lib/menu-sections';
-import { menuBase } from '@/lib/venues';
+import { menuPath } from '@/lib/venues';
 import { usePageMeta } from '@/lib/seo/page-meta';
 import { siteT } from '@/lib/site-copy';
 import InstallPrompt from '@/components/guest/InstallPrompt';
@@ -65,7 +65,7 @@ const GuestMenu = () => {
   usePageMeta({
     title: siteT('seo_menu_title', locale),
     description: siteT('seo_menu_description', locale),
-    path: menuBase(),
+    path: menuPath(),
     locale,
   });
   // A live session is the store's, not the URL's.

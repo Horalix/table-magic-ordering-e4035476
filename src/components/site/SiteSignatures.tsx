@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom';
 import { ArrowRight, ArrowUpRight } from 'lucide-react';
 import SmartImage from '@/components/ui/SmartImage';
 import { useSiteT, type SiteKey } from '@/lib/site-i18n';
-import { menuBase, type Venue } from '@/lib/venues';
+import { menuPath, type Venue } from '@/lib/venues';
 import Reveal from './Reveal';
 import { Container, SectionHeading } from './SiteSection';
 import { categoryHref, useSignatureDishes, type SiteCategory } from './signature-dishes';
@@ -24,7 +24,7 @@ const SiteSignatures = ({ venue }: { venue: Venue }) => {
           <SectionHeading id="signatures-title" eyebrow={st('sig_eyebrow')} title={st('sig_title')} lead={st('sig_sub')} />
           <Reveal className="hidden shrink-0 sm:block" delay={0.1}>
             <Link
-              to={menuBase(venue.slug)}
+              to={menuPath(venue.slug)}
               className="group inline-flex items-center gap-2 border-b border-ls-forest/25 pb-1 text-[15px] font-semibold text-ls-forest transition-colors hover:border-ls-forest focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ls-sage-deep focus-visible:ring-offset-4 focus-visible:ring-offset-ls-paper"
             >
               {st('sig_all')}
@@ -79,7 +79,7 @@ const SiteSignatures = ({ venue }: { venue: Venue }) => {
 
         <div className="mt-8 sm:hidden">
           <Link
-            to={menuBase(venue.slug)}
+            to={menuPath(venue.slug)}
             className="inline-flex items-center gap-2 border-b border-ls-forest/25 pb-1 text-[15px] font-semibold text-ls-forest"
           >
             {st('sig_all')}

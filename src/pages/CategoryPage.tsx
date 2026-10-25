@@ -23,7 +23,7 @@ import { merchBadges, unorderableReason, windowLabel } from '@/lib/availability'
 import { sectionSlug } from '@/lib/menu-sections';
 import { PriceTag, SaleBadge, NewBadge, ComboBadge } from '@/components/guest/PriceTag';
 import { useComboMap } from '@/lib/promotions-api';
-import { menuBase, menuHome } from '@/lib/venues';
+import { menuCategoryPath, menuHome } from '@/lib/venues';
 import { usePageMeta } from '@/lib/seo/page-meta';
 import { siteT } from '@/lib/site-copy';
 import {
@@ -426,7 +426,7 @@ const CategoryPage = () => {
     if (token) params.set('token', token);
     const qs = params.toString();
     window.scrollTo({ top: 0 });
-    navigate(`${menuBase()}/${c.name.toLowerCase()}${qs ? `?${qs}` : ''}`, { replace: true, state: location.state });
+    navigate(`${menuCategoryPath(c.name.toLowerCase())}${qs ? `?${qs}` : ''}`, { replace: true, state: location.state });
   };
 
   const closeSearch = () => { setSearch(''); setSearchOpen(false); };
@@ -504,7 +504,7 @@ const CategoryPage = () => {
   usePageMeta({
     title: siteT('seo_category_title', locale, { category: categoryLabel }),
     description: siteT('seo_category_description', locale, { category: categoryLabel }),
-    path: `${menuBase()}/${type ?? ''}`,
+    path: menuCategoryPath(type ?? ''),
     locale,
   });
 

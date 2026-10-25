@@ -1,39 +1,39 @@
 # The old static menu that used to live at menu.lasoul.net. Printed QR codes,
 # Google results and saved home-screen icons still point at these pages.
-/menu.html                     /menu/lasoul                               301
-/drink.html                    /menu/lasoul/drinks                        301
-/food.html                     /menu/lasoul/food                          301
-/dessert.html                  /menu/lasoul/desserts                      301
-/drinks/coffee.html            /menu/lasoul/drinks?section=coffee         301
-/drinks/filter.html            /menu/lasoul/drinks?section=filter-coffee  301
-/drinks/icedCoffee.html        /menu/lasoul/drinks?section=iced-coffee    301
-/drinks/hotDrink.html          /menu/lasoul/drinks?section=hot-drinks     301
-/drinks/specialDrink.html      /menu/lasoul/drinks?section=special-drinks 301
-/drinks/tea.html               /menu/lasoul/drinks?section=tea            301
-/drinks/icedTea.html           /menu/lasoul/drinks?section=iced-tea       301
-/drinks/freshJuice.html        /menu/lasoul/drinks?section=fresh-juice    301
-/drinks/mojito.html            /menu/lasoul/drinks?section=mojito         301
-/drinks/frape.html             /menu/lasoul/drinks?section=frappe         301
-/drinks/lemonade.html          /menu/lasoul/drinks?section=lemonade       301
-/drinks/other.html             /menu/lasoul/drinks?section=other          301
-/food/breakfast.html           /menu/lasoul/food?section=breakfast        301
-/food/appetizers.html          /menu/lasoul/food?section=appetizer        301
-/food/pasta.html               /menu/lasoul/food?section=pasta            301
-/food/soups.html               /menu/lasoul/food?section=soups            301
-/food/salad.html               /menu/lasoul/food?section=salads           301
-/food/burgers.html             /menu/lasoul/food?section=burgers          301
-/food/slider.html              /menu/lasoul/food?section=sliders          301
-/food/rizoto.html              /menu/lasoul/food?section=risotto          301
-/food/fries.html               /menu/lasoul/food?section=fries            301
-/food/kidsMenu.html            /menu/lasoul/food?section=kids-menu        301
+/menu.html                     /menu/lasoul/                               301
+/drink.html                    /menu/lasoul/drinks/                        301
+/food.html                     /menu/lasoul/food/                          301
+/dessert.html                  /menu/lasoul/desserts/                      301
+/drinks/coffee.html            /menu/lasoul/drinks/?section=coffee         301
+/drinks/filter.html            /menu/lasoul/drinks/?section=filter-coffee  301
+/drinks/icedCoffee.html        /menu/lasoul/drinks/?section=iced-coffee    301
+/drinks/hotDrink.html          /menu/lasoul/drinks/?section=hot-drinks     301
+/drinks/specialDrink.html      /menu/lasoul/drinks/?section=special-drinks 301
+/drinks/tea.html               /menu/lasoul/drinks/?section=tea            301
+/drinks/icedTea.html           /menu/lasoul/drinks/?section=iced-tea       301
+/drinks/freshJuice.html        /menu/lasoul/drinks/?section=fresh-juice    301
+/drinks/mojito.html            /menu/lasoul/drinks/?section=mojito         301
+/drinks/frape.html             /menu/lasoul/drinks/?section=frappe         301
+/drinks/lemonade.html          /menu/lasoul/drinks/?section=lemonade       301
+/drinks/other.html             /menu/lasoul/drinks/?section=other          301
+/food/breakfast.html           /menu/lasoul/food/?section=breakfast        301
+/food/appetizers.html          /menu/lasoul/food/?section=appetizer        301
+/food/pasta.html               /menu/lasoul/food/?section=pasta            301
+/food/soups.html               /menu/lasoul/food/?section=soups            301
+/food/salad.html               /menu/lasoul/food/?section=salads           301
+/food/burgers.html             /menu/lasoul/food/?section=burgers          301
+/food/slider.html              /menu/lasoul/food/?section=sliders          301
+/food/rizoto.html              /menu/lasoul/food/?section=risotto          301
+/food/fries.html               /menu/lasoul/food/?section=fries            301
+/food/kidsMenu.html            /menu/lasoul/food/?section=kids-menu        301
 
 # The old lasoul.net, another developer’s site that this app replaces. Its
 # pages were /en/home, /bs/home and /ar/home; links and search results to
 # them carry over to the new pages in the same language. Exact paths only:
 # /bs and /ar are now this site’s own Bosnian and Arabic pages.
-/en/home                       /                                          301
-/en                            /                                          301
-/bs/home                       /bs                                        301
-/ar/home                       /ar                                        301
+/en/home                       /                                           301
+/en                            /                                           301
+/bs/home                       /bs/                                        301
+/ar/home                       /ar/                                        301
 
 /* /index.html 200

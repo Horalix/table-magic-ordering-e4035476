@@ -28,9 +28,9 @@ test.describe('menu and discovery', () => {
   // Each restaurant's menu has its own address; the old ones still lead there.
   test('the old menu addresses lead to La Soul’s menu, keeping the table and section', async ({ page }) => {
     await page.goto('/menu?table=7');
-    await expect(page).toHaveURL(/\/menu\/lasoul\?table=7$/);
+    await expect(page).toHaveURL(/\/menu\/lasoul\/\?table=7$/);
     await page.goto('/menu/food?section=burgers');
-    await expect(page).toHaveURL(/\/menu\/lasoul\/food\?section=burgers$/);
+    await expect(page).toHaveURL(/\/menu\/lasoul\/food\/\?section=burgers$/);
     await expect(page.getByRole('heading', { level: 2, name: /Burgers|Burgeri/ })).toBeVisible();
     await page.goto('/menu/italiaverde');
     await expect(page.getByRole('link', { name: /Back to Menu|Nazad na meni/ })).toBeVisible();

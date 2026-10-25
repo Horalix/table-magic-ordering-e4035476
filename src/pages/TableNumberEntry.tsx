@@ -7,7 +7,7 @@ import { useT } from '@/lib/i18n';
 import { useCartStore } from '@/lib/cart-store';
 import { checkVenueToken, type VenueTokenCheck } from '@/lib/guest-api';
 import { prefersReducedMotion, duration, easeEnter } from '@/lib/motion';
-import { menuBase } from '@/lib/venues';
+import { menuPath } from '@/lib/venues';
 
 /**
  * Single-QR entry.
@@ -82,7 +82,7 @@ const TableNumberEntry = () => {
           </div>
           <h1 className="font-serif text-2xl font-bold text-white">{t('qr_expired')}</h1>
           <Button
-            onClick={() => navigate(menuBase())}
+            onClick={() => navigate(menuPath())}
             className="mt-6 w-full h-12 rounded-2xl bg-white text-primary hover:bg-white/90 font-sans font-semibold"
           >
             {t('browse_menu')}
@@ -141,7 +141,7 @@ const TableNumberEntry = () => {
           </Button>
         </form>
 
-        <button onClick={() => navigate(menuBase())} className="mt-6 text-xs text-white/60 underline underline-offset-4 font-sans">
+        <button onClick={() => navigate(menuPath())} className="mt-6 text-xs text-white/60 underline underline-offset-4 font-sans">
           {t('browse_menu')}
         </button>
       </motion.div>

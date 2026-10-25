@@ -3,9 +3,9 @@
  *
  * Each venue's menu lives at /menu/<slug>, so a second restaurant (Italia
  * Verde is next) is one entry here plus its own menu data. Everything that
- * links into a menu asks `menuBase()` rather than writing "/menu", which is
- * what lets the bare /menu and the old /menu/drinks-style addresses keep
- * working as redirects.
+ * links into a menu asks `menuPath()` or `menuBase()` rather than writing
+ * "/menu", which is what lets the bare /menu and the old /menu/drinks-style
+ * addresses keep working as redirects.
  *
  * Facts the website shows publicly are kept here, not invented: a field that
  * is not known yet is null and its part of the site stays hidden.
@@ -80,13 +80,30 @@ export function venueBySlug(slug: string | undefined): Venue | null {
   return venue && venue.live ? venue : null;
 }
 
-/** "/menu/lasoul" — the root of a venue's menu. */
+/** "/menu/lasoul" — the prefix every address in a venue's menu starts with. */
 export function menuBase(slug: string = DEFAULT_VENUE): string {
   return `/menu/${slug}`;
 }
 
-/** The menu root with a query string, or without one when it is empty. */
+/*
+ * Page addresses end in "/". Every public page is prerendered as a folder
+ * (…/index.html), and the host serves a folder at its slash address and
+ * redirects the slash-less one there; links that already end in "/" never
+ * cost a redirect, and search engines see one address per page.
+ */
+
+/** "/menu/lasoul/" — the menu's own page. */
+export function menuPath(slug: string = DEFAULT_VENUE): string {
+  return `${menuBase(slug)}/`;
+}
+
+/** "/menu/lasoul/food/" — one category's page. */
+export function menuCategoryPath(categorySlug: string, slug: string = DEFAULT_VENUE): string {
+  return `${menuBase(slug)}/${categorySlug}/`;
+}
+
+/** The menu page with a query string, or without one when it is empty. */
 export function menuHome(query?: string | URLSearchParams | null, slug: string = DEFAULT_VENUE): string {
   const qs = typeof query === 'string' ? query.replace(/^\?/, '') : query?.toString() ?? '';
-  return qs ? `${menuBase(slug)}?${qs}` : menuBase(slug);
+  return qs ? `${menuPath(slug)}?${qs}` : menuPath(slug);
 }

@@ -16,11 +16,11 @@
  */
 import type { Locale } from '../i18n';
 import { siteT, type SiteKey } from '../site-copy';
-import { menuBase, type Venue } from '../venues';
+import type { Venue } from '../venues';
 import { CURATED_SIGNATURES } from '../../components/site/signature-list';
 import { absoluteUrl, SITE_URL } from './site-url';
 import type { SeoMenu, SeoMenuCategory, SeoMenuItem, SeoMenuSection } from './menu-data';
-import { dishPath, faqEntries, hoursDays, LOCALES, OG_IMAGE_PATH, sitePath } from './structured-data';
+import { categoryPath, dishPath, faqEntries, hoursDays, LOCALES, menuPath, OG_IMAGE_PATH, sitePath } from './structured-data';
 
 const OG_LOCALE: Record<Locale, string> = { en: 'en_GB', bs: 'bs_BA', ar: 'ar_AR' };
 const LANGUAGE_NAME: Record<Locale, string> = { en: 'English', bs: 'Bosanski', ar: 'العربية' };
@@ -88,8 +88,8 @@ const languageLinks = (current: Locale) =>
     ? `<strong lang="${l}">${LANGUAGE_NAME[l]}</strong>`
     : `<a href="${sitePath(l)}" hreflang="${l}" lang="${l}">${LANGUAGE_NAME[l]}</a>`)).join(' · ')}</p>`;
 
-const sectionHref = (category: string, section: string | null) => {
-  const base = `${menuBase()}/${category.toLowerCase()}`;
+const sectionHref = (venueSlug: string, category: string, section: string | null) => {
+  const base = categoryPath(venueSlug, category.toLowerCase());
   return section ? `${base}?section=${encodeURIComponent(section.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''))}` : base;
 };
 
@@ -115,18 +115,18 @@ export function homeBody(venue: Venue, locale: Locale): string {
   const promise = (['halal', 'alcohol', 'fresh', 'allergens'] as const).map((k) =>
     `<li><strong>${st(`promise_${k}_title` as SiteKey, locale)}</strong> — ${st(`promise_${k}_body` as SiteKey, locale)}</li>`).join('');
   const signatures = CURATED_SIGNATURES.map((d) =>
-    `<li><a href="${sectionHref(d.category, d.section)}">${escapeHtml(d.name[locale])}</a></li>`).join('');
+    `<li><a href="${sectionHref(venue.slug, d.category, d.section)}">${escapeHtml(d.name[locale])}</a></li>`).join('');
   const categories = (['drinks', 'food', 'desserts'] as const).map((c) =>
-    `<li><a href="${menuBase(venue.slug)}/${c}">${st(`cat_${c}` as SiteKey, locale)}</a> — ${st(`cat_${c}_desc` as SiteKey, locale)}</li>`).join('');
+    `<li><a href="${categoryPath(venue.slug, c)}">${st(`cat_${c}` as SiteKey, locale)}</a> — ${st(`cat_${c}_desc` as SiteKey, locale)}</li>`).join('');
   const faq = faqEntries(venue, locale).map(({ q, a }) => `<dt>${escapeHtml(q)}</dt><dd>${escapeHtml(a)}</dd>`).join('');
   return [
     `<header><p><a href="${sitePath(locale)}">${escapeHtml(venue.name)}</a> — ${st('tagline', locale)}</p>`,
-    `<nav aria-label="${st('nav_label', locale)}"><a href="${menuBase(venue.slug)}">${st('nav_menu', locale)}</a> · <a href="#story">${st('nav_story', locale)}</a> · <a href="#faq">${st('faq_eyebrow', locale)}</a> · <a href="#visit">${st('nav_visit', locale)}</a></nav>`,
+    `<nav aria-label="${st('nav_label', locale)}"><a href="${menuPath(venue.slug)}">${st('nav_menu', locale)}</a> · <a href="#story">${st('nav_story', locale)}</a> · <a href="#faq">${st('faq_eyebrow', locale)}</a> · <a href="#visit">${st('nav_visit', locale)}</a></nav>`,
     languageLinks(locale), `</header>`,
     `<main>`,
     `<h1>${st('hero_title', locale)}</h1>`,
     `<p>${st('hero_sub', locale)}</p>`,
-    `<p><a href="${menuBase(venue.slug)}">${st('hero_cta', locale)}</a></p>`,
+    `<p><a href="${menuPath(venue.slug)}">${st('hero_cta', locale)}</a></p>`,
     `<section id="story"><h2>${st('story_title', locale)}</h2><p>${st('story_p1', locale)}</p><p>${st('story_p2', locale)}</p></section>`,
     `<section><h2>${st('sig_title', locale)}</h2><p>${st('sig_sub', locale)}</p><ul>${signatures}</ul></section>`,
     `<section><h2>${st('menu_title', locale)}</h2><p>${st('menu_sub', locale)}</p><ul>${categories}</ul></section>`,
@@ -148,7 +148,7 @@ export function menuBody(venue: Venue, menu: SeoMenu | null, locale: Locale, onl
     ? `${escapeHtml(only.names.en)} — ${escapeHtml(venue.name)}`
     : `${escapeHtml(venue.name)} — ${st('nav_menu', 'en')}`;
   const body = categories.map((c) => [
-    only ? '' : `<h2><a href="${menuBase(venue.slug)}/${c.slug}">${escapeHtml(c.names.en)}</a> <span lang="bs">(${escapeHtml(c.names.bs)})</span> <span lang="ar" dir="rtl">${escapeHtml(c.names.ar)}</span></h2>`,
+    only ? '' : `<h2><a href="${categoryPath(venue.slug, c.slug)}">${escapeHtml(c.names.en)}</a> <span lang="bs">(${escapeHtml(c.names.bs)})</span> <span lang="ar" dir="rtl">${escapeHtml(c.names.ar)}</span></h2>`,
     ...c.sections.map((s) => [
       `<section><h3>${escapeHtml(s.names.en)} <span lang="bs">(${escapeHtml(s.names.bs)})</span> <span lang="ar" dir="rtl">${escapeHtml(s.names.ar)}</span></h3><ul>`,
       ...s.items.map((i) => [
@@ -162,16 +162,16 @@ export function menuBody(venue: Venue, menu: SeoMenu | null, locale: Locale, onl
     ].join('')),
   ].join('\n')).join('\n');
   const otherCategories = (menu?.categories ?? []).filter((c) => c.id !== only?.id)
-    .map((c) => `<a href="${menuBase(venue.slug)}/${c.slug}">${escapeHtml(c.names.en)}</a>`).join(' · ');
+    .map((c) => `<a href="${categoryPath(venue.slug, c.slug)}">${escapeHtml(c.names.en)}</a>`).join(' · ');
   return [
     `<header><p><a href="/">${escapeHtml(venue.name)}</a> — ${st('tagline', 'en')}, ${escapeHtml(venue.city)}</p>`,
-    `<nav><a href="${menuBase(venue.slug)}">${st('nav_menu', 'en')}</a>${otherCategories ? ` · ${otherCategories}` : ''}</nav></header>`,
+    `<nav><a href="${menuPath(venue.slug)}">${st('nav_menu', 'en')}</a>${otherCategories ? ` · ${otherCategories}` : ''}</nav></header>`,
     `<main><h1>${title}</h1>`,
     `<p>${st('seo_menu_description', 'en')}</p>`,
     `<p lang="bs">${st('seo_menu_description', 'bs')}</p>`,
     `<p lang="ar" dir="rtl">${st('seo_menu_description', 'ar')}</p>`,
     `<p>${st('fact_halal', 'en')} · ${st('fact_alcohol', 'en')} · ${escapeHtml('Prices in KM (BAM)')}</p>`,
-    body || `<p><a href="${menuBase(venue.slug)}">${st('hero_cta', locale)}</a></p>`,
+    body || `<p><a href="${menuPath(venue.slug)}">${st('hero_cta', locale)}</a></p>`,
     `</main>`,
     visitBlock(venue, 'en'),
   ].join('\n');
@@ -185,7 +185,7 @@ const ALLERGEN_NAMES: Record<string, string> = {
 
 /** One dish's page: names in three languages, photo, price, description, allergens, and its neighbours. */
 export function dishBody(venue: Venue, category: SeoMenuCategory, section: SeoMenuSection, item: SeoMenuItem): string {
-  const categoryHref = `${menuBase(venue.slug)}/${category.slug}`;
+  const categoryHref = categoryPath(venue.slug, category.slug);
   const openHref = `${categoryHref}?section=${encodeURIComponent(section.names.en.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''))}&dish=${item.id}`;
   const facts = [
     `<strong>${price(item.price)}</strong>`,
@@ -201,7 +201,7 @@ export function dishBody(venue: Venue, category: SeoMenuCategory, section: SeoMe
     .map((i) => `<li><a href="${dishPath(venue.slug, i)}">${escapeHtml(i.names.en)}</a> — ${price(i.price)}</li>`).join('');
   return [
     `<header><p><a href="/">${escapeHtml(venue.name)}</a> — ${st('tagline', 'en')}, ${escapeHtml(venue.city)}</p>`,
-    `<nav aria-label="Breadcrumb"><a href="/">${escapeHtml(venue.name)}</a> › <a href="${menuBase(venue.slug)}">${st('nav_menu', 'en')}</a> › <a href="${categoryHref}">${escapeHtml(category.names.en)}</a>${section.names.en !== category.names.en ? ` › ${escapeHtml(section.names.en)}` : ''}</nav></header>`,
+    `<nav aria-label="Breadcrumb"><a href="/">${escapeHtml(venue.name)}</a> › <a href="${menuPath(venue.slug)}">${st('nav_menu', 'en')}</a> › <a href="${categoryHref}">${escapeHtml(category.names.en)}</a>${section.names.en !== category.names.en ? ` › ${escapeHtml(section.names.en)}` : ''}</nav></header>`,
     `<main><article>`,
     `<h1>${escapeHtml(item.names.en)}</h1>`,
     item.names.bs !== item.names.en ? `<p lang="bs">${escapeHtml(item.names.bs)}</p>` : '',
@@ -280,16 +280,16 @@ function factsMarkdown(venue: Venue): string {
 /** llms.txt: what an AI engine should know about La Soul, and where to read more. */
 export function llmsTxt(venue: Venue, menu: SeoMenu | null): string {
   const cats = (menu?.categories ?? []).map((c) =>
-    `- [${c.names.en}](${absoluteUrl(`${menuBase(venue.slug)}/${c.slug}`)}): ${c.sections.map((s) => s.names.en).join(', ')}`);
+    `- [${c.names.en}](${absoluteUrl(categoryPath(venue.slug, c.slug))}): ${c.sections.map((s) => s.names.en).join(', ')}`);
   return [
     `# ${venue.name}`, '',
     `> ${siteT('seo_description', 'en')}`, '',
     factsMarkdown(venue), '',
     '## Pages', '',
     `- [Website (English)](${absoluteUrl('/')})`,
-    `- [Website (Bosnian)](${absoluteUrl('/bs')})`,
-    `- [Website (Arabic)](${absoluteUrl('/ar')})`,
-    `- [Full menu with prices](${absoluteUrl(menuBase(venue.slug))})`,
+    `- [Website (Bosnian)](${absoluteUrl(sitePath('bs'))})`,
+    `- [Website (Arabic)](${absoluteUrl(sitePath('ar'))})`,
+    `- [Full menu with prices](${absoluteUrl(menuPath(venue.slug))})`,
     ...cats, '',
     '## Optional', '',
     `- [The whole menu as text](${absoluteUrl('/llms-full.txt')})`, '',
@@ -313,6 +313,6 @@ export function llmsFullTxt(venue: Venue, menu: SeoMenu | null): string {
     factsMarkdown(venue), '',
     '## Questions', '', faq, '',
     `# Menu (prices in KM; everything halal and alcohol-free)`, '',
-    dishes || `See ${absoluteUrl(menuBase(venue.slug))}`, '',
+    dishes || `See ${absoluteUrl(menuPath(venue.slug))}`, '',
   ].join('\n');
 }

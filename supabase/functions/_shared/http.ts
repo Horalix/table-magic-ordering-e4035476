@@ -8,16 +8,18 @@
  */
 
 /**
- * Where the app is actually served: the published Lovable address now, the
- * La Soul domains later. With only order.lasoul.net here, a browser on any of
- * these was refused by every function behind this list (card payment,
- * Translate menu) unless ALLOWED_ORIGINS had been set by hand.
+ * Where the app is actually served: Netlify (lasoulapp.netlify.app) now, the
+ * La Soul domains later, and Lovable's own preview. With only
+ * order.lasoul.net here, a browser on any of these was refused by every
+ * function behind this list (card payment, Translate menu) unless
+ * ALLOWED_ORIGINS had been set by hand.
  */
 const DEFAULT_ORIGINS = [
   "https://lasoul.net",
   "https://www.lasoul.net",
   "https://menu.lasoul.net",
   "https://order.lasoul.net",
+  "https://lasoulapp.netlify.app",
   "https://table-magic-ordering.lovable.app",
   "http://localhost:8080",
   "http://localhost:5173",

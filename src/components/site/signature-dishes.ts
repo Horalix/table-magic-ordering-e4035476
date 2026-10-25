@@ -3,7 +3,7 @@ import type { Locale } from '@/lib/i18n';
 import { isNew } from '@/lib/promotions';
 import type { MenuItemRow } from '@/lib/promotions-api';
 import { sectionSlug } from '@/lib/menu-sections';
-import { menuBase } from '@/lib/venues';
+import { menuCategoryPath } from '@/lib/venues';
 import { CURATED_SIGNATURES, type SignatureDish, type SiteCategory } from './signature-list';
 
 export { CURATED_SIGNATURES, type SignatureDish, type SiteCategory } from './signature-list';
@@ -11,7 +11,7 @@ export { CURATED_SIGNATURES, type SignatureDish, type SiteCategory } from './sig
 const CATEGORY_SLUG: Record<SiteCategory, string> = { Drinks: 'drinks', Food: 'food', Desserts: 'desserts' };
 
 export function categoryHref(category: SiteCategory, venueSlug: string, section?: string | null): string {
-  const base = `${menuBase(venueSlug)}/${CATEGORY_SLUG[category]}`;
+  const base = menuCategoryPath(CATEGORY_SLUG[category], venueSlug);
   return section ? `${base}?section=${sectionSlug(section)}` : base;
 }
 

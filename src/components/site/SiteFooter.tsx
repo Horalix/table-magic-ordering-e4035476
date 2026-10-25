@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import { useSiteT } from '@/lib/site-i18n';
-import { menuBase, type Venue } from '@/lib/venues';
+import { menuPath, type Venue } from '@/lib/venues';
 import { Container } from './SiteSection';
 
 const SiteFooter = ({ venue }: { venue: Venue }) => {
@@ -27,7 +27,7 @@ const SiteFooter = ({ venue }: { venue: Venue }) => {
           </address>
           <nav aria-label={st('footer_nav')} className="lg:col-span-3">
             <ul className="space-y-3">
-              <li><Link to={menuBase(venue.slug)} className={linkClass}>{st('footer_menu')}</Link></li>
+              <li><Link to={menuPath(venue.slug)} className={linkClass}>{st('footer_menu')}</Link></li>
               <li><a href="#story" className={linkClass}>{st('nav_story')}</a></li>
               <li><a href="#visit" className={linkClass}>{st('nav_visit')}</a></li>
               <li><Link to="/privacy" className={linkClass}>{st('footer_privacy')}</Link></li>

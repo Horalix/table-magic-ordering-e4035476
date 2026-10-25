@@ -9,7 +9,13 @@ runner on 25 October; all twelve checks passed). Pending:
 `20261027090000_waiter_take_table.sql` (a waiter can take a table nobody has;
 "several tables at once" holds from 8 tables instead of 3), and a redeploy of
 `monri-create-payment` and `monri-webhook` (the webhook must run with
-`verify_jwt = false`, and both share the new CORS list).
+`verify_jwt = false`, and both share the new CORS list, which now includes
+`https://lasoulapp.netlify.app`).
+
+The website and app themselves are hosted on **Netlify**
+(`lasoulapp.netlify.app`), which builds and deploys every push to `main` on
+its own; Lovable's Publish → Update only refreshes Lovable's own preview
+address. Lovable is still what applies migrations and deploys Edge Functions.
 
 ---
 

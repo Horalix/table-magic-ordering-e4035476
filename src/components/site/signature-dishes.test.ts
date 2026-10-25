@@ -38,8 +38,8 @@ describe('signature dishes', () => {
   });
 
   it('links into the venue’s menu at the dish’s section', () => {
-    expect(categoryHref('Food', 'lasoul', 'Iced Coffee')).toBe('/menu/lasoul/food?section=iced-coffee');
-    expect(categoryHref('Desserts', 'italiaverde')).toBe('/menu/italiaverde/desserts');
+    expect(categoryHref('Food', 'lasoul', 'Iced Coffee')).toBe('/menu/lasoul/food/?section=iced-coffee');
+    expect(categoryHref('Desserts', 'italiaverde')).toBe('/menu/italiaverde/desserts/');
   });
 });
 

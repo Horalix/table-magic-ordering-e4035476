@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, ShieldCheck, Lock, CreditCard, Database, Share2, UserCheck, FileText, Mail } from 'lucide-react';
 import { staggerContainer, fadeUp } from '@/lib/motion';
 import { useLanguageStore, useT, type Locale } from '@/lib/i18n';
+import { usePageMeta } from '@/lib/seo/page-meta';
 
 type L = Record<Locale, string>;
 const pick = (o: L, l: Locale) => o[l] ?? o.en;
@@ -85,6 +86,7 @@ const Trust = () => {
   const t = useT();
   const navigate = useNavigate();
   const locale = useLanguageStore((s) => s.locale);
+  usePageMeta({ title: `${pick(T, locale)} — La Soul`, description: pick(INTRO, locale), path: '/privacy', locale });
 
   return (
     <div className="min-h-screen bg-background pb-16" dir={locale === 'ar' ? 'rtl' : 'ltr'}>

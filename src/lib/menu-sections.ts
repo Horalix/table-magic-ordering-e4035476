@@ -6,7 +6,7 @@
  * redirects from the old static site (public/_redirects) can be written by
  * hand, and so a link survives the restaurant reordering its menu.
  */
-import { menuBase } from '@/lib/venues';
+import { menuCategoryPath } from '@/lib/venues';
 
 /** A top-level category's slug. Unknown names fall back to their slugged form. */
 const CATEGORY_SLUGS: Record<string, string> = {
@@ -15,9 +15,9 @@ const CATEGORY_SLUGS: Record<string, string> = {
   Desserts: 'desserts',
 };
 
-/** Route for a top-level category, under the venue's menu: /menu/lasoul/food. */
+/** Route for a top-level category, under the venue's menu: /menu/lasoul/food/. */
 export function categoryPath(name: string): string {
-  return `${menuBase()}/${CATEGORY_SLUGS[name] ?? sectionSlug(name)}`;
+  return menuCategoryPath(CATEGORY_SLUGS[name] ?? sectionSlug(name));
 }
 
 /** "Kids Menu" -> "kids-menu", "Café & Tea" -> "cafe-tea". */

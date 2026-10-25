@@ -32,7 +32,7 @@ export default defineConfig(({ mode }) => ({
         theme_color: "#7E9B79",
         background_color: "#F7F4EC",
         display: "standalone",
-        start_url: "/menu/lasoul",
+        start_url: "/menu/lasoul/",
         scope: "/",
         icons: [
           { src: "/icons/icon-192.png", sizes: "192x192", type: "image/png" },

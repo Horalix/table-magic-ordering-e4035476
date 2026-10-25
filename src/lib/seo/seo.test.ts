@@ -36,7 +36,7 @@ describe('the facts', () => {
       name: 'La Soul',
       telephone: '+38733877779',
       url: `${SITE_URL}/`,
-      hasMenu: `${SITE_URL}/menu/lasoul`,
+      hasMenu: `${SITE_URL}/menu/lasoul/`,
       address: { streetAddress: 'Butmirska cesta 16A | 16B', addressLocality: 'Sarajevo', addressCountry: 'BA' },
       geo: { '@type': 'GeoCoordinates', latitude: 43.827548, longitude: 18.3103156 },
       currenciesAccepted: 'BAM',
@@ -95,7 +95,7 @@ describe('the menu', () => {
     const burger = node.hasMenuSection.find((s) => s.name === 'Burgers')!.hasMenuItem[1];
     expect(burger).toMatchObject({
       '@type': 'MenuItem', name: 'La Soul Burger', description: 'Beef & cheddar',
-      url: `${SITE_URL}/menu/lasoul/dish/la-soul-burger`, image: `${SITE_URL}/menu/b/768.webp`,
+      url: `${SITE_URL}/menu/lasoul/dish/la-soul-burger/`, image: `${SITE_URL}/menu/b/768.webp`,
       suitableForDiet: 'https://schema.org/HalalDiet',
       offers: { '@type': 'Offer', price: '15.50', priceCurrency: 'BAM' },
     });
@@ -108,9 +108,9 @@ describe('the prerendered pages', () => {
   it('say who they are in <head>, safely', () => {
     const head = headTags({
       path: sitePath('bs'), locale: 'bs', venue, title: 'A <b> & "c"', description: 'd',
-      alternates: { en: '/', bs: '/bs', 'x-default': '/' }, jsonLd: { x: '</script><script>alert(1)' },
+      alternates: { en: '/', bs: '/bs/', 'x-default': '/' }, jsonLd: { x: '</script><script>alert(1)' },
     });
-    expect(head).toContain(`<link rel="canonical" href="${SITE_URL}/bs" />`);
+    expect(head).toContain(`<link rel="canonical" href="${SITE_URL}/bs/" />`);
     expect(head).toContain(`<link rel="alternate" hreflang="x-default" href="${SITE_URL}/" />`);
     expect(head).toContain('<title>A &lt;b&gt; &amp; &quot;c&quot;</title>');
     expect(head).not.toContain('</script><script>alert');
@@ -128,8 +128,8 @@ describe('the prerendered pages', () => {
     expect(html).toContain('<h1>برغر وكيك، مُحضَّرة بكل شغف.</h1>');
     expect(html).toContain(".js [data-prerender]{display:none}");
     const menuHtml = menuBody(venue, menu, 'en');
-    expect(menuHtml).toContain('<a href="/menu/lasoul/dish/la-soul-burger">La Soul Burger</a></strong> — 15.50 KM');
-    expect(dishPath('lasoul', menu.categories[0].sections[0].items[0])).toBe('/menu/lasoul/dish/espresso');
+    expect(menuHtml).toContain('<a href="/menu/lasoul/dish/la-soul-burger/">La Soul Burger</a></strong> — 15.50 KM');
+    expect(dishPath('lasoul', menu.categories[0].sections[0].items[0])).toBe('/menu/lasoul/dish/espresso/');
   });
 
   it('come with robots.txt, a sitemap, and llms.txt for answer engines', () => {
@@ -139,16 +139,16 @@ describe('the prerendered pages', () => {
     expect(robots).toContain('Disallow: /kitchen');
     expect(robots).toContain(`Sitemap: ${SITE_URL}/sitemap.xml`);
 
-    const sitemap = sitemapXml([{ path: '/', priority: 1, alternates: { bs: '/bs' }, images: ['/site/a.webp'] }], '2026-10-25');
+    const sitemap = sitemapXml([{ path: '/', priority: 1, alternates: { bs: '/bs/' }, images: ['/site/a.webp'] }], '2026-10-25');
     expect(sitemap).toContain(`<loc>${SITE_URL}/</loc>`);
-    expect(sitemap).toContain(`hreflang="bs" href="${SITE_URL}/bs"`);
+    expect(sitemap).toContain(`hreflang="bs" href="${SITE_URL}/bs/"`);
     expect(sitemap).toContain(`<image:image><image:loc>${SITE_URL}/site/a.webp</image:loc></image:image>`);
 
     const llms = llmsTxt(venue, menu);
     expect(llms).toMatch(/^# La Soul/);
     expect(llms).toContain('everything is halal');
     expect(llms).toContain('Butmirska cesta 16A | 16B');
-    expect(llms).toContain(`(${SITE_URL}/menu/lasoul/food): Burgers`);
-    expect(llmsFullTxt(venue, menu)).toContain(`[La Soul Burger](${SITE_URL}/menu/lasoul/dish/la-soul-burger) / برجر La Soul — 15.50 KM. Beef & cheddar`);
+    expect(llms).toContain(`(${SITE_URL}/menu/lasoul/food/): Burgers`);
+    expect(llmsFullTxt(venue, menu)).toContain(`[La Soul Burger](${SITE_URL}/menu/lasoul/dish/la-soul-burger/) / برجر La Soul — 15.50 KM. Beef & cheddar`);
   });
 });

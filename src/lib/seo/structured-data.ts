@@ -11,19 +11,22 @@
  */
 import type { Locale } from '../i18n';
 import { siteT } from '../site-copy';
-import { EVERY_DAY, menuBase, type OpeningHours, type Venue } from '../venues';
+import { EVERY_DAY, menuBase, menuCategoryPath, menuPath, type OpeningHours, type Venue } from '../venues';
 import { absoluteUrl } from './site-url';
 import type { SeoMenu, SeoMenuCategory, SeoMenuItem, SeoMenuSection } from './menu-data';
 
+/* Page addresses end in "/" — see venues.ts. */
+export { menuPath };
+export const categoryPath = (venueSlug: string, categorySlug: string) => menuCategoryPath(categorySlug, venueSlug);
 /** A dish's own page. */
-export const dishPath = (venueSlug: string, item: SeoMenuItem) => `${menuBase(venueSlug)}/dish/${item.slug}`;
+export const dishPath = (venueSlug: string, item: SeoMenuItem) => `${menuBase(venueSlug)}/dish/${item.slug}/`;
 
 export const LOCALES: Locale[] = ['en', 'bs', 'ar'];
 export const OG_IMAGE_PATH = '/site/og.jpg';
 const IN_LANGUAGE: Record<Locale, string> = { en: 'en', bs: 'bs', ar: 'ar' };
 
-/** The website's address in each language: / for English, /bs and /ar. */
-export const sitePath = (locale: Locale) => (locale === 'en' ? '/' : `/${locale}`);
+/** The website's address in each language: / for English, /bs/ and /ar/. */
+export const sitePath = (locale: Locale) => (locale === 'en' ? '/' : `/${locale}/`);
 
 /** "Every day" when a run covers the whole week; otherwise the days, in English (schema.org names). */
 export function hoursDays(h: OpeningHours, locale: Locale): string {
@@ -89,7 +92,7 @@ export function restaurantNode(venue: Venue, locale: Locale) {
         }
       : {}),
     servesCuisine: ['Burgers', 'Cakes', 'Desserts', 'Breakfast', 'Coffee', 'Halal'],
-    hasMenu: absoluteUrl(menuBase(venue.slug)),
+    hasMenu: absoluteUrl(menuPath(venue.slug)),
     priceRange: '3–35 KM',
     currenciesAccepted: 'BAM',
     paymentAccepted: 'Cash, Credit Card, Debit Card',
@@ -159,7 +162,7 @@ export function menuItemNode(venue: Venue, item: SeoMenuItem, locale: Locale) {
  */
 export function menuNode(venue: Venue, menu: SeoMenu, locale: Locale, only?: SeoMenuCategory) {
   const categories = only ? [only] : menu.categories;
-  const path = only ? `${menuBase(venue.slug)}/${only.slug}` : menuBase(venue.slug);
+  const path = only ? categoryPath(venue.slug, only.slug) : menuPath(venue.slug);
   return {
     '@type': 'Menu',
     '@id': absoluteUrl(`${path}#menu`),
@@ -186,12 +189,12 @@ export function dishGraph(venue: Venue, category: SeoMenuCategory, section: SeoM
   return {
     '@context': 'https://schema.org',
     '@graph': [
-      { ...restaurantNode(venue, locale), hasMenu: { '@id': absoluteUrl(`${menuBase(venue.slug)}#menu`) } },
-      { ...menuItemNode(venue, item, locale), isPartOf: { '@id': absoluteUrl(`${menuBase(venue.slug)}#menu`) } },
+      { ...restaurantNode(venue, locale), hasMenu: { '@id': absoluteUrl(`${menuPath(venue.slug)}#menu`) } },
+      { ...menuItemNode(venue, item, locale), isPartOf: { '@id': absoluteUrl(`${menuPath(venue.slug)}#menu`) } },
       breadcrumbNode([
         { name: venue.name, path: '/' },
-        { name: siteT('nav_menu', locale), path: menuBase(venue.slug) },
-        { name: category.names[locale], path: `${menuBase(venue.slug)}/${category.slug}` },
+        { name: siteT('nav_menu', locale), path: menuPath(venue.slug) },
+        { name: category.names[locale], path: categoryPath(venue.slug, category.slug) },
         { name: item.names[locale], path: dishPath(venue.slug, item) },
       ]),
     ],
@@ -202,13 +205,13 @@ export function dishGraph(venue: Venue, category: SeoMenuCategory, section: SeoM
 export function menuGraph(venue: Venue, menu: SeoMenu, locale: Locale, only?: SeoMenuCategory) {
   const crumbs = [
     { name: venue.name, path: '/' },
-    { name: siteT('nav_menu', locale), path: menuBase(venue.slug) },
-    ...(only ? [{ name: only.names[locale], path: `${menuBase(venue.slug)}/${only.slug}` }] : []),
+    { name: siteT('nav_menu', locale), path: menuPath(venue.slug) },
+    ...(only ? [{ name: only.names[locale], path: categoryPath(venue.slug, only.slug) }] : []),
   ];
   return {
     '@context': 'https://schema.org',
     '@graph': [
-      { ...restaurantNode(venue, locale), hasMenu: { '@id': absoluteUrl(`${menuBase(venue.slug)}#menu`) } },
+      { ...restaurantNode(venue, locale), hasMenu: { '@id': absoluteUrl(`${menuPath(venue.slug)}#menu`) } },
       menuNode(venue, menu, locale, only),
       breadcrumbNode(crumbs),
     ],

@@ -4,7 +4,7 @@ import { toast } from 'sonner';
 import { useCartStore } from '@/lib/cart-store';
 import { touchSession } from '@/lib/guest-api';
 import { t } from '@/lib/i18n';
-import { menuBase } from '@/lib/venues';
+import { menuPath } from '@/lib/venues';
 
 /**
  * Pings the backend every 30s so the session stays "present".
@@ -31,7 +31,7 @@ export function useSessionHeartbeat() {
           ended = true;
           leaveTable();
           toast.error(t('session_expired'));
-          navigate(menuBase(), { replace: true });
+          navigate(menuPath(), { replace: true });
         })
         .catch(() => { /* a blip, not an ending */ });
     };

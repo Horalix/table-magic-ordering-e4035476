@@ -15,9 +15,9 @@ import path from 'node:path';
 import { loadEnv, type Plugin, type ResolvedConfig } from 'vite';
 import type { Locale } from '../src/lib/i18n';
 import { siteT } from '../src/lib/site-copy';
-import { DEFAULT_VENUE, menuBase, VENUES } from '../src/lib/venues';
+import { DEFAULT_VENUE, VENUES } from '../src/lib/venues';
 import { fetchSeoMenu, type SeoMenu } from '../src/lib/seo/menu-data';
-import { dishGraph, dishPath, homeGraph, LOCALES, menuGraph, sitePath } from '../src/lib/seo/structured-data';
+import { categoryPath, dishGraph, dishPath, homeGraph, LOCALES, menuGraph, menuPath, sitePath } from '../src/lib/seo/structured-data';
 import {
   dishBody, headTags, homeBody, llmsFullTxt, llmsTxt, menuBody, robotsTxt, sitemapXml, type SitemapEntry,
 } from '../src/lib/seo/static-pages';
@@ -82,7 +82,7 @@ export function seoPrerender(): Plugin {
 
       // The menu: one address in every language, so no alternates; English
       // titles with the Bosnian and Arabic names in the content itself.
-      const base = menuBase(venue.slug);
+      const base = menuPath(venue.slug);
       write(base, renderPage(template, headTags({
         path: base, locale: 'en', venue,
         title: siteT('seo_menu_title', 'en'), description: siteT('seo_menu_description', 'en'),
@@ -91,7 +91,7 @@ export function seoPrerender(): Plugin {
 
       const categories = menu?.categories ?? [];
       for (const category of categories) {
-        const p = `${base}/${category.slug}`;
+        const p = categoryPath(venue.slug, category.slug);
         write(p, renderPage(template, headTags({
           path: p, locale: 'en', venue,
           title: siteT('seo_category_title', 'en', { category: category.names.en }),
@@ -124,9 +124,10 @@ export function seoPrerender(): Plugin {
       const entries: SitemapEntry[] = [
         ...LOCALES.map((l) => ({ path: sitePath(l), alternates, priority: l === 'en' ? 1 : 0.9, images: ['/site/hero-wide-1600.webp'] })),
         { path: base, priority: 0.9 },
-        ...categories.map((c) => ({ path: `${base}/${c.slug}`, priority: 0.8 })),
+        ...categories.map((c) => ({ path: categoryPath(venue.slug, c.slug), priority: 0.8 })),
+        // Only prerendered pages: anything else is served the home page's
+        // HTML until the app runs, canonical and all.
         ...dishEntries,
-        { path: '/privacy', priority: 0.2 },
       ];
       writeFileSync(path.join(outDir, 'robots.txt'), robotsTxt());
       writeFileSync(path.join(outDir, 'sitemap.xml'), sitemapXml(entries, today));

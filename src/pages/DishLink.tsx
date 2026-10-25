@@ -3,7 +3,7 @@ import { Navigate, useParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { sectionSlug } from '@/lib/menu-sections';
 import { assignDishSlugs } from '@/lib/seo/menu-data';
-import { menuBase } from '@/lib/venues';
+import { menuCategoryPath } from '@/lib/venues';
 import NotFound from './NotFound';
 
 type Row = { id: string; name: string; subcategories: { name: string; categories: { name: string } | null } | null };
@@ -35,7 +35,7 @@ const DishLink = () => {
       const category = row?.subcategories?.categories?.name;
       if (!row || !category) { setTarget(null); return; }
       const params = new URLSearchParams({ section: sectionSlug(row.subcategories?.name ?? ''), dish: row.id });
-      setTarget(`${menuBase()}/${sectionSlug(category)}?${params.toString()}`);
+      setTarget(`${menuCategoryPath(sectionSlug(category))}?${params.toString()}`);
     })();
     return () => { live = false; };
   }, [dishSlug]);

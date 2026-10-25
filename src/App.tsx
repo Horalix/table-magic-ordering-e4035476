@@ -8,7 +8,7 @@ import { lazy, Suspense } from "react";
 import StaffGate from "./components/auth/StaffGate";
 import { ClockProvider } from "./lib/clock";
 import LocaleShell from "./components/LocaleShell";
-import { menuBase, venueBySlug } from "./lib/venues";
+import { menuCategoryPath, menuHome, venueBySlug } from "./lib/venues";
 import { AppUpdater } from "./lib/app-update";
 
 // Code-split route bundles so guests, staff, and admin screens load only when needed.
@@ -77,14 +77,14 @@ const LEGACY_CATEGORIES = new Set(['drinks', 'food', 'desserts']);
 
 const MenuRedirect = () => {
   const { search } = useLocation();
-  return <Navigate to={`${menuBase()}${search}`} replace />;
+  return <Navigate to={menuHome(search)} replace />;
 };
 
 const VenueMenu = () => {
   const { venue } = useParams<{ venue: string }>();
   const { search } = useLocation();
   if (venueBySlug(venue)) return <PageTransition><GuestMenu /></PageTransition>;
-  if (venue && LEGACY_CATEGORIES.has(venue)) return <Navigate to={`${menuBase()}/${venue}${search}`} replace />;
+  if (venue && LEGACY_CATEGORIES.has(venue)) return <Navigate to={`${menuCategoryPath(venue)}${search}`} replace />;
   return <NotFound />;
 };
 

@@ -31,9 +31,9 @@ test.describe('website', () => {
     await expect(page.getByRole('heading', { name: 'Order from your table' })).toBeAttached();
 
     const cta = page.getByRole('link', { name: 'View the menu', exact: true });
-    await expect(cta).toHaveAttribute('href', '/menu/lasoul');
+    await expect(cta).toHaveAttribute('href', '/menu/lasoul/');
     await cta.click();
-    await expect(page).toHaveURL(/\/menu\/lasoul$/);
+    await expect(page).toHaveURL(/\/menu\/lasoul\/$/);
     await expect(page.getByRole('button', { name: /Food/ }).first()).toBeVisible();
 
     expect(errors).toEqual([]);
@@ -43,7 +43,7 @@ test.describe('website', () => {
     await setLocale(page, 'en');
     await page.goto('/');
     for (const [name, slug] of [['Drinks', 'drinks'], ['Food', 'food'], ['Desserts', 'desserts']]) {
-      await expect(page.getByRole('link', { name: `Open ${name}` })).toHaveAttribute('href', `/menu/lasoul/${slug}`);
+      await expect(page.getByRole('link', { name: `Open ${name}` })).toHaveAttribute('href', `/menu/lasoul/${slug}/`);
     }
   });
 
@@ -58,9 +58,9 @@ test.describe('website', () => {
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('Burgeri i kolači pravljeni s dušom.');
     await expect(page.locator('html')).toHaveAttribute('lang', 'bs');
     await expect(page.locator('html')).toHaveAttribute('dir', 'ltr');
-    await expect(page.getByRole('link', { name: 'Pogledajte meni', exact: true })).toHaveAttribute('href', '/menu/lasoul');
+    await expect(page.getByRole('link', { name: 'Pogledajte meni', exact: true })).toHaveAttribute('href', '/menu/lasoul/');
     // Each language has its own address.
-    await expect(page).toHaveURL(/\/bs$/);
+    await expect(page).toHaveURL(/\/bs\/$/);
 
     await page.getByRole('button', { name: LANGUAGE_BUTTON }).click();
     await page.getByRole('menuitem', { name: 'العربية' }).click();
@@ -68,7 +68,7 @@ test.describe('website', () => {
     await expect(page.locator('html')).toHaveAttribute('lang', 'ar');
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('برغر وكيك، مُحضَّرة بكل شغف.');
     await expect(page).toHaveTitle(/مقهى حلال في سراييفو/);
-    await expect(page).toHaveURL(/\/ar$/);
+    await expect(page).toHaveURL(/\/ar\/$/);
 
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
     expect(overflow).toBeLessThanOrEqual(1);
@@ -113,16 +113,18 @@ test.describe('website', () => {
     expect(place.geo).toMatchObject({ latitude: 43.827548, longitude: 18.3103156 });
     expect(place.openingHoursSpecification[0]).toMatchObject({ opens: '11:00', closes: '21:00' });
     await expect(page.locator('link[rel="canonical"]')).toHaveAttribute('href', /\/$/);
-    await expect(page.locator('link[rel="alternate"][hreflang="bs"]')).toHaveAttribute('href', /\/bs$/);
+    await expect(page.locator('link[rel="alternate"][hreflang="bs"]')).toHaveAttribute('href', /\/bs\/$/);
     await expect(page.locator('meta[property="og:image"]')).toHaveAttribute('content', /^https:\/\/.+\/site\/og\.jpg$/);
   });
 
   test('opens in the language of its address', async ({ page }) => {
     await setLocale(page, 'en');
+    // Typed without the slash, it still lands on the page's own address.
     await page.goto('/bs');
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('Burgeri i kolači pravljeni s dušom.');
-    await expect(page.locator('link[rel="canonical"]')).toHaveAttribute('href', /\/bs$/);
-    await page.goto('/ar');
+    await expect(page).toHaveURL(/\/bs\/$/);
+    await expect(page.locator('link[rel="canonical"]')).toHaveAttribute('href', /\/bs\/$/);
+    await page.goto('/ar/');
     await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('برغر وكيك، مُحضَّرة بكل شغف.');
   });
@@ -134,7 +136,9 @@ test.describe('website', () => {
     expect(html).toContain('<h1>Burgers and cakes, made with soul.</h1>');
     expect(html).toContain('Is everything at La Soul halal?');
     expect(html).toMatch(/<script type="application\/ld\+json">.*"FAQPage"/);
-    expect(html).toMatch(/<link rel="alternate" hreflang="ar" href="[^"]+\/ar" \/>/);
+    expect(html).toMatch(/<link rel="alternate" hreflang="ar" href="[^"]+\/ar\/" \/>/);
+    // Canonical addresses end in "/", the form the host serves every page at.
+    expect(html).toMatch(/<link rel="canonical" href="https:\/\/[^"]+\/" \/>/);
   });
 
   test('publishes robots.txt, a sitemap and llms.txt', async ({ page }) => {
@@ -143,7 +147,8 @@ test.describe('website', () => {
     expect(robots).toContain('Disallow: /admin');
     expect(robots).toMatch(/Sitemap: https:\/\/.+\/sitemap\.xml/);
     const sitemap = await (await page.request.get('/sitemap.xml')).text();
-    expect(sitemap).toMatch(/<loc>https:\/\/.+\/bs<\/loc>/);
+    expect(sitemap).toMatch(/<loc>https:\/\/.+\/bs\/<\/loc>/);
+    expect(sitemap).toMatch(/<loc>https:\/\/.+\/menu\/lasoul\/<\/loc>/);
     const llms = await (await page.request.get('/llms.txt')).text();
     expect(llms).toMatch(/^# La Soul/);
     expect(llms).toContain('everything is halal');
@@ -151,7 +156,7 @@ test.describe('website', () => {
 
   test('a dish’s link opens that dish on the menu', async ({ page }) => {
     await setLocale(page, 'en');
-    await page.goto('/menu/lasoul/food?dish=item-burger');
+    await page.goto('/menu/lasoul/food/?dish=item-burger');
     await expect(page.getByRole('dialog')).toBeVisible();
     await expect(page.getByRole('dialog').getByRole('heading', { name: 'La Soul Burger' })).toBeVisible();
   });

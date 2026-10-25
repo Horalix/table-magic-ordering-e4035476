@@ -4,7 +4,7 @@ import { motion } from 'framer-motion';
 import { ArrowRight, MapPin } from 'lucide-react';
 import { easeEnter } from '@/lib/motion';
 import { useSiteT } from '@/lib/site-i18n';
-import { menuBase, type Venue } from '@/lib/venues';
+import { menuPath, type Venue } from '@/lib/venues';
 import { siteImage, siteSrc, siteSrcSet } from './site-image-data';
 
 /**
@@ -83,7 +83,7 @@ const SiteHero = ({ venue }: { venue: Venue }) => {
           </motion.p>
           <motion.div {...enter(0.28)} className="mt-7 flex flex-wrap items-center gap-2.5 sm:gap-3 lg:mt-9">
             <Link
-              to={menuBase(venue.slug)}
+              to={menuPath(venue.slug)}
               className="group inline-flex h-[52px] items-center gap-2 rounded-full bg-ls-forest pe-4 ps-5 text-[14.5px] font-semibold sm:gap-2.5 sm:pe-5 sm:ps-6 sm:text-[15px] text-ls-cream shadow-[0_14px_30px_-14px_rgba(35,46,40,0.7)] transition-colors hover:bg-ls-forest-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ls-sage-deep focus-visible:ring-offset-2 focus-visible:ring-offset-ls-cream"
             >
               {st('hero_cta')}
