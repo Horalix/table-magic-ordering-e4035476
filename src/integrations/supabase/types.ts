@@ -271,80 +271,6 @@ export type Database = {
           },
         ]
       }
-      menu_combo_options: {
-        Row: {
-          item_id: string
-          slot_id: string
-          sort_order: number
-          surcharge: number
-        }
-        Insert: {
-          item_id: string
-          slot_id: string
-          sort_order?: number
-          surcharge?: number
-        }
-        Update: {
-          item_id?: string
-          slot_id?: string
-          sort_order?: number
-          surcharge?: number
-        }
-        Relationships: [
-          {
-            foreignKeyName: "menu_combo_options_item_id_fkey"
-            columns: ["item_id"]
-            isOneToOne: false
-            referencedRelation: "menu_items"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "menu_combo_options_slot_id_fkey"
-            columns: ["slot_id"]
-            isOneToOne: false
-            referencedRelation: "menu_combo_slots"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      menu_combo_slots: {
-        Row: {
-          combo_item_id: string
-          created_at: string
-          id: string
-          label: string
-          label_ar: string | null
-          label_bs: string | null
-          sort_order: number
-        }
-        Insert: {
-          combo_item_id: string
-          created_at?: string
-          id?: string
-          label: string
-          label_ar?: string | null
-          label_bs?: string | null
-          sort_order?: number
-        }
-        Update: {
-          combo_item_id?: string
-          created_at?: string
-          id?: string
-          label?: string
-          label_ar?: string | null
-          label_bs?: string | null
-          sort_order?: number
-        }
-        Relationships: [
-          {
-            foreignKeyName: "menu_combo_slots_combo_item_id_fkey"
-            columns: ["combo_item_id"]
-            isOneToOne: false
-            referencedRelation: "menu_items"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       menu_item_recommendations: {
         Row: {
           created_at: string
@@ -419,28 +345,18 @@ export type Database = {
           description_ar: string | null
           description_bs: string | null
           dietary_tags: string[]
-          featured_note?: string | null
-          featured_note_ar?: string | null
-          featured_note_bs?: string | null
-          featured_rank?: number | null
           id: string
           image_url: string | null
           is_available: boolean
           margin_score: number
           meal_role: Database["public"]["Enums"]["meal_role"] | null
           merchandising_tags: string[]
-          new_until?: string | null
           name: string
           name_ar: string | null
           name_bs: string | null
           portion_note: string | null
           prep_minutes: number | null
           price: number
-          sale_ends_at?: string | null
-          sale_kind?: string | null
-          sale_label?: string | null
-          sale_starts_at?: string | null
-          sale_value?: number | null
           sort_order: number
           station: string
           subcategory_id: string
@@ -455,28 +371,18 @@ export type Database = {
           description_ar?: string | null
           description_bs?: string | null
           dietary_tags?: string[]
-          featured_note?: string | null
-          featured_note_ar?: string | null
-          featured_note_bs?: string | null
-          featured_rank?: number | null
           id?: string
           image_url?: string | null
           is_available?: boolean
           margin_score?: number
           meal_role?: Database["public"]["Enums"]["meal_role"] | null
           merchandising_tags?: string[]
-          new_until?: string | null
           name: string
           name_ar?: string | null
           name_bs?: string | null
           portion_note?: string | null
           prep_minutes?: number | null
           price: number
-          sale_ends_at?: string | null
-          sale_kind?: string | null
-          sale_label?: string | null
-          sale_starts_at?: string | null
-          sale_value?: number | null
           sort_order?: number
           station?: string
           subcategory_id: string
@@ -491,28 +397,18 @@ export type Database = {
           description_ar?: string | null
           description_bs?: string | null
           dietary_tags?: string[]
-          featured_note?: string | null
-          featured_note_ar?: string | null
-          featured_note_bs?: string | null
-          featured_rank?: number | null
           id?: string
           image_url?: string | null
           is_available?: boolean
           margin_score?: number
           meal_role?: Database["public"]["Enums"]["meal_role"] | null
           merchandising_tags?: string[]
-          new_until?: string | null
           name?: string
           name_ar?: string | null
           name_bs?: string | null
           portion_note?: string | null
           prep_minutes?: number | null
           price?: number
-          sale_ends_at?: string | null
-          sale_kind?: string | null
-          sale_label?: string | null
-          sale_starts_at?: string | null
-          sale_value?: number | null
           sort_order?: number
           station?: string
           subcategory_id?: string
@@ -546,7 +442,6 @@ export type Database = {
       order_items: {
         Row: {
           bumped_by: string | null
-          components?: Json | null
           created_at: string
           id: string
           menu_item_id: string
@@ -554,7 +449,6 @@ export type Database = {
           order_id: string
           quantity: number
           ready_at: string | null
-          regular_unit_price?: number | null
           served_at: string | null
           started_at: string | null
           station: string
@@ -563,7 +457,6 @@ export type Database = {
         }
         Insert: {
           bumped_by?: string | null
-          components?: Json | null
           created_at?: string
           id?: string
           menu_item_id: string
@@ -571,7 +464,6 @@ export type Database = {
           order_id: string
           quantity?: number
           ready_at?: string | null
-          regular_unit_price?: number | null
           served_at?: string | null
           started_at?: string | null
           station?: string
@@ -580,7 +472,6 @@ export type Database = {
         }
         Update: {
           bumped_by?: string | null
-          components?: Json | null
           created_at?: string
           id?: string
           menu_item_id?: string
@@ -588,7 +479,6 @@ export type Database = {
           order_id?: string
           quantity?: number
           ready_at?: string | null
-          regular_unit_price?: number | null
           served_at?: string | null
           started_at?: string | null
           station?: string
@@ -1172,6 +1062,7 @@ export type Database = {
       }
       restaurant_settings: {
         Row: {
+          after_meal_prompt_minutes: number
           id: number
           kitchen_capacity_minutes: number
           kitchen_delay_minutes: number
@@ -1203,6 +1094,7 @@ export type Database = {
           venue_qr_token: string
         }
         Insert: {
+          after_meal_prompt_minutes?: number
           id?: number
           kitchen_capacity_minutes?: number
           kitchen_delay_minutes?: number
@@ -1234,6 +1126,7 @@ export type Database = {
           venue_qr_token?: string
         }
         Update: {
+          after_meal_prompt_minutes?: number
           id?: number
           kitchen_capacity_minutes?: number
           kitchen_delay_minutes?: number
@@ -2044,14 +1937,11 @@ export type Database = {
       }
     }
     Functions: {
-      admin_save_combo: {
-        Args: { _combo_item_id: string; _slots: Json }
-        Returns: Json
-      }
       admin_set_waiter_pin: {
         Args: { _pin: string; _waiter_id: string }
         Returns: undefined
       }
+      after_meal_moment: { Args: { _session_id: string }; Returns: boolean }
       analytics_event_allowed: { Args: { _event: string }; Returns: boolean }
       assert_guest_session: {
         Args: { _session_id: string; _session_token: string }
@@ -2161,7 +2051,6 @@ export type Database = {
         Returns: Json
       }
       guest_check_venue_token: { Args: { _token: string }; Returns: Json }
-      guest_get_combos: { Args: never; Returns: Json }
       guest_get_join_request: {
         Args: { _client_id: string; _request_id: string; _session_id: string }
         Returns: Json
@@ -2528,6 +2417,10 @@ export type Database = {
         Args: { _order_id: string }
         Returns: boolean
       }
+      repeat_blocked: {
+        Args: { _item_id: string; _session_id: string }
+        Returns: boolean
+      }
       report_ticket_print: {
         Args: {
           _error?: string
@@ -2574,6 +2467,19 @@ export type Database = {
       rotate_table_qr_token: { Args: { _table_id: string }; Returns: string }
       rotate_venue_qr_token: { Args: never; Returns: string }
       sales_analytics: { Args: { _from?: string; _to?: string }; Returns: Json }
+      session_context: {
+        Args: { _session_id: string }
+        Returns: {
+          avg_line_price: number
+          covers: number
+          has_served_main: boolean
+          line_count: number
+          minutes_since_served: number
+          ordered_item_ids: string[]
+          running_total: number
+          served_item_ids: string[]
+        }[]
+      }
       session_idle_timeout: { Args: never; Returns: number }
       set_order_fiscalization: {
         Args: {

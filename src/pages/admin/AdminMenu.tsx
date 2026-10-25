@@ -25,7 +25,7 @@ import type { Database } from '@/integrations/supabase/types';
 
 type CategoryInsert = Database['public']['Tables']['categories']['Insert'];
 type SubcategoryInsert = Database['public']['Tables']['subcategories']['Insert'];
-type MenuItemRow = Database['public']['Tables']['menu_items']['Row'];
+type MenuItemRow = import('@/lib/promotions-api').MenuItemRow;
 type AdminSubcategory = Database['public']['Tables']['subcategories']['Row'] & { menu_items?: MenuItemRow[] | null };
 type AdminCategory = Database['public']['Tables']['categories']['Row'] & { subcategories?: AdminSubcategory[] | null };
 

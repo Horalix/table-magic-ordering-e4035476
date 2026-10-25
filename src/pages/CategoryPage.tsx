@@ -29,7 +29,7 @@ import {
 import type { Database } from '@/integrations/supabase/types';
 
 type CategoryRow = Database['public']['Tables']['categories']['Row'];
-type MenuItemRow = Database['public']['Tables']['menu_items']['Row'];
+type MenuItemRow = import('@/lib/promotions-api').MenuItemRow;
 type SubcategoryRow = Database['public']['Tables']['subcategories']['Row'];
 
 const categoryNameMap: Record<string, string> = {
