@@ -2088,6 +2088,14 @@ export type Database = {
         Returns: string
       }
       bandit_readiness: { Args: never; Returns: Json }
+      business_day: { Args: { _at?: string }; Returns: string }
+      business_day_range: {
+        Args: { _day: string }
+        Returns: {
+          ends_at: string
+          starts_at: string
+        }[]
+      }
       cancel_order: {
         Args: { _order_id: string; _reason: string }
         Returns: Json
