@@ -133,5 +133,39 @@ SELECT rewrite, function, found
     RAISE EXCEPTION ''You already have a pending request'';
   END IF;
 ' in replace(COALESCE((SELECT string_agg(pg_get_functiondef(p.oid), E'\n') FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace WHERE n.nspname = 'public' AND p.proname = 'enforce_join_request_limits'), ''), chr(13) || chr(10), chr(10))) > 0) AS found
+  UNION ALL
+  SELECT '20261025120000-127000 (analytics): column used' AS rewrite, 'order_items.station' AS function, EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'order_items' AND column_name = 'station') AS found
+  UNION ALL
+  SELECT '20261025120000-127000 (analytics): column used' AS rewrite, 'order_items.ready_at' AS function, EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'order_items' AND column_name = 'ready_at') AS found
+  UNION ALL
+  SELECT '20261025120000-127000 (analytics): column used' AS rewrite, 'table_sessions.covers' AS function, EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'table_sessions' AND column_name = 'covers') AS found
+  UNION ALL
+  SELECT '20261025120000-127000 (analytics): column used' AS rewrite, 'menu_items.meal_role' AS function, EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'menu_items' AND column_name = 'meal_role') AS found
+  UNION ALL
+  SELECT '20261025120000-127000 (analytics): column used' AS rewrite, 'suggestion_conversions.decision_id' AS function, EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'suggestion_conversions' AND column_name = 'decision_id') AS found
+  UNION ALL
+  SELECT '20261025120000-127000 (analytics): column used' AS rewrite, 'recommendation_impressions.decision_id' AS function, EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'recommendation_impressions' AND column_name = 'decision_id') AS found
+  UNION ALL
+  SELECT '20261025120000-127000 (analytics): column used' AS rewrite, 'menu_item_affinity.a_orders' AS function, EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'menu_item_affinity' AND column_name = 'a_orders') AS found
+  UNION ALL
+  SELECT '20261025120000-127000 (analytics): new names are free' AS rewrite, 'no live function already uses them' AS function, NOT EXISTS (SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace WHERE n.nspname = 'public' AND p.proname IN ('analytics_trading_days','analytics_item_days','wilson_interval','menu_engineering','sales_components','sales_change_terms','sales_decomposition','item_trends','station_timings','daily_anomalies','reco_funnel','management_insights','log_menu_item_availability','prep_history')) AS found
+  UNION ALL
+  SELECT '20261025120000_item_availability_days.sql' AS rewrite, 'menu_item_availability_log is new' AS function, to_regclass('public.menu_item_availability_log') IS NULL AS found
+  UNION ALL
+  SELECT '20261025100000_reco_learning_v3.sql:478' AS rewrite, 'guest_place_order' AS function, (position('decision_id' in replace(COALESCE((SELECT string_agg(pg_get_functiondef(p.oid), E'
+') FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace WHERE n.nspname = 'public' AND p.proname = 'guest_place_order'), ''), chr(13) || chr(10), chr(10))) > 0) AS found
+  UNION ALL
+  SELECT '20261025100000_reco_learning_v3.sql:501' AS rewrite, 'guest_mark_suggestion_seen' AS function, (position('recommendation_impressions' in replace(COALESCE((SELECT string_agg(pg_get_functiondef(p.oid), E'
+') FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace WHERE n.nspname = 'public' AND p.proname = 'guest_mark_suggestion_seen'), ''), chr(13) || chr(10), chr(10))) > 0) AS found
+  UNION ALL
+  SELECT '20261025100000_reco_learning_v3.sql:459' AS rewrite, 'refresh_suggestion_stats' AS function, (to_regprocedure('public.refresh_suggestion_stats(integer)') IS NOT NULL) AS found
+  UNION ALL
+  SELECT '20261025100000_reco_learning_v3.sql:1338' AS rewrite, 'rank_recommendations' AS function, (to_regprocedure('public.rank_recommendations(uuid[],text,text,integer,uuid,text[])') IS NOT NULL) AS found
+  UNION ALL
+  SELECT '20261025100000_reco_learning_v3.sql:66' AS rewrite, 'suggestion_stats.daypart' AS function, EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'suggestion_stats' AND column_name = 'daypart') AS found
+  UNION ALL
+  SELECT '20261025110000_reco_measurement.sql:274' AS rewrite, 'session_outcomes(covers, net_sales, opened_at)' AS function, (SELECT count(*) = 3 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'session_outcomes' AND column_name IN ('covers', 'net_sales', 'opened_at')) AS found
+  UNION ALL
+  SELECT '20261025100000-110000 (reco v3): new names are free' AS rewrite, 'no live object already uses them' AS function, NOT EXISTS (SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace WHERE n.nspname = 'public' AND p.proname IN ('basket_weight','eb_lower05','eb_posterior_mean','pair_strength','acceptance_upper95','acceptance_retired','suggestion_prior','refresh_suggestion_priors','popular_items_for_daypart','two_proportion_interval','ancova_interval')) AND to_regclass('public.suggestion_priors') IS NULL AND to_regclass('public.subcategory_affinity') IS NULL AND to_regclass('public.item_section_share') IS NULL AS found
   ) checks
  ORDER BY found, rewrite;

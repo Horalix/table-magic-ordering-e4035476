@@ -2,8 +2,8 @@
 
 Copy everything between the rules into Lovable. Nothing else needs to be said.
 
-Last updated: **24 October 2026**, for seventeen migrations from
-`20260804090300` to `20261024190000`.
+Last updated: **25 October 2026**, for twenty-nine migrations from
+`20260804090300` to `20261025140000`.
 
 > **What is actually live.** Checked against the production API on
 > 24 October 2026: functions from the 3 August batch exist (for example
@@ -42,7 +42,7 @@ whose search text is not in the live function — send it back before going on.
 
 ## Step 2 — the prompt
 
-> **Task: apply seventeen existing migration files to Supabase, in order. Do not
+> **Task: apply twenty-nine existing migration files to Supabase, in order. Do not
 > write any new SQL.**
 >
 > These files are already in the repository under `supabase/migrations/`:
@@ -65,6 +65,18 @@ whose search text is not in the live function — send it back before going on.
 > 20261024170000_analytics_safe_reads.sql
 > 20261024180000_house_pairings.sql
 > 20261024190000_order_abuse_guards.sql
+> 20261025090000_unit_margin.sql
+> 20261025100000_reco_learning_v3.sql
+> 20261025110000_reco_measurement.sql
+> 20261025120000_item_availability_days.sql
+> 20261025121000_menu_engineering.sql
+> 20261025122000_sales_decomposition.sql
+> 20261025123000_item_trends.sql
+> 20261025124000_service_alerts.sql
+> 20261025125000_reco_funnel.sql
+> 20261025126000_management_insights.sql
+> 20261025127000_prep_history.sql
+> 20261025140000_menu_translations.sql
 > ```
 >
 > **Run each file, in that exact order, exactly as written.** Read each one from
@@ -122,8 +134,9 @@ whose search text is not in the live function — send it back before going on.
 > -- 6. the nightly job is scheduled (expect 1 row; if 0, pg_cron is not enabled — say so)
 > SELECT jobname, schedule FROM cron.job WHERE jobname = 'lasoul-daily-maintenance';
 >
-> -- 7. sampling must still be OFF (expect false)
-> SELECT reco_sampling_enabled FROM public.restaurant_settings WHERE id = 1;
+> -- 7. sampling must still be OFF (expect false, then v3-profit and 12:00:00)
+> SELECT reco_sampling_enabled, public.reco_policy_version(), reco_alcohol_from
+>   FROM public.restaurant_settings WHERE id = 1;
 >
 > -- 8. fake-order protection is in place (expect 60.00, 10, 150.00, 3, and a row
 > --    for the index; if the index row is missing, paste the NOTICE text too)
@@ -157,10 +170,37 @@ whose search text is not in the live function — send it back before going on.
 - **Analytics**: charts bucket by Sarajevo trading day; one malformed event can
   no longer blank a screen; Menu Intelligence stops listing each pair six
   times; the Analytics page gains an ordering funnel.
+- **Owner insights** (`20261025120000`–`20261025127000`, new read-only
+  functions plus one small table): the Dashboard leads with the three things
+  most worth doing this week in KM, and says whether today is normal (pace
+  against the same weekday, unusual days, slow kitchen or bar tickets).
+  Analytics opens with one sentence on why sales moved. Menu Intelligence gains
+  the menu-engineering matrix (stars, plowhorses, puzzles, dogs), one
+  suggestion funnel and the full list of cards. A trigger starts recording when
+  a dish is marked sold out or back on, so dishes are judged only on the days
+  they were on sale; history before that is estimated, and the page says so.
+  The Daily Report shows tomorrow's prep list only once it beats "same as last
+  week" on the last six same weekdays.
 - **House pairings**: suggestions start from what a La Soul waiter would
   offer (fries with a burger, churros with a hot chocolate, an espresso after
   dessert) as curated rules you can edit or switch off in Admin → Service &
   suggestions, and a curated pair can no longer add a second drink or main.
+- **Suggestions v3** (`20261025100000`, `20261025110000`): the engine learns
+  from the server's own record — a suggestion counts as seen once, and as
+  taken only when the order was paid for — instead of from browser taps.
+  Pairs need to beat chance on a pessimistic reading before they are used, old
+  orders fade instead of dropping off after 90 days, and a dish with no
+  history is suggested from what its section sells at this time of day.
+  Suggestions are ranked by expected profit (how often taken × margin, using
+  food costs where entered and the role defaults otherwise). A dish the table
+  has seen and passed over is offered less. No alcoholic drink is suggested
+  before 12:00 (Admin → Service & suggestions), to a table with a kids' dish,
+  or to a guest filtering for halal. The policy version becomes `v3-profit`,
+  so a holdout experiment running at the time is closed — start a new one
+  (50% for three to four weeks; see `docs/measuring-upsell.md`). The impact
+  comparison gains attach rates and an adjusted figure that needs far fewer
+  days. The migration relearns once as it runs; look for the `menu
+  intelligence refreshed` notice.
 - **Fake orders**: a pay-at-table order that looks wrong — a big first order
   (over 60 KM or 10 portions), a table over 150 KM unpaid, several tables
   opening at once, a second session on one table, someone who joined without
