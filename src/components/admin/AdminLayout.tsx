@@ -10,6 +10,7 @@ import {
 import { toast } from 'sonner';
 import { springPill } from '@/lib/motion';
 import { useStaffDocument } from '@/components/staff/useStaffDocument';
+import AdminMobileTabs from '@/components/admin/AdminMobileTabs';
 import type { User } from '@supabase/supabase-js';
 
 // Grouped so the sidebar reads as a hierarchy, not a flat list.
@@ -230,10 +231,11 @@ const AdminLayout = () => {
             <p className="text-xs text-muted-foreground truncate">{currentLabel}</p>
           </div>
         </div>
-        <div className="px-4 py-5 sm:p-6 lg:p-8 max-w-7xl mx-auto w-full">
+        <div className="px-4 py-5 pb-24 sm:p-6 sm:pb-24 lg:p-8 max-w-7xl mx-auto w-full">
           <Outlet />
         </div>
       </main>
+      <AdminMobileTabs onMore={() => setSidebarOpen(true)} />
     </div>
   );
 };

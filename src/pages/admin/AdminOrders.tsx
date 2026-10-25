@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { formatStamp } from '@/lib/timing';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent } from '@/components/ui/card';
@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
-import { AlertTriangle, Ban, Banknote, CalendarDays, Check, RefreshCw, Smartphone, Undo2 } from 'lucide-react';
+import { AlertTriangle, Ban, Banknote, CalendarDays, Check, RefreshCw, Search, Smartphone, Undo2, X } from 'lucide-react';
 import PaymentBadge from '@/components/PaymentBadge';
 import RefundDialog from '@/components/admin/RefundDialog';
 import PaymentConfirm from '@/components/staff/PaymentConfirm';
@@ -71,9 +71,29 @@ const AdminOrders = () => {
   /** Recording or clearing a fiscal receipt. */
   const [fiscal, setFiscal] = useState<{ order: AdminOrder; mode: 'set' | 'clear' } | null>(null);
   const [receipt, setReceipt] = useState('');
+  /** "#047", "7", "t7", a guest's name or a dish — whatever the person asking said. */
+  const [query, setQuery] = useState('');
 
   const today = businessDayISO();
   const begin = useLatestRequest();
+
+  /**
+   * Find an order the way it is asked about: "table 7's order", "#047",
+   * "the one with the risotto", "Amina's". Searches what is loaded for the
+   * day; the list says when more is not loaded yet.
+   */
+  const shown = useMemo(() => {
+    const q = query.trim().toLowerCase().replace(/^#/, '');
+    if (!q) return orders;
+    // "table" before "t", or "table 7" loses only its first letter.
+    const tableQ = q.replace(/^(table|t)\s*/, '');
+    return orders.filter((o) => {
+      if ((o.order_code ?? '').toLowerCase().includes(q)) return true;
+      if (/^\d+$/.test(tableQ) && String(tableOf(o)) === tableQ) return true;
+      if ((o.guest_name ?? '').toLowerCase().includes(q)) return true;
+      return (o.order_items ?? []).some((i) => (i.menu_items?.name ?? '').toLowerCase().includes(q));
+    });
+  }, [orders, query]);
 
   const fetchOrders = useCallback(async () => {
     const isLatest = begin();
@@ -277,6 +297,25 @@ const AdminOrders = () => {
         </div>
       </div>
 
+      <div className="relative mb-4">
+        <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+        <Input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Find an order: #047, table 7, a guest or a dish"
+          className="pl-9 pr-10 h-11"
+          aria-label="Find an order"
+        />
+        {query && (
+          <button
+            type="button" onClick={() => setQuery('')} aria-label="Clear search"
+            className="absolute right-1 top-1/2 -translate-y-1/2 w-9 h-9 flex items-center justify-center text-muted-foreground hover:text-foreground"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        )}
+      </div>
+
       {/* The trading day runs past midnight; say so, or 00:30 orders look misfiled. */}
       <p className="text-xs font-sans text-muted-foreground -mt-4 mb-4">
         {day === today ? 'Tonight' : new Date(`${day}T12:00:00`).toLocaleDateString()} · 05:00 to 05:00, the same day the daily report and close use
@@ -298,7 +337,12 @@ const AdminOrders = () => {
         </div>
       ) : (
       <div className="space-y-3">
-        {orders.map((order) => {
+        {query.trim() && (
+          <p className="text-xs font-sans text-muted-foreground" aria-live="polite">
+            {shown.length} of {orders.length} loaded orders match{hasMore ? ' — load more below to search the rest of the day' : ''}
+          </p>
+        )}
+        {shown.map((order) => {
           const refundable = ['paid', 'partially_refunded'].includes(order.payment_status)
             && Number(order.refunded_amount ?? 0) < Number(order.total);
           const isFiscalized = (order.fiscalization_status ?? (order.fiscalized ? 'fiscalized' : 'not_fiscalized')) === 'fiscalized';
