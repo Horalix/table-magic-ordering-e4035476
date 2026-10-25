@@ -1,222 +1,364 @@
-# Launch checklist
+# Launch checklist — La Soul
 
-From the current state to live restaurant use. Do these in order — later steps
-assume earlier ones.
+From where things stand (25 October 2026) to the whole floor ordering from
+their phones. **Part 2 is the rehearsal sheet: print it and take it to La
+Soul.**
 
-Legend: ☐ to do · **⚠** cannot be done from this repository (needs a person with
-dashboard/bank access).
+The app is live at **https://lasoulapp.netlify.app**: the website, the menu,
+ordering at the table, the waiter and kitchen screens, the floor monitor and
+the whole admin. It passes 1,169 automated tests and 486 browser tests, but it
+has **not yet run a real service** on real phones, a real kitchen tablet and a
+real printer. That is what the rehearsal is for.
 
----
-
-## Phase 0 — before anything is deployed
-
-- ☐ Read `docs/master-product-audit.md`. It says what was wrong and why each
-  fix exists.
-- ☐ `npm ci && npm run verify` on a clean checkout. Must be green:
-  typecheck, lint (0 errors), 114 tests, secret scan, production build.
-- ☐ `npx playwright install chromium webkit && npm run test:e2e` — 55 specs.
-- ☐ Confirm `.env` is **not** tracked: `git ls-files | grep '^\.env$'` returns
-  nothing.
+Every screen name and button below is what the app actually says. The staff
+screens are in English; guests see their own language.
 
 ---
 
-## Phase 1 — database
+## Part 1 — Before the rehearsal (manager, a laptop, 1–2 hours)
 
-- ☐ Take a backup / confirm PITR is on before migrating. **⚠**
-- ☐ `supabase db push`. The new migrations are additive and idempotent; the
-  enum values are split into their own migration because PostgreSQL will not
-  let a new enum value be used in the transaction that added it.
-- ☐ Verify the new objects exist:
-  ```sql
-  SELECT proname FROM pg_proc
-   WHERE proname IN ('release_order_to_kitchen','monri_apply_callback',
-                     'record_table_payment','day_reconciliation',
-                     'guest_get_recommendations','claim_ticket_print');
-  -- expect 6 rows
-  SELECT tgname FROM pg_trigger WHERE tgname = 'enforce_order_integrity';
-  ```
-- ☐ Confirm the safe default landed:
-  ```sql
-  SELECT online_card_enabled, ordering_enabled FROM restaurant_settings WHERE id = 1;
-  -- expect: false, true
-  ```
-- ☐ Spot-check that legacy card orders were migrated:
-  ```sql
-  SELECT count(*) FROM orders WHERE payment_method = 'card';  -- expect 0
-  ```
+Sign in at **/admin/login** with the manager's email and password. Everything
+here is in the admin menu on the left (on a phone: **More**).
 
----
+### Accounts
 
-## Phase 2 — Supabase configuration **⚠**
+- [ ] **Manager password.** Reset it in Lovable (Cloud → Users) if nobody
+      knows it, then sign in at `/admin/login`.
+- [ ] **Waiters** → **Add Waiter**, once per waiter: *Display name*,
+      *Username*, *Password (6+ chars)*, *Floor PIN (4 digits, auto if
+      blank)* → **Create**.
+      Waiters sign in at `/waiter/login` with the username and password; the
+      PIN is only for the shared floor monitor. Give each waiter their login
+      in person. If you leave the PIN blank, the generated one shows for 8
+      seconds — write it down.
+- [ ] **One more account for the kitchen tablet(s)**, the same way: e.g.
+      display name *Kitchen*, username `kitchen`. The tablet signs in with it
+      at `/waiter/login`, then opens `/kitchen`. Do not leave the manager's
+      account signed in on a shared tablet: it can change prices and settings.
 
-- ☐ Edge Function secrets: `ALLOWED_ORIGINS` (include
-  `https://order.lasoul.net`), and — only when they exist — the `MONRI_*` set.
-- ☐ Enable Point-in-Time Recovery, and test one restore.
-- ☐ Enable Leaked Password Protection (Auth → Providers → Password).
-- ☐ Enforce MFA on the Supabase account.
-- ☐ Confirm only the `public` schema is exposed to the API.
-- ☐ Deploy the functions:
-  ```bash
-  supabase functions deploy monri-create-payment
-  supabase functions deploy monri-webhook
-  ```
+### Tables, sections and tonight's floor
 
----
+- [ ] **Tables** → *How many tables do you have?* → **Generate tables**. The
+      numbers must match the numbers on the real tables.
+- [ ] **Sections** → *New section name* → **Add section** for each area
+      (e.g. Terrace, Inside). Tap a table chip → **Move table N to…**.
+- [ ] **Tonight** → tap a section → tap the waiters who cover it → **Done**.
+      **This is per day** (the trading day runs to 05:00) and must be done
+      before every service. Without it every table lands under *No waiter
+      yet* on the waiter phones.
 
-## Phase 3 — front-end deployment **⚠**
+### Menu
 
-- ☐ Netlify environment variables:
-  ```
-  VITE_SUPABASE_URL, VITE_SUPABASE_PROJECT_ID, VITE_SUPABASE_PUBLISHABLE_KEY
-  VITE_SENTRY_DSN          (recommended)
-  VITE_MONRI_ENABLED=false (stays false until Monri sandbox passes)
-  ```
-- ☐ SPA redirect: `public/_redirects` already contains `/* /index.html 200`.
-  Confirm a deep link works in production, e.g.
-  `https://order.lasoul.net/table/7?token=…` served directly (not via an
-  in-app navigation).
-- ☐ Point DNS at Netlify for `order.lasoul.net`; confirm HTTPS and the
-  automatic HTTP→HTTPS redirect.
-- ☐ Load `https://order.lasoul.net/menu` on a real phone. Check the PWA install
-  prompt, and that a hard reload does not show a stale build.
+- [ ] **Menu**: check every price (tap a price to change it), and that
+      anything not on offer is **Sold out**.
+- [ ] Pencil icon → *Edit item* → **Allergens** on everything with nuts,
+      dairy, gluten, eggs or sesame, and a **Photo** on the best sellers →
+      **Save changes**.
+- [ ] Seven mojito descriptions still say "cocktail". Change them to
+      "alcohol-free mojito" (or ask me to).
 
----
+### Printer
 
-## Phase 4 — restaurant setup
+- [ ] Write down the printer's **make and model** — it also decides how
+      fiscal receipts can be automated later.
+- [ ] **Printing** → **Network printers** (Epson with *Server Direct Print*,
+      or Star with *CloudPRNT*): *Add a network printer* → name, station
+      (Kitchen / Bar / Kitchen + bar), paper (80 mm / 58 mm) → **Add
+      printer** → open **Address & setup steps**, enter that address on the
+      printer → wait for **Online** → **Test print**.
+- [ ] *Or*, with no network printer: **Or print from a tablet** → Bluetooth or
+      USB → **Send a test ticket**.
+- [ ] *Printing on* and *Print new orders by themselves* switched on, *Copies
+      per ticket* set → **Save settings**.
 
-- ☐ Admin → Tables: every table exists with the right number.
-- ☐ Admin → QR Codes: **rotate every token**, then print fresh QR codes. Any
-  token printed during development must be dead.
-- ☐ Admin → Sections and Waiters: sections defined, waiters created with PINs.
-- ☐ Admin → Menu: prices correct, availability correct, images present on the
-  top 20 items, allergens filled in on anything with nuts, dairy or gluten.
-- ☐ Admin → Printing: paper width, header, footer, copies.
-- ☐ Kitchen device: open `/kitchen`, enable the printer on **one** device, turn
-  sound on, confirm the pill reads **Live**.
-- ☐ Admin → Service & suggestions: ordering **on**, pay-at-table **on**, online
-  card **off**.
+### Service settings — Service & suggestions
 
----
+- [ ] **Accept orders from guests**: on. **Pay at the table**: on.
+- [ ] **Online card payment (Monri)**: **off**. It stays off until Monri is
+      set up (Part 5); switched on, guests are charged for real.
+- [ ] **Service hours** (*Opens* / *Closes*): the real hours. Orders placed
+      outside them are held until a waiter confirms them. **If you rehearse
+      outside opening hours, widen the hours for the evening** and set them
+      back afterwards — otherwise every rehearsal order is held.
+- [ ] **New tables at once**: 8. Fine for the rehearsal; raise it if large
+      groups are seated at once.
+- [ ] **Show suggestions to guests**: on.
 
-## Phase 5 — dress rehearsal (before any guest)
+### QR codes
 
-Run a full order at a real table, with staff, on real devices.
+- [ ] **QR Codes** → **A4 Sheet** → **Print**: one test sheet for the
+      rehearsal is enough. Scan one with a phone before printing more.
+- [ ] Choose for the real launch: **Per table** codes (the guest lands on
+      their table — recommended) or one **Venue QR** (the guest types the
+      table number).
+- [ ] A printed code contains the address the admin was open on. Print the
+      final batch once **lasoul.net** is connected and open the admin there
+      (Part 5); codes printed from lasoulapp.netlify.app keep working through
+      Netlify's redirect, but are one hop slower.
 
-- ☐ Scan a table QR → menu loads in under 2 s on 4G.
-- ☐ Search finds a dish by name in Bosnian and in English.
-- ☐ Add items, see one relevant suggestion, dismiss it — it does not return.
-- ☐ Checkout: itemised total correct, no tip preselected.
-- ☐ Order with **Cash** → appears in the kitchen instantly, prints once, has an
-  order number.
-- ☐ Order with **Card at the table** → kitchen shows "Owes · bring terminal".
-- ☐ Move it New → Confirmed → Preparing → Ready → Served.
-- ☐ Record **Paid cash** on one, **Paid terminal** on the other.
-- ☐ Order again from the same phone → joins the same tab.
-- ☐ Second phone joins the table → approval prompt appears on the first.
-- ☐ Request the bill → waiter is notified → resolving closes the session.
-- ☐ Admin → Daily Report: cash and terminal in separate columns, both correct,
-  nothing in "needs attention".
-- ☐ Mark both fiscalized; the warning clears.
-- ☐ Switch to Arabic: layout mirrors, nothing overflows, checkout works.
-- ☐ Switch to Bosnian: copy reads naturally to a native speaker.
-- ☐ Turn Wi-Fi off mid-order: the guest is told the order was **not** sent.
-- ☐ Pause ordering in Admin: the guest app blocks checkout and explains why.
-  Turn it back on.
+### Devices
 
----
+- [ ] **Kitchen tablet**: charger in, screen set to never sleep, volume up.
+      Sign in → `/kitchen` → pick the station (*All*, or *Kitchen* and *Bar*
+      on two tablets). Tap **Test sound**. Only if there is **no** network
+      printer: turn on the printer icon (*Use this device as the ticket
+      printer*) on **exactly one** device per station.
+- [ ] **Each waiter phone**: sign in at `/waiter/login`, add it to the home
+      screen, set a long screen timeout, tap once to enable sound. **A waiter
+      only gets alerts while the waiter screen is open** — there are no push
+      notifications.
+- [ ] *Optional* — a wall or counter tablet on `/waiter/monitor` (*La Soul ·
+      Floor*): each waiter taps their name and PIN to see their tables.
+- [ ] **Two guest phones**: one iPhone, one Android, at least one on mobile
+      data rather than the restaurant Wi-Fi.
+- [ ] Every staff screen shows the green **Live** pill.
 
-## Phase 6 — soft launch
+### Before guests, not before the rehearsal
 
-- ☐ One section only, one service.
-- ☐ A manager watches `/kitchen` and Admin → Daily Report throughout.
-- ☐ At close, reconcile: drawer vs **Cash**, terminal batch vs **POS terminal**.
-  Both must match exactly.
-- ☐ Zero duplicate prints, zero stuck payments, zero callback problems.
-- ☐ Collect what staff found confusing. Fix the copy, not the staff.
-- ☐ Repeat for two or three services before opening it to the whole floor.
+- [ ] **Error reporting.** It is off on the live site: nobody hears about a
+      crash on a guest's phone. Create a Sentry project (React), put its DSN
+      in Netlify → Site configuration → Environment variables →
+      `VITE_SENTRY_DSN`, and redeploy. **⚠** needs a Sentry account.
+- [ ] **Uptime monitor** on `https://lasoulapp.netlify.app/menu/lasoul/`,
+      1–5 minute checks, alerts by email. **⚠**
 
 ---
 
-## Phase 7 — full launch
+## Part 2 — The rehearsal (print this)
 
-- ☐ All sections live.
-- ☐ Uptime monitor on the menu URL and the webhook URL. **⚠**
-- ☐ Sentry receiving events; someone owns the alerts. **⚠**
-- ☐ Staff guide printed and by the pass
-  (`docs/restaurant-staff-training.md`).
-- ☐ Week-1 baseline metrics recorded (`docs/product-metrics.md`).
+**Who:** a manager (laptop, admin), one waiter (phone), the kitchen (tablet +
+printer), two "guests" (phones). About 90 minutes. Order cheap things —
+coffee, water, one dish.
+
+**When:** a day **before** the first real service. There is no test mode:
+rehearsal orders are real orders, and reports are per day, so the rehearsal
+day's numbers are simply the rehearsal's. Clean-up is at the end.
+
+**Write down:** the seconds in step 9, anything that confused anyone, and a
+screenshot of anything that looked wrong.
+
+Date: ______________ Started: ______ Finished: ______
+
+### A. Arriving at the table — Guest 1, table 1
+
+1. - [ ] Scan table 1's QR → *Connecting you to your table…* → **Welcome!**
+         → type a name → **Continue** → the menu, with *Table 1 · Change
+         table* at the top. On mobile data: under about 2 seconds.
+2. - [ ] Globe button (top right) → **Bosanski** → **العربية**: Arabic reads
+         right to left and nothing is cut off → back to English. (The
+         language button is on the menu and category pages only.)
+3. - [ ] Search: "burger", then a Bosnian dish name → results with **Add**.
+         (Dish names are searched in all three languages; descriptions only
+         in English.)
+4. - [ ] Open a dish → allergens are shown → **+ Add a note** → **Add to
+         order · … KM** → the cart bar shows **View Order**.
+
+### B. A second phone joins — Guest 2, same table
+
+5. - [ ] Guest 2 scans the **same** QR, types a name → *Waiting for the
+         table to let you in…*
+6. - [ ] Within about 5 seconds Guest 1 sees *"[name] wants to join your
+         table"* → **Accept** → Guest 2 is in the menu.
+
+### C. The first order — the speed test (the most important part)
+
+7. - [ ] Guest 1: **View Order** → a suggestion under *Complete your order*
+         → tap **X** → it does not come back.
+8. - [ ] **Send order · … KM** → *Order sent to the kitchen*, an order
+         number, *We'll bring it to table 1.*
+9. - [ ] **Kitchen:** *New order* banner and chime, and the ticket prints
+         **once** (a separate bar ticket if there is a drink). Tap **Got it**.
+         **Waiter phone:** the order appears under *In the kitchen* (or, if
+         table 1 is in nobody's section, under *No waiter yet* → **Take** →
+         *Table 1 is yours*).
+         Seconds from tapping Send to: kitchen ______ waiter ______
+10. - [ ] **Kitchen:** **Start** → **Ready** on each line (or **Start all** /
+          **All ready**) → the waiter phone vibrates and chimes, the card says
+          *Ready to run* → waiter **Mark served**.
+11. - [ ] Guest 1: **Track your order** → the bar moves *Received → Preparing
+          → Ready → Served* within a few seconds of each step.
+12. - [ ] Kitchen: tap **Ready** on something by mistake → **Undo** (it works
+          for 90 seconds).
+
+### D. A second order on the same tab
+
+13. - [ ] Guest 2 orders a drink → it shows on the kitchen's *Bar* view, not
+          on *Kitchen*; a bar ticket prints. Guest 1's **Your Tab** shows both orders, both names and
+          one total.
+
+### E. Calling the waiter and paying
+
+14. - [ ] Guest 1, menu home: **Call Waiter** → *Waiter notified*. Waiter
+          phone: chime and vibration, a card *Needs you* → **Done**.
+15. - [ ] Waiter: **Free table** on table 1 → it refuses: *Table 1 still owes
+          … KM*. (Nobody can free a table that has not paid.)
+16. - [ ] Guest 1: **Your Tab** → **Request Bill** → *Bill requested*, then
+          the rating question. Waiter phone: *Wants the bill*.
+17. - [ ] Waiter: **Cash** → *Table 1: take … KM in cash?* → **Yes, … KM
+          received** → *Recorded as paid in cash*.
+18. - [ ] Waiter: **Free table** → **Free table 1?** → **Free table**. Guest
+          phones: their session has ended; to order again they must scan.
+
+### F. A second table, paid on the terminal
+
+19. - [ ] Guest 2 scans **table 2's** QR, orders one thing → the waiter
+          records it with **Terminal** → *Recorded as paid on the terminal*.
+          Every order arrives as *Owes · cash* while online card payment is
+          off; the waiter records how the guest really paid.
+
+### G. A held order (on purpose)
+
+20. - [ ] On a table no staff member has touched yet (e.g. table 3): order
+          over 60 KM in one go. Guest sees *Order received — Your waiter will
+          confirm it in a moment*. Kitchen and waiter: *Needs confirming* with
+          *Large first order*; **nothing prints**.
+21. - [ ] Waiter: **Confirm** → *Table 3 confirmed — sent to the kitchen* →
+          it prints. Kitchen: **Void** → reason "Rehearsal" → **Void order**
+          (so nobody cooks it).
+
+### H. When things go wrong
+
+22. - [ ] Manager: **Service & suggestions** → *Accept orders from guests*
+          off → **Stop orders**. Within a minute the guest's cart says
+          *Ordering is paused*, and **Send order** is greyed out. Switch it
+          back on.
+23. - [ ] Guest phone: Wi-Fi **and** mobile data off → **Send order** →
+          *Your order was not sent. Nothing was charged…* → back online →
+          **Send order** → the kitchen gets it **exactly once**.
+24. - [ ] Kitchen tablet: Wi-Fi off for 30 seconds → *Offline · retrying*.
+          A guest orders meanwhile. Wi-Fi on → **Live**, and the order is
+          there.
+25. - [ ] Printer: switch it off → a guest orders → switch it back on → the
+          ticket comes out **once**. If the kitchen shows *Did not print* or
+          *PRINTER STUCK*, tap **Reprint** / **Retry** (also under Printing →
+          *Print queue*). No ticket lost, none printed twice.
+
+### I. Closing — the manager
+
+26. - [ ] **Orders** → **Mark fiscalized** on one paid order → *Fiscal
+          receipt number* → **Record receipt**. (Practice only: do **not**
+          ring rehearsal orders into the real fiscal device.)
+27. - [ ] **Daily Report**: *Cash* and *POS terminal* each match what the
+          waiter recorded; read *Needs attention before close*.
+28. - [ ] *Close the day*: type the system's own amounts → *Cash balances.*
+          → **Close the day**. (It can be redone; it changes no orders.)
+
+### J. Clean-up — before the first real service
+
+29. - [ ] **Orders** → the red cancel icon on every rehearsal order → reason
+          "Rehearsal" → **Cancel order** (orders already in the kitchen or
+          paid need the manager's account). Cancelled orders leave the sales
+          figures; a paid one shows "needs a refund" — that is expected here.
+30. - [ ] **Tables** → **Free** any table still open.
+31. - [ ] **Service hours** back to the real hours, if you widened them.
+
+### Do not press during the rehearsal
+
+| Button | Why |
+|---|---|
+| QR Codes → **New code** | Kills every printed venue code at once |
+| **Online card payment (Monri)** | Guests are charged for real |
+| Tables → bin icon (**Delete table**) | Ends the session and removes its orders |
+| Waiters → **Remove** | Deletes that waiter's login for good |
+| Menu → **Re-translate All** → **Overwrite all** | Replaces corrected Bosnian and Arabic text |
+| Printing → **New address** / **Remove printer** | The printer stops receiving tickets |
+| Service → **Start measuring at N%** | Hides suggestions from some real tables |
+
+Notes:
+
+&nbsp;
+
+&nbsp;
+
+&nbsp;
 
 ---
 
-## Phase 8 — online card payment (separate, later, blocked)
+## Part 3 — Soft launch (the first 2–3 services)
 
-Do not attempt this until the whole of Phase 7 has been stable for at least a
-week.
+- [ ] One section only, one service. A manager keeps `/kitchen` and the
+      **Daily Report** open throughout.
+- [ ] Before each service: **Tonight**, the **Live** pills, a **Test print**.
+- [ ] Every app order is rung into the restaurant's certified fiscal POS, then
+      **Mark fiscalized** with the receipt number. The accountant confirms
+      this workflow in writing (`docs/fiscalization-workflow.md`). **⚠**
+- [ ] At close: drawer = **Cash**, terminal batch = **POS terminal**, each
+      checked on its own → **Close the day**.
+- [ ] Zero duplicate prints; nothing left in *Needs confirming*; *Needs
+      attention before close* empty.
+- [ ] Write down what staff found confusing and send it to me — fix the
+      wording, not the staff.
 
-- ☐ **⚠** Monri **online** merchant account exists (the physical POS
-  relationship is not sufficient).
-- ☐ **⚠** Online MID/TID issued by the acquiring bank.
-- ☐ **⚠** Card-not-present acquiring agreement signed.
-- ☐ **⚠** Sandbox credentials received.
-- ☐ All 16 cases in `docs/monri-go-live.md` §5 pass and are recorded.
-- ☐ Production credentials, `MONRI_ENVIRONMENT=production`, functions
-  redeployed, callback URL registered.
-- ☐ `VITE_MONRI_ENABLED=true`, site redeployed.
-- ☐ Admin → Service & suggestions → Online card payment **on**.
-- ☐ One real low-value transaction end to end, then refunded, both reconciling
-  correctly.
+## Part 4 — The whole floor
+
+- [ ] All sections live.
+- [ ] Sentry receiving errors and someone reads them; the uptime monitor
+      alerting someone. **⚠**
+- [ ] Week-1 numbers written down as the baseline (`docs/product-metrics.md`).
+- [ ] The routine checks in `docs/operations-runbook.md` §6: every service,
+      every close, weekly, monthly.
+
+## Part 5 — Later, waiting on others
+
+- [ ] **lasoul.net** → Netlify, then one line of code, Search Console, Bing,
+      the Google Business Profile and Instagram (`docs/seo-and-domain.md`).
+      Then print the final QR codes from the admin opened on lasoul.net.
+- [ ] **Monri online card payment** (`docs/monri-go-live.md`): an online
+      merchant account, online MID/TID and a card-not-present agreement from
+      the bank, sandbox credentials; then the two Monri functions redeployed
+      (the prompt is in `docs/lovable-migration-prompt.md`), the 16 sandbox
+      cases, and one real low-value payment and refund. Only after the floor
+      has run well for a week. **⚠**
+- [ ] **Fiscal receipts sent automatically** from the app: the fiscal
+      printer's make and model and its service company's documentation
+      (`docs/fiscalization-bih.md`). **⚠**
+- [ ] **Italia Verde** at `/menu/italiaverde`: its menu, logo, photos,
+      address and hours.
+- [ ] **From the owners:** confirm the hours (11:00–21:00), one business name
+      everywhere, interior photos and a short "who we are".
 
 ---
 
 ## Rollback
 
-Fastest first. Nothing here needs a deploy except where noted.
+Fastest first. None of these needs a code change.
 
 | To stop | Do | Effect |
 |---|---|---|
-| **Online card payments** | Admin → Service & suggestions → off | Immediate. In-flight payments still resolve; no new card orders. Pay-at-table unaffected. |
-| **All guest ordering** | Admin → Service & suggestions → Accept orders → off | Guests see the pause message and are told to ask a waiter. The server refuses orders, so nothing slips through. Existing orders continue normally. |
-| **Suggestions** | Admin → Service & suggestions → off | No suggestion anywhere. Nothing else changes. |
-| **Printing** | Kitchen → printer icon off, or Admin → Printing → disable | Kitchen screen keeps working. |
-| **A bad front-end deploy** | Netlify → Deploys → publish the previous one | ~1 minute. The database is unaffected. |
-| **The whole app** | Netlify → pause the site | Staff take orders on paper. Data already in the database is safe. |
+| **Online card payments** | Service & suggestions → *Online card payment (Monri)* off | Immediate. Payments already in progress still resolve; pay-at-table unaffected |
+| **All guest ordering** | Service & suggestions → *Accept orders from guests* off | Guests see the pause message and ask a waiter; the server refuses orders. Existing orders continue |
+| **A rush** | Service & suggestions → *Kitchen delay notice (minutes)* | Guests are warned it may take longer, and still order. Use before stopping orders |
+| **Suggestions** | Service & suggestions → *Show suggestions to guests* off | No suggestions anywhere |
+| **Printing** | Kitchen → printer icon off, or Printing → *Printing on* off | The kitchen screen keeps working |
+| **A bad website or app update** | Netlify → Deploys → the previous deploy → *Publish deploy* | About a minute; the database is untouched |
 
-### Rolling back a migration
+Emergencies, outage by outage: `docs/operations-runbook.md` §7.
 
-The payment-safety migrations are additive: they add columns, tables, functions
-and one trigger. Nothing is dropped, so a front-end rollback alone is safe and
-is almost always the right move.
+### For a developer: rolling back the order-integrity trigger
 
-If the **trigger** itself must go (it is the only thing that can reject a write
-the old code expected to succeed):
+The payment-safety migrations only add things, so a front-end rollback alone is
+safe and almost always the right move. If the `enforce_order_integrity`
+trigger itself must go (it is the one thing that can refuse a write older code
+expected to succeed — see `docs/order-state-machine.md`):
 
 ```sql
 DROP TRIGGER IF EXISTS enforce_order_integrity ON public.orders;
-```
-
-That restores the old permissive behaviour immediately. Understand what you are
-giving up: illegal transitions and direct writes to money columns become
-possible again. Re-create it with:
-
-```sql
+-- and to restore it:
 CREATE TRIGGER enforce_order_integrity
   BEFORE UPDATE ON public.orders
   FOR EACH ROW EXECUTE FUNCTION public.enforce_order_integrity();
 ```
 
-To revert `guest_place_order` to releasing card orders immediately — **do not
-do this while online card payments are enabled**, it is the exact bug the whole
-branch exists to fix — restore the prior definition from
-`supabase/migrations/20260620180000_printing_tipping_reports.sql`.
-
----
+Without it, illegal status changes and direct writes to money columns become
+possible again. On the live database this goes through Lovable, like any SQL.
 
 ## Definition of done
 
-- Zero unpaid card orders have reached the kitchen.
-- Zero duplicate prints.
-- The cash drawer and the terminal batch match the report, exactly, three
-  services running.
-- Staff can explain what every payment label means without looking it up.
+- Every order reaches the kitchen and the waiter within seconds, and prints
+  once.
+- The cash drawer and the terminal batch match the Daily Report exactly,
+  three services running.
+- Every app order is on the fiscal device, and marked so in the app.
+- Staff can say what every label means without looking it up.
 - A guest can order, pay and get their food without asking anyone how the app
   works.

@@ -391,7 +391,7 @@ const AdminService = () => {
               <Label htmlFor="hold-burst" className="font-sans font-semibold text-sm">New tables at once</Label>
               <p className="text-xs text-muted-foreground font-sans mb-1.5">
                 More than this many tables opening within five minutes of each other, with no staff contact yet,
-                looks like a shared photo of the QR. Default 3. Raise it if you seat big groups at once.
+                looks like a shared photo of the QR. Default 8. Raise it if you seat big groups at once.
               </p>
               <Input
                 id="hold-burst" type="number" inputMode="numeric" min={1} step="1"
