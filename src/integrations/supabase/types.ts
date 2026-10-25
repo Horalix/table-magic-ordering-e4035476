@@ -1142,6 +1142,7 @@ export type Database = {
           recommendations_enabled: boolean
           session_idle_timeout_minutes: number
           social_proof_min_sessions: number
+          stale_order_hours: number
           updated_at: string
           venue_qr_rotated_at: string
           venue_qr_token: string
@@ -1176,6 +1177,7 @@ export type Database = {
           recommendations_enabled?: boolean
           session_idle_timeout_minutes?: number
           social_proof_min_sessions?: number
+          stale_order_hours?: number
           updated_at?: string
           venue_qr_rotated_at?: string
           venue_qr_token?: string
@@ -1210,6 +1212,7 @@ export type Database = {
           recommendations_enabled?: boolean
           session_idle_timeout_minutes?: number
           social_proof_min_sessions?: number
+          stale_order_hours?: number
           updated_at?: string
           venue_qr_rotated_at?: string
           venue_qr_token?: string
@@ -2117,6 +2120,7 @@ export type Database = {
         }
         Returns: Json
       }
+      close_stale_orders: { Args: { _hours?: number }; Returns: Json }
       close_stale_sessions: { Args: never; Returns: number }
       covers_summary: { Args: { _day?: string }; Returns: Json }
       day_reconciliation: { Args: { _day?: string }; Returns: Json }
@@ -2495,6 +2499,19 @@ export type Database = {
           _to: Database["public"]["Enums"]["order_status"]
         }
         Returns: boolean
+      }
+      orders_needing_attention: {
+        Args: { _hours?: number }
+        Returns: {
+          hours_open: number
+          id: string
+          order_code: string
+          payment_status: string
+          problem: string
+          status: Database["public"]["Enums"]["order_status"]
+          table_number: number
+          total: number
+        }[]
       }
       payment_status_rank: { Args: { _status: string }; Returns: number }
       prep_confidence_threshold: { Args: never; Returns: number }
