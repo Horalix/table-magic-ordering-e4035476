@@ -185,5 +185,19 @@ SELECT rewrite, function, found
   SELECT '20261026100100_promotions_ordering.sql:89 (tab, optional)' AS rewrite, 'guest_get_tab' AS function, ((SELECT count(*) FROM regexp_matches(replace(COALESCE((SELECT string_agg(pg_get_functiondef(p.oid), E'\n') FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace WHERE n.nspname = 'public' AND p.proname = 'guest_get_tab'), ''), chr(13) || chr(10), chr(10)), '''notes'',[[:space:]]*oi\.notes,', 'g')) = 1) AS found
   UNION ALL
   SELECT '20261026100000_promotions.sql: new names are free' AS rewrite, 'no live object already uses them' AS function, NOT EXISTS (SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace WHERE n.nspname = 'public' AND p.proname IN ('menu_item_sale_price','menu_item_unit_price','guest_get_combos','admin_save_combo','price_order_lines','guard_order_item_promotion')) AND to_regclass('public.menu_combo_slots') IS NULL AND to_regclass('public.menu_combo_options') IS NULL AND NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND ((table_name = 'menu_items' AND column_name IN ('sale_kind','sale_value','sale_starts_at','sale_ends_at','sale_label','new_until','featured_rank','featured_note','featured_note_bs','featured_note_ar')) OR (table_name = 'order_items' AND column_name IN ('regular_unit_price','components')))) AS found
+  UNION ALL
+  SELECT '20261026120000_cloud_printers.sql' AS rewrite, 'printers is new' AS function, to_regclass('public.printers') IS NULL AS found
+  UNION ALL
+  SELECT '20261026120000_cloud_printers.sql' AS rewrite, 'new function names are free' AS function, NOT EXISTS (SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace WHERE n.nspname = 'public' AND p.proname IN ('printer_ticket_types','cloud_print_candidates','cloud_printer_checkin','cloud_print_claim','cloud_print_report','cloud_printer_test_done','printer_health')) AS found
+  UNION ALL
+  SELECT '20261026120000_cloud_printers.sql' AS rewrite, 'requeue_ticket_print(uuid, text) returns jsonb' AS function, EXISTS (SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace WHERE n.nspname = 'public' AND p.proname = 'requeue_ticket_print' AND pg_get_function_identity_arguments(p.oid) = '_order_id uuid, _ticket_type text' AND pg_get_function_result(p.oid) = 'jsonb') AS found
+  UNION ALL
+  SELECT '20261026120000_cloud_printers.sql' AS rewrite, 'order_ticket_events claim columns' AS function, (SELECT count(*) = 5 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'order_ticket_events' AND column_name IN ('claimed_by_device','claimed_at','print_verified','attempts','last_error')) AS found
+  UNION ALL
+  SELECT '20261026120000_cloud_printers.sql' AS rewrite, 'order_ticket_events status allows claimed' AS function, EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'order_ticket_events_status_check' AND pg_get_constraintdef(oid) LIKE '%claimed%') AS found
+  UNION ALL
+  SELECT '20261026120000_cloud_printers.sql' AS rewrite, 'cloudprnt reads these columns' AS function, (SELECT count(*) = 4 FROM information_schema.columns WHERE table_schema = 'public' AND ((table_name = 'orders' AND column_name IN ('order_code','released_to_kitchen_at')) OR (table_name = 'table_sessions' AND column_name = 'assigned_waiter_id') OR (table_name = 'restaurant_settings' AND column_name = 'print_header'))) AS found
+  UNION ALL
+  SELECT '20261026120000_cloud_printers.sql' AS rewrite, 'helpers it calls exist' AS function, (SELECT count(DISTINCT p.proname) = 3 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace WHERE n.nspname = 'public' AND p.proname IN ('is_staff_member','has_role','write_audit')) AS found
   ) checks
  ORDER BY found, rewrite;
