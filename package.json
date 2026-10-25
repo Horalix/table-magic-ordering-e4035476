@@ -20,7 +20,8 @@
     "verify": "npm run typecheck && npm run lint && npm run test && npm run scan:secrets && npm run build",
     "photos:export": "node scripts/menu-photos.mjs export",
     "photos:import": "node scripts/menu-photos.mjs import",
-    "photos:prompts": "node scripts/photo-prompts.mjs"
+    "photos:prompts": "node scripts/photo-prompts.mjs",
+    "photos:round2": "node scripts/photo-prompts-v2.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

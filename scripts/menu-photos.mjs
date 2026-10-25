@@ -6,10 +6,13 @@
  *                           dish, under assets/menu-photos/originals/, named
  *                           "<NN Category>/<NN Section>/<NNN> <Dish>__<id8>.<ext>",
  *                           plus index.csv and contact sheets.
- *   npm run photos:import   every file under assets/menu-photos/improved/ whose
+ *   npm run photos:import [-- improved-v2]
+ *                           every file under assets/menu-photos/improved/ (or the
+ *                           folder named) whose
  *                           name still ends in "__<id8>" becomes that dish's
  *                           source (scripts/image-sources/<id>.<ext>), then the
- *                           image pipeline rebuilds those dishes.
+ *                           image pipeline rebuilds those dishes. heroes/food|drinks|
+ *                           desserts.* in that folder become the home-screen covers.
  *
  * "Best current photo" is the override in scripts/image-sources/ when there
  * is one (the larger originals recovered from the old site), else the row's
@@ -22,7 +25,7 @@
  */
 import { createClient } from '@supabase/supabase-js';
 import sharp from 'sharp';
-import { mkdir, writeFile, readdir, copyFile, rm } from 'node:fs/promises';
+import { mkdir, writeFile, readdir, rm } from 'node:fs/promises';
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve, join, extname, basename } from 'node:path';
@@ -31,7 +34,6 @@ import { spawnSync } from 'node:child_process';
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const ASSETS = resolve(ROOT, 'assets/menu-photos');
 const ORIGINALS = join(ASSETS, 'originals');
-const IMPROVED = join(ASSETS, 'improved');
 const SOURCES = resolve(ROOT, 'scripts/image-sources');
 const EXTS = ['jpg', 'jpeg', 'png', 'webp'];
 
@@ -105,7 +107,7 @@ async function loadMenu() {
 async function exportPhotos() {
   const { rows, catOrder } = await loadMenu();
   await rm(ORIGINALS, { recursive: true, force: true });
-  await mkdir(IMPROVED, { recursive: true });
+  await mkdir(join(ASSETS, 'improved'), { recursive: true });
   const catIndex = new Map(catOrder.map((c, i) => [c.name, i + 1]));
   const sectionsByCat = new Map();
   for (const r of rows) {
@@ -183,15 +185,35 @@ async function contactSheets(index) {
   }
 }
 
-async function importPhotos() {
-  if (!existsSync(IMPROVED)) { console.log('  Nothing to import: assets/menu-photos/improved/ does not exist.'); return; }
+/** Home-screen category covers: 16:9 at the two widths GuestMenu requests. */
+async function importHeroes(dir) {
+  const heroes = join(dir, 'heroes');
+  if (!existsSync(heroes)) return 0;
+  let n = 0;
+  for (const key of ['food', 'drinks', 'desserts']) {
+    const file = EXTS.map((e) => join(heroes, `${key}.${e}`)).find((x) => existsSync(x));
+    if (!file) continue;
+    for (const w of [640, 1080]) {
+      await sharp(file).rotate().resize(w, Math.round((w * 9) / 16), { fit: 'cover', position: 'centre' })
+        .webp({ quality: 84 }).toFile(resolve(ROOT, 'public/covers', `${key}-${w}.webp`));
+    }
+    n++;
+  }
+  console.log(`  ✓ ${n} home cover(s) → public/covers/`);
+  return n;
+}
+
+async function importPhotos(dirName = 'improved') {
+  const IMPROVED = join(ASSETS, dirName);
+  if (!existsSync(IMPROVED)) { console.log(`  Nothing to import: assets/menu-photos/${dirName}/ does not exist.`); return; }
+  await importHeroes(IMPROVED);
   const { rows } = await loadMenu();
   const byPrefix = new Map(rows.map((r) => [r.id.slice(0, 8), r.id]));
   const files = [];
   const walk = async (d) => {
     for (const e of await readdir(d, { withFileTypes: true })) {
       const p = join(d, e.name);
-      if (e.isDirectory()) await walk(p);
+      if (e.isDirectory()) { if (e.name !== 'heroes' && e.name !== '_review') await walk(p); }
       else if (EXTS.includes(extname(e.name).slice(1).toLowerCase())) files.push(p);
     }
   };
@@ -205,8 +227,9 @@ async function importPhotos() {
     const meta = await sharp(f).metadata();
     if ((meta.width ?? 0) < 1000) { skipped.push(`${basename(f)} (only ${meta.width}px wide; save at least 1024px, 2048 is best)`); continue; }
     for (const e of EXTS) await rm(join(SOURCES, `${id}.${e}`), { force: true });
-    const ext = meta.format === 'jpeg' ? 'jpg' : meta.format;
-    await copyFile(f, join(SOURCES, `${id}.${ext}`));
+    // Image tools hand back 2-3 MB PNGs; the repository keeps a near-lossless
+    // WebP (about a tenth of the size) as the source for the image ladder.
+    await sharp(f).rotate().webp({ quality: 92, smartSubsample: true }).toFile(join(SOURCES, `${id}.webp`));
     done++;
   }
   console.log(`  ✓ ${done} improved photo(s) → scripts/image-sources/`);
@@ -220,5 +243,5 @@ async function importPhotos() {
 
 const cmd = process.argv[2];
 if (cmd === 'export') await exportPhotos();
-else if (cmd === 'import') await importPhotos();
+else if (cmd === 'import') await importPhotos(process.argv[3]);
 else { console.log('  usage: node scripts/menu-photos.mjs export|import'); process.exit(1); }

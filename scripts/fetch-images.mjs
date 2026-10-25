@@ -53,6 +53,14 @@ const WIDTHS = [96, 192, 384, 768, 1152];
 // really 153px tall and stretched; these are cut square at the size a phone
 // actually draws (80-112px boxes at 2x and 3x).
 const SQUARES = [160, 240, 360];
+// How much of a square studio shot a list thumbnail shows (see processRow).
+const THUMB_ZOOM = 0.78;
+const THUMB_ZOOM_EXCEPTIONS = {
+  '5a674711-02e2-416e-99de-7fa1e76003aa': 1, // Breakfast Platter (flat lay)
+  '7382930d-240f-48c4-a3e1-5555e8561e60': 1, // Breakfast Platter for Two (flat lay)
+  'c98d1f5e-bbc2-47c2-b4ab-48ec64383283': 1, // Picnic Box Set (flat lay)
+  '4bdf76b3-b150-46f5-b059-0f228d48c56d': 0.92, // Churros: the long tray needs the width
+};
 // Downscaling softens edges; a light unsharp mask on the small sizes keeps a
 // burger looking like a burger at thumbnail size.
 const SHARPEN = { sigma: 0.6, m1: 0.5, m2: 2.5 };
@@ -158,12 +166,28 @@ async function processRow(row, manifest, counters) {
       }),
     );
 
-    const side = Math.min(srcW, srcH);
+    // Square studio shots (the re-staged photos in scripts/image-sources/)
+    // frame the dish with set dressing in the top corners — right for the
+    // dish sheet, wasted pixels in a 108px list thumbnail, and the same linen
+    // and flowers repeated down a list. Their thumbnails zoom in on the dish:
+    // a centred box of THUMB_ZOOM of the frame, sitting a little low because
+    // the props are at the top. Flat lays fill the frame and are left alone.
+    const studio = override && srcW >= 1000 && Math.abs(srcW - srcH) / srcW < 0.03;
+    const zoom = studio ? (THUMB_ZOOM_EXCEPTIONS[id] ?? THUMB_ZOOM) : 1;
+    let thumbSource = input;
+    if (zoom < 1) {
+      const box = Math.round(Math.min(srcW, srcH) * zoom);
+      const left = Math.round((srcW - box) / 2);
+      const top = Math.min(srcH - box, Math.max(0, Math.round(srcH * 0.56 - box / 2)));
+      thumbSource = await sharp(input).rotate().extract({ left, top, width: box, height: box }).toBuffer();
+    }
+
+    const side = Math.round(Math.min(srcW, srcH) * zoom);
     const squares = SQUARES.filter((sq) => sq <= side);
     if (squares.length === 0) squares.push(side);
     await Promise.all(
       squares.map((sq) =>
-        sharp(input)
+        sharp(thumbSource)
           .rotate()
           .resize(sq, sq, { fit: 'cover', position: sharp.strategy.attention })
           .sharpen(SHARPEN)
