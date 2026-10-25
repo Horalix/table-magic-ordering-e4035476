@@ -20,7 +20,7 @@ import { createTestDatabase, migrationFiles } from '../../scripts/db-harness.mjs
 import { HAND_OVER } from './harness/hand-over';
 
 // The first file not yet applied on production.
-const FIRST_PENDING = '20261024130000';
+const FIRST_PENDING = '20261027090000';
 
 describe('migration privileges', () => {
   it('applies every pending migration as an owner without superuser rights', async () => {

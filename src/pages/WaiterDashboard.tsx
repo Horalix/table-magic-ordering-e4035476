@@ -33,7 +33,7 @@ import { formatDuration, formatMinutes, useElapsed, useElapsedMinutes, waitBg, s
 import {
   canTakePayment, closeTableSession, describePaymentResult, km, recordTablePayment,
   resolveBillRequest as rpcResolveBillRequest, resolveWaiterCall as rpcResolveWaiterCall,
-  updateOrderStatus as rpcUpdateOrderStatus, type TablePaymentMethod, type TablePaymentResult,
+  takeTable, updateOrderStatus as rpcUpdateOrderStatus, type TablePaymentMethod, type TablePaymentResult,
 } from '@/lib/staff-api';
 import {
   useCoalesced, useLatestRequest, useStaffRealtime, useStaffRealtimeEvent, useStaffRefresh,
@@ -158,7 +158,14 @@ const WaiterDashboard = () => {
     }
 
     const activeSessions = (mine.data ?? []) as WaiterSession[];
-    const sessionIds = activeSessions.map((session) => session.id);
+    const freeSessions = (free.data ?? []) as WaiterSession[];
+    /*
+     * Mine AND nobody's. A table outside the day's rota used to be silent on
+     * every phone — its call, its bill request, its plates on the pass — and
+     * only the floor monitor showed them. Everyone sees those now, with a
+     * one-tap "Take table" (staff_take_table).
+     */
+    const sessionIds = [...activeSessions, ...freeSessions].map((session) => session.id);
 
     const empty = { data: [], error: null };
     const [ord, calls, bills] = sessionIds.length > 0
@@ -196,7 +203,7 @@ const WaiterDashboard = () => {
 
     setStale(false);
     setTables(activeSessions);
-    setUnassigned((free.data ?? []) as WaiterSession[]);
+    setUnassigned(freeSessions);
     setOrders((ord.data ?? []) as WaiterOrder[]);
     setWaiterCalls((calls.data ?? []) as FloorAlert[]);
     setBillRequests((bills.data ?? []) as FloorAlert[]);
@@ -354,6 +361,18 @@ const WaiterDashboard = () => {
     }
   });
 
+  /** Make a table nobody has this waiter's. */
+  const take = (sessionId: string, tableNumber: number | string) => once(`take:${sessionId}`, async () => {
+    try {
+      const result = await takeTable(sessionId);
+      if (result.taken) toast.success(`Table ${tableNumber} is yours`);
+      else if (result.reason === 'already_taken') toast.info(`${result.waiter ?? 'Someone'} already has table ${tableNumber}`);
+      else toast.error(`Table ${tableNumber} has closed`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Could not take the table');
+    }
+  });
+
   const logout = async () => {
     await supabase.auth.signOut();
     navigate('/waiter/login');
@@ -366,6 +385,19 @@ const WaiterDashboard = () => {
     for (const o of orders) (map[o.table_session_id] ??= []).push(o);
     return map;
   }, [orders]);
+
+  const unassignedIds = useMemo(() => new Set(unassigned.map((s) => s.id)), [unassigned]);
+
+  /** On an alert from a table nobody has: say so, and offer to take it. */
+  const takeStrip = (sessionId: string, tableNumber: number | string) => (
+    unassignedIds.has(sessionId) ? (
+      <TakeTableStrip
+        tableNumber={tableNumber}
+        busy={busy.has(`take:${sessionId}`)}
+        onTake={() => { void take(sessionId, tableNumber); }}
+      />
+    ) : null
+  );
 
   const owedFor = useCallback((sessionId: string) => {
     const due = (bySession[sessionId] ?? []).filter(canTakePayment);
@@ -604,6 +636,7 @@ const WaiterDashboard = () => {
                       onUpdate={updateOrderStatus}
                       highlight
                     />
+                    {takeStrip(order.table_session_id, tableOf(order))}
                   </motion.div>
                 ))}
                 {waiterCalls.map((call) => (
@@ -618,7 +651,9 @@ const WaiterDashboard = () => {
                     doneLabel="Done"
                     busy={busy.has(`call:${call.id}`)}
                     onDone={() => { void resolveCall(call.id); }}
-                  />
+                  >
+                    {takeStrip(call.table_session_id, tableOf(call))}
+                  </AlertCard>
                 ))}
                 {billRequests.map((bill) => (
                   <AlertCard
@@ -633,6 +668,7 @@ const WaiterDashboard = () => {
                     busy={busy.has(`bill:${bill.id}`)}
                     onDone={() => { void resolveBill(bill.id); }}
                   >
+                    {takeStrip(bill.table_session_id, tableOf(bill))}
                     {settleRow(bill.table_session_id, tableOf(bill), true)}
                   </AlertCard>
                 ))}
@@ -664,6 +700,25 @@ const WaiterDashboard = () => {
             </div>
           )}
         </section>
+
+        {unassigned.length > 0 && (
+          <section>
+            <SectionTitle icon={<UserX className="w-4 h-4" />} title="No waiter yet" count={unassigned.length} />
+            <p className="text-sm text-muted-foreground font-sans mb-2">
+              Seated, but on nobody&rsquo;s section. Their calls and plates show above for everyone — take a table to make it yours.
+            </p>
+            <ul className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2">
+              {unassigned.map((session) => (
+                <UnassignedRow
+                  key={session.id}
+                  session={session}
+                  busy={busy.has(`take:${session.id}`)}
+                  onTake={() => { void take(session.id, session.tables?.table_number ?? '?'); }}
+                />
+              ))}
+            </ul>
+          </section>
+        )}
 
         {/* Collapsed by default: during service the table list is reference,
             not a to-do list, and it used to push the alerts off the screen. */}
@@ -700,18 +755,6 @@ const WaiterDashboard = () => {
             )}
           </CollapsibleContent>
         </Collapsible>
-
-        {unassigned.length > 0 && (
-          <section>
-            <SectionTitle icon={<UserX className="w-4 h-4" />} title="Unassigned tables" count={unassigned.length} />
-            <p className="text-sm text-muted-foreground font-sans mb-2">
-              Seated, but no waiter has them. Tell your manager, or look after them.
-            </p>
-            <ul className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2">
-              {unassigned.map((session) => <UnassignedRow key={session.id} session={session} />)}
-            </ul>
-          </section>
-        )}
       </main>
 
       <FreeTableDialog
@@ -900,16 +943,30 @@ const TableCard = ({
   );
 };
 
-const UnassignedRow = ({ session }: { session: WaiterSession }) => {
+const UnassignedRow = ({ session, busy, onTake }: { session: WaiterSession; busy: boolean; onTake: () => void }) => {
   const ms = useElapsed(session.opened_at);
   return (
-    <li className="rounded-lg border border-border px-3 min-h-[44px] flex items-center justify-between gap-2 text-sm">
-      <span className="font-serif text-lg font-bold">T{session.tables?.table_number ?? '?'}</span>
-      <span className="text-muted-foreground truncate">{session.guest_name ?? ''}</span>
-      <span className={`text-xs px-2 py-0.5 rounded-full border tabular-nums ${seatedBg(ms)}`}>{formatDuration(ms)}</span>
+    <li className="rounded-lg border border-border ps-3 pe-1.5 py-1.5 min-h-[56px] flex items-center gap-2 text-sm">
+      <span className="font-serif text-lg font-bold shrink-0">T{session.tables?.table_number ?? '?'}</span>
+      <span className="text-muted-foreground truncate flex-1">{session.guest_name ?? ''}</span>
+      <span className={`text-xs px-2 py-0.5 rounded-full border tabular-nums shrink-0 ${seatedBg(ms)}`}>{formatDuration(ms)}</span>
+      <Button className="tap-sm min-h-[44px] shrink-0 text-sm font-semibold" disabled={busy} onClick={onTake}>
+        Take
+      </Button>
     </li>
   );
 };
+
+/** Under an alert from a table nobody has: whose it is, and the tap that makes it yours. */
+const TakeTableStrip = ({ tableNumber, busy, onTake }: { tableNumber: number | string; busy: boolean; onTake: () => void }) => (
+  <div className="flex items-center gap-2 rounded-lg bg-muted/60 ps-3 pe-1.5 py-1.5 mt-2">
+    <UserX className="w-4 h-4 text-muted-foreground shrink-0" aria-hidden />
+    <span className="text-sm text-muted-foreground flex-1">No waiter on table {tableNumber}</span>
+    <Button className="tap-sm min-h-[44px] shrink-0 text-sm font-semibold" disabled={busy} onClick={onTake}>
+      Take table
+    </Button>
+  </div>
+);
 
 const STATUS_META: Partial<Record<OrderStatus, { dot: string }>> = {
   pending: { dot: 'bg-muted-foreground' },

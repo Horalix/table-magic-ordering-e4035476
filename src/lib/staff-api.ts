@@ -209,6 +209,20 @@ export const closeTableSession = async (sessionId: string): Promise<CloseSession
   return { ...result, outstanding: Number(result?.outstanding ?? 0) };
 };
 
+export interface TakeTableResult {
+  taken: boolean;
+  reason?: 'not_open' | 'already_taken';
+  /** Who has it, when someone got there first. */
+  waiter?: string | null;
+}
+
+/**
+ * Take a table nobody has: it becomes the calling waiter's. Never takes one
+ * from a colleague — when someone got there first, the answer says who.
+ */
+export const takeTable = (sessionId: string) =>
+  rpc<TakeTableResult>('staff_take_table', { _session_id: sessionId });
+
 /** "24.00 KM" — one formatting for money on every staff screen. */
 export const km = (amount: number | string | null | undefined) => `${Number(amount ?? 0).toFixed(2)} KM`;
 

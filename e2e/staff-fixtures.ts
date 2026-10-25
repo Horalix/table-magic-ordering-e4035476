@@ -333,6 +333,11 @@ export async function installStaffStubs(page: Page, state: StaffState) {
         return json(route, { resolved: true, closed: false, outstanding: 0 });
       }
 
+      case 'staff_take_table': {
+        state.rpcCalls.push({ fn, body });
+        return json(route, { taken: true });
+      }
+
       case 'staff_resolve_waiter_call': {
         state.rpcCalls.push({ fn, body });
         state.waiterCalls = state.waiterCalls.filter((c) => c.id !== body._call_id);

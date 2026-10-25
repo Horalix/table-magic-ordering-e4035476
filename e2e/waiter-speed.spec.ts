@@ -42,6 +42,25 @@ test.describe('what needs me now', () => {
     expect(order.map((t) => t.split(' ·')[0].trim())).toEqual(['Ready to run', 'Needs you', 'Wants the bill']);
   });
 
+  // A table on nobody's section used to be silent on every phone.
+  test('a call from a table with no waiter reaches everyone, and one tap takes the table', async ({ staff, page }) => {
+    await asMarko(page);
+    await page.route('**/rest/v1/table_sessions**', (route) => route.fulfill(json(
+      route.request().url().includes('assigned_waiter_id=is.null')
+        ? [{ id: 'session-9', opened_at: iso(5), guest_name: 'Lejla', table_id: 't9', tables: { table_number: 9, section_id: null } }]
+        : [],
+    )));
+    staff.waiterCalls = [{ id: 'c9', status: 'pending', created_at: iso(1), table_session_id: 'session-9', table_sessions: { tables: { table_number: 9 } } }];
+    await page.goto('/waiter');
+    const list = page.locator('section').filter({ hasText: 'Attention needed' });
+    await expect(list.getByText('Table 9', { exact: true })).toBeVisible();
+    await expect(list.getByText('No waiter on table 9')).toBeVisible();
+    await list.getByRole('button', { name: 'Take table' }).click();
+    await expect.poll(() => staff.rpcCalls.filter((c) => c.fn === 'staff_take_table').map((c) => c.body))
+      .toEqual([{ _session_id: 'session-9' }]);
+    await expect(page.getByText('Table 9 is yours')).toBeVisible();
+  });
+
   test('marking plates served is one tap', async ({ staff, page }) => {
     staff.orders = [anOrder({ id: 'w1', status: 'ready', table_session_id: 'session-1', table_sessions: t7 })];
     await asMarko(page);
