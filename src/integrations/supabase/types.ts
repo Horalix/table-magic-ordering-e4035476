@@ -1062,6 +1062,7 @@ export type Database = {
       }
       restaurant_settings: {
         Row: {
+          after_meal_prompt_minutes: number
           id: number
           kitchen_capacity_minutes: number
           kitchen_delay_minutes: number
@@ -1093,6 +1094,7 @@ export type Database = {
           venue_qr_token: string
         }
         Insert: {
+          after_meal_prompt_minutes?: number
           id?: number
           kitchen_capacity_minutes?: number
           kitchen_delay_minutes?: number
@@ -1124,6 +1126,7 @@ export type Database = {
           venue_qr_token?: string
         }
         Update: {
+          after_meal_prompt_minutes?: number
           id?: number
           kitchen_capacity_minutes?: number
           kitchen_delay_minutes?: number
@@ -1938,6 +1941,7 @@ export type Database = {
         Args: { _pin: string; _waiter_id: string }
         Returns: undefined
       }
+      after_meal_moment: { Args: { _session_id: string }; Returns: boolean }
       analytics_event_allowed: { Args: { _event: string }; Returns: boolean }
       assert_guest_session: {
         Args: { _session_id: string; _session_token: string }
@@ -2413,6 +2417,10 @@ export type Database = {
         Args: { _order_id: string }
         Returns: boolean
       }
+      repeat_blocked: {
+        Args: { _item_id: string; _session_id: string }
+        Returns: boolean
+      }
       report_ticket_print: {
         Args: {
           _error?: string
@@ -2459,6 +2467,19 @@ export type Database = {
       rotate_table_qr_token: { Args: { _table_id: string }; Returns: string }
       rotate_venue_qr_token: { Args: never; Returns: string }
       sales_analytics: { Args: { _from?: string; _to?: string }; Returns: Json }
+      session_context: {
+        Args: { _session_id: string }
+        Returns: {
+          avg_line_price: number
+          covers: number
+          has_served_main: boolean
+          line_count: number
+          minutes_since_served: number
+          ordered_item_ids: string[]
+          running_total: number
+          served_item_ids: string[]
+        }[]
+      }
       session_idle_timeout: { Args: never; Returns: number }
       set_order_fiscalization: {
         Args: {
