@@ -36,6 +36,13 @@
       "when": 1792941735344,
       "tag": "0004_bandit_readiness",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1792941783686,
+      "tag": "0005_thompson_sampling",
+      "breakpoints": true
     }
   ]
 }
