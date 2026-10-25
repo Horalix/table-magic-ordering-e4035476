@@ -24,20 +24,49 @@
     <link rel="preconnect" href="https://wsrv.nl" crossorigin />
     <link rel="dns-prefetch" href="//wsrv.nl" />
     <link rel="dns-prefetch" href="//menu.lasoul.net" />
-    <title>La Soul — Order from your table</title>
-    <meta name="description" content="La Soul · café & burger boutique — browse the menu and order right from your table." />
+    <!--
+      The website's hero photograph, requested while the app's code is still
+      downloading — and only on `/`, so a guest scanning a table code is never
+      sent it. The media queries and widths must match SiteHero.tsx and
+      scripts/site-images.mjs, or the browser fetches the hero twice.
+    -->
+    <script>
+      (function () {
+        if (location.pathname !== '/') return;
+        function preload(name, widths, media) {
+          var l = document.createElement('link');
+          l.rel = 'preload';
+          l.as = 'image';
+          l.type = 'image/webp';
+          l.media = media;
+          l.setAttribute('imagesrcset', widths.map(function (w) { return '/site/' + name + '-' + w + '.webp ' + w + 'w'; }).join(', '));
+          l.setAttribute('imagesizes', '100vw');
+          l.setAttribute('fetchpriority', 'high');
+          document.head.appendChild(l);
+        }
+        preload('hero-wide', [960, 1280, 1600, 2048], '(min-width: 640px)');
+        preload('hero-tall', [480, 720, 960, 1152], '(max-width: 639.98px)');
+      })();
+    </script>
+    <!-- Defaults for crawlers and link previews that do not run JavaScript;
+         the website sets absolute URLs and structured data when it loads. -->
+    <title>La Soul — Cake &amp; Burger Boutique in Sarajevo</title>
+    <meta name="description" content="A fully halal, alcohol-free café in Sarajevo: burgers, cakes and coffee, made fresh. See the menu and order from your table." />
     <meta name="author" content="La Soul" />
 
     <meta property="og:type" content="website" />
-    <meta property="og:image" content="/icons/icon-512.png">
+    <meta property="og:site_name" content="La Soul" />
+    <meta property="og:image" content="/site/og.jpg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:title" content="La Soul — Cake &amp; Burger Boutique in Sarajevo" />
+    <meta property="og:description" content="A fully halal, alcohol-free café in Sarajevo: burgers, cakes and coffee, made fresh. See the menu and order from your table." />
 
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:image" content="/icons/icon-512.png">
-    <meta property="og:title" content="La Soul">
-  <meta name="twitter:title" content="La Soul">
-  <meta property="og:description" content="Mobile ordering menu">
-  <meta name="twitter:description" content="Mobile ordering menu">
-</head>
+    <meta name="twitter:image" content="/site/og.jpg" />
+    <meta name="twitter:title" content="La Soul — Cake &amp; Burger Boutique in Sarajevo" />
+    <meta name="twitter:description" content="A fully halal, alcohol-free café in Sarajevo: burgers, cakes and coffee, made fresh. See the menu and order from your table." />
+  </head>
 
   <body>
     <div id="root"></div>

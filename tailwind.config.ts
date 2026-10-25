@@ -3,7 +3,15 @@ import tailwindcssAnimate from "tailwindcss-animate";
 
 export default {
   darkMode: ["class"],
-  content: ["./pages/**/*.{ts,tsx}", "./components/**/*.{ts,tsx}", "./app/**/*.{ts,tsx}", "./src/**/*.{ts,tsx}"],
+  /*
+   * The public website's own utilities are generated into its lazily loaded
+   * stylesheet instead (tailwind.site.config.ts via src/pages/site/site.css),
+   * so a guest opening the menu downloads none of them.
+   */
+  content: [
+    "./pages/**/*.{ts,tsx}", "./components/**/*.{ts,tsx}", "./app/**/*.{ts,tsx}", "./src/**/*.{ts,tsx}",
+    "!./src/components/site/**", "!./src/pages/site/**",
+  ],
   prefix: "",
   theme: {
     container: {
@@ -65,6 +73,21 @@ export default {
         "cream-dark": "hsl(var(--cream-dark))",
         charcoal: "hsl(var(--charcoal))",
         "hero-sage": "hsl(var(--hero-sage))",
+        /*
+         * The public website's palette (src/pages/site), straight from the
+         * brand: cream ground, forest headings, sage accent, warm grey text.
+         * `sage-deep` is the sage darkened to 5:1 on cream, for small text.
+         */
+        ls: {
+          cream: "#F7F4EC",
+          paper: "#FBF9F4",
+          sand: "#EFE9DD",
+          forest: "#232E28",
+          "forest-soft": "#2E3B34",
+          sage: "#7E9B79",
+          "sage-deep": "#56704F",
+          grey: "#5B6158",
+        },
         sidebar: {
           DEFAULT: "hsl(var(--sidebar-background))",
           foreground: "hsl(var(--sidebar-foreground))",

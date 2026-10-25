@@ -12,6 +12,8 @@ import { menuBase, venueBySlug } from "./lib/venues";
 import { AppUpdater } from "./lib/app-update";
 
 // Code-split route bundles so guests, staff, and admin screens load only when needed.
+// The website at / is a chunk of its own: a guest scanning a table code never downloads it.
+const SiteHome = lazy(() => import("./pages/site/SiteHome"));
 const GuestMenu = lazy(() => import("./pages/GuestMenu"));
 const CategoryPage = lazy(() => import("./pages/CategoryPage"));
 const CartPage = lazy(() => import("./pages/CartPage"));
@@ -117,8 +119,10 @@ const App = () => (
         </Suspense>
         <Suspense fallback={<RouteFallback />}>
           <Routes>
+            {/* The website (lasoul.net). No page transition: its hero is the
+                page's largest paint and should not wait for a fade. */}
+            <Route path="/" element={<SiteHome />} />
             {/* Guest routes wrapped in soft page transition. */}
-            <Route path="/" element={<PageTransition><GuestMenu /></PageTransition>} />
             <Route path="/menu" element={<MenuRedirect />} />
             <Route path="/menu/:venue" element={<VenueMenu />} />
             <Route path="/menu/:venue/:type" element={<VenueCategory />} />
