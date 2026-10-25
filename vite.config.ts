@@ -3,6 +3,7 @@ import react from "@vitejs/plugin-react-swc";
 import path from "path";
 import { componentTagger } from "lovable-tagger";
 import { VitePWA } from "vite-plugin-pwa";
+import { seoPrerender } from "./scripts/seo-prerender";
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({
@@ -16,6 +17,8 @@ export default defineConfig(({ mode }) => ({
   plugins: [
     react(),
     mode === "development" && componentTagger(),
+    // Real HTML for crawlers that run no JavaScript, robots.txt, sitemap.xml, llms.txt.
+    seoPrerender(),
     VitePWA({
       // Registered and updated by src/lib/app-update.ts, which applies a new
       // version at a safe moment instead of leaving the old one on screen.

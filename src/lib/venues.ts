@@ -10,9 +10,21 @@
  * Facts the website shows publicly are kept here, not invented: a field that
  * is not known yet is null and its part of the site stays hidden.
  */
+export type Weekday = 'Monday' | 'Tuesday' | 'Wednesday' | 'Thursday' | 'Friday' | 'Saturday' | 'Sunday';
+export const EVERY_DAY: Weekday[] = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+
+/** One run of opening hours: these days, from `opens` to `closes` (24-hour, local time). */
+export interface OpeningHours {
+  days: Weekday[];
+  opens: string;
+  closes: string;
+}
+
 export interface Venue {
   slug: string;
   name: string;
+  /** Other names people and maps know it by — the Google Maps listing, the old site. */
+  alternateNames: string[];
   /** Shown under the name, e.g. on the website hero. */
   tagline: string;
   phone: string;
@@ -20,28 +32,41 @@ export interface Venue {
   phoneHref: string;
   address: string;
   city: string;
-  /** Opens directions in the guest's maps app. */
+  /** ISO 3166-1 alpha-2. */
+  country: string;
+  /** The pin on its Google Maps listing. */
+  geo: { lat: number; lng: number } | null;
+  /** Opens directions in the guest's maps app — the venue's own listing. */
   mapsUrl: string;
-  /** e.g. [{ days: 'Mon–Sun', hours: '08:00–23:00' }]; null until confirmed. */
-  hours: { days: string; hours: string }[] | null;
+  /** Null until confirmed; the website then shows none. */
+  hours: OpeningHours[] | null;
   instagram: string | null;
   facebook: string | null;
   /** Live: has a menu and takes orders. Not live: the address answers "not found". */
   live: boolean;
 }
 
+/*
+ * La Soul's facts are from its own site (lasoul.net, October 2026) and its
+ * Google Maps listing, "La Soul Cafe & Burger Boutique": hours 11:00–21:00,
+ * Instagram @lasoul.bih, the pin below. Change them here and the website,
+ * its structured data, the sitemap and llms.txt all follow.
+ */
 export const VENUES: Record<string, Venue> = {
   lasoul: {
     slug: 'lasoul',
     name: 'La Soul',
+    alternateNames: ['La Soul Cafe & Burger Boutique', 'La Soul Cake & Burger Boutique', 'LASOUL'],
     tagline: 'Cake & Burger Boutique',
     phone: '+387 33 877 779',
     phoneHref: '+38733877779',
     address: 'Butmirska cesta 16A | 16B',
     city: 'Sarajevo',
-    mapsUrl: 'https://www.google.com/maps/search/?api=1&query=La+Soul+Butmirska+cesta+16+Sarajevo',
-    hours: null,
-    instagram: null,
+    country: 'BA',
+    geo: { lat: 43.827548, lng: 18.3103156 },
+    mapsUrl: 'https://maps.app.goo.gl/UrsoG5vew2FfwMt66',
+    hours: [{ days: EVERY_DAY, opens: '11:00', closes: '21:00' }],
+    instagram: 'https://www.instagram.com/lasoul.bih',
     facebook: null,
     live: true,
   },

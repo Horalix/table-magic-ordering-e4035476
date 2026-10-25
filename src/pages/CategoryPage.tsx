@@ -24,6 +24,8 @@ import { sectionSlug } from '@/lib/menu-sections';
 import { PriceTag, SaleBadge, NewBadge, ComboBadge } from '@/components/guest/PriceTag';
 import { useComboMap } from '@/lib/promotions-api';
 import { menuBase, menuHome } from '@/lib/venues';
+import { usePageMeta } from '@/lib/seo/page-meta';
+import { siteT } from '@/lib/site-copy';
 import {
   comboRegularPrice, comboUnitPrice, fixedChoices, isNew, missingSlots, nextPriceChange, rememberPrices, saleView, type ComboDef,
 } from '@/lib/promotions';
@@ -480,6 +482,31 @@ const CategoryPage = () => {
       setSelectedItem(item);
     });
   };
+
+  // ?dish=<id>: a dish's own page (/menu/<venue>/dish/<slug>) sends people
+  // here; open that dish once the menu has loaded. Once only, so closing it
+  // stays closed.
+  const dishParam = searchParams.get('dish');
+  const dishOpened = useRef(false);
+  useEffect(() => {
+    if (!dishParam || dishOpened.current) return;
+    const item = allItems.find((i) => i.id === dishParam);
+    if (!item) return;
+    dishOpened.current = true;
+    openItem(item);
+    // openItem is a fresh function each render; the dish and the items decide.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dishParam, allItems]);
+
+  // What this page says about itself to search engines, in the guest's language;
+  // the prerendered page for the same address says the same (scripts/seo-prerender.ts).
+  const categoryLabel = category ? getLocalizedName(category, locale) : (categoryName ?? '');
+  usePageMeta({
+    title: siteT('seo_category_title', locale, { category: categoryLabel }),
+    description: siteT('seo_category_description', locale, { category: categoryLabel }),
+    path: `${menuBase()}/${type ?? ''}`,
+    locale,
+  });
 
   const closeItem = () => {
     setSelectedItem(null);

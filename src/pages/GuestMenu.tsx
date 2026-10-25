@@ -19,6 +19,9 @@ import { useSessionHeartbeat } from '@/hooks/useSessionHeartbeat';
 import { useSessionGuard } from '@/hooks/useSessionGuard';
 import { staggerContainer, fadeUp, duration, easeEnter, PRESS_SCALE } from '@/lib/motion';
 import { menuHref } from '@/lib/menu-sections';
+import { menuBase } from '@/lib/venues';
+import { usePageMeta } from '@/lib/seo/page-meta';
+import { siteT } from '@/lib/site-copy';
 import InstallPrompt from '@/components/guest/InstallPrompt';
 import RecentOrdersRow from '@/components/guest/RecentOrdersRow';
 import MenuSearch from '@/components/guest/MenuSearch';
@@ -57,6 +60,14 @@ const GuestMenu = () => {
   const [searchParams] = useSearchParams();
   const t = useT();
   const locale = useLanguageStore((s) => s.locale);
+  // Search engines: the same title and description the prerendered page for
+  // this address carries (scripts/seo-prerender.ts), in the guest's language.
+  usePageMeta({
+    title: siteT('seo_menu_title', locale),
+    description: siteT('seo_menu_description', locale),
+    path: menuBase(),
+    locale,
+  });
   // A live session is the store's, not the URL's.
   //
   // The PWA start_url is /menu with no query string, and any reload or shared

@@ -14,6 +14,7 @@ import { AppUpdater } from "./lib/app-update";
 // Code-split route bundles so guests, staff, and admin screens load only when needed.
 // The website at / is a chunk of its own: a guest scanning a table code never downloads it.
 const SiteHome = lazy(() => import("./pages/site/SiteHome"));
+const DishLink = lazy(() => import("./pages/DishLink"));
 const GuestMenu = lazy(() => import("./pages/GuestMenu"));
 const CategoryPage = lazy(() => import("./pages/CategoryPage"));
 const CartPage = lazy(() => import("./pages/CartPage"));
@@ -122,10 +123,13 @@ const App = () => (
             {/* The website (lasoul.net). No page transition: its hero is the
                 page's largest paint and should not wait for a fade. */}
             <Route path="/" element={<SiteHome />} />
+            <Route path="/bs" element={<SiteHome locale="bs" />} />
+            <Route path="/ar" element={<SiteHome locale="ar" />} />
             {/* Guest routes wrapped in soft page transition. */}
             <Route path="/menu" element={<MenuRedirect />} />
             <Route path="/menu/:venue" element={<VenueMenu />} />
             <Route path="/menu/:venue/:type" element={<VenueCategory />} />
+            <Route path="/menu/:venue/dish/:dishSlug" element={<DishLink />} />
             <Route path="/cart" element={<PageTransition><CartPage /></PageTransition>} />
             <Route path="/tab" element={<PageTransition><RunningTabPage /></PageTransition>} />
             <Route path="/table/:tableNumber" element={<TableEntry />} />

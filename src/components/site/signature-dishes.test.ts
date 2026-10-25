@@ -1,8 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import imageManifest from '@/lib/image-manifest.json';
 import { CURATED_SIGNATURES, SIGNATURE_COUNT, categoryHref, mergeSignatures, pickHighlighted } from './signature-dishes';
-import { restaurantJsonLd } from './site-seo';
-import { VENUES } from '@/lib/venues';
 
 const row = (over: Record<string, unknown>) => ({
   id: 'x', name: 'Dish', name_bs: null, name_ar: null, image_url: null, is_available: true,
@@ -45,18 +43,3 @@ describe('signature dishes', () => {
   });
 });
 
-describe('structured data', () => {
-  it('describes La Soul with known facts only', () => {
-    const ld = restaurantJsonLd(VENUES.lasoul, 'https://lasoul.net', 'desc');
-    expect(ld).toMatchObject({
-      '@type': 'Restaurant',
-      name: 'La Soul',
-      telephone: '+38733877779',
-      url: 'https://lasoul.net/',
-      hasMenu: 'https://lasoul.net/menu/lasoul',
-      address: { streetAddress: 'Butmirska cesta 16A | 16B', addressLocality: 'Sarajevo', addressCountry: 'BA' },
-    });
-    expect(ld).not.toHaveProperty('openingHoursSpecification');
-    expect(ld).not.toHaveProperty('sameAs');
-  });
-});

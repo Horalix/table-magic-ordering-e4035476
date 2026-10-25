@@ -27,4 +27,13 @@
 /food/fries.html               /menu/lasoul/food?section=fries            301
 /food/kidsMenu.html            /menu/lasoul/food?section=kids-menu        301
 
+# The old lasoul.net, another developer’s site that this app replaces. Its
+# pages were /en/home, /bs/home and /ar/home; links and search results to
+# them carry over to the new pages in the same language. Exact paths only:
+# /bs and /ar are now this site’s own Bosnian and Arabic pages.
+/en/home                       /                                          301
+/en                            /                                          301
+/bs/home                       /bs                                        301
+/ar/home                       /ar                                        301
+
 /* /index.html 200

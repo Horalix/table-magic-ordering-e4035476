@@ -1,6 +1,7 @@
 import { Clock, Facebook, Instagram, MapPin, Navigation, Phone } from 'lucide-react';
 import { useSiteT } from '@/lib/site-i18n';
 import type { Venue } from '@/lib/venues';
+import { hoursDays } from '@/lib/seo/structured-data';
 import Reveal from './Reveal';
 import SiteImage from './SiteImage';
 import { Container, SectionHeading } from './SiteSection';
@@ -11,7 +12,7 @@ import { Container, SectionHeading } from './SiteSection';
  * never a "TBD" or an invented time.
  */
 const SiteVisit = ({ venue }: { venue: Venue }) => {
-  const { st } = useSiteT();
+  const { st, locale } = useSiteT();
   const socials = [
     venue.instagram && { href: venue.instagram, label: 'Instagram', icon: Instagram },
     venue.facebook && { href: venue.facebook, label: 'Facebook', icon: Facebook },
@@ -49,9 +50,9 @@ const SiteVisit = ({ venue }: { venue: Venue }) => {
                   <dd className="w-full">
                     <ul className="space-y-1 text-[16px] text-ls-forest">
                       {venue.hours.map((h) => (
-                        <li key={h.days} className="flex justify-between gap-6">
-                          <span>{h.days}</span>
-                          <span dir="ltr" className="tabular-nums text-ls-grey">{h.hours}</span>
+                        <li key={h.days.join()} className="flex justify-between gap-6">
+                          <span>{hoursDays(h, locale)}</span>
+                          <span dir="ltr" className="tabular-nums text-ls-grey">{h.opens}–{h.closes}</span>
                         </li>
                       ))}
                     </ul>
