@@ -9,7 +9,7 @@ import { Switch } from '@/components/ui/switch';
 import SmartImage from '@/components/ui/SmartImage';
 import { ChefHat, CupSoda, Loader2, Upload, X } from 'lucide-react';
 import ComboBuilder from '@/components/admin/ComboBuilder';
-import { fetchCombos } from '@/lib/promotions-api';
+import { fetchCombos, type PromoColumns } from '@/lib/promotions-api';
 import { SALE_LABELS, SALE_LABEL_NAMES } from '@/lib/promotions';
 import {
   defaultNewUntil, emptySale, saleColumns, saleDraftFromRow, saleEndPresets, salePreview, slotsFromCombo,
@@ -20,7 +20,7 @@ import { DIET_TAGS, getItemTags } from '@/lib/dietary';
 import { useT } from '@/lib/i18n';
 import type { Database } from '@/integrations/supabase/types';
 
-type MenuItemRow = Database['public']['Tables']['menu_items']['Row'];
+type MenuItemRow = Database['public']['Tables']['menu_items']['Row'] & PromoColumns;
 type MenuItemInsert = Database['public']['Tables']['menu_items']['Insert'];
 
 interface Props {
@@ -323,7 +323,7 @@ const MenuItemDialog = ({ open, onOpenChange, subcategoryId, item, onSaved, star
       if (cancelled) return;
       if (!featured.error) {
         setPromoAvailable(true);
-        setFeaturedOthers(((featured.data ?? []) as { id: string; name: string; featured_rank: number }[]).filter((r) => r.id !== item?.id));
+        setFeaturedOthers(((featured.data ?? []) as unknown as { id: string; name: string; featured_rank: number }[]).filter((r) => r.id !== item?.id));
       }
       const combos = await fetchCombos();
       if (cancelled || !combos) return;
@@ -488,7 +488,7 @@ const MenuItemDialog = ({ open, onOpenChange, subcategoryId, item, onSaved, star
     if (error) { setSaving(false); toast.error(error.message); return; }
 
     if (savedId && (comboOn || wasCombo)) {
-      const { error: comboError } = await supabase.rpc('admin_save_combo', {
+      const { error: comboError } = await supabase.rpc('admin_save_combo' as never, {
         _combo_item_id: savedId,
         _slots: comboOn ? slotsPayload(slots) : [],
       });

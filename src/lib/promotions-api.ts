@@ -11,7 +11,26 @@ import {
 } from '@/lib/promotions';
 import type { Database } from '@/integrations/supabase/types';
 
-export type MenuItemRow = Database['public']['Tables']['menu_items']['Row'];
+/**
+ * The promotion columns added by 20261026100000 — optional, so the app
+ * typechecks against a database that has not been given that migration yet,
+ * matching the runtime code that treats their absence as "no promotion".
+ * When the migration is applied and the types regenerate, this stays true.
+ */
+export type PromoColumns = {
+  sale_kind?: string | null;
+  sale_value?: number | string | null;
+  sale_starts_at?: string | null;
+  sale_ends_at?: string | null;
+  sale_label?: string | null;
+  new_until?: string | null;
+  featured_rank?: number | null;
+  featured_note?: string | null;
+  featured_note_bs?: string | null;
+  featured_note_ar?: string | null;
+};
+
+export type MenuItemRow = Database['public']['Tables']['menu_items']['Row'] & PromoColumns;
 
 /**
  * Every combo with its parts and choices.
@@ -22,7 +41,9 @@ export type MenuItemRow = Database['public']['Tables']['menu_items']['Row'];
  * failed request.
  */
 export async function fetchCombos(): Promise<ComboDef[] | null> {
-  const { data, error } = await supabase.rpc('guest_get_combos');
+  // Not in the generated types until 20261026100000 is applied; the runtime
+  // answer (error → null) is already the safe path for a missing RPC.
+  const { data, error } = await supabase.rpc('guest_get_combos' as never);
   if (error) return null;
   return Array.isArray(data) ? (data as unknown as ComboDef[]) : [];
 }
