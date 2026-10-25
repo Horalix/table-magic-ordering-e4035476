@@ -1,0 +1,53 @@
+/*
+ * The website's stylesheet, loaded with the website's own chunk so the menu
+ * never downloads it: the Tailwind utilities only the website uses (scoped
+ * under .site-root, see tailwind.site.config.ts) and the few rules that are
+ * not utilities.
+ */
+@config "../../../tailwind.site.config.ts";
+@tailwind utilities;
+
+.site-root {
+  min-height: 100vh;
+  background-color: #f7f4ec;
+  color: #232e28;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  html.site-smooth {
+    scroll-behavior: smooth;
+  }
+}
+
+/* The page is cream all the way down, including the overscroll on iOS. */
+html.site-smooth,
+html.site-smooth body {
+  background-color: #f7f4ec;
+}
+
+/*
+ * Arches — the shape of the La Soul mark: a true semicircle on top, softly
+ * rounded feet. `rounded-t-full` cannot do this: when radii overflow the box
+ * the browser shrinks ALL of them in proportion, so the feet came out square.
+ * Elliptical percentages (horizontal 50%, vertical = half the width as a share
+ * of the height) keep the top round for each aspect ratio used. Scoped like
+ * the utilities, and after them, so they win over `rounded-[28px]`.
+ */
+.site-root .ls-arch-2x3 {
+  border-radius: 50% 50% 24px 24px / 33.333% 33.333% 24px 24px;
+}
+@media (min-width: 640px) {
+  .site-root .ls-arch-card {
+    border-radius: 50% 50% 28px 28px / 34.091% 34.091% 28px 28px;
+  }
+}
+@media (min-width: 1024px) {
+  .site-root .ls-arch-5x6 {
+    border-radius: 50% 50% 28px 28px / 41.667% 41.667% 28px 28px;
+  }
+}
+
+.site-root ::selection {
+  background: rgba(126, 155, 121, 0.35);
+  color: #232e28;
+}

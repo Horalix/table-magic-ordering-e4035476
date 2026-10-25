@@ -12,6 +12,7 @@
     "preview": "vite preview",
     "images": "node scripts/fetch-images.mjs",
     "brand": "node scripts/gen-brand.mjs",
+    "site:images": "node scripts/site-images.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
