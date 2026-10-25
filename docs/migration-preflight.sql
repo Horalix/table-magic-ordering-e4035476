@@ -5,7 +5,9 @@
 -- (confirmed 26 Oct 2026); its rows pass on that evidence, since the texts it
 -- replaced are gone by design. 20260804090400_session_affinity.sql is applied
 -- too (Lovable, before it stopped at maintenance); its search texts survive
--- its own edits, so its rows pass as they are.
+-- its own edits, so its rows pass as they are. 20260804090500 to
+-- 20260804090900 are applied as well; the one text thompson_sampling replaced
+-- passes on the evidence that the ranker already calls acceptance_for_ranking.
 SELECT rewrite, function, found
   FROM (
   SELECT '20260804090300_session_context.sql:149 (or already applied)' AS rewrite, 'rank_recommendations' AS function, ((position('      public.cart_has_drink(_cart_item_ids) AS has_drink
@@ -34,7 +36,7 @@ SELECT rewrite, function, found
   SELECT '20260804090400_session_affinity.sql:238' AS rewrite, 'rank_recommendations' AS function, (position('    SELECT item_id, source_item_id, rtype, 0::numeric, observed_score FROM observed
     UNION ALL' in replace(COALESCE((SELECT string_agg(pg_get_functiondef(p.oid), E'\n') FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace WHERE n.nspname = 'public' AND p.proname = 'rank_recommendations'), ''), chr(13) || chr(10), chr(10))) > 0) AS found
   UNION ALL
-  SELECT '20260804090900_thompson_sampling.sql:216' AS rewrite, 'rank_recommendations' AS function, (position('public.daypart_acceptance(mi.id, p.placement, r.source_item_id, p.daypart)' in replace(COALESCE((SELECT string_agg(pg_get_functiondef(p.oid), E'\n') FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace WHERE n.nspname = 'public' AND p.proname = 'rank_recommendations'), ''), chr(13) || chr(10), chr(10))) > 0) AS found
+  SELECT '20260804090900_thompson_sampling.sql:216 (or already applied)' AS rewrite, 'rank_recommendations' AS function, ((position('public.daypart_acceptance(mi.id, p.placement, r.source_item_id, p.daypart)' in replace(COALESCE((SELECT string_agg(pg_get_functiondef(p.oid), E'\n') FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace WHERE n.nspname = 'public' AND p.proname = 'rank_recommendations'), ''), chr(13) || chr(10), chr(10))) > 0) OR (EXISTS (SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace WHERE n.nspname = 'public' AND p.proname = 'acceptance_for_ranking') AND position('acceptance_for_ranking(' in COALESCE((SELECT string_agg(pg_get_functiondef(p.oid), E'\n') FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace WHERE n.nspname = 'public' AND p.proname = 'rank_recommendations'), '')) > 0)) AS found
   UNION ALL
   SELECT '20260805090000_business_day.sql:191' AS rewrite, 'sales_analytics' AS function, (position('v_from := _from::timestamptz;' in replace(COALESCE((SELECT string_agg(pg_get_functiondef(p.oid), E'\n') FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace WHERE n.nspname = 'public' AND p.proname = 'sales_analytics'), ''), chr(13) || chr(10), chr(10))) > 0) AS found
   UNION ALL

@@ -19,7 +19,7 @@ import { describe, expect, it } from 'vitest';
 import { createTestDatabase, migrationFiles } from '../../scripts/db-harness.mjs';
 
 // The first file not yet applied on production.
-const FIRST_PENDING = '20260804090500';
+const FIRST_PENDING = '20260805090000';
 
 const HAND_OVER = `
   CREATE ROLE migrator NOSUPERUSER NOLOGIN;
@@ -97,4 +97,24 @@ describe('migration privileges', () => {
     }
     await db.close();
   }, 240_000);
+
+  // pg_get_functiondef() raises on aggregates, and the live planner evaluated
+  // a WHERE condition on all of pg_proc before the schema filter: business_day
+  // stopped on "array_agg is an aggregate function". The test database plans
+  // it the other way, so only a rule catches it: match on prosrc in filters,
+  // and call pg_get_functiondef() only on rows already chosen.
+  it('never calls pg_get_functiondef() inside a filter', () => {
+    const problems: string[] = [];
+    for (const file of (migrationFiles() as string[]).filter((f) => f >= FIRST_PENDING)) {
+      const sql = readFileSync(path.join(__dirname, '..', 'migrations', file), 'utf8').replace(/--[^\n]*/g, '');
+      const lines = sql.split('\n');
+      lines.forEach((line, i) => {
+        if (/\b(WHERE|AND|OR|ON)\s+(NOT\s+)?(position\([^)]*\bin\s+)?pg_get_functiondef\(/i.test(line)
+          || /pg_get_functiondef\([^)]*\)\s*(NOT\s+)?(LIKE|ILIKE|~|=|<>)/i.test(line)) {
+          problems.push(`${file}:${i + 1}: ${line.trim()}`);
+        }
+      });
+    }
+    expect(problems).toEqual([]);
+  });
 });

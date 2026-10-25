@@ -223,12 +223,18 @@ BEGIN
    * Both auto-assignment paths look up today's rota. Under UTC they stopped
    * matching at 02:00 local — mid-service — and every table opened after that
    * arrived with no waiter attached.
+   *
+   * Matched on prosrc, not pg_get_functiondef(): the planner may evaluate a
+   * WHERE condition on every row of pg_proc before the schema filter, and
+   * pg_get_functiondef() raises on aggregates such as array_agg — which is
+   * how the live database refused this block.
    */
   FOR r IN
     SELECT p.oid, p.proname
       FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
      WHERE n.nspname = 'public'
-       AND pg_get_functiondef(p.oid) LIKE '%shift_date = CURRENT_DATE%'
+       AND p.prokind = 'f'
+       AND p.prosrc LIKE '%shift_date = CURRENT_DATE%'
   LOOP
     v_def := replace(pg_get_functiondef(r.oid), chr(13) || chr(10), chr(10));
     v_new := replace(v_def, 'shift_date = CURRENT_DATE', 'shift_date = public.business_day()');
@@ -258,6 +264,7 @@ BEGIN
     SELECT p.oid, p.proname
       FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
      WHERE n.nspname = 'public'
+       AND p.prokind = 'f'
        AND p.proname IN ('close_shift', 'shift_close_for', 'covers_summary')
   LOOP
     v_def := replace(pg_get_functiondef(r.oid), chr(13) || chr(10), chr(10));
