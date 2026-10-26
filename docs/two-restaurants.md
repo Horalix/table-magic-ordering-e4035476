@@ -49,6 +49,32 @@ request gets around it:
 Public pages stay public: anyone may read either restaurant's website and menu,
 as today. Only ordering and everything behind it is separated.
 
+### Which restaurant a request is about
+
+`current_venue()` answers it, in this order:
+
+1. **What the request already proved.** A guest's table session or QR code,
+   a printer's token, a ticket's order: the function that checked it sets
+   the restaurant for the rest of the request.
+2. **The restaurant the app is showing**, in the `x-venue` header: the menu's
+   address (`/menu/veraitalia/`), the guest's table, or the restaurant the
+   owner picked in the admin. A signed-in user gets it only for a restaurant
+   they work at; anyone else's phone asking for the other one gets their own.
+3. **Where a waiter or restaurant admin works.**
+4. La Soul.
+
+So a La Soul waiter needs nothing set up — the database knows where they work
+— and an app that sends no header at all (today's) is La Soul throughout.
+
+### Still shared (on purpose, for now)
+
+The suggestion engine's learned totals (`reco_learning`: visit counts and
+per-kind totals) are counted across both restaurants. No dish is ever
+suggested at the other restaurant — every suggestion is filtered to the
+guest's own menu — but Vera Italia's visits will nudge La Soul's learned
+strengths. Split those totals per restaurant before Vera Italia has much
+traffic of its own.
+
 ## What is per restaurant
 
 | | Was | Now |
@@ -74,9 +100,13 @@ live until switched on.
    changed uniqueness (QR codes, the room code, order numbers, the daily
    close). Everything else keeps reading La Soul's settings, so La Soul works
    exactly as before.
-2. **Functions**: guest ordering, suggestions, staff actions, reports and
-   analytics read their own restaurant's settings and data; report functions
-   take a restaurant.
+2. **Functions** (`20261028100000_two_restaurants_context.sql`): every
+   request works inside one restaurant (below). Guest ordering, suggestions,
+   the kitchen boards, printers, staff actions, reports, analytics, the daily
+   close and the scheduled clean-up read their own restaurant's settings and
+   data; the scheduled jobs go through each restaurant in turn. Something
+   added without naming a restaurant (a table, a dish, a printer) belongs to
+   the restaurant of the request.
 3. **The app**: the restaurant switch for the super admin, admin and staff
    screens scoped to a restaurant, creating staff and admins per restaurant,
    QR codes per restaurant, guest menus by address (`/menu/veraitalia/`).

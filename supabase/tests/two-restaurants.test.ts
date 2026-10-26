@@ -10,7 +10,7 @@
  */
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 // @ts-expect-error -- plain JS harness, no types needed
 import { createTestDatabase, actAs } from '../../scripts/db-harness.mjs';
 
@@ -63,7 +63,8 @@ beforeEach(async () => {
     TRUNCATE public.audit_log, public.order_ticket_events, public.order_items, public.orders,
              public.waiter_calls, public.bill_requests, public.table_sessions, public.tables,
              public.section_assignments, public.sections, public.waiters, public.shift_closes,
-             public.menu_items, public.subcategories, public.categories, public.order_code_counters
+             public.menu_items, public.subcategories, public.categories, public.order_code_counters,
+             public.printers, public.analytics_events
       RESTART IDENTITY CASCADE;
     DELETE FROM public.user_roles;
     DELETE FROM auth.users;
@@ -128,9 +129,16 @@ describe('a guest orders only from the restaurant they sit in', () => {
   });
 
   it('cannot order La Soul\'s dish at a Vera Italia table, or the other way round', async () => {
-    await expect(guestOrders(S_V, 'tok-v', DISH_L)).rejects.toThrow(/Not available at this restaurant/);
-    await expect(guestOrders(S_L, 'tok-l', DISH_V)).rejects.toThrow(/Not available at this restaurant/);
+    // To the guest the other restaurant's dish reads like a sold-out one.
+    await expect(guestOrders(S_V, 'tok-v', DISH_L)).rejects.toThrow(/Unavailable: La Soul Burger/);
+    await expect(guestOrders(S_L, 'tok-l', DISH_V)).rejects.toThrow(/Unavailable: Pizza Margherita/);
     expect((await db.query(`SELECT 1 FROM public.orders`)).rows).toHaveLength(0);
+
+    // Behind that, the database itself refuses an order line for the other
+    // menu, however it is written.
+    const order = await guestOrders(S_V, 'tok-v', DISH_V);
+    await expect(db.exec(`INSERT INTO public.order_items(order_id, menu_item_id, quantity, unit_price)
+                          VALUES ('${order}', '${DISH_L}', 1, 18)`)).rejects.toThrow(/Not available at this restaurant/);
   });
 
   it('a QR code names its table, and through it its restaurant — both have a table 7', async () => {
@@ -206,11 +214,20 @@ describe('staff see and change only their own restaurant', () => {
     as(user, async () => ids((await db.query<{ id: string }>(`SELECT id FROM public.orders`)).rows));
 
   it('a waiter, a restaurant admin and the owner each see what is theirs', async () => {
-    expect(await visibleOrders(WAITER_L)).toEqual([orderL]);
-    expect(await visibleOrders(WAITER_V)).toEqual([orderV]);
-    expect(await visibleOrders(ADMIN_L)).toEqual([orderL]);
-    expect(await visibleOrders(ADMIN_V)).toEqual([orderV]);
-    expect(await visibleOrders(SUPER)).toEqual([orderL, orderV].sort());
+    try {
+      expect(await visibleOrders(WAITER_L)).toEqual([orderL]);
+      expect(await visibleOrders(WAITER_V)).toEqual([orderV]);
+      expect(await visibleOrders(ADMIN_L)).toEqual([orderL]);
+      expect(await visibleOrders(ADMIN_V)).toEqual([orderV]);
+      // The owner sees the restaurant the app is showing — La Soul unless told otherwise.
+      expect(await visibleOrders(SUPER)).toEqual([orderL]);
+      await showing('veraitalia');
+      expect(await visibleOrders(SUPER)).toEqual([orderV]);
+      // A waiter whose phone asks for the other restaurant still sees only their own.
+      expect(await visibleOrders(WAITER_L)).toEqual([orderL]);
+    } finally {
+      await showing(null);
+    }
   });
 
   it('tables, sessions, waiters and settings follow the same rule', async () => {
@@ -281,6 +298,209 @@ describe('each admin manages only their own restaurant', () => {
     expect((await roles(SUPER)).length).toBe(5);
   });
 });
+
+describe('every request works inside one restaurant', () => {
+  afterEachReset();
+
+  it('something added without naming a restaurant belongs to the one the request is about', async () => {
+    // A Vera Italia admin adds a table and a section; the app names no restaurant.
+    await as(ADMIN_V, () => db.query(`INSERT INTO public.tables(table_number) VALUES (40)`));
+    await as(ADMIN_V, () => db.query(`INSERT INTO public.sections(name) VALUES ('Giardino')`));
+    // The owner, looking at Vera Italia, adds one too.
+    await showing('veraitalia');
+    await as(SUPER, () => db.query(`INSERT INTO public.tables(table_number) VALUES (41)`));
+    await showing(null);
+    const venues = (await db.query<{ n: number; venue_id: string }>(
+      `SELECT table_number AS n, venue_id FROM public.tables WHERE table_number IN (40, 41) ORDER BY 1`)).rows;
+    expect(venues).toEqual([{ n: 40, venue_id: V }, { n: 41, venue_id: V }]);
+    expect((await db.query<{ venue_id: string }>(`SELECT venue_id FROM public.sections WHERE name = 'Giardino'`)).rows[0].venue_id).toBe(V);
+    // With no restaurant named and no restaurant of their own: La Soul, as before.
+    await db.exec(`INSERT INTO public.tables(table_number) VALUES (42)`);
+    expect((await db.query<{ venue_id: string }>(`SELECT venue_id FROM public.tables WHERE table_number = 42`)).rows[0].venue_id).toBe(L);
+  });
+
+  it('pausing one restaurant leaves the other taking orders', async () => {
+    await db.exec(`UPDATE public.restaurant_settings SET ordering_enabled = false WHERE venue_id = '${V}'`);
+    await expect(guestOrders(S_V, 'tok-v', DISH_V)).rejects.toThrow(/Ordering is paused/);
+    await guestOrders(S_L, 'tok-l', DISH_L);
+  });
+
+  it('a guest\'s order is numbered by their restaurant', async () => {
+    const code = async (order: string) =>
+      (await db.query<{ order_code: string }>(`SELECT order_code FROM public.orders WHERE id = $1`, [order])).rows[0].order_code;
+    expect(await code(await guestOrders(S_L, 'tok-l', DISH_L))).toBe('001');
+    expect(await code(await guestOrders(S_L, 'tok-l', DISH_L))).toBe('002');
+    expect(await code(await guestOrders(S_V, 'tok-v', DISH_V))).toBe('001');
+  });
+
+  it('each restaurant\'s idle timeout applies to its own tables', async () => {
+    await db.exec(`
+      UPDATE public.restaurant_settings SET session_idle_timeout_minutes = 15 WHERE venue_id = '${V}';
+      UPDATE public.table_sessions SET last_heartbeat_at = now() - interval '20 minutes';
+    `);
+    await expect(guestOrders(S_V, 'tok-v', DISH_V)).rejects.toThrow(/Invalid or expired table session/);
+    await guestOrders(S_L, 'tok-l', DISH_L);
+  });
+
+  it('menu search finds only the restaurant being shown', async () => {
+    const search = async (q: string) =>
+      (await db.query<{ name: string }>(`SELECT name FROM public.guest_search_menu($1)`, [q])).rows.map((r) => r.name);
+    await showing('veraitalia');
+    expect(await search('Pizza')).toEqual(['Pizza Margherita']);
+    expect(await search('Burger')).toEqual([]);
+    await showing('lasoul');
+    expect(await search('Burger')).toEqual(['La Soul Burger']);
+    expect(await search('Pizza')).toEqual([]);
+  });
+
+  it('a rush of new tables at one restaurant holds nothing at the other', async () => {
+    await db.exec(`
+      UPDATE public.restaurant_settings SET hold_burst_sessions = 2, hold_first_order_km = NULL, hold_first_order_items = NULL,
+             service_open = NULL, service_close = NULL;
+      INSERT INTO public.tables(table_number, venue_id) SELECT n, '${L}' FROM generate_series(30, 34) n;
+      INSERT INTO public.table_sessions(table_id, token, is_active, last_heartbeat_at, opened_at)
+        SELECT id, 'rush-' || table_number, true, now(), now() FROM public.tables WHERE table_number BETWEEN 30 AND 34;
+    `);
+    const held = async (order: string) =>
+      (await db.query<{ held_reason: string | null }>(`SELECT held_reason FROM public.orders WHERE id = $1`, [order])).rows[0].held_reason;
+    expect(await held(await guestOrders(S_L, 'tok-l', DISH_L))).toBe('venue_burst');
+    expect(await held(await guestOrders(S_V, 'tok-v', DISH_V))).toBeNull();
+  });
+});
+
+describe('the kitchen, the printers and the numbers are each restaurant\'s own', () => {
+  afterEachReset();
+
+  it('the kitchen board shows only its own restaurant\'s dishes', async () => {
+    await guestOrders(S_L, 'tok-l', DISH_L);
+    await guestOrders(S_V, 'tok-v', DISH_V);
+    const board = (user: string) => as(user, async () =>
+      (await db.query<{ name: string }>(`SELECT name FROM public.kds_all_day()`)).rows.map((r) => r.name));
+    expect(await board(WAITER_V)).toEqual(['Pizza Margherita']);
+    expect(await board(WAITER_L)).toEqual(['La Soul Burger']);
+  });
+
+  it('a printer prints only its own restaurant\'s tickets, even when both are called Kitchen', async () => {
+    const tokenL = 'l'.repeat(32);
+    const tokenV = 'v'.repeat(32);
+    await db.exec(`INSERT INTO public.printers(name, station, poll_token, venue_id) VALUES
+      ('Kitchen', 'all', '${tokenL}', '${L}'), ('Kitchen', 'all', '${tokenV}', '${V}')`);
+    const orderL = await guestOrders(S_L, 'tok-l', DISH_L);
+    const orderV = await guestOrders(S_V, 'tok-v', DISH_V);
+    for (const order of [orderL, orderV]) {
+      await db.query(`SELECT public.enqueue_order_ticket(o.id) FROM public.orders o WHERE o.id = $1
+                       AND NOT EXISTS (SELECT 1 FROM public.order_ticket_events t WHERE t.order_id = o.id)`, [order]);
+    }
+    const claim = async (token: string) =>
+      (await db.query<{ job: { order_id: string } | null }>(`SELECT public.cloud_print_claim($1) AS job`, [token])).rows[0].job;
+    expect((await claim(tokenV))?.order_id).toBe(orderV);
+    expect(await claim(tokenV)).toBeNull();
+    expect((await claim(tokenL))?.order_id).toBe(orderL);
+  });
+
+  it('sales and visits are counted for the restaurant being looked at, and only for its staff', async () => {
+    await guestOrders(S_L, 'tok-l', DISH_L);
+    await guestOrders(S_V, 'tok-v', DISH_V);
+    await db.exec(`INSERT INTO public.analytics_events(visit_id, event, props, occurred_at, venue_id) VALUES
+      ('visit-l', 'menu_viewed', '{}', now(), '${L}'),
+      ('visit-v1', 'menu_viewed', '{}', now(), '${V}'), ('visit-v2', 'menu_viewed', '{}', now(), '${V}')`);
+    const revenue = (user: string) => as(user, async () =>
+      Number((await db.query<{ r: { totals: { revenue: number } } }>(`SELECT public.sales_analytics() AS r`)).rows[0].r.totals.revenue));
+    const visits = (user: string) => as(user, async () =>
+      Number((await db.query<{ r: { visits: number } }>(`SELECT public.funnel_summary() AS r`)).rows[0].r.visits));
+    expect(await revenue(ADMIN_V)).toBe(14);
+    expect(await revenue(ADMIN_L)).toBe(18);
+    expect(await visits(ADMIN_V)).toBe(2);
+    expect(await visits(ADMIN_L)).toBe(1);
+    // The owner sees the restaurant the app is showing; La Soul unless told otherwise.
+    await showing('veraitalia');
+    expect(await revenue(SUPER)).toBe(14);
+    await showing(null);
+    expect(await revenue(SUPER)).toBe(18);
+    // Asking for the other restaurant's numbers gets their own.
+    await showing('lasoul');
+    expect(await revenue(ADMIN_V)).toBe(14);
+    expect(await visits(ADMIN_V)).toBe(2);
+    // Someone who works at neither gets neither.
+    await expect(as(NEWCOMER, () => db.query(`SELECT public.sales_analytics()`))).rejects.toThrow(/Only staff/);
+  });
+
+  it('closing Vera Italia\'s day counts Vera Italia\'s orders', async () => {
+    await guestOrders(S_L, 'tok-l', DISH_L);
+    await guestOrders(S_L, 'tok-l', DISH_L);
+    await guestOrders(S_V, 'tok-v', DISH_V);
+    // Their admin names no restaurant: it is theirs.
+    await as(ADMIN_V, () => db.query(`SELECT public.close_shift(NULL, 0, 0, NULL, NULL, true)`));
+    await as(ADMIN_L, () => db.query(`SELECT public.close_shift(NULL, 0, 0, NULL, NULL, true)`));
+    const rows = (await db.query<{ venue_id: string; snapshot: { orders: number } }>(`SELECT venue_id, snapshot FROM public.shift_closes`)).rows;
+    expect(Object.fromEntries(rows.map((r) => [r.venue_id, Number(r.snapshot.orders)]))).toEqual({ [L]: 2, [V]: 1 });
+  });
+
+  it('a guest is only ever suggested their own restaurant\'s dishes', async () => {
+    await db.exec(`
+      UPDATE public.restaurant_settings SET recommendations_enabled = true, reco_holdout_pct = 0;
+      INSERT INTO public.categories(id, name, sort_order, venue_id) VALUES
+        ('c0000000-0000-0000-0000-0000000000da', 'Drinks', 2, '${L}'), ('c0000000-0000-0000-0000-0000000000db', 'Bevande', 2, '${V}');
+      INSERT INTO public.subcategories(id, category_id, name, sort_order) VALUES
+        ('d0000000-0000-0000-0000-0000000000da', 'c0000000-0000-0000-0000-0000000000da', 'Cold', 1),
+        ('d0000000-0000-0000-0000-0000000000db', 'c0000000-0000-0000-0000-0000000000db', 'Fredde', 1);
+      INSERT INTO public.menu_items(subcategory_id, name, price, is_available, station)
+        SELECT 'd0000000-0000-0000-0000-0000000000da', 'Soul lemonade ' || n, 4 + n, true, 'bar' FROM generate_series(1, 4) n;
+      INSERT INTO public.menu_items(subcategory_id, name, price, is_available, station)
+        SELECT 'd0000000-0000-0000-0000-0000000000db', 'Limonata ' || n, 4 + n, true, 'bar' FROM generate_series(1, 4) n;
+      -- Each dish's own pairing, and one a slip of the admin's hand made across restaurants.
+      INSERT INTO public.menu_item_recommendations(source_item_id, recommended_item_id, recommendation_type, priority)
+        SELECT '${DISH_V}'::uuid, id, 'pair_with', 90 FROM public.menu_items WHERE name = 'Limonata 1'
+        UNION ALL SELECT '${DISH_L}'::uuid, id, 'pair_with', 90 FROM public.menu_items WHERE name = 'Soul lemonade 1'
+        UNION ALL SELECT '${DISH_V}'::uuid, '${DISH_L}'::uuid, 'pair_with', 95;
+    `);
+    // A few visits at each, so popularity has something to go on.
+    for (let i = 0; i < 3; i++) {
+      await guestOrders(S_L, 'tok-l', DISH_L);
+      await guestOrders(S_V, 'tok-v', DISH_V);
+    }
+    const suggested = async (session: string, token: string, cart: string[]) =>
+      (await db.query<{ id: string }>(
+        `SELECT id FROM public.guest_get_recommendations($1, $2, $3::uuid[], 'cart', 'en', 8)`, [session, token, cart])).rows.map((r) => r.id);
+    const owner = async (dishes: string[]) =>
+      [...new Set((await db.query<{ venue_id: string }>(
+        `SELECT venue_id FROM public.menu_items WHERE id = ANY($1::uuid[])`, [dishes])).rows.map((r) => r.venue_id))];
+    const atVera = await suggested(S_V, 'tok-v', [DISH_V]);
+    expect(atVera.length).toBeGreaterThan(0);
+    expect(await owner(atVera)).toEqual([V]);
+    // Even with the other restaurant's dish slipped into the cart.
+    expect(await owner(await suggested(S_V, 'tok-v', [DISH_V, DISH_L]))).toEqual([V]);
+    expect(await owner(await suggested(S_L, 'tok-l', [DISH_L, DISH_V]))).toEqual([L]);
+  });
+
+  it('a waiter takes only their own restaurant\'s tables', async () => {
+    await expect(as(WAITER_L, () => db.query(`SELECT public.staff_take_table($1)`, [S_V]))).rejects.toThrow(/Only staff can take a table/);
+    const taken = await as(WAITER_V, async () =>
+      (await db.query<{ r: { taken: boolean } }>(`SELECT public.staff_take_table($1) AS r`, [S_V])).rows[0].r);
+    expect(taken.taken).toBe(true);
+    expect((await db.query<{ assigned_waiter_id: string }>(`SELECT assigned_waiter_id FROM public.table_sessions WHERE id = $1`, [S_V])).rows[0].assigned_waiter_id).toBe(W_V);
+  });
+
+  it('the scheduled clean-up closes each restaurant\'s idle tables by its own clock', async () => {
+    await db.exec(`
+      UPDATE public.restaurant_settings SET session_idle_timeout_minutes = 15 WHERE venue_id = '${V}';
+      UPDATE public.restaurant_settings SET session_idle_timeout_minutes = 120 WHERE venue_id = '${L}';
+      UPDATE public.table_sessions SET last_heartbeat_at = now() - interval '30 minutes';
+    `);
+    expect((await db.query<{ n: number }>(`SELECT public.close_stale_sessions() AS n`)).rows[0].n).toBe(1);
+    expect(ids((await db.query<{ id: string }>(`SELECT id FROM public.table_sessions WHERE is_active`)).rows)).toEqual([S_L]);
+  });
+});
+
+/** The app names the restaurant it is showing in an x-venue header. */
+function showing(slug: string | null) {
+  return db.query(`SELECT set_config('request.headers', $1, false)`, [slug ? JSON.stringify({ 'x-venue': slug }) : '']);
+}
+
+/** Request headers are session-wide in the test database; clear them after each test. */
+function afterEachReset() {
+  afterEach(async () => { await db.query(`SELECT set_config('request.headers', '', false)`); });
+}
 
 describe('moving to two restaurants', () => {
   // The step itself, on a database as production has it today.
