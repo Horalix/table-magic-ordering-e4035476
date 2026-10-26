@@ -53,11 +53,13 @@ export function seoPrerender(): Plugin {
       const env = { ...loadEnv(config.mode, config.root, 'VITE_'), ...process.env } as Record<string, string | undefined>;
       const offline = config.mode === 'e2e' || process.env.SEO_OFFLINE === '1';
       const manifestPath = path.join(config.root, 'src', 'lib', 'image-manifest.json');
-      const manifest: Record<string, { widths?: number[] }> = existsSync(manifestPath) ? JSON.parse(readFileSync(manifestPath, 'utf8')) : {};
+      const manifest: Record<string, { widths?: number[]; v?: string }> = existsSync(manifestPath) ? JSON.parse(readFileSync(manifestPath, 'utf8')) : {};
       const imageFor = (id: string) => {
         const widths = manifest[id]?.widths;
         if (!widths?.length) return null;
-        return `/menu/${id}/${widths.includes(768) ? 768 : widths[widths.length - 1]}.webp`;
+        // The same versioned address the app uses (scripts/image-versions.mjs).
+        const v = manifest[id]?.v;
+        return `/menu/${id}/${widths.includes(768) ? 768 : widths[widths.length - 1]}.webp${v ? `?v=${v}` : ''}`;
       };
       const menu: SeoMenu | null = offline || !env.VITE_SUPABASE_URL || !env.VITE_SUPABASE_PUBLISHABLE_KEY
         ? null

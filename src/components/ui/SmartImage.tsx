@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import imageManifest from '@/lib/image-manifest.json';
+import { localImageFile } from '@/lib/menu-image';
 
 interface SmartImageProps extends Omit<React.ImgHTMLAttributes<HTMLImageElement>, 'loading' | 'srcSet'> {
   src?: string;
@@ -39,6 +40,13 @@ interface ManifestEntry {
   squares?: number[];
   blur: string;
   ext: string;
+  /**
+   * A hash of the files themselves (scripts/image-versions.mjs). It goes on
+   * every local address, so a re-shot photo or re-cut crop is a new address:
+   * the service worker caches these CacheFirst, and the same file name with
+   * new content would otherwise keep showing the old picture.
+   */
+  v?: string;
 }
 
 type FetchPriorityAttributes = {
@@ -126,16 +134,16 @@ const SmartImage = ({
   let blur: string | undefined;
 
   if (local && square && local.squares?.length) {
-    const base = `/menu/${id}`;
+    const file = localImageFile(id!, local);
     blur = local.blur;
-    srcSet = local.squares.map((w) => `${base}/sq-${w}.webp ${w}w`).join(', ');
-    url1x = `${base}/sq-${local.squares[local.squares.length - 1]}.webp`;
+    srcSet = local.squares.map((w) => `${file(`sq-${w}`)} ${w}w`).join(', ');
+    url1x = file(`sq-${local.squares[local.squares.length - 1]}`);
   } else if (local) {
-    const base = `/menu/${id}`;
+    const file = localImageFile(id!, local);
     blur = local.blur;
-    srcSet = local.widths.map((w) => `${base}/${w}.webp ${w}w`).join(', ');
+    srcSet = local.widths.map((w) => `${file(String(w))} ${w}w`).join(', ');
     // Default `src` = largest variant (browser overrides via srcSet+sizes).
-    url1x = `${base}/${local.widths[local.widths.length - 1]}.webp`;
+    url1x = file(String(local.widths[local.widths.length - 1]));
   } else {
     url1x = buildUrl(src!, width, height, 1);
     srcSet = `${url1x} 1x, ${buildUrl(src!, width, height, 2)} 2x`;

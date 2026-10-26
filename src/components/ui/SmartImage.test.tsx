@@ -15,6 +15,18 @@ describe('SmartImage local files', () => {
     expect(imgSrc(container)).toMatch(new RegExp(`^/menu/${ID}/`));
   });
 
+  // Phones cache these by address. Re-shot photos kept their file names, so
+  // lists showed the old cached thumbnail while the dish sheet showed the new
+  // photo; the version in the address is what makes a new photo a new file.
+  it('puts the photo’s version on every local address', () => {
+    const v = (manifest as Record<string, { v?: string }>)[ID].v;
+    expect(v).toMatch(/^[0-9a-f]{10}$/);
+    const { container } = render(<SmartImage id={ID} src={ENTRY.src} alt="dish" width={108} height={108} square />);
+    const img = container.querySelector(`img[src^="/menu/${ID}/"]`)!;
+    expect(img.getAttribute('src')).toContain(`.webp?v=${v}`);
+    for (const candidate of (img.getAttribute('srcset') ?? '').split(',')) expect(candidate).toContain(`?v=${v} `);
+  });
+
   // The manager uploads a new photo in Admin → Menu: it must show at once,
   // not be hidden behind the old locally built one.
   it('shows a newly uploaded photo instead of the old local files', () => {

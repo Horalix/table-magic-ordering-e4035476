@@ -14,7 +14,9 @@
  *                                       cut around the dish (sharp's
  *                                       attention strategy) and sharpened
  *   public/menu/<id>/.hash            — source hash sidecar (idempotency)
- *   src/lib/image-manifest.json       — { [id]: { widths, blur, ext } }
+ *   src/lib/image-manifest.json       — { [id]: { widths, squares, blur, ext, src, v } }
+ *                                       (v: a hash of the files, set by
+ *                                       scripts/image-versions.mjs)
  *
  * Run:  npm run images            (only rows whose image changed)
  *       npm run images -- --force (rebuild every row)
@@ -36,6 +38,7 @@ import { mkdir, writeFile, readFile, rm } from 'node:fs/promises';
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
+import { stampImageVersions } from './image-versions.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, '..');
@@ -303,10 +306,13 @@ async function main() {
   // Stable key order keeps the committed manifest diff-friendly.
   const sorted = Object.fromEntries(Object.entries(manifest).sort(([a], [b]) => a.localeCompare(b)));
   await writeFile(MANIFEST_PATH, JSON.stringify(sorted, null, 2) + '\n', 'utf8');
+  // New files, new addresses: phones cache these by address (image-versions.mjs).
+  const versioned = stampImageVersions();
 
   console.log('\n');
   console.log(`  ✓ downloaded ${counters.downloaded}  ·  skipped ${counters.skipped}  ·  failed ${counters.failed}`);
   console.log(`  ✓ manifest → src/lib/image-manifest.json (${Object.keys(sorted).length} entries)`);
+  console.log(`  ✓ ${versioned} photo version(s) updated`);
   if (counters.errors.length) {
     console.log('\n  Errors (first 10):');
     counters.errors.slice(0, 10).forEach((e) => console.log(`    - ${e}`));

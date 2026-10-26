@@ -6,6 +6,7 @@ import { useCartFx, type Flight } from '@/lib/cart-fx';
 import { t } from '@/lib/i18n';
 import { duration, easeExit, easeStandard } from '@/lib/motion';
 import imageManifest from '@/lib/image-manifest.json';
+import { localImageFile } from '@/lib/menu-image';
 
 /**
  * The add-to-order flight.
@@ -20,7 +21,7 @@ import imageManifest from '@/lib/image-manifest.json';
  * guest gets a short toast instead, since there is nowhere to fly to.
  */
 
-type ManifestEntry = { widths?: number[]; squares?: number[] };
+type ManifestEntry = { widths?: number[]; squares?: number[]; v?: string };
 const manifest = imageManifest as Record<string, ManifestEntry>;
 
 const SIZE = 40;
@@ -29,8 +30,11 @@ const cssEase = (e: readonly number[]) => `cubic-bezier(${e.join(', ')})`;
 /** The smallest local photo for an item, else its remote image, else nothing. */
 function photoFor(flight: Flight): string | null {
   const local = flight.id ? manifest[flight.id] : undefined;
-  if (local?.squares?.length) return `/menu/${flight.id}/sq-${local.squares[0]}.webp`;
-  if (local?.widths?.length) return `/menu/${flight.id}/${local.widths[0]}.webp`;
+  if (local && flight.id) {
+    const file = localImageFile(flight.id, local);
+    if (local.squares?.length) return file(`sq-${local.squares[0]}`);
+    if (local.widths?.length) return file(String(local.widths[0]));
+  }
   return flight.imageUrl || null;
 }
 
