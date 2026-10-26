@@ -15,6 +15,10 @@ export default defineConfig({
     hookTimeout: 120_000,
   },
   resolve: {
-    alias: { "@": path.resolve(__dirname, "./src") },
+    alias: {
+      "@": path.resolve(__dirname, "./src"),
+      // Provided by vite-plugin-pwa in the app build, which tests do not load.
+      "virtual:pwa-register": path.resolve(__dirname, "./src/test/pwa-register-stub.ts"),
+    },
   },
 });

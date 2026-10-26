@@ -13,7 +13,11 @@ import { registerSW } from 'virtual:pwa-register';
  *
  *  - every open screen asks for a new version every few minutes and whenever
  *    it comes back to the foreground;
- *  - a waiting version is applied on the next page change, or when a guest
+ *  - a version that arrives while the app is still opening, before anyone has
+ *    touched it, is taken at once: a guest who has just scanned the table's
+ *    code sees the current menu from the first screen, not the previous
+ *    release's photos until their first tap;
+ *  - otherwise a waiting version is applied on the next page change, or when a guest
  *    returns to the tab (never on the cart, where a card payment may be in
  *    flight), or on a staff screen nobody has touched for a while — never
  *    while someone is typing or has a dialog open.
@@ -24,18 +28,31 @@ import { registerSW } from 'virtual:pwa-register';
 const CHECK_EVERY_MS = 5 * 60_000;
 const STAFF_IDLE_MS = 90_000;
 const STAFF_PATH = /^\/(admin|kitchen|waiter)(\/|$)/;
+/** How long after the page opens a new version still counts as arriving "while it opens". */
+const FRESH_START_MS = 15_000;
 
 let updateSW: ((reloadPage?: boolean) => Promise<void>) | null = null;
 let waiting = false;
 let started = false;
+let touchedSinceLoad = false;
 
 /** Register the service worker and start looking for new versions. Once per page. */
 export function startAppUpdates(): void {
   if (started || typeof window === 'undefined' || !('serviceWorker' in navigator)) return;
   started = true;
+  const touched = () => { touchedSinceLoad = true; };
+  window.addEventListener('pointerdown', touched, { once: true, passive: true });
+  window.addEventListener('keydown', touched, { once: true });
   updateSW = registerSW({
     immediate: true,
-    onNeedRefresh() { waiting = true; },
+    onNeedRefresh() {
+      waiting = true;
+      // Still opening and untouched: nothing to lose, so take it now.
+      if (performance.now() < FRESH_START_MS && !touchedSinceLoad
+        && !window.location.pathname.startsWith('/cart') && !busy()) {
+        applyWaitingUpdate();
+      }
+    },
     onRegisteredSW(_url, registration) {
       if (!registration) return;
       const check = () => { if (navigator.onLine) void registration.update().catch(() => { /* next time */ }); };
