@@ -244,8 +244,9 @@ If the amount does **not** match, do not release. Refund and re-take.
 ## 9. Useful SQL
 
 ```sql
--- Today, everything, with correct denominators.
-SELECT public.day_reconciliation(CURRENT_DATE);
+-- Today, everything, with correct denominators. No argument: the Sarajevo
+-- trading day (CURRENT_DATE is the UTC day — see 6b).
+SELECT public.day_reconciliation();
 
 -- Money that started and never landed.
 SELECT order_code, total, created_at, status
@@ -268,3 +269,59 @@ SELECT created_at, outcome, detail, monri_order_number
  WHERE outcome NOT IN ('approved_released','approved_already_released','duplicate','pending')
  ORDER BY created_at DESC LIMIT 50;
 ```
+
+### Free every table before a demo or rehearsal
+
+**Never during service.** It ends every open table and cancels every unpaid
+order on them. In the app the same is done table by table: Orders → cancel
+each unpaid order with a reason, then Tables → **Free**. Paid orders are left
+exactly as they are, and nothing is deleted: cancelled orders keep their
+reason ("Demo reset") and stay out of sales figures.
+
+```sql
+-- 1. What is open now (read-only).
+SELECT
+  (SELECT count(*) FROM public.table_sessions WHERE is_active) AS open_tables,
+  (SELECT count(*) FROM public.orders o JOIN public.table_sessions s ON s.id = o.table_session_id
+    WHERE s.is_active AND o.status <> 'cancelled'
+      AND o.payment_status NOT IN ('paid', 'refunded', 'partially_refunded')) AS unpaid_orders_to_cancel,
+  (SELECT count(*) FROM public.orders o JOIN public.table_sessions s ON s.id = o.table_session_id
+    WHERE s.is_active AND o.payment_status = 'paid') AS paid_orders_left_alone;
+
+-- 2. The reset, in one transaction.
+DO $reset$
+DECLARE
+  v_orders int;
+  v_tables int;
+BEGIN
+  -- The same authorised context close_stale_orders() uses to cancel orders.
+  PERFORM set_config('lasoul.financial_ctx', 'on', true);
+
+  UPDATE public.orders o
+     SET status = 'cancelled', cancelled_at = now(), cancel_reason = 'Demo reset'
+    FROM public.table_sessions s
+   WHERE s.id = o.table_session_id AND s.is_active
+     AND o.status <> 'cancelled'
+     AND o.payment_status NOT IN ('paid', 'refunded', 'partially_refunded');
+  GET DIAGNOSTICS v_orders = ROW_COUNT;
+
+  UPDATE public.waiter_calls SET status = 'resolved', resolved_at = now()
+   WHERE status <> 'resolved'
+     AND table_session_id IN (SELECT id FROM public.table_sessions WHERE is_active);
+  UPDATE public.bill_requests SET status = 'resolved', resolved_at = now()
+   WHERE status <> 'resolved'
+     AND table_session_id IN (SELECT id FROM public.table_sessions WHERE is_active);
+
+  UPDATE public.table_sessions SET is_active = false, closed_at = now() WHERE is_active;
+  GET DIAGNOSTICS v_tables = ROW_COUNT;
+
+  RAISE NOTICE 'Demo reset: % orders cancelled, % tables freed', v_orders, v_tables;
+END
+$reset$;
+
+-- 3. Check: expect 0.
+SELECT count(*) AS open_tables FROM public.table_sessions WHERE is_active;
+```
+
+Phones that were on those tables find out at their next check (within a
+minute) and need to scan again.
