@@ -63,6 +63,7 @@ const THUMB_ZOOM_EXCEPTIONS = {
   '7382930d-240f-48c4-a3e1-5555e8561e60': 1, // Breakfast Platter for Two (flat lay)
   'c98d1f5e-bbc2-47c2-b4ab-48ec64383283': 1, // Picnic Box Set (flat lay)
   '4bdf76b3-b150-46f5-b059-0f228d48c56d': 0.92, // Churros: the long tray needs the width
+  '99162c3d-f38b-4720-9cbf-97066369220d': 1, // Sky Cola Zero: the can fills the frame top to bottom
 };
 // Where across a landscape photo the square thumbnail is centred (0 = left
 // edge, 1 = right), for photos where the attention crop picks the props: the

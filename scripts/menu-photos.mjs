@@ -208,7 +208,15 @@ async function importPhotos(dirName = 'improved') {
   if (!existsSync(IMPROVED)) { console.log(`  Nothing to import: assets/menu-photos/${dirName}/ does not exist.`); return; }
   await importHeroes(IMPROVED);
   const { rows } = await loadMenu();
-  const byPrefix = new Map(rows.map((r) => [r.id.slice(0, 8), r.id]));
+  // Dishes added together can share the first 8 characters of their id (the
+  // four added on 24 October all start 7c1e2a40). The prefix alone then named
+  // several dishes and every one of their photos was written to the last of
+  // them; the dish name in the exported file name tells them apart.
+  const byPrefix = new Map();
+  for (const r of rows) {
+    const key = r.id.slice(0, 8);
+    byPrefix.set(key, [...(byPrefix.get(key) ?? []), r]);
+  }
   const imageUrlById = new Map(rows.map((r) => [r.id, r.image_url ?? null]));
   // Which uploaded photo each prepared file replaces (see fetch-images.mjs).
   const overridesPath = join(SOURCES, 'overrides.json');
@@ -226,9 +234,15 @@ async function importPhotos(dirName = 'improved') {
   await mkdir(SOURCES, { recursive: true });
   let done = 0; const skipped = [];
   for (const f of files) {
-    const m = basename(f, extname(f)).match(/__([0-9a-f]{8})$/i);
-    const id = m && byPrefix.get(m[1].toLowerCase());
-    if (!id) { skipped.push(basename(f)); continue; }
+    const m = basename(f, extname(f)).match(/^(?:\d+ )?(.*)__([0-9a-f]{8})$/i);
+    const candidates = m ? byPrefix.get(m[2].toLowerCase()) ?? [] : [];
+    const id = candidates.length === 1 ? candidates[0].id : candidates.find((r) => safe(r.name) === m[1])?.id;
+    if (!id) {
+      skipped.push(candidates.length > 1
+        ? `${basename(f)} (${candidates.length} dishes share this id ending; keep the dish name in the file name)`
+        : basename(f));
+      continue;
+    }
     const meta = await sharp(f).metadata();
     if ((meta.width ?? 0) < 1000) { skipped.push(`${basename(f)} (only ${meta.width}px wide; save at least 1024px, 2048 is best)`); continue; }
     for (const e of EXTS) await rm(join(SOURCES, `${id}.${e}`), { force: true });
