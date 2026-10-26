@@ -1,0 +1,6 @@
+# Response headers on Netlify.
+
+# The install manifest of the home-screen app. Netlify served it as
+# application/octet-stream; browsers tolerate that, install checks do not.
+/manifest.webmanifest
+  Content-Type: application/manifest+json

@@ -204,7 +204,8 @@ const GuestMenu = () => {
         {/* Row one is the brand and the language, nothing else, so the
             wordmark can be big enough to read across a table. */}
         <div className="relative z-10 flex items-center justify-between gap-3">
-          <div dir="ltr" className="min-w-0">
+          {/* The page's heading — "La Soul Menu" to a screen reader. */}
+          <h1 dir="ltr" className="min-w-0">
             <img
               src="/brand/wordmark-white.webp"
               alt="La Soul"
@@ -213,8 +214,8 @@ const GuestMenu = () => {
               {...{ fetchpriority: 'high' }}
               className="h-7 w-auto drop-shadow-[0_1px_2px_rgba(0,0,0,0.15)]"
             />
-            <p className="text-[10px] font-sans text-white/85 tracking-[0.34em] uppercase font-semibold mt-2.5 ps-0.5 rtl:tracking-normal rtl:text-xs">{t('menu')}</p>
-          </div>
+            <span className="block text-[10px] font-sans text-white/85 tracking-[0.34em] uppercase font-semibold mt-2.5 ps-0.5 rtl:tracking-normal rtl:text-xs">{t('menu')}</span>
+          </h1>
           <LanguageSelector variant="hero" />
         </div>
 

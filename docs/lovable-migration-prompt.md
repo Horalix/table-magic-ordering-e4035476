@@ -2,24 +2,43 @@
 
 Copy everything between the rules into Lovable. Nothing else needs to be said.
 
-## Now: redeploy two functions (no migration)
+## Now: the mojito wording, and two functions (no migration)
 
-Everything below is live, checked on 25 October: `staff_take_table` exists,
-both Monri functions run the new code, and `monri-webhook` runs without JWT
-verification. But Lovable deployed them from `a78ada4`, before
-`https://lasoulapp.netlify.app` joined their CORS list, so a card payment
-started on the Netlify site would be refused. Not urgent while card payment
-is off; it must be done before Monri goes live.
+1. **Seven mojitos say "cocktail"** in all three languages (Classic, Mango,
+   Peach, Raspberry, Strawberry, Passion Fruit, Blue Ocean) — on a fully halal,
+   alcohol-free menu. The other mocktails already say "alcohol-free". The
+   UPDATE below makes them "alcohol-free mojito" / "bezalkoholni mojito" /
+   "موهيتو … خالٍ من الكحول"; it was run against copies of the live
+   descriptions first, and it touches only those seven rows. The prerendered
+   dish pages pick the new wording up on the next Netlify deploy.
+2. **Two Monri functions.** Lovable deployed them from `a78ada4`, before
+   `https://lasoulapp.netlify.app` joined their CORS list, so a card payment
+   started on the Netlify site would be refused. Not urgent while card payment
+   is off; it must be done before Monri goes live.
 
 ---
 
-> **Task: redeploy two Edge Functions from the latest `main`. No migration, no
-> SQL, no other changes.**
+> **Task: two small things, in order. Do not write any other SQL and do not
+> change the schema.**
 >
-> Make sure your checkout includes commit `d9c4b6c` (the latest `main`). Then
-> redeploy `monri-create-payment` and `monri-webhook` from
-> `supabase/functions/` with the settings in `supabase/config.toml`
-> (`monri-webhook` has `verify_jwt = false`). Paste the deploy result.
+> Make sure your checkout is the latest `main`.
+>
+> 1. Run this exactly as written, as one query, and paste the raw output
+>    (expect `UPDATE 7`):
+>    ```sql
+>    UPDATE public.menu_items
+>       SET description    = replace(description, 'cocktail', 'alcohol-free mojito'),
+>           description_bs = replace(description_bs, 'koktel', 'bezalkoholni mojito'),
+>           description_ar = replace(replace(description_ar,
+>                              'كوكتيل منعش', 'موهيتو منعش خالٍ من الكحول'),
+>                              'كوكتيل كلاسيكي', 'موهيتو كلاسيكي خالٍ من الكحول')
+>     WHERE name ILIKE '%mojito%'
+>       AND description ILIKE '%cocktail%'
+>       AND description NOT ILIKE '%alcohol-free%';
+>    ```
+> 2. Redeploy the Edge Functions `monri-create-payment` and `monri-webhook`
+>    from `supabase/functions/` with the settings in `supabase/config.toml`
+>    (`monri-webhook` has `verify_jwt = false`). Paste the deploy result.
 >
 > Do not create or change any user account, password or credential, and do not
 > enable online card payments.
