@@ -3694,6 +3694,7 @@ export type Database = {
         Args: { _covers: number; _session_id: string }
         Returns: Json
       }
+      staff_take_table: { Args: { _session_id: string }; Returns: Json }
       staff_update_order_status: {
         Args: {
           _order_id: string
