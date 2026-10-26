@@ -21,7 +21,8 @@ const AdminQRCodes = () => {
   const load = async () => {
     const [{ data: rows }, { data: settings }] = await Promise.all([
       supabase.from('tables').select('*').order('table_number'),
-      supabase.from('restaurant_settings').select('venue_qr_token, venue_qr_rotated_at').eq('id', 1).maybeSingle(),
+      // One row: the access rules show this restaurant's settings only.
+      supabase.from('restaurant_settings').select('venue_qr_token, venue_qr_rotated_at').maybeSingle(),
     ]);
     setTables(rows || []);
     setVenueToken((settings as { venue_qr_token?: string } | null)?.venue_qr_token ?? null);

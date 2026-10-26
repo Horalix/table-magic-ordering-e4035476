@@ -1,16 +1,16 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_VENUE, menuBase, menuCategoryPath, menuHome, menuPath, venueBySlug } from './venues';
+import { DEFAULT_VENUE, VENUES, menuBase, menuCategoryPath, menuHome, menuPath, venueByDbId, venueBySlug } from './venues';
 
 describe('venues', () => {
   it('puts each restaurant’s menu under its own address', () => {
     expect(DEFAULT_VENUE).toBe('lasoul');
     expect(menuBase()).toBe('/menu/lasoul');
-    expect(menuBase('italiaverde')).toBe('/menu/italiaverde');
+    expect(menuBase('veraitalia')).toBe('/menu/veraitalia');
   });
 
   it('gives every page its address with the trailing slash the host serves it at', () => {
     expect(menuPath()).toBe('/menu/lasoul/');
-    expect(menuPath('italiaverde')).toBe('/menu/italiaverde/');
+    expect(menuPath('veraitalia')).toBe('/menu/veraitalia/');
     expect(menuCategoryPath('food')).toBe('/menu/lasoul/food/');
   });
 
@@ -23,9 +23,16 @@ describe('venues', () => {
 
   it('only answers for restaurants that are live', () => {
     expect(venueBySlug('lasoul')?.name).toBe('La Soul');
-    // Italia Verde is next; until its entry exists its address is "not found".
-    expect(venueBySlug('italiaverde')).toBeNull();
+    // Vera Italia is known but not open yet: its address is "not found".
+    expect(VENUES.veraitalia.name).toBe('Vera Italia');
+    expect(venueBySlug('veraitalia')).toBeNull();
     expect(venueBySlug('drinks')).toBeNull();
     expect(venueBySlug(undefined)).toBeNull();
+  });
+
+  it('matches the database’s fixed restaurant ids', () => {
+    expect(venueByDbId('a5000000-0000-4000-8000-000000000001')?.slug).toBe('lasoul');
+    expect(venueByDbId('a5000000-0000-4000-8000-000000000002')?.slug).toBe('veraitalia');
+    expect(venueByDbId(null)).toBeNull();
   });
 });

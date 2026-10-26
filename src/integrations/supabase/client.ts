@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from './types';
+import { venueFetch } from '@/lib/current-venue';
 
 // Import the supabase client like this:
 // import { supabase } from "@/integrations/supabase/client";
@@ -56,5 +57,7 @@ export const supabase = createClient<Database>(
       persistSession: typeof localStorage !== 'undefined',
       autoRefreshToken: typeof localStorage !== 'undefined',
     },
+    // Every database request says which restaurant it is about (src/lib/current-venue.ts).
+    global: { fetch: venueFetch },
   },
 );

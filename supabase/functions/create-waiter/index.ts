@@ -10,11 +10,17 @@ interface Body {
   password?: string;
   display_name?: string;
   pin?: string;
+  /** The restaurant (slug) the owner is adding them to; a restaurant admin always adds to their own. */
+  venue?: string;
 }
 
 interface RoleRow {
   role: string;
+  venue_id: string | null;
 }
+
+/** La Soul — docs/two-restaurants.md. */
+const DEFAULT_VENUE_ID = 'a5000000-0000-4000-8000-000000000001';
 
 const synthEmail = (u: string) => `${u}@waiter.lasoul.local`;
 const errorMessage = (error: unknown) => error instanceof Error ? error.message : 'Server error';
@@ -38,13 +44,25 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
     const admin = createClient(SUPABASE_URL, SERVICE_ROLE);
-    const { data: roles } = await admin.from('user_roles').select('role').eq('user_id', userData.user.id);
-    const isAdmin = (roles as RoleRow[] | null)?.some((r) => r.role === 'admin');
-    if (!isAdmin) {
+    const { data: roles } = await admin.from('user_roles').select('role, venue_id').eq('user_id', userData.user.id);
+    const adminRoles = ((roles as RoleRow[] | null) ?? []).filter((r) => r.role === 'admin');
+    if (!adminRoles.length) {
       return new Response(JSON.stringify({ error: 'Admin only' }), { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
     const body: Body = await req.json();
+
+    // Which restaurant the waiter works at: the owner (an admin of no one
+    // restaurant) names it; a restaurant admin can only add to their own.
+    let venueId: string;
+    if (adminRoles.some((r) => r.venue_id === null)) {
+      const { data: named } = body.venue
+        ? await admin.from('venues').select('id').eq('slug', body.venue).maybeSingle()
+        : { data: null };
+      venueId = (named as { id: string } | null)?.id ?? DEFAULT_VENUE_ID;
+    } else {
+      venueId = adminRoles[0].venue_id as string;
+    }
     const username = (body.username || '').trim().toLowerCase().replace(/[^a-z0-9_.-]/g, '');
     const password = body.password || '';
     const display_name = (body.display_name || '').trim();
@@ -71,14 +89,14 @@ Deno.serve(async (req) => {
 
     const userId = created.user.id;
 
-    const { error: roleErr } = await admin.from('user_roles').insert({ user_id: userId, role: 'staff' });
+    const { error: roleErr } = await admin.from('user_roles').insert({ user_id: userId, role: 'staff', venue_id: venueId });
     if (roleErr) {
       return new Response(JSON.stringify({ error: roleErr.message }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
     const { data: waiter, error: wErr } = await admin
       .from('waiters')
-      .insert({ user_id: userId, display_name, username })
+      .insert({ user_id: userId, display_name, username, venue_id: venueId })
       .select()
       .single();
     if (wErr) {

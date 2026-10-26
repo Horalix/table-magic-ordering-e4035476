@@ -357,7 +357,8 @@ const KitchenDisplay = () => {
   // Load print settings + keep them live — through the shared channel, rather
   // than a second socket of this screen's own.
   const loadSettings = useCallback(() => {
-    void supabase.from('restaurant_settings').select('*').eq('id', 1).maybeSingle()
+    // One row: the access rules show this restaurant's settings only.
+    void supabase.from('restaurant_settings').select('*').maybeSingle()
       .then(({ data }) => {
         if (!data) return;
         setPrintConfig({ ...DEFAULT_PRINT, ...(data as Partial<PrintConfig>) });

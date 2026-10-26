@@ -7,6 +7,7 @@ const corsHeaders = {
 
 interface RoleRow {
   role: string;
+  venue_id: string | null;
 }
 
 const errorMessage = (error: unknown) => error instanceof Error ? error.message : 'Server error';
@@ -31,9 +32,9 @@ Deno.serve(async (req) => {
     }
 
     const admin = createClient(SUPABASE_URL, SERVICE_ROLE);
-    const { data: roles } = await admin.from('user_roles').select('role').eq('user_id', userData.user.id);
-    const isAdmin = (roles as RoleRow[] | null)?.some((r) => r.role === 'admin');
-    if (!isAdmin) {
+    const { data: roles } = await admin.from('user_roles').select('role, venue_id').eq('user_id', userData.user.id);
+    const adminRoles = ((roles as RoleRow[] | null) ?? []).filter((r) => r.role === 'admin');
+    if (!adminRoles.length) {
       return new Response(JSON.stringify({ error: 'Admin only' }), { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
@@ -42,8 +43,11 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ error: 'waiter_id required' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    const { data: waiter } = await admin.from('waiters').select('user_id').eq('id', waiter_id).maybeSingle();
-    if (!waiter) {
+    const { data: waiter } = await admin.from('waiters').select('user_id, venue_id').eq('id', waiter_id).maybeSingle();
+    // The owner removes anyone; a restaurant admin only their own restaurant's
+    // waiters — the other restaurant's are "not found" to them.
+    const mayRemove = waiter && adminRoles.some((r) => r.venue_id === null || r.venue_id === waiter.venue_id);
+    if (!waiter || !mayRemove) {
       return new Response(JSON.stringify({ error: 'Waiter not found' }), { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 

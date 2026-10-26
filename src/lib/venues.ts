@@ -1,8 +1,8 @@
 /**
  * The restaurants this app serves, by the slug in their menu's address.
  *
- * Each venue's menu lives at /menu/<slug>, so a second restaurant (Italia
- * Verde is next) is one entry here plus its own menu data. Everything that
+ * Each venue's menu lives at /menu/<slug>, so a second restaurant (Vera
+ * Italia is next) is one entry here plus its own menu data. Everything that
  * links into a menu asks `menuPath()` or `menuBase()` rather than writing
  * "/menu", which is what lets the bare /menu and the old /menu/drinks-style
  * addresses keep working as redirects.
@@ -10,6 +10,8 @@
  * Facts the website shows publicly are kept here, not invented: a field that
  * is not known yet is null and its part of the site stays hidden.
  */
+import { guestVenue } from './current-venue';
+
 export type Weekday = 'Monday' | 'Tuesday' | 'Wednesday' | 'Thursday' | 'Friday' | 'Saturday' | 'Sunday';
 export const EVERY_DAY: Weekday[] = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
@@ -22,6 +24,8 @@ export interface OpeningHours {
 
 export interface Venue {
   slug: string;
+  /** Its row in the database's `venues` table; fixed, it never changes. */
+  dbId: string;
   name: string;
   /** Other names people and maps know it by — the Google Maps listing, the old site. */
   alternateNames: string[];
@@ -55,6 +59,7 @@ export interface Venue {
 export const VENUES: Record<string, Venue> = {
   lasoul: {
     slug: 'lasoul',
+    dbId: 'a5000000-0000-4000-8000-000000000001',
     name: 'La Soul',
     alternateNames: ['La Soul Cafe & Burger Boutique', 'La Soul Cake & Burger Boutique', 'LASOUL'],
     tagline: 'Cake & Burger Boutique',
@@ -70,7 +75,35 @@ export const VENUES: Record<string, Venue> = {
     facebook: null,
     live: true,
   },
+  /*
+   * Same owner, its own restaurant (docs/two-restaurants.md). Its facts come
+   * with the owner's photos and menu; until then they are empty and it is not
+   * live, so its addresses answer "not found" and nothing public shows it.
+   */
+  veraitalia: {
+    slug: 'veraitalia',
+    dbId: 'a5000000-0000-4000-8000-000000000002',
+    name: 'Vera Italia',
+    alternateNames: [],
+    tagline: '',
+    phone: '',
+    phoneHref: '',
+    address: '',
+    city: '',
+    country: '',
+    geo: null,
+    mapsUrl: '',
+    hours: null,
+    instagram: null,
+    facebook: null,
+    live: false,
+  },
 };
+
+/** The restaurant whose row in the database has this id. */
+export function venueByDbId(id: string | null | undefined): Venue | null {
+  return Object.values(VENUES).find((v) => v.dbId === id) ?? null;
+}
 
 /** The venue a table QR code, a bare /menu or an old link belongs to. */
 export const DEFAULT_VENUE = 'lasoul';
@@ -80,8 +113,22 @@ export function venueBySlug(slug: string | undefined): Venue | null {
   return venue && venue.live ? venue : null;
 }
 
+/**
+ * The restaurant a guest is in right now: the menu being browsed, else the
+ * table they last sat down at, else La Soul. Every menu address below
+ * defaults to it, so "back to the menu" from the cart, the tab or a page
+ * that was not found returns a Vera Italia guest to Vera Italia's menu.
+ */
+export function activeVenue(): string {
+  const path = typeof location === 'undefined' ? '' : location.pathname;
+  const browsing = /^\/menu\/([^/]+)/.exec(path)?.[1];
+  if (browsing && VENUES[browsing]) return browsing;
+  const sat = guestVenue();
+  return sat && VENUES[sat] ? sat : DEFAULT_VENUE;
+}
+
 /** "/menu/lasoul" — the prefix every address in a venue's menu starts with. */
-export function menuBase(slug: string = DEFAULT_VENUE): string {
+export function menuBase(slug: string = activeVenue()): string {
   return `/menu/${slug}`;
 }
 
@@ -93,17 +140,17 @@ export function menuBase(slug: string = DEFAULT_VENUE): string {
  */
 
 /** "/menu/lasoul/" — the menu's own page. */
-export function menuPath(slug: string = DEFAULT_VENUE): string {
+export function menuPath(slug: string = activeVenue()): string {
   return `${menuBase(slug)}/`;
 }
 
 /** "/menu/lasoul/food/" — one category's page. */
-export function menuCategoryPath(categorySlug: string, slug: string = DEFAULT_VENUE): string {
+export function menuCategoryPath(categorySlug: string, slug: string = activeVenue()): string {
   return `${menuBase(slug)}/${categorySlug}/`;
 }
 
 /** The menu page with a query string, or without one when it is empty. */
-export function menuHome(query?: string | URLSearchParams | null, slug: string = DEFAULT_VENUE): string {
+export function menuHome(query?: string | URLSearchParams | null, slug: string = activeVenue()): string {
   const qs = typeof query === 'string' ? query.replace(/^\?/, '') : query?.toString() ?? '';
   return qs ? `${menuPath(slug)}?${qs}` : menuPath(slug);
 }

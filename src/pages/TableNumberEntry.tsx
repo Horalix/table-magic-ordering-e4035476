@@ -7,7 +7,7 @@ import { useT } from '@/lib/i18n';
 import { useCartStore } from '@/lib/cart-store';
 import { checkVenueToken, type VenueTokenCheck } from '@/lib/guest-api';
 import { prefersReducedMotion, duration, easeEnter } from '@/lib/motion';
-import { menuPath } from '@/lib/venues';
+import { VENUES, menuPath } from '@/lib/venues';
 
 /**
  * Single-QR entry.
@@ -51,6 +51,8 @@ const TableNumberEntry = () => {
   }, [token]);
 
   const max = check?.max_table_number ?? null;
+  // The room code names its restaurant: browsing goes to that menu.
+  const browse = () => navigate(menuPath(check?.venue && VENUES[check.venue] ? check.venue : undefined));
   const parsed = Number.parseInt(value, 10);
   const outOfRange = Number.isInteger(parsed) && max !== null && (parsed < 1 || parsed > max);
   const canSubmit = Number.isInteger(parsed) && parsed > 0 && !outOfRange;
@@ -82,7 +84,7 @@ const TableNumberEntry = () => {
           </div>
           <h1 className="font-serif text-2xl font-bold text-white">{t('qr_expired')}</h1>
           <Button
-            onClick={() => navigate(menuPath())}
+            onClick={browse}
             className="mt-6 w-full h-12 rounded-2xl bg-white text-primary hover:bg-white/90 font-sans font-semibold"
           >
             {t('browse_menu')}
@@ -141,7 +143,7 @@ const TableNumberEntry = () => {
           </Button>
         </form>
 
-        <button onClick={() => navigate(menuPath())} className="mt-6 text-xs text-white/60 underline underline-offset-4 font-sans">
+        <button onClick={browse} className="mt-6 text-xs text-white/60 underline underline-offset-4 font-sans">
           {t('browse_menu')}
         </button>
       </motion.div>
