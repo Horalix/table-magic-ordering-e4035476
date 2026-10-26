@@ -49,7 +49,7 @@ MONRI_AUTHENTICITY_TOKEN  = <from Monri>
 MONRI_ENVIRONMENT         = test                    # then: production
 MONRI_CALLBACK_URL        = https://<project>.functions.supabase.co/monri-webhook
 MONRI_CURRENCY            = BAM
-ALLOWED_ORIGINS           = https://order.lasoul.net,http://localhost:8080
+# ALLOWED_ORIGINS         — leave unset (see below)
 ```
 
 No front-end variable is needed any more, and no rebuild: the card button
@@ -58,9 +58,11 @@ OFF for a build that must never offer cards.
 
 `ALLOWED_ORIGINS` matters: the payment-start function is CORS allow-listed
 rather than `*`, because it accepts a guest session token. Unset, it allows
-lasoul.net, www.lasoul.net, menu.lasoul.net, order.lasoul.net, the published
-Lovable address and localhost (`supabase/functions/_shared/http.ts`); set it
-only to change that list.
+lasoul.net, www.lasoul.net, menu.lasoul.net, order.lasoul.net, the Netlify
+site (lasoulapp.netlify.app), the published Lovable address and localhost
+(`supabase/functions/_shared/http.ts`); set it only to change that list — it
+replaces the list, so a value without lasoulapp.netlify.app refuses every card
+payment started there.
 
 **Admin → Service & suggestions** shows the state at any time: whether Monri
 is connected (the two secrets are set), test or production, the currency, and
