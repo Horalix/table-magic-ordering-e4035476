@@ -105,6 +105,27 @@ export function playOrderAlert(): boolean {
 }
 
 /**
+ * One soft G5 ding. A table has ordered — the waiter phone, which is not
+ * making it, only needs to know. Shaped unlike the rest: not rising (food up),
+ * not three beeps (call), not falling (bill).
+ */
+export function playOrderPlacedAlert(): boolean {
+  return withContext((ctx) => {
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(784, ctx.currentTime);
+    gain.gain.setValueAtTime(0.25, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.35);
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + 0.35);
+  });
+}
+
+/**
  * New ticket, for the kitchen board: C5–E5–G5 twice, triangle wave, louder.
  *
  * The two-note sine chime above is pleasant and disappears under an

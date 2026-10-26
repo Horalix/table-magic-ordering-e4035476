@@ -96,8 +96,9 @@ Zatim, odozgo prema dolje:
 | **No waiter yet** | Stolovi s gostima koji nisu ni u čijoj sekciji — **Take**, i sto je vaš |
 | **My tables** | Vaši stolovi, koliko koji duguje, **Cash** / **Terminal** i **Free table** |
 
-**Nova narudžba** se pojavi pod *In the kitchen*. Dodirnite **Accept** da gost
-vidi da ju je konobar primijetio (nije obavezno — kuhinja ne čeka na to).
+**Nova narudžba** — jedna kratka vibracija i tihi zvuk, i pojavi se pod *In the
+kitchen*. Dodirnite **Accept** da gost vidi da ju je konobar primijetio (nije
+obavezno — kuhinja ne čeka na to).
 
 **Hrana je gotova** — duga vibracija i zvuk, a narudžba stoji na vrhu kao
 *Ready to run*. Odnesite je, pa **Mark served**.

@@ -39,7 +39,7 @@ import {
   useCoalesced, useLatestRequest, useStaffRealtime, useStaffRealtimeEvent, useStaffRefresh,
 } from '@/lib/realtime';
 import {
-  playBillRequestAlert, playOrderAlert, playWaiterCallAlert, useAudioUnlock, useReminderChime, vibrate,
+  playBillRequestAlert, playOrderAlert, playOrderPlacedAlert, playWaiterCallAlert, useAudioUnlock, useReminderChime, vibrate,
 } from '@/lib/kitchen-sounds';
 import ConnectionPill from '@/components/staff/ConnectionPill';
 import PaymentConfirm from '@/components/staff/PaymentConfirm';
@@ -471,6 +471,24 @@ const WaiterDashboard = () => {
     vibrate([120, 80, 120, 80, 120]);
     if (soundOn) playOrderAlert();
   }, [readyToRun, soundOn, loading]);
+
+  /*
+   * A table of mine — or one nobody has yet — has ordered: one short buzz
+   * and a soft ding. The order used to appear without a sound, so a waiter
+   * only found out by looking. An order first seen as held is not new when it
+   * is confirmed (the waiter just did that); held orders chime on their own
+   * (HeldOrdersCard). Same baseline rule as above.
+   */
+  const prevOrderIds = useRef<Set<string> | null>(null);
+  useEffect(() => {
+    if (loading) return;
+    const prev = prevOrderIds.current;
+    prevOrderIds.current = new Set(orders.map((o) => o.id));
+    if (prev === null) return;
+    if (!orders.some((o) => !prev.has(o.id) && isInKitchen(o.status) && !isHeld(o))) return;
+    vibrate(150);
+    if (soundOn) playOrderPlacedAlert();
+  }, [orders, soundOn, loading]);
 
   /* Again every ~75s while a table is waiting and nobody is on the way. */
   const alertsRef = useRef({ calls: waiterCalls, bills: billRequests });

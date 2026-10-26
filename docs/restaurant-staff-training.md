@@ -90,8 +90,9 @@ Then, from top to bottom:
 | **No waiter yet** | Tables with guests that are on nobody's section — **Take** one to make it yours |
 | **My tables** | Your tables, what each owes, **Cash** / **Terminal** and **Free table** |
 
-**A new order** appears under *In the kitchen*. Tap **Accept** to show the
-guest a waiter has seen it (optional — the kitchen does not wait for it).
+**A new order** — one short buzz and a soft ding, and it appears under *In the
+kitchen*. Tap **Accept** to show the guest a waiter has seen it (optional —
+the kitchen does not wait for it).
 
 **Food is ready** — a long buzz and a chime, and the order sits at the top as
 *Ready to run*. Take it out, then **Mark served**.

@@ -68,6 +68,26 @@ test.describe('what needs me now', () => {
     await page.getByRole('button', { name: 'Mark served' }).click();
     await expect.poll(() => staff.statusWrites).toEqual([{ id: 'w1', status: 'served' }]);
   });
+
+  // A new order on my table used to appear without a sound or a buzz: the
+  // waiter only knew by looking.
+  test('a new order on my table buzzes the phone; what was there already does not', async ({ staff, page }) => {
+    await page.addInitScript(() => {
+      const w = window as unknown as { __buzz: unknown[] };
+      w.__buzz = [];
+      Object.defineProperty(navigator, 'vibrate', { value: (p: unknown) => { w.__buzz.push(p); return true; }, configurable: true });
+    });
+    staff.orders = [anOrder({ id: 'o-old', table_session_id: 'session-1', table_sessions: t7 })];
+    await asMarko(page);
+    await page.goto('/waiter');
+    await expect(page.getByText('In the kitchen')).toBeVisible();
+    const buzzes = () => page.evaluate(() => (window as unknown as { __buzz: unknown[] }).__buzz);
+    expect(await buzzes()).toEqual([]);
+
+    staff.orders = [...staff.orders, anOrder({ id: 'o-new', order_code: '048', table_session_id: 'session-6', table_sessions: t6 })];
+    await page.evaluate(() => window.dispatchEvent(new Event('online')));
+    await expect.poll(buzzes).toEqual([150]);
+  });
 });
 
 test.describe('the bill', () => {
