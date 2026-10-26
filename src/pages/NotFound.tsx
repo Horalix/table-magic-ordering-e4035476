@@ -1,10 +1,15 @@
-import { Link } from 'react-router-dom';
+import { Link, Navigate, useLocation } from 'react-router-dom';
 import { useT } from '@/lib/i18n';
+import { legacyRedirect } from '@/lib/legacy-redirects';
 import { menuPath } from '@/lib/venues';
 
 /** Any mistyped or stale link. Guests land here too, so it speaks their language. */
 const NotFound = () => {
   const t = useT();
+  const { pathname } = useLocation();
+  // An address that moved (an old printed QR code, an old lasoul.net page).
+  const moved = legacyRedirect(pathname);
+  if (moved) return <Navigate to={moved} replace />;
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-6">
       <div className="text-center max-w-xs">

@@ -36,6 +36,19 @@ test.describe('menu and discovery', () => {
     await expect(page.getByRole('link', { name: /Back to Menu|Nazad na meni/ })).toBeVisible();
   });
 
+  // Netlify redirects these on a first visit, but on a phone that had opened
+  // the site before, the service worker answers and the app saw only an
+  // unknown address. This server applies no redirects either, which is the
+  // same situation.
+  test('an old printed QR code or lasoul.net link still lands in the right place', async ({ page }) => {
+    await page.goto('/food/burgers.html');
+    await expect(page).toHaveURL(/\/menu\/lasoul\/food\/\?section=burgers$/);
+    await expect(page.getByRole('heading', { level: 2, name: /Burgers|Burgeri/ })).toBeVisible();
+    await page.goto('/en/home');
+    await expect(page).toHaveURL(/\/$/);
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+  });
+
   // Printed QR codes and links from the old menu site land on a section.
   test('a section link opens the category at that section', async ({ page }) => {
     await page.goto('/menu/food?section=burgers');
