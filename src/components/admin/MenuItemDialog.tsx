@@ -526,7 +526,8 @@ const MenuItemDialog = ({ open, onOpenChange, subcategoryId, item, onSaved, star
             <div className="mt-1.5 flex items-center gap-3">
               <div className="w-20 h-20 rounded-lg overflow-hidden bg-muted shrink-0 border border-border">
                 {imageUrl ? (
-                  <SmartImage src={imageUrl} alt={name || 'item'} width={80} height={80} wrapperClassName="w-20 h-20" />
+                  // With the dish's id: the photo guests see, until a new one is uploaded here.
+                  <SmartImage src={imageUrl} id={item?.id} alt={name || 'item'} width={80} height={80} square wrapperClassName="w-20 h-20" />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center text-muted-foreground/40 text-2xl font-serif">
                     {(name || '·')[0]}

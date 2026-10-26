@@ -4,6 +4,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
+import SmartImage from '@/components/ui/SmartImage';
 import {
   ChevronDown, ChevronRight, ChevronUp, EyeOff, Image as ImageIcon, Languages,
   Loader2, MoreVertical, Pencil, Plus, RefreshCw, Search, Trash2, UtensilsCrossed, X,
@@ -578,8 +579,9 @@ const AdminMenu = () => {
                               {items.map((item, itemIdx) => (
                                 <div key={item.id} className="flex items-center justify-between gap-2 py-2 px-2 rounded-lg hover:bg-muted/30">
                                   <div className="min-w-0 flex items-center gap-3">
+                                    {/* The photo guests see: the prepared one while it stands for this upload. */}
                                     {item.image_url
-                                      ? <img src={item.image_url} alt={item.name} className="w-10 h-10 rounded-lg object-cover shrink-0" />
+                                      ? <SmartImage src={item.image_url} id={item.id} alt={item.name} width={40} height={40} sizes="40px" square wrapperClassName="w-10 h-10 rounded-lg overflow-hidden shrink-0" />
                                       : <div className="w-10 h-10 rounded-lg bg-muted shrink-0 flex items-center justify-center text-muted-foreground/40 font-serif">{item.name[0]}</div>}
                                     <div className="min-w-0">
                                       <div className="flex items-center gap-1.5 min-w-0">
