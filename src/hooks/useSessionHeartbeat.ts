@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
-import { useCartStore } from '@/lib/cart-store';
+import { tableForgotten, useCartStore } from '@/lib/cart-store';
 import { touchSession } from '@/lib/guest-api';
 import { t } from '@/lib/i18n';
 import { menuPath } from '@/lib/venues';
@@ -25,6 +25,19 @@ export function useSessionHeartbeat() {
     if (!sessionId || !sessionToken) return;
     let ended = false;
     const ping = () => {
+      // Only a guest with the app on screen keeps the table. A tab left open
+      // in a pocket since lunch is a new visit when it is next looked at.
+      if (document.visibilityState === 'visible') {
+        const { tableSeenAt, endVisit, markTableSeen } = useCartStore.getState();
+        if (tableForgotten(tableSeenAt)) {
+          ended = true;
+          endVisit();
+          toast.error(t('session_expired'));
+          navigate(menuPath(), { replace: true });
+          return;
+        }
+        markTableSeen();
+      }
       touchSession(sessionId, sessionToken)
         .then((active) => {
           if (active !== false || ended) return;

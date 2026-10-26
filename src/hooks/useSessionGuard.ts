@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useCartStore } from '@/lib/cart-store';
+import { tableForgotten, useCartStore } from '@/lib/cart-store';
 import { resumeSession } from '@/lib/guest-api';
 
 /**
@@ -18,7 +18,9 @@ import { resumeSession } from '@/lib/guest-api';
  *     SERVER. Still active means the meal is still going; closed or expired
  *     means the visit is over and the device forgets the table.
  *
- * The server is the authority in both directions. The device only remembers.
+ * The server is the authority in both directions. The device only remembers —
+ * and not for long: a table nobody has looked at for an hour is forgotten
+ * before the server is asked (TABLE_MEMORY_MS in cart-store).
  */
 
 const TAB_MARKER = 'lasoul-session-checked';
@@ -34,6 +36,15 @@ export function useSessionGuard(): SessionGuardState {
 
   useEffect(() => {
     if (!sessionId || !sessionToken) { setState('none'); return; }
+
+    // Nobody has looked at the app at this table for an hour: whatever the
+    // server says, this is a new visit (TABLE_MEMORY_MS). A table left open by
+    // staff kept phones on it all day.
+    if (tableForgotten(useCartStore.getState().tableSeenAt)) {
+      useCartStore.getState().endVisit();
+      setState('none');
+      return;
+    }
 
     // Already verified in this tab: this is a reload, not a new visit.
     if (typeof sessionStorage !== 'undefined' && sessionStorage.getItem(TAB_MARKER) === sessionId) {

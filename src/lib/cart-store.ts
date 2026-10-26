@@ -133,6 +133,13 @@ interface CartStore {
   setGuestName: (name: string) => void;
   setLastOrderTime: () => void;
   setPendingPayment: (pending: PendingPayment | null) => void;
+  /**
+   * When the guest last had the app on screen while at the table (ms). A table
+   * nobody has looked at for TABLE_MEMORY_MS is forgotten (tableForgotten).
+   */
+  tableSeenAt: number | null;
+  /** The app is on screen: the table is still this guest's. */
+  markTableSeen: () => void;
   /** Forget the table entirely — the visit is over. */
   endVisit: () => void;
   /**
@@ -212,6 +219,7 @@ export const useCartStore = create<CartStore>()(persist((set, get) => ({
   pendingPayment: null,
   checkoutKey: null,
   unavailableIds: [],
+  tableSeenAt: null,
   clientId: genId(),
   rotateClientId: () => set({ clientId: genId() }),
 
@@ -345,11 +353,13 @@ export const useCartStore = create<CartStore>()(persist((set, get) => ({
 
   clearCart: () => set({ items: [], checkoutKey: null, unavailableIds: [] }),
 
-  setTable: (tableNumber, token) => set({ tableNumber, qrToken: token, sessionId: null, sessionToken: null }),
+  setTable: (tableNumber, token) => set({ tableNumber, qrToken: token, sessionId: null, sessionToken: null, tableSeenAt: null }),
 
   setSessionId: (id) => set({ sessionId: id }),
 
-  setSession: (id, token) => set({ sessionId: id, sessionToken: token }),
+  setSession: (id, token) => set({ sessionId: id, sessionToken: token, tableSeenAt: Date.now() }),
+
+  markTableSeen: () => set({ tableSeenAt: Date.now() }),
 
   setGuestName: (name) => set({ guestName: name }),
 
@@ -378,13 +388,14 @@ export const useCartStore = create<CartStore>()(persist((set, get) => ({
       pendingPayment: null,
       checkoutKey: null,
       unavailableIds: [],
+      tableSeenAt: null,
     });
   },
 
   leaveTable: () => {
     get().stopHeartbeat();
     try { sessionStorage?.removeItem('lasoul-session-checked'); } catch { /* not available */ }
-    set({ sessionId: null, sessionToken: null, tableNumber: null, guestName: null, pendingPayment: null, checkoutKey: null });
+    set({ sessionId: null, sessionToken: null, tableNumber: null, guestName: null, pendingPayment: null, checkoutKey: null, tableSeenAt: null });
   },
 
   // In cents: 3 x 14.40 is 43.199999... in floating point.
@@ -412,7 +423,7 @@ export const useCartStore = create<CartStore>()(persist((set, get) => ({
       if (!isActive) {
         // The cart stays: the guest may simply rescan and send it. Only the
         // table identity is dropped, because the server no longer honours it.
-        set({ sessionId: null, sessionToken: null, tableNumber: null, qrToken: null, guestName: null, pendingPayment: null, checkoutKey: null });
+        set({ sessionId: null, sessionToken: null, tableNumber: null, qrToken: null, guestName: null, pendingPayment: null, checkoutKey: null, tableSeenAt: null });
         toast.error(t('session_expired'));
         if (heartbeatInterval) {
           clearInterval(heartbeatInterval);
@@ -443,6 +454,33 @@ export const useCartStore = create<CartStore>()(persist((set, get) => ({
     lastOrderTime: s.lastOrderTime,
     pendingPayment: s.pendingPayment,
     checkoutKey: s.checkoutKey,
+    tableSeenAt: s.tableSeenAt,
     clientId: s.clientId,
   }),
 }));
+
+/**
+ * How long a phone remembers its table without the guest looking at the app.
+ *
+ * Not long, on purpose: a table remembered from earlier in the day opened the
+ * next visit on the wrong table. Forgetting costs a returning guest one scan —
+ * the same table's code puts them straight back on the same bill, because the
+ * server recognises the phone.
+ */
+export const TABLE_MEMORY_MS = 60 * 60 * 1000;
+
+export const tableForgotten = (seenAt: number | null, now = Date.now()) =>
+  !seenAt || now - seenAt > TABLE_MEMORY_MS;
+
+/*
+ * One table per phone. The home-screen app and the browser tab a QR scan
+ * opened are two copies of the app, each holding the store in memory and
+ * writing it back; the copy left in the background wrote the old table over
+ * the one just scanned, and its heartbeat kept that old table open. When
+ * another copy changes the stored cart, this one takes it as it is.
+ */
+if (typeof window !== 'undefined') {
+  window.addEventListener('storage', (e) => {
+    if (e.key === 'lasoul-cart') void useCartStore.persist.rehydrate();
+  });
+}

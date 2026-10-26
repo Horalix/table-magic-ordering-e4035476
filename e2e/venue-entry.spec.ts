@@ -123,4 +123,39 @@ test.describe('returning to the app', () => {
     await page.getByRole('button', { name: /Table 7/i }).click();
     await expect(page).toHaveURL(/\/start/);
   });
+
+  // A table the staff never freed stayed open all day, and every phone that
+  // had sat there came back to it hours later.
+  test('forgets a table nobody has looked at for an hour, even while it is still open', async ({ page, state }) => {
+    state.sessionResume = { status: 'active', session_id: 'session-1', table_number: 7, guest_name: 'Amina' };
+    await page.addInitScript(() => {
+      const raw = JSON.parse(localStorage.getItem('lasoul-cart') ?? '{}');
+      raw.state.tableSeenAt = Date.now() - 2 * 60 * 60 * 1000;
+      localStorage.setItem('lasoul-cart', JSON.stringify(raw));
+    });
+
+    await page.goto('/menu');
+    await expect(page.getByRole('searchbox')).toBeVisible();
+    await expect(page.getByRole('button', { name: /Table 7/i })).toHaveCount(0);
+  });
+
+  // The home-screen app and the browser tab a QR scan opens are two copies of
+  // the app. The one left in the background wrote its old table back over the
+  // one just scanned.
+  test('takes the table another copy of the app just chose', async ({ page, context, state }) => {
+    await page.goto('/menu');
+    await expect(page.getByRole('button', { name: /Table 7/i })).toBeVisible();
+
+    state.sessionResume = { status: 'active', session_id: 'session-9', table_number: 9, guest_name: 'Amina' };
+    const other = await context.newPage();
+    await other.goto('/robots.txt');
+    await other.evaluate(() => {
+      const raw = JSON.parse(localStorage.getItem('lasoul-cart') ?? '{}');
+      raw.state = { ...raw.state, tableNumber: 9, sessionId: 'session-9', sessionToken: 'sess-token-9', tableSeenAt: Date.now() };
+      localStorage.setItem('lasoul-cart', JSON.stringify(raw));
+    });
+
+    await expect(page.getByRole('button', { name: /Table 9/i })).toBeVisible();
+    await expect(page.getByRole('button', { name: /Table 7/i })).toHaveCount(0);
+  });
 });

@@ -26,7 +26,7 @@ async function seedCart(page: Page, quantity = 3) {
       state: {
         items: [{ id: 'item-burger', menuItemId: 'item-burger', name: 'La Soul Burger', price: 18, quantity: qty }],
         tableNumber: 7, qrToken: 'qr-token-7', sessionToken: 'sess-token-7', sessionId: 'session-1',
-        guestName: 'Amina', lastOrderTime: null, pendingPayment: null, clientId: 'e2e-device',
+        guestName: 'Amina', lastOrderTime: null, pendingPayment: null, tableSeenAt: Date.now(), clientId: 'e2e-device',
       },
       version: 0,
     }));

@@ -255,6 +255,7 @@ export async function seedSession(page: Page) {
         guestName: 'Amina',
         lastOrderTime: null,
         pendingPayment: null,
+        tableSeenAt: Date.now(),
         clientId: 'e2e-device',
       },
       version: 0,
