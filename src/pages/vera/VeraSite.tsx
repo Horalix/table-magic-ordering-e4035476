@@ -4,7 +4,7 @@ import { ChevronDown, Clock, MapPin, Phone } from 'lucide-react';
 import LanguageSelector from '@/components/guest/LanguageSelector';
 import SmartImage from '@/components/ui/SmartImage';
 import Reveal from '@/components/site/Reveal';
-import { COURSES, ROMAN, SITE, pick, type Copy } from '@/components/vera/copy';
+import { COURSES, PLACE, ROMAN, SITE, pick, type Copy } from '@/components/vera/copy';
 import roomImages from '@/components/vera/room-images.json';
 import { useLanguageStore, useT, type Locale } from '@/lib/i18n';
 import { HOME_VENUE } from '@/lib/home-venue';
@@ -164,7 +164,8 @@ const VeraSite = ({ locale: pathLocale }: { locale?: Locale }) => {
             <h1 dir="ltr">
               <img src="/brand/vera/lockup-cream.webp" alt="Vera Italia" width={1158} height={806} className="w-64 sm:w-80 h-auto drop-shadow-[0_2px_18px_rgba(0,0,0,0.35)]" />
             </h1>
-            <p className="mt-7 font-serif italic text-[22px] sm:text-2xl text-[hsl(var(--vi-glow))]">{c(SITE.heroLine)}</p>
+            {venue.city && <p className="mt-7 vi-caps text-[hsl(var(--vi-glow))]/85">{c(SITE.place)}</p>}
+            <p className={`${venue.city ? 'mt-3' : 'mt-7'} font-serif italic text-[22px] sm:text-2xl text-[hsl(var(--vi-glow))]`}>{c(SITE.heroLine)}</p>
             <div className="mt-9">{menuCta(true)}</div>
           </div>
           <a href="#benvenuti" aria-label={c(SITE.welcome)} className="absolute bottom-6 left-1/2 z-10 -translate-x-1/2 text-white/70 hover:text-white">
@@ -322,7 +323,8 @@ const VeraSite = ({ locale: pathLocale }: { locale?: Locale }) => {
               </>
             ) : (
               <>
-                <h2 className="mt-6 font-serif italic text-[40px] sm:text-6xl font-light">{c(SITE.openingSoon)}</h2>
+                {/* The city until the owner gives the street; "Opening soon" only before it opens. */}
+                <h2 className="mt-6 font-serif italic text-[40px] sm:text-6xl font-light">{venue.city ? c(PLACE.city) : c(SITE.openingSoon)}</h2>
                 <p className="mt-5 font-serif italic text-xl text-muted-foreground">{c(SITE.visitSoon)}</p>
               </>
             )}
@@ -337,7 +339,7 @@ const VeraSite = ({ locale: pathLocale }: { locale?: Locale }) => {
           {venue.live && <Link to={menuPath('veraitalia')} className="hover:text-white">{c(SITE.menuTitle)}</Link>}
           <Link to="/privacy" className="hover:text-white">{t('privacy_security')}</Link>
         </div>
-        <p className="mt-6 vi-caps text-[hsl(var(--vi-glow))]/50">© {new Date().getFullYear()} Vera Italia</p>
+        <p className="mt-6 vi-caps text-[hsl(var(--vi-glow))]/50">© {new Date().getFullYear()} Vera Italia{venue.city ? ` · ${c(PLACE.city)}, ${c(PLACE.country)}` : ''}</p>
       </footer>
     </div>
   );

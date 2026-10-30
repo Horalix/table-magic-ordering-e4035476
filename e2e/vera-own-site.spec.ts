@@ -17,6 +17,10 @@ test.describe('Vera Italia’s own site', () => {
     await installVeraStubs(page);
     await page.goto('/');
     await expect(page.getByRole('heading', { level: 1, name: 'Vera Italia' })).toBeVisible();
+    // Where it is, on the photograph and in the visit section; "Opening soon" no longer.
+    await expect(page.getByText('Italian restaurant · Sarajevo')).toBeVisible();
+    await expect(page.getByRole('heading', { level: 2, name: 'Sarajevo' })).toBeAttached();
+    await expect(page.getByText('Opening soon')).toHaveCount(0);
     await expect(page.locator('html')).toHaveAttribute('data-venue', 'veraitalia');
     await expect(page.getByRole('img', { name: 'La Soul' })).toHaveCount(0);
     await expect(page.locator('link[rel="manifest"]')).toHaveAttribute('href', '/manifest-veraitalia.webmanifest');
@@ -25,7 +29,7 @@ test.describe('Vera Italia’s own site', () => {
 
   test('a shared link to its menu or a course previews as Vera Italia, and installs as Vera Italia', async ({ page }) => {
     // What a link preview or a crawler reads: the HTML as served, before any code runs.
-    for (const [path, title] of [['/menu/veraitalia/', 'Menu — Vera Italia'], ['/menu/veraitalia/pizza-napoletana/', 'Pizza Napoletana — Vera Italia']]) {
+    for (const [path, title] of [['/menu/veraitalia/', 'Menu — Vera Italia, Italian Restaurant in Sarajevo'], ['/menu/veraitalia/pizza-napoletana/', 'Pizza Napoletana in Sarajevo — Vera Italia']]) {
       const html = await (await page.request.get(path)).text();
       expect(html).toContain(`<title>${title}</title>`);
       expect(html).toContain('href="/manifest-veraitalia.webmanifest"');
@@ -38,7 +42,9 @@ test.describe('Vera Italia’s own site', () => {
 
   test('tells search engines and link previews it is veraitalia.net', async ({ page }) => {
     const home = await (await page.request.get('/')).text();
-    expect(home).toContain('<title>Vera Italia — Cucina Italiana</title>');
+    expect(home).toContain('<title>Vera Italia — Italian Restaurant &amp; Pizza in Sarajevo</title>');
+    expect(home).toContain('<meta name="geo.placename" content="Sarajevo" />');
+    expect(await (await page.request.get('/bs/')).text()).toContain('<title>Vera Italia — italijanski restoran i pizza u Sarajevu</title>');
     expect(home).toContain('<link rel="canonical" href="https://veraitalia.net/" />');
     expect(home).not.toContain('<title>La Soul');
 
@@ -71,7 +77,7 @@ test.describe('Vera Italia’s own site', () => {
 
   test('every dish has its own page, and the website answers what people ask', async ({ page }) => {
     const dish = await (await page.request.get('/menu/veraitalia/dish/truffle-pizza/')).text();
-    expect(dish).toContain('<title>Truffle Pizza — 25 KM · Vera Italia</title>');
+    expect(dish).toContain('<title>Truffle Pizza — 25 KM · Vera Italia, Sarajevo</title>');
     expect(dish).toContain('"priceCurrency":"BAM"');
 
     const home = await (await page.request.get('/')).text();

@@ -118,40 +118,83 @@ address already, and the card-payment functions (switched off) take
 veraitalia.net from `supabase/functions/_shared/http.ts` whenever they are
 next deployed.
 
-**4. Search, maps and AI answers** (the owner, once it has an address):
+**4. First in Sarajevo — search, maps and AI answers**
 
-1. **Google Search Console** — add a *Domain* property `veraitalia.net` (a
+Someone looking for "the best Italian restaurant in Sarajevo" ("najbolji
+italijanski restoran Sarajevo", "pizza Sarajevo") is answered in three
+places, and each is won differently:
+
+- **The map** — three restaurants on a Google map above every result. Google
+  ranks them by its Business Profile: how relevant (category, name, menu), how
+  near the searcher, and how prominent — the number, rating and freshness of
+  its Google reviews above all. No website can win this on its own.
+- **The results under it** — today mostly lists: TripAdvisor, tourismbih.com,
+  sarajevo.travel, Wanderlog, Foursquare, Culture Trip. veraitalia.net ranks
+  for its own name, its dishes and "Italian restaurant Sarajevo" once Google
+  trusts it; being *on* those lists is what reaches the rest.
+- **AI answers** (ChatGPT, Gemini, Perplexity, Copilot) — they repeat what
+  those lists, Bing, Google Maps and the reviews say, and quote the website
+  for facts: what it serves, where, the prices.
+
+**What the website already does** (`src/lib/seo/vera-seo.ts`,
+`src/components/vera/copy.ts`): every title, description and the page itself
+say *Italian restaurant in Sarajevo* — in English, Bosnian ("italijanski
+restoran u Sarajevu") and Arabic, with hreflang between them; a `Restaurant`
+in Sarajevo (linked to Sarajevo on Wikidata) with its cuisine, KM/BAM price
+range, menu, logo and photographs, and its address, hours, phone and
+profiles the day they are given; the whole menu as `Menu → MenuSection →
+MenuItem`, every dish priced, with its own page, breadcrumbs and "in
+Sarajevo" in its title; a FAQ in three languages that answers "Where can I
+eat Neapolitan pizza in Sarajevo?" and "What sets Vera Italia apart from other
+Italian restaurants in Sarajevo?" from the menu; `llms.txt` and
+`llms-full.txt` for AI engines; Sarajevo's geo tags; a sitemap with
+photographs; a 1200×630 link preview. It never calls itself "the best": a
+claim like that is worth nothing to Google, and the reviews say it far better.
+
+**What only the owner can do, most important first:**
+
+1. **Google Business Profile** — create or claim "Vera Italia" at
+   business.google.com and verify it. The name exactly as on the door
+   (adding "best", "pizza" or "Sarajevo" to the name gets profiles
+   suspended). Primary category *Italian restaurant*, then *Pizza
+   restaurant*; the exact address, phone and hours; website
+   `https://veraitalia.net/`; menu `https://veraitalia.net/menu/veraitalia/`;
+   the website's dish and room photographs, the oven, and the entrance with
+   its sign; the attributes that are true (dine-in, vegetarian options, the
+   payments it takes). Then a photo or post every week.
+2. **Reviews** — the biggest single reason one restaurant shows above
+   another. Once the profile exists, send its review link (*Ask for reviews*
+   in the profile): it goes in `reviewUrl` in `src/lib/venues.ts`, and every
+   guest who rates their visit in the app is then offered "Leave a Google
+   review" — every guest, whatever they rated, as Google requires. Answer
+   every review, in its language. Never pay for reviews or offer anything for
+   one.
+3. **The facts, to me** — the street address, phone, hours, the Google Maps
+   link and Instagram. They go in `src/lib/venues.ts`, and the website, its
+   structured data, its FAQ ("Where is Vera Italia?", "When is it open?") and
+   llms.txt all say them at once — written exactly as on the Google profile.
+4. **Google Search Console** — add a *Domain* property `veraitalia.net` (a
    DNS TXT record), submit `https://veraitalia.net/sitemap.xml`, and request
-   indexing of `/`, `/bs/` and `/ar/`.
-2. **Bing Webmaster Tools** — *Import from Google Search Console*. Bing's index
-   is what ChatGPT search and Copilot read.
-3. **Google Business Profile** — "Vera Italia", primary category *Italian
-   restaurant* (add *Pizza restaurant*), the exact address, phone and hours,
-   website `https://veraitalia.net/`, menu link
-   `https://veraitalia.net/menu/veraitalia/`, and the dish and room
-   photographs. This is what Google Maps, "near me" searches and AI answers
-   about restaurants lean on most.
-4. **Apple Business Connect** (Apple Maps, Siri), **Bing Places**,
-   **TripAdvisor**, **Instagram** and **Facebook** — the same name, address
-   and phone, written the same way everywhere, all linking to veraitalia.net.
-5. The address, phone, hours, Google Maps link, Instagram and review link go
-   in `src/lib/venues.ts`: the website, its structured data, its FAQ ("Where
-   is Vera Italia?", "When is it open?") and llms.txt all take them from
-   there.
-6. It is open (`live: true`, step 4 of the table above, 30 October 2026):
-   its menu, four courses and 25 dish pages are in the sitemap and open to
-   search. Submit the sitemap again in Search Console and Bing so they are
-   read soon.
+   indexing of `/`, `/bs/` and `/ar/`. **Bing Webmaster Tools** — *Import from
+   Google Search Console*; Bing's index is what ChatGPT search and Copilot
+   read.
+5. **The lists** — a listing on **TripAdvisor** (claim it; tourists and AI
+   answers lean on it), **tourismbih.com** and **sarajevo.travel** (both
+   take restaurant submissions), **Foursquare** (it feeds Apple Maps and
+   others), **Apple Business Connect** (Apple Maps, Siri) and **Bing
+   Places** — the same name, address and phone, written the same way
+   everywhere, all linking to veraitalia.net.
+6. **Being written about** — Sarajevo food writers, local portals and
+   Instagram accounts, and the "best restaurants in Sarajevo" lists: an
+   invitation to taste the menu is how a new restaurant gets onto them, and a
+   link from them to veraitalia.net is what Google counts.
+7. **Instagram and Facebook** — "Vera Italia · Sarajevo" with the website in
+   the bio; the dishes and the room, regularly.
 
-What the site already gives search engines and AI engines
-(`src/lib/seo/vera-seo.ts`): the website in English, Bosnian and Arabic with
-hreflang; a `Restaurant` with its cuisine, price range (KM/BAM), menu, logo,
-photographs and, once known, address, hours, phone and profiles; the whole
-menu as `Menu → MenuSection → MenuItem`, every dish priced in BAM, marked
-vegetarian where it is, with its own page and breadcrumbs; a FAQ answered from
-the menu in three languages; `llms.txt` and `llms-full.txt`; a sitemap with
-photographs; and a 1200×630 link-preview image (`public/site/vera/og.jpg`).
-Nothing in it is La Soul's, and nothing the owner has not given is said.
+It is open (`live: true`, step 4 of the table above, 30 October 2026): its
+menu, four courses and 25 dish pages are in the sitemap and open to search.
+Nothing in any of it is La Soul's, and nothing the owner has not given is
+said.
 
 ## Vera Italia — what is ready
 
