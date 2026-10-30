@@ -23,6 +23,19 @@ test.describe('Vera Italia’s own site', () => {
     await expect(page.locator('meta[name="apple-mobile-web-app-title"]')).toHaveAttribute('content', 'Vera Italia');
   });
 
+  test('a shared link to its menu or a course previews as Vera Italia, and installs as Vera Italia', async ({ page }) => {
+    // What a link preview or a crawler reads: the HTML as served, before any code runs.
+    for (const [path, title] of [['/menu/veraitalia/', 'Menu — Vera Italia'], ['/menu/veraitalia/pizza-napoletana/', 'Pizza Napoletana — Vera Italia']]) {
+      const html = await (await page.request.get(path)).text();
+      expect(html).toContain(`<title>${title}</title>`);
+      expect(html).toContain('href="/manifest-veraitalia.webmanifest"');
+      expect(html).toContain('<meta name="apple-mobile-web-app-title" content="Vera Italia" />');
+      expect(html).not.toContain('<title>La Soul');
+    }
+    expect(await (await page.request.get('/manifest-veraitalia.webmanifest')).json())
+      .toMatchObject({ name: 'Vera Italia', start_url: '/menu/veraitalia/' });
+  });
+
   test('tells search engines and link previews it is veraitalia.net', async ({ page }) => {
     const home = await (await page.request.get('/')).text();
     expect(home).toContain('<title>Vera Italia — Cucina Italiana</title>');

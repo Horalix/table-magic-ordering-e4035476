@@ -23,7 +23,7 @@ export const VENUE_URLS: Record<string, string> = {
  */
 export const OWN_SITE_LIVE: Record<string, boolean> = {
   lasoul: true,
-  veraitalia: false,
+  veraitalia: true, // veraitalia.net answered on 30 October 2026
 };
 
 /** This build's own address: every canonical link, the sitemap, structured data and llms.txt point at it. */

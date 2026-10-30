@@ -102,9 +102,15 @@ way round.
 3. *Domain management → HTTPS*: Netlify issues the certificate once DNS
    answers (minutes to a few hours). Open `https://veraitalia.net/`.
 4. **Then, in the code:** `OWN_SITE_LIVE.veraitalia = true` in
-   `src/lib/seo/site-url.ts`. La Soul's site then forwards `/veraitalia/` and
-   `/menu/veraitalia/…` to veraitalia.net, and Vera Italia's QR codes are
-   printed with veraitalia.net. **Print its QR codes after this.**
+   `src/lib/seo/site-url.ts` (done 30 October 2026, the day veraitalia.net
+   answered). La Soul's site forwards `/veraitalia/` and `/menu/veraitalia/…`
+   to veraitalia.net — Netlify on a first visit, the app itself on a phone its
+   service worker answers — and stops listing them in its sitemap; Vera
+   Italia's QR codes are printed with veraitalia.net. **Print its QR codes
+   from now on, not before.**
+5. **The "Powered by Netlify" badge:** Netlify shows it on new Free-plan
+   projects. Turn it off in the project: *Project configuration → General →
+   Powered by Netlify badge*. No redeploy needed.
 
 **3. Lovable:** nothing more for the domain. The prompt in
 `docs/lovable-migration-prompt.md` is the same; the staff functions answer any
