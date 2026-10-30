@@ -4,15 +4,17 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider, hashKey } from "@tanstack/react-query";
 import { MotionConfig } from "framer-motion";
 import { BrowserRouter, Routes, Route, Navigate, useLocation, useParams } from "react-router-dom";
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useEffect, type ReactNode } from "react";
 import StaffGate from "./components/auth/StaffGate";
 import { ClockProvider } from "./lib/clock";
 import LocaleShell from "./components/LocaleShell";
-import { menuCategoryPath, menuHome, venueBySlug } from "./lib/venues";
+import { menuCategoryPath, menuHome, ownSiteElsewhere, venueBySlug } from "./lib/venues";
 import { currentVenueSlug } from "./lib/current-venue";
 import { HOME_VENUE } from "./lib/home-venue";
 
 const VERA_HOME = HOME_VENUE === "veraitalia";
+/** Vera Italia's own site, when its pages are not this site's to show. */
+const VERA_ELSEWHERE = ownSiteElsewhere("veraitalia");
 import { VenueTheme } from "./hooks/useVenue";
 import { AppUpdater } from "./lib/app-update";
 
@@ -91,6 +93,24 @@ const MenuRedirect = () => {
   return <Navigate to={menuHome(search)} replace />;
 };
 
+/** A full page load of another address: the browser leaves this site. */
+const ForwardTo = ({ to }: { to: string }) => {
+  useEffect(() => { window.location.replace(to); }, [to]);
+  return null;
+};
+
+/**
+ * A restaurant with a site of its own (veraitalia.net) is shown there: the
+ * same page, at its own address. Netlify forwards these on a first visit; a
+ * phone whose service worker answers never asks Netlify, so the app does too.
+ */
+const OnItsOwnSite = ({ children }: { children: ReactNode }) => {
+  const { venue } = useParams<{ venue: string }>();
+  const { pathname, search, hash } = useLocation();
+  const away = ownSiteElsewhere(venue);
+  return away ? <ForwardTo to={`${away}${pathname}${search}${hash}`} /> : <>{children}</>;
+};
+
 const VenueMenu = () => {
   const { venue } = useParams<{ venue: string }>();
   const { search } = useLocation();
@@ -139,12 +159,12 @@ const App = () => (
             <Route path="/" element={VERA_HOME ? <VeraSite /> : <SiteHome />} />
             <Route path="/bs" element={VERA_HOME ? <VeraSite locale="bs" /> : <SiteHome locale="bs" />} />
             <Route path="/ar" element={VERA_HOME ? <VeraSite locale="ar" /> : <SiteHome locale="ar" />} />
-            <Route path="/veraitalia" element={VERA_HOME ? <Navigate to="/" replace /> : <VeraSite />} />
+            <Route path="/veraitalia" element={VERA_HOME ? <Navigate to="/" replace /> : VERA_ELSEWHERE ? <ForwardTo to={`${VERA_ELSEWHERE}/`} /> : <VeraSite />} />
             {/* Guest routes wrapped in soft page transition. */}
             <Route path="/menu" element={<MenuRedirect />} />
-            <Route path="/menu/:venue" element={<VenueMenu />} />
-            <Route path="/menu/:venue/:type" element={<VenueCategory />} />
-            <Route path="/menu/:venue/dish/:dishSlug" element={<DishLink />} />
+            <Route path="/menu/:venue" element={<OnItsOwnSite><VenueMenu /></OnItsOwnSite>} />
+            <Route path="/menu/:venue/:type" element={<OnItsOwnSite><VenueCategory /></OnItsOwnSite>} />
+            <Route path="/menu/:venue/dish/:dishSlug" element={<OnItsOwnSite><DishLink /></OnItsOwnSite>} />
             <Route path="/cart" element={<PageTransition><CartPage /></PageTransition>} />
             <Route path="/tab" element={<PageTransition><RunningTabPage /></PageTransition>} />
             <Route path="/table/:tableNumber" element={<TableEntry />} />

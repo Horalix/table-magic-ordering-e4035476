@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_VENUE, VENUES, menuBase, menuCategoryPath, menuHome, menuPath, venueByDbId, venueBySlug } from './venues';
+import { DEFAULT_VENUE, VENUES, menuBase, menuCategoryPath, menuHome, menuPath, ownSiteElsewhere, qrOrigin, venueByDbId, venueBySlug } from './venues';
 
 describe('venues', () => {
   it('puts each restaurant’s menu under its own address', () => {
@@ -34,5 +34,20 @@ describe('venues', () => {
     expect(venueByDbId('a5000000-0000-4000-8000-000000000001')?.slug).toBe('lasoul');
     expect(venueByDbId('a5000000-0000-4000-8000-000000000002')?.slug).toBe('veraitalia');
     expect(venueByDbId(null)).toBeNull();
+  });
+});
+
+describe('a restaurant with a site of its own', () => {
+  // This build is La Soul's (no VITE_HOME_VENUE), and shows no restaurant in place (no VITE_PREVIEW_VENUES).
+  it('is shown on its own site: its pages are forwarded there, its QR codes carry its address', () => {
+    expect(ownSiteElsewhere('veraitalia')).toBe('https://veraitalia.net');
+    expect(qrOrigin('veraitalia')).toBe('https://veraitalia.net');
+  });
+
+  it('leaves La Soul, an unknown restaurant and an address naming none where they are', () => {
+    expect(ownSiteElsewhere('lasoul')).toBeNull();
+    expect(ownSiteElsewhere('drinks')).toBeNull();
+    expect(ownSiteElsewhere(undefined)).toBeNull();
+    expect(qrOrigin('lasoul')).toBe(location.origin);
   });
 });

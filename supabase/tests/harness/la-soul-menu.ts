@@ -57,6 +57,8 @@ export async function laSoulDatabase(): Promise<Db> {
   await db.exec(migration('20261025150000_menu_corrections.sql'));
   await db.exec(migration('20261025160000_reco_profit.sql'));
   await db.exec(migration('20261026110000_reco_adaptive.sql'));
+  // ...and that restored its learner and readers from before suggestions were per restaurant.
+  await db.exec(migration('20261030130000_suggestions_per_restaurant.sql'));
   await db.exec(`
     UPDATE public.restaurant_settings
        SET recommendations_enabled = true, reco_holdout_pct = 0, reco_exploration = 0

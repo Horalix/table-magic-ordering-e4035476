@@ -80,17 +80,20 @@ test.describe('Vera Italia’s menu', () => {
     await expect(page.locator('meta[name="apple-mobile-web-app-title"]')).toHaveAttribute('content', 'La Soul');
   });
 
-  test('a shared link to its menu previews as Vera Italia, and installs as Vera Italia', async ({ page }) => {
-    // What a link preview or a crawler reads: the HTML as served, before any code runs.
-    for (const [path, title] of [['/menu/veraitalia/', 'Menu — Vera Italia'], ['/menu/veraitalia/pizza-napoletana/', 'Pizza Napoletana — Vera Italia']]) {
-      const html = await (await page.request.get(path)).text();
-      expect(html).toContain(`<title>${title}</title>`);
-      expect(html).toContain('href="/manifest-veraitalia.webmanifest"');
-      expect(html).toContain('<meta name="apple-mobile-web-app-title" content="Vera Italia" />');
-      expect(html).not.toContain('<title>La Soul');
-    }
-    const manifest = await (await page.request.get('/manifest-veraitalia.webmanifest')).json();
-    expect(manifest).toMatchObject({ name: 'Vera Italia', start_url: '/menu/veraitalia/' });
+  test('La Soul’s site sends Vera Italia’s addresses to veraitalia.net, and lists none of them', async ({ page }) => {
+    // Netlify's rules, first in the file so nothing of La Soul's answers before them
+    // (scripts/seo-prerender.ts; the link previews themselves: e2e/vera-own-site.spec.ts).
+    const rules = (await (await page.request.get('/_redirects')).text())
+      .split('\n').filter((l) => l.trim() && !l.startsWith('#')).map((l) => l.trim().split(/\s+/));
+    expect(rules.slice(0, 4)).toEqual([
+      ['/veraitalia', 'https://veraitalia.net/', '301!'],
+      ['/veraitalia/*', 'https://veraitalia.net/', '301!'],
+      ['/menu/veraitalia', 'https://veraitalia.net/menu/veraitalia/', '301!'],
+      ['/menu/veraitalia/*', 'https://veraitalia.net/menu/veraitalia/:splat', '301!'],
+    ]);
+    // La Soul's own rules follow, untouched.
+    expect(rules).toContainEqual(['/menu.html', '/menu/lasoul/', '301']);
+    expect(await (await page.request.get('/sitemap.xml')).text()).not.toContain('veraitalia');
   });
 });
 

@@ -168,6 +168,18 @@ export function qrOrigin(slug: string): string {
   return typeof location === 'undefined' ? VENUE_URLS[HOME_VENUE] : location.origin;
 }
 
+/**
+ * Where a restaurant's website and menu live when that is not this site: its
+ * own site, once it is up (OWN_SITE_LIVE) — Netlify forwards those addresses
+ * there, and so does the app for a phone its service worker answers. Null on
+ * its own site, before that is up, and on a build that shows it in place to
+ * test it (VITE_PREVIEW_VENUES: the browser tests, a preview deploy).
+ */
+export function ownSiteElsewhere(slug: string | undefined): string | null {
+  if (!slug || slug === HOME_VENUE || !OWN_SITE_LIVE[slug] || liveFromEnv(slug)) return null;
+  return VENUE_URLS[slug] ?? null;
+}
+
 /** "/menu/lasoul" — the prefix every address in a venue's menu starts with. */
 export function menuBase(slug: string = activeVenue()): string {
   return `/menu/${slug}`;
