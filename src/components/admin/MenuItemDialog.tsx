@@ -770,7 +770,7 @@ const MenuItemDialog = ({ open, onOpenChange, subcategoryId, item, onSaved, star
             <PromoSection
               id="new"
               title="Mark as new"
-              description="A “New” badge and a place in “New at La Soul” on the home screen. It ends by itself."
+              description="A “New” badge and a place in the “New at …” row on the home screen. It ends by itself."
               checked={newOn}
               onCheckedChange={(on) => { setNewOn(on); if (on && !newUntil) setNewUntil(defaultNewUntil()); }}
             >

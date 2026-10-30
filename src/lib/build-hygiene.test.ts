@@ -70,22 +70,24 @@ describe('vendor chunking stays honest', () => {
 describe('the font stylesheet is generated, not hand-edited', () => {
   const css = read('src/fonts.css');
 
-  it('carries both families as one variable file each', () => {
-    // Eight static faces became two variable ones. If someone regenerates this
-    // with static weights the file count quadruples silently.
+  it('carries every face as one variable file', () => {
+    // Eight static faces became two variable ones; Vera Italia's Cormorant
+    // added its upright and its italic. If someone regenerates this with
+    // static weights the file count quadruples silently.
     const faces = css.match(/@font-face/g) ?? [];
-    expect(faces).toHaveLength(2);
-    expect(css).toMatch(/font-weight:\s*400\s+700/);
+    expect(faces).toHaveLength(4);
+    expect(css.match(/font-weight:\s*\d00\s+\d00/g) ?? []).toHaveLength(4);
   });
 
   it('serves them from this origin', () => {
     expect(css).toMatch(/url\('\/fonts\/inter\.woff2'\)/);
     expect(css).toMatch(/url\('\/fonts\/lora\.woff2'\)/);
+    expect(css).toMatch(/url\('\/fonts\/cormorant\.woff2'\)/);
     expect(css).not.toMatch(/https?:\/\//);
   });
 
   it('swaps rather than blocking on the font', () => {
     // font-display: swap is why a slow font never hides the menu text.
-    expect(css.match(/font-display:\s*swap/g) ?? []).toHaveLength(2);
+    expect(css.match(/font-display:\s*swap/g) ?? []).toHaveLength(4);
   });
 });

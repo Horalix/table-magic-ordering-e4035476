@@ -30,6 +30,9 @@ import {
   comboRegularPrice, comboUnitPrice, fixedChoices, isNew, missingSlots, nextPriceChange, rememberPrices, saleView, type ComboDef,
 } from '@/lib/promotions';
 import type { Database } from '@/integrations/supabase/types';
+import { useVenue } from '@/hooks/useVenue';
+// Vera Italia's courses have long Italian names; the tabs use their short ones.
+import { COURSES, pick } from '@/components/vera/copy';
 
 type CategoryRow = Database['public']['Tables']['categories']['Row'];
 type MenuItemRow = import('@/lib/promotions-api').MenuItemRow;
@@ -50,10 +53,14 @@ const fetchCategoriesList = async () => {
   if (error) throw error;
   return data;
 };
+// By name ("Food"), or by the slug in its address ("pizza-napoletana" for
+// Vera Italia's "Pizza Napoletana"). The access rules return only the
+// restaurant being browsed, so two restaurants may share a name.
 const fetchCategory = async (name: string) => {
-  const { data, error } = await supabase.from('categories').select('*').eq('name', name).single();
-  if (error) throw error;
-  return data;
+  const data = await fetchCategoriesList();
+  const found = data.find((c) => c.name === name) ?? data.find((c) => sectionSlug(c.name) === name);
+  if (!found) throw new Error(`No category "${name}"`);
+  return found;
 };
 const fetchSubcategories = async (categoryId: string) => {
   const { data, error } = await supabase.from('subcategories').select('*').eq('category_id', categoryId).order('sort_order');
@@ -98,7 +105,7 @@ const CategoryTabs = ({ categories, current, locale, label, onSelect }: {
             className={`relative h-9 px-1.5 rounded-full text-[13px] font-sans font-semibold transition-colors tap-sm ${active ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
           >
             {active && <motion.span layoutId="category-tab" transition={springPill} className="absolute inset-0 rounded-full bg-card shadow-sm" />}
-            <span className="relative z-10 block truncate">{getLocalizedName(c, locale)}</span>
+            <span className="relative z-10 block truncate">{COURSES[c.name] ? pick(COURSES[c.name].short, locale) : getLocalizedName(c, locale)}</span>
           </button>
         );
       })}
@@ -209,6 +216,9 @@ const CategoryPage = () => {
   const rtl = locale === 'ar';
 
   const categoryName = categoryNameMap[type || ''] || type;
+  // Vera Italia frames its dishes in the arch of its dining room's niches.
+  const vera = useVenue().slug === 'veraitalia';
+  const thumbShape = vera ? 'vi-arch-square' : 'rounded-2xl';
 
   const { data: category, isError: categoryFailed, refetch: refetchCategory } = useQuery({
     queryKey: ['category', categoryName],
@@ -653,7 +663,7 @@ const CategoryPage = () => {
             sizes="(max-width: 640px) 46vw, 220px"
             priority={eager && i < 4}
             fallbackText={name}
-            wrapperClassName={`w-full aspect-square rounded-2xl ${blocked ? 'opacity-45 saturate-50' : ''}`}
+            wrapperClassName={`w-full aspect-square ${thumbShape} ${blocked ? 'opacity-45 saturate-50' : ''}`}
           />
           {item.image_url && <OpeningPhoto itemId={item.id} src={item.image_url} alt={name} sizes="(max-width: 640px) 46vw, 220px" />}
           {hasSession && !blocked && <div className="absolute bottom-2 end-2 z-[2]">{renderStepper(item, name, 'grid')}</div>}
@@ -713,7 +723,7 @@ const CategoryPage = () => {
               sizes="108px"
               priority={eager && i < 4}
               fallbackText={localizedName}
-              wrapperClassName={`w-[108px] h-[108px] rounded-2xl ${blocked ? 'opacity-45 saturate-50' : ''}`}
+              wrapperClassName={`w-[108px] h-[108px] ${thumbShape} ${blocked ? 'opacity-45 saturate-50' : ''}`}
             />
             <OpeningPhoto itemId={item.id} src={item.image_url} alt="" sizes="108px" />
             {hasSession && !blocked && (
@@ -756,7 +766,7 @@ const CategoryPage = () => {
       return <div className="px-4 pt-3 grid grid-cols-2 gap-x-3 gap-y-5">{list.map((it, i) => renderGridCard(it, i, eager))}</div>;
     }
     return (
-      <div className="mx-4 mt-3 rounded-3xl bg-card border border-border/70 shadow-[0_1px_2px_rgba(20,30,25,0.04)] divide-y divide-border/70 overflow-hidden">
+      <div className={`mx-4 mt-3 ${vera ? 'rounded-xl' : 'rounded-3xl'} bg-card border border-border/70 shadow-[0_1px_2px_rgba(20,30,25,0.04)] divide-y divide-border/70 overflow-hidden`}>
         {list.map((it, i) => renderListRow(it, i, isSearch, eager))}
       </div>
     );

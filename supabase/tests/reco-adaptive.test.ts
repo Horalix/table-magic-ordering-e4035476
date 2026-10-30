@@ -124,7 +124,8 @@ beforeAll(async () => {
     INSERT INTO auth.users(id) VALUES ('${STAFF}');
     INSERT INTO public.user_roles(user_id, role) VALUES ('${STAFF}', 'admin'), ('${STAFF}', 'staff');
   `);
-  const { rows } = await db.query<{ id: string; name: string }>(`SELECT id, btrim(name) AS name FROM public.menu_items`);
+  // La Soul's dishes: Vera Italia's menu has some of the same names.
+  const { rows } = await db.query<{ id: string; name: string }>(`SELECT id, btrim(name) AS name FROM public.menu_items WHERE venue_id = public.default_venue()`);
   for (const r of rows) {
     ids.set(r.name.toLowerCase(), r.id);
     names.set(r.id, r.name);

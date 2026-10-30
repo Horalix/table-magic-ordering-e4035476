@@ -46,6 +46,8 @@ export interface Venue {
   hours: OpeningHours[] | null;
   instagram: string | null;
   facebook: string | null;
+  /** Where a guest who enjoyed the visit can review it (its Google listing); null skips that step. */
+  reviewUrl: string | null;
   /** Live: has a menu and takes orders. Not live: the address answers "not found". */
   live: boolean;
 }
@@ -73,19 +75,22 @@ export const VENUES: Record<string, Venue> = {
     hours: [{ days: EVERY_DAY, opens: '11:00', closes: '21:00' }],
     instagram: 'https://www.instagram.com/lasoul.bih',
     facebook: null,
+    reviewUrl: 'https://share.google/al1h37etpg3lpIXGn',
     live: true,
   },
   /*
-   * Same owner, its own restaurant (docs/two-restaurants.md). Its facts come
-   * with the owner's photos and menu; until then they are empty and it is not
-   * live, so its addresses answer "not found" and nothing public shows it.
+   * Same owner, its own restaurant (docs/two-restaurants.md). Its menu and
+   * photographs arrived on 30 October 2026; its address, phone, hours and
+   * listings have not, so they are empty and the website shows none of them.
+   * Not live until its menu is in the database: until then its addresses
+   * answer "not found".
    */
   veraitalia: {
     slug: 'veraitalia',
     dbId: 'a5000000-0000-4000-8000-000000000002',
     name: 'Vera Italia',
     alternateNames: [],
-    tagline: '',
+    tagline: 'Cucina Italiana',
     phone: '',
     phoneHref: '',
     address: '',
@@ -96,9 +101,21 @@ export const VENUES: Record<string, Venue> = {
     hours: null,
     instagram: null,
     facebook: null,
-    live: false,
+    reviewUrl: null,
+    live: liveFromEnv('veraitalia'),
   },
 };
+
+/**
+ * A restaurant switched on for this build only (VITE_PREVIEW_VENUES, a
+ * comma list): the browser tests and a preview deploy show Vera Italia
+ * before the database has its menu; production does not.
+ */
+function liveFromEnv(slug: string): boolean {
+  // import.meta.env exists in the app build; the build scripts read this file without it.
+  const list = (import.meta as { env?: Record<string, string | undefined> }).env?.VITE_PREVIEW_VENUES ?? '';
+  return String(list).split(',').map((s) => s.trim()).includes(slug);
+}
 
 /** The restaurant whose row in the database has this id. */
 export function venueByDbId(id: string | null | undefined): Venue | null {

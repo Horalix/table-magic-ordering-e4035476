@@ -1,7 +1,7 @@
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider, hashKey } from "@tanstack/react-query";
 import { MotionConfig } from "framer-motion";
 import { BrowserRouter, Routes, Route, Navigate, useLocation, useParams } from "react-router-dom";
 import { lazy, Suspense } from "react";
@@ -9,11 +9,15 @@ import StaffGate from "./components/auth/StaffGate";
 import { ClockProvider } from "./lib/clock";
 import LocaleShell from "./components/LocaleShell";
 import { menuCategoryPath, menuHome, venueBySlug } from "./lib/venues";
+import { currentVenueSlug } from "./lib/current-venue";
+import { VenueTheme } from "./hooks/useVenue";
 import { AppUpdater } from "./lib/app-update";
 
 // Code-split route bundles so guests, staff, and admin screens load only when needed.
 // The website at / is a chunk of its own: a guest scanning a table code never downloads it.
 const SiteHome = lazy(() => import("./pages/site/SiteHome"));
+// Vera Italia's website (docs/two-restaurants.md).
+const VeraSite = lazy(() => import("./pages/vera/VeraSite"));
 const DishLink = lazy(() => import("./pages/DishLink"));
 const GuestMenu = lazy(() => import("./pages/GuestMenu"));
 const CategoryPage = lazy(() => import("./pages/CategoryPage"));
@@ -57,6 +61,10 @@ const queryClient = new QueryClient({
       gcTime: 30 * 60 * 1000,
       refetchOnWindowFocus: false,
       retry: 1,
+      // Every answer is one restaurant's (the x-venue header, src/lib/current-venue.ts),
+      // so the cache keeps each restaurant's apart: La Soul's categories must
+      // never be what Vera Italia's menu shows for a moment.
+      queryKeyHashFn: (key) => hashKey([currentVenueSlug() ?? '', ...key]),
     },
   },
 });
@@ -112,6 +120,7 @@ const App = () => (
       <Suspense fallback={null}><FlyToCart /></Suspense>
       <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
       <LocaleShell>
+        <VenueTheme />
         <AppUpdater />
         <Suspense fallback={null}>
           {/* Guest-only: shows a join-approval prompt whenever this device is
@@ -125,6 +134,7 @@ const App = () => (
             <Route path="/" element={<SiteHome />} />
             <Route path="/bs" element={<SiteHome locale="bs" />} />
             <Route path="/ar" element={<SiteHome locale="ar" />} />
+            <Route path="/veraitalia" element={<VeraSite />} />
             {/* Guest routes wrapped in soft page transition. */}
             <Route path="/menu" element={<MenuRedirect />} />
             <Route path="/menu/:venue" element={<VenueMenu />} />

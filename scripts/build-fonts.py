@@ -47,7 +47,16 @@ CACHE = os.path.join(ROOT, 'node_modules', '.cache', 'fonts-src')
 SOURCES = {
     'lora': 'https://github.com/google/fonts/raw/main/ofl/lora/Lora%5Bwght%5D.ttf',
     'inter': 'https://github.com/google/fonts/raw/main/ofl/inter/Inter%5Bopsz,wght%5D.ttf',
+    # Vera Italia's serif (src/index.css, [data-venue="veraitalia"]). A browser
+    # downloads a face only when text on the page uses it, so La Soul's pages
+    # never fetch these.
+    'cormorant': 'https://github.com/google/fonts/raw/main/ofl/cormorantgaramond/CormorantGaramond%5Bwght%5D.ttf',
+    'cormorant-italic': 'https://github.com/google/fonts/raw/main/ofl/cormorantgaramond/CormorantGaramond-Italic%5Bwght%5D.ttf',
 }
+
+# The CSS family and style of each file.
+FAMILY = {'lora': 'Lora', 'inter': 'Inter', 'cormorant': 'Cormorant Garamond', 'cormorant-italic': 'Cormorant Garamond'}
+STYLE = {'cormorant-italic': 'italic'}
 
 # Google's latin-ext covers all of Central and Eastern Europe — Polish ogoneks,
 # Romanian commas, Hungarian double acutes, Turkish dotless i. The menu is
@@ -79,12 +88,13 @@ UNICODES = ','.join([
 
 # Inter also carries an optical-size axis. Pin it and keep only weight; nothing
 # in the UI varies optical size, and dropping the axis shrinks the file.
-PIN_AXES = {'inter': {'opsz': 16}, 'lora': {}}
+PIN_AXES = {'inter': {'opsz': 16}, 'lora': {}, 'cormorant': {}, 'cormorant-italic': {}}
 
 # Kept as a range so one file serves every weight. Inter's axis runs 100-900,
 # but the UI only ever asks for 400 through 700, and clamping the range lets
-# the instancer drop the deltas outside it.
-WEIGHT_RANGE = {'lora': (400, 700), 'inter': (400, 700)}
+# the instancer drop the deltas outside it. Cormorant's display sizes use its
+# light 300.
+WEIGHT_RANGE = {'lora': (400, 700), 'inter': (400, 700), 'cormorant': (300, 700), 'cormorant-italic': (300, 600)}
 
 
 def fetch(name, url):
@@ -150,8 +160,8 @@ def main():
 
         faces.append(
             "@font-face {\n"
-            "  font-family: '" + name.capitalize() + "';\n"
-            "  font-style: normal;\n"
+            "  font-family: '" + FAMILY[name] + "';\n"
+            "  font-style: " + STYLE.get(name, 'normal') + ";\n"
             "  font-weight: " + str(lo) + " " + str(hi) + ";\n"
             "  font-display: swap;\n"
             "  src: url('/fonts/" + name + ".woff2') format('woff2');\n"
@@ -166,10 +176,12 @@ def main():
         " * which cost two extra handshakes before any text could paint and sent every\n"
         " * guest's IP to a third party while /privacy promised otherwise.\n"
         " *\n"
-        " * Variable fonts with the weight axis kept, so these two files cover every\n"
-        " * weight the UI uses. Subset to Latin plus the Bosnian diacritics and the\n"
-        " * punctuation actually rendered. Arabic was never in either family and still\n"
-        " * is not — the ar locale uses the system Arabic font, as before.\n"
+        " * Variable fonts with the weight axis kept, so one file per face covers every\n"
+        " * weight the UI uses. Lora and Inter are La Soul's; Cormorant Garamond is\n"
+        " * Vera Italia's, and a browser fetches it only on Vera Italia's pages.\n"
+        " * Subset to Latin plus the Bosnian diacritics and the punctuation actually\n"
+        " * rendered. Arabic is in none of them — the ar locale uses the system\n"
+        " * Arabic font, as before.\n"
         " *\n"
         " * " + str(total_src // 1024) + " KB of source font -> "
         + str(total_out // 1024) + " KB shipped.\n"

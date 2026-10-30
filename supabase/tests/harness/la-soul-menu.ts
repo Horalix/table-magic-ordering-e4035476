@@ -80,6 +80,7 @@ export async function laSoulDatabase(): Promise<Db> {
       v_at timestamptz := now() - make_interval(secs => (_hours_ago * 3600)::double precision);
       v_order uuid;
       v_round jsonb;
+      -- La Soul's dishes only: Vera Italia's menu shares some of their names.
       v_missing text;
     BEGIN
       INSERT INTO public.table_sessions(id, table_id, token, is_active, last_heartbeat_at, opened_at)
@@ -87,7 +88,7 @@ export async function laSoulDatabase(): Promise<Db> {
       FOR v_round IN SELECT * FROM jsonb_array_elements(_rounds) LOOP
         SELECT string_agg(n, ', ') INTO v_missing
           FROM jsonb_array_elements_text(v_round) n
-         WHERE NOT EXISTS (SELECT 1 FROM public.menu_items mi WHERE lower(btrim(mi.name)) = lower(n));
+         WHERE NOT EXISTS (SELECT 1 FROM public.menu_items mi WHERE lower(btrim(mi.name)) = lower(n) AND mi.venue_id = public.default_venue());
         IF v_missing IS NOT NULL THEN RAISE EXCEPTION 'not on the menu: %', v_missing; END IF;
         INSERT INTO public.orders(table_session_id, total, status, payment_status, payment_method,
                                   released_to_kitchen_at, paid_at, created_at)
@@ -96,11 +97,11 @@ export async function laSoulDatabase(): Promise<Db> {
         INSERT INTO public.order_items(order_id, menu_item_id, quantity, unit_price, status)
         SELECT v_order, mi.id, 1, mi.price, 'served'
           FROM jsonb_array_elements_text(v_round) n
-          JOIN public.menu_items mi ON lower(btrim(mi.name)) = lower(n);
+          JOIN public.menu_items mi ON lower(btrim(mi.name)) = lower(n) AND mi.venue_id = public.default_venue();
         INSERT INTO public.suggestion_conversions(order_id, recommended_item_id, placement, quantity, line_total)
         SELECT v_order, mi.id, 'cart', 1, mi.price
           FROM jsonb_array_elements_text(v_round) n
-          JOIN public.menu_items mi ON lower(btrim(mi.name)) = lower(n)
+          JOIN public.menu_items mi ON lower(btrim(mi.name)) = lower(n) AND mi.venue_id = public.default_venue()
          WHERE n = ANY(_suggested);
       END LOOP;
       RETURN v_session;

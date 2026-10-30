@@ -10,6 +10,7 @@ import ServerRatingStep from './ServerRatingStep';
 import { getWaiterForReview, submitServerRating, submitVisitRating } from '@/lib/guest-api';
 import { useBackToClose } from '@/lib/use-dialog';
 import { PRESS_SCALE_ICON } from '@/lib/motion';
+import { useVenue } from '@/hooks/useVenue';
 
 interface ReviewPromptProps {
   open: boolean;
@@ -18,12 +19,12 @@ interface ReviewPromptProps {
   sessionToken: string;
 }
 
-const GOOGLE_REVIEW_URL = 'https://share.google/al1h37etpg3lpIXGn';
-
 type Step = 'overall' | 'server' | 'final';
 
 const ReviewPrompt = ({ open, onClose, sessionId, sessionToken }: ReviewPromptProps) => {
   const t = useT();
+  // Each restaurant's own Google listing; one without a listing yet just says thank you.
+  const venue = useVenue();
   const [step, setStep] = useState<Step>('overall');
   const [rating, setRating] = useState(0);
   const [hoveredStar, setHoveredStar] = useState(0);
@@ -77,7 +78,9 @@ const ReviewPrompt = ({ open, onClose, sessionId, sessionToken }: ReviewPromptPr
             {step === 'final' ? t('thank_you_feedback') : t('how_was_experience')}
           </DialogTitle>
           <DialogDescription className="text-center font-sans">
-            {step === 'final' ? t('help_discover_lasoul') : t('rate_your_visit')}
+            {step !== 'final'
+              ? t('rate_your_visit')
+              : venue.reviewUrl ? t('help_discover_venue', { name: venue.name }) : <span className="sr-only">{t('thank_you_feedback')}</span>}
           </DialogDescription>
         </DialogHeader>
 
@@ -125,15 +128,17 @@ const ReviewPrompt = ({ open, onClose, sessionId, sessionToken }: ReviewPromptPr
               ))}
             </div>
 
-            <Button
-              asChild
-              className="w-full rounded-xl min-h-[48px] bg-primary text-primary-foreground font-sans gap-2"
-            >
-              <a href={GOOGLE_REVIEW_URL} target="_blank" rel="noopener noreferrer">
-                <ExternalLink className="w-4 h-4" />
-                {t('leave_google_review')}
-              </a>
-            </Button>
+            {venue.reviewUrl && (
+              <Button
+                asChild
+                className="w-full rounded-xl min-h-[48px] bg-primary text-primary-foreground font-sans gap-2"
+              >
+                <a href={venue.reviewUrl} target="_blank" rel="noopener noreferrer">
+                  <ExternalLink className="w-4 h-4" />
+                  {t('leave_google_review')}
+                </a>
+              </Button>
+            )}
 
             <Button variant="ghost" onClick={onClose} className="font-sans text-muted-foreground">
               {t('close')}

@@ -48,3 +48,4 @@ assets/pitch/
 # Website imagery working folder: prompts, raw generations, screenshots.
 # The shipped WebP ladders are built from it by scripts/site-images.mjs.
 assets/site-src/
+assets/vera-photos/

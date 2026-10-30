@@ -277,6 +277,15 @@ async function main() {
 
   const rows = [...(items ?? []), ...(cats ?? [])];
   console.log(`  ${rows.length} images referenced in Supabase${FORCE ? ' (rebuilding all)' : ''}\n`);
+  // Vera Italia's dishes, from its menu file, until its menu migration is
+  // live (20261030120000_vera_italia_menu.sql); then the database lists
+  // them too. Without this the pruning below would delete their photos.
+  const known = new Set(rows.map((r) => r.id));
+  const vera = JSON.parse(readFileSync(resolve(__dirname, 'vera-italia/menu.json'), 'utf8'));
+  for (const it of vera.categories.flatMap((c) => c.sections.flatMap((s) => s.items))) {
+    if (!it.no_photo && !known.has(it.id)) rows.push({ id: it.id, image_url: `/menu/${it.id}/1152.webp` });
+    if (it.thumb_zoom) THUMB_ZOOM_EXCEPTIONS[it.id] = it.thumb_zoom;
+  }
 
   const counters = { downloaded: 0, skipped: 0, failed: 0, errors: [] };
 

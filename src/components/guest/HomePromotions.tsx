@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import SmartImage from '@/components/ui/SmartImage';
 import { PriceTag, SaleBadge, NewBadge, ComboBadge } from '@/components/guest/PriceTag';
 import { useI18n, getLocalizedName } from '@/lib/i18n';
+import { useVenue } from '@/hooks/useVenue';
 import { fadeUp, PRESS_SCALE } from '@/lib/motion';
 import { useComboMap, usePromotedItems, type MenuItemRow } from '@/lib/promotions-api';
 import { comboUnitPrice, fixedChoices, isNew, saleView, type ComboDef } from '@/lib/promotions';
@@ -18,6 +19,7 @@ import { comboUnitPrice, fixedChoices, isNew, saleView, type ComboDef } from '@/
  */
 const HomePromotions = ({ onOpen }: { onOpen: (item: MenuItemRow) => void }) => {
   const { featured, offers, fresh, combos, now } = usePromotedItems();
+  const venue = useVenue();
   const comboMap = useComboMap();
   const { t } = useI18n();
 
@@ -34,7 +36,7 @@ const HomePromotions = ({ onOpen }: { onOpen: (item: MenuItemRow) => void }) => 
         </PromoRow>
       )}
       {fresh.length > 0 && (
-        <PromoRow id="new" title={t('new_at_lasoul')}>
+        <PromoRow id="new" title={t('new_at_venue', { name: venue.name })}>
           {fresh.map((item) => <PromoCard key={item.id} item={item} combo={comboMap.get(item.id)} now={now} onOpen={onOpen} />)}
         </PromoRow>
       )}

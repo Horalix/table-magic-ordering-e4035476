@@ -70,8 +70,11 @@ export function headTags(p: PageHead): string {
     `<meta name="twitter:description" content="${escapeHtml(p.description)}" />`,
     `<meta name="twitter:image" content="${image}" />`,
     // Sarajevo Canton (ISO 3166-2:BA-09), and the pin on the venue's Google Maps listing.
-    `<meta name="geo.region" content="BA-09" />`,
-    `<meta name="geo.placename" content="${escapeHtml(p.venue.city)}" />`,
+    // (Not for a restaurant whose address is not known yet.)
+    ...(p.venue.city ? [
+      `<meta name="geo.region" content="BA-09" />`,
+      `<meta name="geo.placename" content="${escapeHtml(p.venue.city)}" />`,
+    ] : []),
     ...(p.venue.geo ? [
       `<meta name="geo.position" content="${p.venue.geo.lat};${p.venue.geo.lng}" />`,
       `<meta name="ICBM" content="${p.venue.geo.lat}, ${p.venue.geo.lng}" />`,

@@ -15,11 +15,14 @@ import path from 'node:path';
 import { loadEnv, type Plugin, type ResolvedConfig } from 'vite';
 import type { Locale } from '../src/lib/i18n';
 import { siteT } from '../src/lib/site-copy';
+import { SITE as VERA_SITE } from '../src/components/vera/copy';
+import VERA_MENU from './vera-italia/menu.json';
+import { SITE_URL } from '../src/lib/seo/site-url';
 import { DEFAULT_VENUE, VENUES } from '../src/lib/venues';
 import { fetchSeoMenu, type SeoMenu } from '../src/lib/seo/menu-data';
 import { categoryPath, dishGraph, dishPath, homeGraph, LOCALES, menuGraph, menuPath, sitePath } from '../src/lib/seo/structured-data';
 import {
-  dishBody, headTags, homeBody, llmsFullTxt, llmsTxt, menuBody, robotsTxt, sitemapXml, type SitemapEntry,
+  dishBody, escapeHtml, headTags, homeBody, llmsFullTxt, llmsTxt, menuBody, robotsTxt, sitemapXml, type SitemapEntry,
 } from '../src/lib/seo/static-pages';
 
 /** The app hides the plain HTML the moment its code runs; crawlers that run none read it. */
@@ -122,6 +125,31 @@ export function seoPrerender(): Plugin {
         }
       }
 
+      // Vera Italia's website (src/pages/vera/VeraSite.tsx). Without its own
+      // page here the address would be served La Soul's home page, title,
+      // canonical and all, to every crawler and link preview.
+      const vera = VENUES.veraitalia;
+      const veraPath = '/veraitalia/';
+      const veraImage = '/site/vera/room-2-1600.webp';
+      const veraDishes = (VERA_MENU.categories as { name: string; sections: { items: { name: string; featured_rank?: number }[] }[] }[]);
+      write(veraPath, renderPage(template, headTags({
+        path: veraPath, locale: 'en', venue: vera, image: veraImage,
+        title: VERA_SITE.seoTitle.en, description: VERA_SITE.seoDescription.en,
+        jsonLd: {
+          '@context': 'https://schema.org',
+          '@type': 'Restaurant',
+          name: vera.name,
+          url: `${SITE_URL}${veraPath}`,
+          image: `${SITE_URL}${veraImage}`,
+          servesCuisine: ['Italian', 'Pizza'],
+          description: VERA_SITE.seoDescription.en,
+        },
+      }), [
+        '<h1>Vera Italia</h1>',
+        `<p>${escapeHtml(VERA_SITE.intro.en)} ${escapeHtml(VERA_SITE.introRoom.en)}</p>`,
+        ...veraDishes.map((c) => `<h2>${escapeHtml(c.name)}</h2><ul>${c.sections.flatMap((sec) => sec.items).map((d) => `<li>${escapeHtml(d.name)}</li>`).join('')}</ul>`),
+      ].join('\n'), 'en'));
+
       const today = new Date().toISOString().slice(0, 10);
       const entries: SitemapEntry[] = [
         ...LOCALES.map((l) => ({ path: sitePath(l), alternates, priority: l === 'en' ? 1 : 0.9, images: ['/site/hero-wide-1600.webp'] })),
@@ -130,6 +158,7 @@ export function seoPrerender(): Plugin {
         // Only prerendered pages: anything else is served the home page's
         // HTML until the app runs, canonical and all.
         ...dishEntries,
+        { path: veraPath, priority: 0.8, images: [veraImage] },
       ];
       writeFileSync(path.join(outDir, 'robots.txt'), robotsTxt());
       writeFileSync(path.join(outDir, 'sitemap.xml'), sitemapXml(entries, today));

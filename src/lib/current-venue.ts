@@ -24,6 +24,8 @@ const STAFF_KEY = 'lasoul.staff-venue';
 const SLUG = /^[a-z0-9-]{1,40}$/;
 const GUEST_PATHS = /^\/(cart|tab|table|start)(\/|$)/;
 const STAFF_PATHS = /^\/(admin|kitchen|waiter)(\/|$)/;
+/** A restaurant's own website, /<slug>/ (La Soul's is the root). */
+const SITE_PATHS = /^\/(veraitalia)(\/|$)/;
 
 function read(key: string): string | null {
   try {
@@ -48,6 +50,8 @@ export function venueForPath(pathname: string): string | null {
   const menu = /^\/menu\/([^/]+)/.exec(pathname);
   // An old /menu/drinks address names no restaurant; the database ignores it.
   if (menu && SLUG.test(menu[1])) return menu[1];
+  const site = SITE_PATHS.exec(pathname);
+  if (site) return site[1];
   if (GUEST_PATHS.test(pathname)) return read(GUEST_KEY);
   if (STAFF_PATHS.test(pathname)) return read(STAFF_KEY);
   return null;

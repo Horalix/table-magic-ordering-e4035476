@@ -291,7 +291,7 @@ const AdminPromotions = () => {
       {/* ---- New ---- */}
       <Card aria-labelledby="promo-new">
         <CardContent className="p-4">
-          <h2 id="promo-new" className="font-serif text-lg font-semibold flex items-center gap-2"><Sparkles className="w-4 h-4 text-primary" /> New at La Soul</h2>
+          <h2 id="promo-new" className="font-serif text-lg font-semibold flex items-center gap-2"><Sparkles className="w-4 h-4 text-primary" /> New on the menu</h2>
           {fresh.length === 0 ? (
             <p className="text-sm font-sans text-muted-foreground mt-2">Nothing is marked new. Switch on “Mark as new” in a dish’s editor; the badge ends by itself.</p>
           ) : (
