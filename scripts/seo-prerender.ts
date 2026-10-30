@@ -15,10 +15,11 @@ import path from 'node:path';
 import { loadEnv, type Plugin, type ResolvedConfig } from 'vite';
 import type { Locale } from '../src/lib/i18n';
 import { siteT } from '../src/lib/site-copy';
-import { SITE as VERA_SITE } from '../src/components/vera/copy';
+import { COURSES, SITE as VERA_SITE, VERA } from '../src/components/vera/copy';
+import { sectionSlug } from '../src/lib/menu-sections';
 import VERA_MENU from './vera-italia/menu.json';
 import { SITE_URL } from '../src/lib/seo/site-url';
-import { DEFAULT_VENUE, VENUES } from '../src/lib/venues';
+import { DEFAULT_VENUE, VENUES, type Venue } from '../src/lib/venues';
 import { fetchSeoMenu, type SeoMenu } from '../src/lib/seo/menu-data';
 import { categoryPath, dishGraph, dishPath, homeGraph, LOCALES, menuGraph, menuPath, sitePath } from '../src/lib/seo/structured-data';
 import {
@@ -38,6 +39,22 @@ export function renderPage(template: string, head: string, body: string, locale:
     .replace(/\s*<meta (?:name|property)="(?:description|author|og:[^"]+|twitter:[^"]+)"[^>]*>/g, '')
     .replace('</head>', `    ${head}\n    ${PRERENDER_STYLE}\n  </head>`)
     .replace('<div id="root"></div>', `<div id="root"><div data-prerender>\n${body}\n</div></div>`);
+}
+
+/**
+ * The template's phone-facing identity is La Soul's: the toolbar colour, the
+ * home-screen icon and name, the web manifest. Another restaurant's pages
+ * carry their own, so a link preview, a bookmark or "Add to Home Screen" on
+ * them is that restaurant's (the app keeps them right as it navigates:
+ * VenueTheme in src/hooks/useVenue.ts).
+ */
+export function withBrand(html: string, venue: Venue): string {
+  return html
+    .replace(/(<meta name="theme-color" content=")[^"]*/, `$1${venue.brand.themeColor}`)
+    .replace(/(<meta name="apple-mobile-web-app-title" content=")[^"]*/, `$1${escapeHtml(venue.name)}`)
+    .replace(/(<link rel="apple-touch-icon" href=")[^"]*/, `$1${venue.brand.appleTouchIcon}`)
+    .replace(/(<link rel="icon"[^>]*href=")[^"]*/, `$1${venue.brand.icon}`)
+    .replace(/(<link rel="manifest" href=")[^"]*/, `$1${venue.brand.manifest}`);
 }
 
 export function seoPrerender(): Plugin {
@@ -132,7 +149,7 @@ export function seoPrerender(): Plugin {
       const veraPath = '/veraitalia/';
       const veraImage = '/site/vera/room-2-1600.webp';
       const veraDishes = (VERA_MENU.categories as { name: string; sections: { items: { name: string; featured_rank?: number }[] }[] }[]);
-      write(veraPath, renderPage(template, headTags({
+      write(veraPath, withBrand(renderPage(template, headTags({
         path: veraPath, locale: 'en', venue: vera, image: veraImage,
         title: VERA_SITE.seoTitle.en, description: VERA_SITE.seoDescription.en,
         jsonLd: {
@@ -148,7 +165,36 @@ export function seoPrerender(): Plugin {
         '<h1>Vera Italia</h1>',
         `<p>${escapeHtml(VERA_SITE.intro.en)} ${escapeHtml(VERA_SITE.introRoom.en)}</p>`,
         ...veraDishes.map((c) => `<h2>${escapeHtml(c.name)}</h2><ul>${c.sections.flatMap((sec) => sec.items).map((d) => `<li>${escapeHtml(d.name)}</li>`).join('')}</ul>`),
-      ].join('\n'), 'en'));
+      ].join('\n'), 'en'), vera));
+
+      // Its menu and each course. A guest who shares the menu's address sees
+      // Vera Italia in the preview, not La Soul's home page; until it opens,
+      // search engines are asked to leave these out.
+      type VeraItem = { id: string; name: string; price: number; description?: string; featured_rank?: number };
+      type VeraCourse = { name: string; sections: { name: string; items: VeraItem[] }[] };
+      const veraCourses = VERA_MENU.categories as VeraCourse[];
+      const veraLines = (course: VeraCourse) => [
+        `<h2>${escapeHtml(course.name)}</h2>`,
+        ...course.sections.map((sec) => `<h3>${escapeHtml(sec.name)}</h3><ul>${sec.items.map((d) => `<li>${escapeHtml(d.name)} — ${d.price.toFixed(2)} KM${d.description ? `: ${escapeHtml(d.description)}` : ''}</li>`).join('')}</ul>`),
+      ];
+      const signature = veraCourses.flatMap((c) => c.sections.flatMap((sec) => sec.items)).find((d) => d.featured_rank === 1);
+      const veraMenuPath = menuPath(vera.slug);
+      write(veraMenuPath, withBrand(renderPage(template, headTags({
+        path: veraMenuPath, locale: 'en', venue: vera, image: (signature && imageFor(signature.id)) || veraImage, noindex: !vera.live,
+        title: VERA.menuTitle.en, description: VERA.menuDescription.en,
+        jsonLd: { '@context': 'https://schema.org', '@type': 'Menu', name: VERA.menuTitle.en, url: `${SITE_URL}${veraMenuPath}` },
+      }), ['<h1>Vera Italia — Il Menù</h1>', ...veraCourses.flatMap(veraLines)].join('\n'), 'en'), vera));
+      const veraCoursePaths: string[] = [];
+      for (const course of veraCourses) {
+        const p = categoryPath(vera.slug, sectionSlug(course.name));
+        const cover = COURSES[course.name]?.cover;
+        write(p, withBrand(renderPage(template, headTags({
+          path: p, locale: 'en', venue: vera, image: (cover && imageFor(cover)) || veraImage, noindex: !vera.live,
+          title: `${course.name} — Vera Italia`, description: VERA.menuDescription.en,
+          jsonLd: { '@context': 'https://schema.org', '@type': 'MenuSection', name: course.name, url: `${SITE_URL}${p}` },
+        }), ['<h1>Vera Italia</h1>', ...veraLines(course)].join('\n'), 'en'), vera));
+        veraCoursePaths.push(p);
+      }
 
       const today = new Date().toISOString().slice(0, 10);
       const entries: SitemapEntry[] = [
@@ -159,6 +205,7 @@ export function seoPrerender(): Plugin {
         // HTML until the app runs, canonical and all.
         ...dishEntries,
         { path: veraPath, priority: 0.8, images: [veraImage] },
+        ...(vera.live ? [veraMenuPath, ...veraCoursePaths].map((path) => ({ path, priority: 0.8 })) : []),
       ];
       writeFileSync(path.join(outDir, 'robots.txt'), robotsTxt());
       writeFileSync(path.join(outDir, 'sitemap.xml'), sitemapXml(entries, today));

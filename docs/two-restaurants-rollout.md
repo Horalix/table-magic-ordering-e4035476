@@ -6,15 +6,17 @@ there is no rush between them and no step needs the restaurant closed.
 
 | | What | How | La Soul sees |
 |---|---|---|---|
-| 1 | **The database**: the two-restaurant migrations and Vera Italia's menu | Lovable runs `docs/migration-runner.sql` (pinned commit, MD5-checked) | Nothing. An app that names no restaurant is La Soul throughout; Vera Italia's 25 dishes are Vera Italia's only. |
-| 2 | **Three edge functions**: `create-waiter`, `delete-waiter`, `cloudprnt` | Lovable redeploys them from `main` | Nothing. New waiters are created for the restaurant of the admin creating them; printers print their own restaurant's header. |
-| 3 | **The app** | Merge the branch into `main`; Netlify deploys it | Nothing, except the admin header now says the restaurant's name. The owner gets a La Soul / Vera Italia switch in the admin. Vera Italia's website is at `/veraitalia/`, saying "Opening soon". |
+| 1 | **The app** | Merge the branch into `main`; Netlify deploys it | Nothing, except the admin header now says the restaurant's name. The owner gets a La Soul / Vera Italia switch in the admin. Vera Italia's website is at `/veraitalia/`, saying "Opening soon". |
+| 2 | **The database**: the two-restaurant migrations and Vera Italia's menu | Lovable runs `docs/migration-runner.sql` (pinned commit, MD5-checked) — the prompt is in `docs/lovable-migration-prompt.md` | Nothing. An app that names no restaurant is La Soul throughout; Vera Italia's 25 dishes are Vera Italia's only. |
+| 3 | **Three edge functions**: `create-waiter`, `delete-waiter`, `cloudprnt` | Lovable redeploys them from `main`, in the same prompt | Nothing. New waiters are created for the restaurant of the admin creating them; printers print their own restaurant's header. |
 | 4 | **Vera Italia opens** | Its tables and room QR code, its staff, its printers; then `live: liveFromEnv(…)` → `live: true` in `src/lib/venues.ts`, and `UPDATE public.venues SET is_live = true WHERE slug = 'veraitalia'` | Nothing. Until then Vera Italia's menu address answers "not found" and its website links to no menu. |
 
-Steps 2 and 3 need step 1 first: the new functions write the restaurant of a
-waiter, which the database only has after step 1. Step 3 is safe on either
-side of step 1 (a database without the second restaurant ignores what the
-app sends), but goes after step 2 so creating a waiter never fails.
+Lovable works from `main`, where the runner and the functions only are once
+the branch is merged, so the merge comes first. That is safe: a database
+without the second restaurant ignores what the app sends, and La Soul is the
+only restaurant until step 2. Step 3 needs step 2 first (the new functions
+write the restaurant of a waiter, which the database only has after it);
+between the merge and step 3 a waiter is created the old way, for La Soul.
 
 ## Step 1 in detail
 
@@ -60,19 +62,27 @@ never in a prompt or a chat.
   (+2 KM, for any pasta or risotto) is its own dish under Pasta & Risotto →
   Extras, so it is ordered and charged like any other.
 - **The photographs**: every dish from the kitchen's own photos of 29 October,
-  re-shot with gpt-image-2.5 (`scripts/vera-photos.mjs`) — the same dish,
-  plate, table and room, with a photographer's light, lens and retouching —
-  and finished with grain and sharpening (`scripts/vera-italia/import-photos.mjs`).
+  re-shot with gpt-image-2.5 (`scripts/vera-photos.mjs`) in the style the
+  owner chose on 30 October — the same dish and plate, straight overhead on
+  travertine in soft window light, the whole plate in frame with stone all
+  round it — and finished with grain and sharpening
+  (`scripts/vera-italia/import-photos.mjs`).
   The owner's three photographs of the room, re-shot the same way as an
   interior photographer would (`scripts/vera-italia/room-photos.mjs` →
   `site-images.mjs`), are the website's.
 - **The logo**: an arch monogram (VI) over VERA ITALIA / CUCINA ITALIANA, a
   one-line wordmark and the app icons, drawn with gpt-image-2.5
   (`scripts/vera-italia/logo.mjs`, `brand-assets.mjs` → `public/brand/vera/`).
-- **The look**: travertine, espresso, terracotta, brass and olive, Cormorant
-  Garamond, the arch of the dining room's niches on every photograph — on
-  Vera Italia's menu, its table pages and its website (`src/components/vera/`,
-  `src/pages/vera/VeraSite.tsx`).
+- **The look**: editorial — ivory paper, ink, brass rules, Cormorant
+  Garamond in large italics; the menu laid out like a printed one (course
+  names as words, a dotted leader to each price), every dish photograph
+  square and whole — on Vera Italia's menu, its table pages and its website
+  (`src/components/vera/`, `src/pages/vera/VeraSite.tsx`).
+- **On the phone**: its own toolbar colour, home-screen icon and name, and
+  "Add to Home Screen" installs a Vera Italia app that opens its menu
+  (`public/manifest-veraitalia.webmanifest`, `brand` in `src/lib/venues.ts`).
+  A link to its menu or a course previews as Vera Italia; those pages ask
+  search engines to leave them out until it opens.
 
 ## Vera Italia — still needed from the owner
 

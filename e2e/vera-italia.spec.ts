@@ -32,6 +32,10 @@ test.describe('Vera Italia’s menu', () => {
     await expect(page.locator('html')).toHaveAttribute('data-venue', 'veraitalia');
     // Nothing of La Soul's: not its wordmark, not its promise.
     await expect(page.getByRole('img', { name: 'La Soul' })).toHaveCount(0);
+    // Nor on the phone: "Add to Home Screen" installs Vera Italia, with its icon and name.
+    await expect(page.locator('link[rel="manifest"]')).toHaveAttribute('href', '/manifest-veraitalia.webmanifest');
+    await expect(page.locator('link[rel="apple-touch-icon"]')).toHaveAttribute('href', '/brand/vera/apple-touch-icon.png');
+    await expect(page.locator('meta[name="apple-mobile-web-app-title"]')).toHaveAttribute('content', 'Vera Italia');
     await settle(page);
     await page.screenshot({ path: `test-results/vera-home-${test.info().project.name}.png`, fullPage: true });
   });
@@ -72,6 +76,21 @@ test.describe('Vera Italia’s menu', () => {
     await page.goto('/menu/lasoul/');
     await expect(page.locator('html')).toHaveAttribute('data-venue', 'lasoul');
     await expect(page.getByRole('img', { name: 'La Soul' }).first()).toBeVisible();
+    await expect(page.locator('link[rel="manifest"]')).toHaveAttribute('href', '/manifest.webmanifest');
+    await expect(page.locator('meta[name="apple-mobile-web-app-title"]')).toHaveAttribute('content', 'La Soul');
+  });
+
+  test('a shared link to its menu previews as Vera Italia, and installs as Vera Italia', async ({ page }) => {
+    // What a link preview or a crawler reads: the HTML as served, before any code runs.
+    for (const [path, title] of [['/menu/veraitalia/', 'Menu — Vera Italia'], ['/menu/veraitalia/pizza-napoletana/', 'Pizza Napoletana — Vera Italia']]) {
+      const html = await (await page.request.get(path)).text();
+      expect(html).toContain(`<title>${title}</title>`);
+      expect(html).toContain('href="/manifest-veraitalia.webmanifest"');
+      expect(html).toContain('<meta name="apple-mobile-web-app-title" content="Vera Italia" />');
+      expect(html).not.toContain('<title>La Soul');
+    }
+    const manifest = await (await page.request.get('/manifest-veraitalia.webmanifest')).json();
+    expect(manifest).toMatchObject({ name: 'Vera Italia', start_url: '/menu/veraitalia/' });
   });
 });
 

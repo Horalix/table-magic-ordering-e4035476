@@ -22,22 +22,28 @@ export function useVenue(): Venue {
   return venueForPage(useLocation().pathname);
 }
 
-const THEME_COLOR: Record<string, string> = {
-  lasoul: '#7e9b79',
-  veraitalia: '#f4efe6',
+/** Points an existing <link> or <meta> at this restaurant's value. */
+const setHead = (selector: string, attr: 'href' | 'content', value: string) => {
+  const el = document.querySelector(selector);
+  if (el && el.getAttribute(attr) !== value) el.setAttribute(attr, value);
 };
 
 /**
  * Puts the restaurant's look on <html> before the page paints: its colours,
- * its serif (src/index.css), and the browser's toolbar colour.
+ * its serif (src/index.css), the browser's toolbar colour, and what "Add to
+ * Home Screen" installs — its name, its icon, its web manifest. A table's QR
+ * code (/table/7) names no restaurant, so the HTML cannot say; this does.
  */
 export function VenueTheme() {
   const { pathname } = useLocation();
   const venue = venueForPage(pathname);
   useLayoutEffect(() => {
     document.documentElement.dataset.venue = venue.slug;
-    const meta = document.querySelector('meta[name="theme-color"]');
-    if (meta && THEME_COLOR[venue.slug]) meta.setAttribute('content', THEME_COLOR[venue.slug]);
+    setHead('meta[name="theme-color"]', 'content', venue.brand.themeColor);
+    setHead('meta[name="apple-mobile-web-app-title"]', 'content', venue.name);
+    setHead('link[rel="apple-touch-icon"]', 'href', venue.brand.appleTouchIcon);
+    setHead('link[rel="icon"]', 'href', venue.brand.icon);
+    setHead('link[rel="manifest"]', 'href', venue.brand.manifest);
     // Pages that set no title of their own (the table, the order, the tab)
     // keep the HTML's, which is La Soul's: on another restaurant's pages, its name.
     if (venue.slug !== DEFAULT_VENUE && document.title.includes('La Soul')) {

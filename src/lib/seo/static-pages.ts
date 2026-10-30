@@ -42,6 +42,8 @@ export interface PageHead {
   venue: Venue;
   /** Site-relative preview image; the website's own by default. */
   image?: string | null;
+  /** Kept out of search results: a restaurant's menu before it opens. */
+  noindex?: boolean;
 }
 
 /** Everything a page says about itself in <head>. */
@@ -55,7 +57,7 @@ export function headTags(p: PageHead): string {
     `<link rel="canonical" href="${url}" />`,
     ...Object.entries(p.alternates ?? {}).map(([lang, path]) =>
       `<link rel="alternate" hreflang="${lang}" href="${absoluteUrl(path)}" />`),
-    `<meta name="robots" content="index, follow, max-image-preview:large" />`,
+    `<meta name="robots" content="${p.noindex ? 'noindex, follow' : 'index, follow, max-image-preview:large'}" />`,
     `<meta property="og:type" content="website" />`,
     `<meta property="og:site_name" content="${escapeHtml(p.venue.name)}" />`,
     `<meta property="og:title" content="${escapeHtml(p.title)}" />`,

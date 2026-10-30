@@ -50,6 +50,13 @@ export interface Venue {
   reviewUrl: string | null;
   /** Live: has a menu and takes orders. Not live: the address answers "not found". */
   live: boolean;
+  /**
+   * What a phone shows for it: the toolbar colour, the icon and name on the
+   * home screen, and the app "Add to Home Screen" installs (its web manifest,
+   * which opens its own menu). Without these a Vera Italia guest installed
+   * an app called La Soul that opened La Soul's menu.
+   */
+  brand: { themeColor: string; manifest: string; icon: string; appleTouchIcon: string };
 }
 
 /*
@@ -77,6 +84,8 @@ export const VENUES: Record<string, Venue> = {
     facebook: null,
     reviewUrl: 'https://share.google/al1h37etpg3lpIXGn',
     live: true,
+    // The manifest is generated from vite.config.ts (VitePWA).
+    brand: { themeColor: '#7e9b79', manifest: '/manifest.webmanifest', icon: '/icons/icon-192.png', appleTouchIcon: '/icons/apple-touch-icon.png' },
   },
   /*
    * Same owner, its own restaurant (docs/two-restaurants.md). Its menu and
@@ -103,6 +112,7 @@ export const VENUES: Record<string, Venue> = {
     facebook: null,
     reviewUrl: null,
     live: liveFromEnv('veraitalia'),
+    brand: { themeColor: '#f4efe6', manifest: '/manifest-veraitalia.webmanifest', icon: '/brand/vera/icon-192.png', appleTouchIcon: '/brand/vera/apple-touch-icon.png' },
   },
 };
 
