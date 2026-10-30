@@ -91,10 +91,10 @@ export const VENUES: Record<string, Venue> = {
   },
   /*
    * Same owner, its own restaurant (docs/two-restaurants.md). Its menu and
-   * photographs arrived on 30 October 2026; its address, phone, hours and
-   * listings have not, so they are empty and the website shows none of them.
-   * Not live until its menu is in the database: until then its addresses
-   * answer "not found".
+   * photographs arrived on 30 October 2026, and its menu has been in the
+   * database since that evening, so it is live: veraitalia.net links to its
+   * menu and search engines list it. Its address, phone, hours and listings
+   * have not arrived, so they are empty and the website shows none of them.
    */
   veraitalia: {
     slug: 'veraitalia',
@@ -113,15 +113,15 @@ export const VENUES: Record<string, Venue> = {
     instagram: null,
     facebook: null,
     reviewUrl: null,
-    live: liveFromEnv('veraitalia'),
+    live: true,
     brand: { themeColor: '#f4efe6', manifest: '/manifest-veraitalia.webmanifest', icon: '/brand/vera/icon-192.png', appleTouchIcon: '/brand/vera/apple-touch-icon.png' },
   },
 };
 
 /**
- * A restaurant switched on for this build only (VITE_PREVIEW_VENUES, a
- * comma list): the browser tests and a preview deploy show Vera Italia
- * before the database has its menu; production does not.
+ * A restaurant shown in place on this build (VITE_PREVIEW_VENUES, a comma
+ * list): the browser tests show Vera Italia's pages on La Soul's site rather
+ * than forwarding them to veraitalia.net; production does not.
  */
 function liveFromEnv(slug: string): boolean {
   // import.meta.env exists in the app build; the build scripts read this file without it.

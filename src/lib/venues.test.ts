@@ -23,9 +23,9 @@ describe('venues', () => {
 
   it('only answers for restaurants that are live', () => {
     expect(venueBySlug('lasoul')?.name).toBe('La Soul');
-    // Vera Italia is known but not open yet: its address is "not found".
-    expect(VENUES.veraitalia.name).toBe('Vera Italia');
-    expect(venueBySlug('veraitalia')).toBeNull();
+    // Vera Italia opened on 30 October 2026.
+    expect(VENUES.veraitalia.live).toBe(true);
+    expect(venueBySlug('veraitalia')?.name).toBe('Vera Italia');
     expect(venueBySlug('drinks')).toBeNull();
     expect(venueBySlug(undefined)).toBeNull();
   });

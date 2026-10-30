@@ -101,7 +101,7 @@ describe('Vera Italia’s pages', () => {
     for (const r of rows) expect(paths).toContain(`/menu/veraitalia/dish/${slugs.get(r.id)}/`);
   });
 
-  it('price every dish in BAM, and keep the menu out of search until it opens', () => {
+  it('price every dish in BAM, and list the menu in search once it opens', () => {
     const dish = pages.find((p) => p.path === '/menu/veraitalia/dish/truffle-pizza/')!;
     expect(dish.head.title).toBe(`Truffle Pizza — ${km(25)} · Vera Italia`);
     const item = graphNodes(dish.head.jsonLd).find((n) => n['@type'] === 'MenuItem') as { offers: { price: string; priceCurrency: string } };
@@ -117,7 +117,7 @@ describe('Vera Italia’s pages', () => {
   it('give answer engines every dish, with its price and page', () => {
     const { short, full } = veraLlms(menu);
     expect(short).toMatch(/^# Vera Italia\n/);
-    expect(short).toContain('- Status: opening soon');
+    expect(short.includes('- Status: opening soon')).toBe(!VENUES.veraitalia.live);
     for (const r of rows) expect(full).toContain(`[${r.name}](`);
     expect(full).toContain('Truffle Pizza](https://');
     expect(full).toContain('— 25 KM');
