@@ -32,7 +32,7 @@ import {
 import type { Database } from '@/integrations/supabase/types';
 import { useVenue } from '@/hooks/useVenue';
 // Vera Italia's courses have long Italian names; the tabs use their short ones.
-import { COURSES, VERA, pick } from '@/components/vera/copy';
+import { COURSES, VERA, courseTitle, pick } from '@/components/vera/copy';
 
 type CategoryRow = Database['public']['Tables']['categories']['Row'];
 type MenuItemRow = import('@/lib/promotions-api').MenuItemRow;
@@ -536,7 +536,7 @@ const CategoryPage = () => {
   // the prerendered page for the same address says the same (scripts/seo-prerender.ts).
   const categoryLabel = category ? getLocalizedName(category, locale) : (categoryName ?? '');
   usePageMeta({
-    title: vera ? `${categoryLabel} — Vera Italia` : siteT('seo_category_title', locale, { category: categoryLabel }),
+    title: vera ? courseTitle(categoryLabel, locale) : siteT('seo_category_title', locale, { category: categoryLabel }),
     description: vera ? pick(VERA.menuDescription, locale) : siteT('seo_category_description', locale, { category: categoryLabel }),
     path: menuCategoryPath(type ?? ''),
     locale,

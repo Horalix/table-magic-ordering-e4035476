@@ -12,14 +12,32 @@ export const pick = (c: Copy, locale: Locale) => c[locale] ?? c.en;
 /** Courses and sections are numbered like a printed menu's. */
 export const ROMAN = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X'];
 
+/**
+ * Where it is, as each language says it: the city, "in the city" (Bosnian
+ * declines it: u Sarajevu), the country. People search for an Italian
+ * restaurant *in Sarajevo*, so the titles, the text and the answers say so.
+ */
+export const PLACE = {
+  city: { en: 'Sarajevo', bs: 'Sarajevo', ar: 'سراييفو' },
+  inCity: { en: 'in Sarajevo', bs: 'u Sarajevu', ar: 'في سراييفو' },
+  country: { en: 'Bosnia and Herzegovina', bs: 'Bosna i Hercegovina', ar: 'البوسنة والهرسك' },
+} satisfies Record<string, Copy>;
+
+/** A course's title — "Pizza Napoletana in Sarajevo — Vera Italia" — the same in the app and on the prerendered page. */
+export const courseTitle = (course: string, locale: Locale) => `${course} ${pick(PLACE.inCity, locale)} — Vera Italia`;
+
 export const VERA = {
   tagline: { en: 'Cucina Italiana', bs: 'Cucina Italiana', ar: 'مطبخ إيطالي' },
   menu: { en: 'Il Menù', bs: 'Il Menù', ar: 'القائمة' },
-  menuTitle: { en: 'Menu — Vera Italia', bs: 'Meni — Vera Italia', ar: 'القائمة — Vera Italia' },
+  menuTitle: {
+    en: 'Menu — Vera Italia, Italian Restaurant in Sarajevo',
+    bs: 'Meni — Vera Italia, italijanski restoran u Sarajevu',
+    ar: 'القائمة — Vera Italia، مطعم إيطالي في سراييفو',
+  },
   menuDescription: {
-    en: 'Vera Italia’s menu: bruschetta and burrata, fettuccine and truffle risotto, ten Neapolitan pizzas and a rib-eye with entrecôte sauce.',
-    bs: 'Meni restorana Vera Italia: bruschetta i burrata, fettuccine i rižoto s tartufom, deset napolitanskih pizza i rib-eye s entrecôte sosom.',
-    ar: 'قائمة Vera Italia: بروسكيتا وبوراتا، فيتوتشيني وريزوتو بالكمأة، عشر بيتزا نابوليتانية وستيك ريب آي بصلصة الأنتريكوت.',
+    en: 'The menu of Vera Italia, an Italian restaurant in Sarajevo: bruschetta and burrata, fettuccine and truffle risotto, ten Neapolitan pizzas and a rib-eye.',
+    bs: 'Meni restorana Vera Italia u Sarajevu: bruschetta i burrata, fettuccine i rižoto s tartufom, deset napolitanskih pizza i rib-eye s entrecôte sosom.',
+    ar: 'قائمة Vera Italia، مطعم إيطالي في سراييفو: بروسكيتا وبوراتا، فيتوتشيني وريزوتو بالكمأة، عشر بيتزا نابوليتانية وستيك ريب آي.',
   },
   courses: { en: 'Le Portate', bs: 'Le Portate', ar: 'الأطباق' },
   specialita: { en: 'Specialità della Casa', bs: 'Specialità della Casa', ar: 'أطباق البيت' },
@@ -51,12 +69,18 @@ export const COURSES: Record<string, { cover: string; line: Copy; short: Copy }>
 
 /** The website, /veraitalia/. Facts not yet known (address, hours, phone) are not written here: the page leaves them out. */
 export const SITE = {
-  seoTitle: { en: 'Vera Italia — Cucina Italiana', bs: 'Vera Italia — Cucina Italiana', ar: 'Vera Italia — مطبخ إيطالي' },
-  seoDescription: {
-    en: 'Vera Italia, an Italian restaurant: Neapolitan pizza from the dome oven, pasta and risotto in silky sauces, burrata and black truffle.',
-    bs: 'Vera Italia, italijanski restoran: napolitanska pizza iz kupolaste peći, pasta i rižoto u svilenkastim sosovima, burrata i crni tartuf.',
-    ar: 'Vera Italia، مطعم إيطالي: بيتزا نابوليتانية من الفرن ذي القبة، باستا وريزوتو بصلصات حريرية، بوراتا وكمأة سوداء.',
+  seoTitle: {
+    en: 'Vera Italia — Italian Restaurant & Pizza in Sarajevo',
+    bs: 'Vera Italia — italijanski restoran i pizza u Sarajevu',
+    ar: 'Vera Italia — مطعم إيطالي وبيتزا في سراييفو',
   },
+  seoDescription: {
+    en: 'Vera Italia is an Italian restaurant in Sarajevo: Neapolitan pizza from the dome oven, pasta and risotto in silky sauces, burrata and black truffle.',
+    bs: 'Vera Italia je italijanski restoran u Sarajevu: napolitanska pizza iz kupolaste peći, pasta i rižoto u svilenkastim sosovima, burrata i crni tartuf.',
+    ar: 'Vera Italia مطعم إيطالي في سراييفو: بيتزا نابوليتانية من الفرن ذي القبة، باستا وريزوتو بصلصات حريرية، بوراتا وكمأة سوداء.',
+  },
+  /** Under the name on the photograph. */
+  place: { en: 'Italian restaurant · Sarajevo', bs: 'Italijanski restoran · Sarajevo', ar: 'مطعم إيطالي · سراييفو' },
   heroLine: { en: 'Pizza napoletana · Pasta · Risotto', bs: 'Pizza napoletana · Pasta · Risotto', ar: 'بيتزا نابوليتانية · باستا · ريزوتو' },
   viewMenu: { en: 'View the menu', bs: 'Pogledajte meni', ar: 'عرض القائمة' },
   openingSoon: { en: 'Opening soon', bs: 'Uskoro otvaramo', ar: 'نفتتح قريبًا' },
@@ -67,9 +91,15 @@ export const SITE = {
     ar: 'بيتزا نابوليتانية من فرننا، باستا وريزوتو بصلصات حريرية، بوراتا وكمأة سوداء.',
   },
   introRoom: {
-    en: 'In a room of travertine and walnut, beneath softly glowing arches.',
-    bs: 'U prostoru od travertina i oraha, ispod nježno osvijetljenih lukova.',
-    ar: 'في قاعة من الترافرتين وخشب الجوز، تحت أقواس مضاءة بنعومة.',
+    en: 'An Italian restaurant in Sarajevo, in a room of travertine and walnut beneath softly glowing arches.',
+    bs: 'Italijanski restoran u Sarajevu, u prostoru od travertina i oraha, ispod nježno osvijetljenih lukova.',
+    ar: 'مطعم إيطالي في سراييفو، في قاعة من الترافرتين وخشب الجوز، تحت أقواس مضاءة بنعومة.',
+  },
+  /** What sets it apart, said plainly: the answer to "which Italian restaurant in Sarajevo?". */
+  apart: {
+    en: 'Neapolitan pizza from a dome oven; burrata and black truffle; a room of travertine and walnut beneath glowing arches; and a menu in Bosnian, English and Arabic that you order from at your table.',
+    bs: 'Napolitanska pizza iz kupolaste peći; burrata i crni tartuf; prostor od travertina i oraha ispod osvijetljenih lukova; i meni na bosanskom, engleskom i arapskom iz kojeg naručujete sa svog stola.',
+    ar: 'بيتزا نابوليتانية من فرن ذي قبة؛ بوراتا وكمأة سوداء؛ قاعة من الترافرتين وخشب الجوز تحت أقواس مضيئة؛ وقائمة بالبوسنية والإنجليزية والعربية تطلب منها من طاولتك.',
   },
   fromKitchen: { en: 'Dalla cucina', bs: 'Dalla cucina', ar: 'من المطبخ' },
   signatures: { en: 'Signature dishes', bs: 'Specijaliteti kuće', ar: 'أطباقنا المميزة' },
@@ -105,8 +135,8 @@ export const SITE = {
   },
   visit: { en: 'Vieni a trovarci', bs: 'Vieni a trovarci', ar: 'زورونا' },
   visitSoon: {
-    en: 'Our address and opening hours will be here very soon.',
-    bs: 'Adresa i radno vrijeme bit će ovdje vrlo brzo.',
-    ar: 'سنضيف عنواننا ومواعيد العمل هنا قريبًا جدًا.',
+    en: 'Our street address and opening hours will be here very soon.',
+    bs: 'Tačna adresa i radno vrijeme bit će ovdje vrlo brzo.',
+    ar: 'سنضيف عنواننا الكامل ومواعيد العمل هنا قريبًا جدًا.',
   },
 } satisfies Record<string, Copy>;

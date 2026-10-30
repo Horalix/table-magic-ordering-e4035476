@@ -93,8 +93,9 @@ export const VENUES: Record<string, Venue> = {
    * Same owner, its own restaurant (docs/two-restaurants.md). Its menu and
    * photographs arrived on 30 October 2026, and its menu has been in the
    * database since that evening, so it is live: veraitalia.net links to its
-   * menu and search engines list it. Its address, phone, hours and listings
-   * have not arrived, so they are empty and the website shows none of them.
+   * menu and search engines list it. It is in Sarajevo (the owner, 30 October
+   * 2026); its street address, phone, hours and listings have not arrived, so
+   * they are empty and the website shows none of them.
    */
   veraitalia: {
     slug: 'veraitalia',
@@ -105,8 +106,8 @@ export const VENUES: Record<string, Venue> = {
     phone: '',
     phoneHref: '',
     address: '',
-    city: '',
-    country: '',
+    city: 'Sarajevo',
+    country: 'BA',
     geo: null,
     mapsUrl: '',
     hours: null,

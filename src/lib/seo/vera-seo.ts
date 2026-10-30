@@ -14,7 +14,7 @@
  * Relative imports only: the build imports this module outside the app.
  */
 import type { Locale } from '../i18n';
-import { COURSES, SITE, VERA } from '../../components/vera/copy';
+import { COURSES, PLACE, SITE, VERA, courseTitle } from '../../components/vera/copy';
 import VERA_MENU from '../../../scripts/vera-italia/menu.json';
 import IMAGE_MANIFEST from '../image-manifest.json';
 import { HOME_VENUE } from '../home-venue';
@@ -31,6 +31,9 @@ const ON_OWN_SITE = HOME_VENUE === SLUG;
 export const VERA_OG_IMAGE = '/site/vera/og.jpg';
 const ROOM_IMAGES = ['/site/vera/room-2-1600.webp', '/site/vera/room-1-1600.webp', '/site/vera/room-3-1600.webp'];
 const LOGO = '/brand/vera/icon-512.png';
+/** Which Sarajevo: its Wikidata entry, for engines that link a restaurant to its city. */
+const WIKIDATA_CITY: Record<string, string> = { Sarajevo: 'https://www.wikidata.org/wiki/Q11194' };
+const upper = (s: string) => s.replace(/^./, (c) => c.toUpperCase());
 
 // ---- addresses --------------------------------------------------------------
 
@@ -145,14 +148,24 @@ export function veraFaq(m: SeoMenu, locale: Locale): Faq[] {
   // One vegetarian dish from each course, by name.
   const vegExamples = m.categories.map((c) => itemsOf(c, false).find(isVegetarian)).filter((i): i is SeoMenuItem => !!i).map((i) => i.names[locale]);
   const sig = signatures(m).map(({ item, note }) => `${item.names[locale]} (${note[locale].replace(/^./, (ch) => (locale === 'ar' ? ch : ch.toLowerCase()))})`);
+  // Three pizzas by name, the house's own first, in the owner's order.
+  const sigItems = signatures(m).map(({ item }) => item);
+  const pizzaNames = [...sigItems.filter((i) => pizzas.includes(i)), ...pizzas.filter((i) => !sigItems.includes(i))].slice(0, 3).map((i) => i.names[locale]);
   const hours = v.hours?.[0];
   const everyDay = hours && EVERY_DAY.every((d) => hours.days.includes(d));
+  // The street once the owner gives it; until then the city and the country.
+  const comma = locale === 'ar' ? '، ' : ', ';
+  const whereAnswer = v.address
+    ? `${v.address}${comma}${PLACE.city[locale]}${comma}${PLACE.country[locale]}.`
+    : `${upper(PLACE.inCity[locale])}${comma}${PLACE.country[locale]}.`;
 
-  type Asked = 'what' | 'pizza' | 'veg' | 'price' | 'order' | 'table' | 'where' | 'when' | 'call';
+  type Asked = 'what' | 'apart' | 'pizza' | 'pizzaIn' | 'veg' | 'price' | 'order' | 'table' | 'where' | 'when' | 'call';
   const answers: Record<Locale, Record<Asked, [string, string]>> = {
     en: {
       what: ['What is Vera Italia?', `${SITE.seoDescription.en} Its menu has ${all.length} dishes.`],
+      apart: ['What sets Vera Italia apart from other Italian restaurants in Sarajevo?', SITE.apart.en],
       pizza: ['Is the pizza at Vera Italia Neapolitan?', `Yes. There are ${pizzas.length} Neapolitan pizzas, ${range(pizzas, 'en')}, each baked in the dome oven at the heart of the room: a puffy, leopard-spotted crust, soft in the middle.`],
+      pizzaIn: ['Where can I eat Neapolitan pizza in Sarajevo?', `At Vera Italia, an Italian restaurant in Sarajevo: ${pizzas.length} Neapolitan pizzas, ${range(pizzas, 'en')}, each baked in its dome oven — among them ${join(pizzaNames, 'en')}.`],
       veg: ['Does Vera Italia have vegetarian dishes?', `Yes: ${veg.length} of its ${all.length} dishes are vegetarian, among them ${join(vegExamples, 'en')}.`],
       price: ['How much does a meal at Vera Italia cost?', `${[
         pizzas.length && `pizzas ${range(pizzas, 'en')}`, pasta.length && `pasta and risotto ${range(pasta, 'en')}`,
@@ -160,13 +173,15 @@ export function veraFaq(m: SeoMenu, locale: Locale): Faq[] {
       ].filter(Boolean).join(', ').replace(/^./, (c) => c.toUpperCase())}. Prices are in convertible marks (KM, BAM).`],
       order: ['What should I order at Vera Italia?', `The house specialities: ${join(sig, 'en')}.`],
       table: ['Can I order from my table at Vera Italia?', 'Yes. Scan the code on your table and order from the menu on your phone, in English, Bosnian or Arabic; the order goes straight to the kitchen, and you pay your waiter whenever you like.'],
-      where: ['Where is Vera Italia?', `${v.address}, ${v.city}.`],
+      where: ['Where is Vera Italia?', whereAnswer],
       when: ['When is Vera Italia open?', hours ? `${everyDay ? 'Every day' : hours.days.join(', ')}, ${hours.opens}–${hours.closes}.` : ''],
       call: ['How do I contact Vera Italia?', `By phone: ${v.phone}.`],
     },
     bs: {
       what: ['Šta je Vera Italia?', `${SITE.seoDescription.bs} Meni ima ${all.length} jela.`],
+      apart: ['Po čemu se Vera Italia razlikuje od drugih italijanskih restorana u Sarajevu?', SITE.apart.bs],
       pizza: ['Je li pizza u Vera Italia napolitanska?', `Da. Na meniju je ${pizzas.length} napolitanskih pizza, ${range(pizzas, 'bs')}, a svaka se peče u kupolastoj peći u srcu restorana: prozračan rub s tamnim mrljama, mekana sredina.`],
+      pizzaIn: ['Gdje u Sarajevu jesti napolitansku pizzu?', `U Vera Italia, italijanskom restoranu u Sarajevu: ${pizzas.length} napolitanskih pizza, ${range(pizzas, 'bs')}, svaka pečena u kupolastoj peći — među njima ${join(pizzaNames, 'bs')}.`],
       veg: ['Ima li Vera Italia vegetarijanskih jela?', `Ima: ${veg.length} od ${all.length} jela su vegetarijanska, među njima ${join(vegExamples, 'bs')}.`],
       price: ['Koliko košta obrok u Vera Italia?', `${[
         pizzas.length && `pizze ${range(pizzas, 'bs')}`, pasta.length && `pasta i rižoto ${range(pasta, 'bs')}`,
@@ -174,13 +189,15 @@ export function veraFaq(m: SeoMenu, locale: Locale): Faq[] {
       ].filter(Boolean).join(', ').replace(/^./, (c) => c.toUpperCase())}. Cijene su u konvertibilnim markama (KM).`],
       order: ['Šta naručiti u Vera Italia?', `Specijaliteti kuće: ${join(sig, 'bs')}.`],
       table: ['Mogu li naručiti sa stola u Vera Italia?', 'Možete. Skenirajte kod na stolu i naručite iz menija na telefonu, na bosanskom, engleskom ili arapskom; narudžba ide pravo u kuhinju, a konobaru plaćate kad god želite.'],
-      where: ['Gdje se nalazi Vera Italia?', `${v.address}, ${v.city}.`],
+      where: ['Gdje se nalazi Vera Italia?', whereAnswer],
       when: ['Kada radi Vera Italia?', hours ? `${everyDay ? 'Svaki dan' : hours.days.join(', ')}, ${hours.opens}–${hours.closes}.` : ''],
       call: ['Kako kontaktirati Vera Italia?', `Telefonom: ${v.phone}.`],
     },
     ar: {
       what: ['ما هو Vera Italia؟', `${SITE.seoDescription.ar} تضم القائمة ${all.length} طبقًا.`],
+      apart: ['ما الذي يميز Vera Italia عن المطاعم الإيطالية الأخرى في سراييفو؟', SITE.apart.ar],
       pizza: ['هل البيتزا في Vera Italia نابوليتانية؟', `نعم. في القائمة ${pizzas.length} أنواع من البيتزا النابوليتانية، ${range(pizzas, 'ar')}، تُخبز كل واحدة منها في الفرن ذي القبة في قلب المطعم: حافة منتفخة مبقّعة ووسط طري.`],
+      pizzaIn: ['أين يمكنني تناول البيتزا النابوليتانية في سراييفو؟', `في Vera Italia، مطعم إيطالي في سراييفو: ${pizzas.length} أنواع من البيتزا النابوليتانية، ${range(pizzas, 'ar')}، تُخبز كل واحدة في الفرن ذي القبة — منها ${join(pizzaNames, 'ar')}.`],
       veg: ['هل توجد أطباق نباتية في Vera Italia؟', `نعم: ${veg.length} من أصل ${all.length} طبقًا نباتية، منها ${join(vegExamples, 'ar')}.`],
       price: ['كم تكلفة الوجبة في Vera Italia؟', `${[
         pizzas.length && `البيتزا ${range(pizzas, 'ar')}`, pasta.length && `الباستا والريزوتو ${range(pasta, 'ar')}`,
@@ -188,17 +205,22 @@ export function veraFaq(m: SeoMenu, locale: Locale): Faq[] {
       ].filter(Boolean).join('، ')}. الأسعار بالمارك البوسني القابل للتحويل (KM).`],
       order: ['ماذا أطلب في Vera Italia؟', `أطباق البيت المميزة: ${join(sig, 'ar')}.`],
       table: ['هل يمكنني الطلب من طاولتي في Vera Italia؟', 'نعم. امسح الرمز على طاولتك واطلب من القائمة على هاتفك بالعربية أو الإنجليزية أو البوسنية؛ يصل الطلب مباشرة إلى المطبخ، وتدفع للنادل متى شئت.'],
-      where: ['أين يقع Vera Italia؟', `${v.address}، ${v.city}.`],
+      where: ['أين يقع Vera Italia؟', whereAnswer],
       when: ['ما هي ساعات عمل Vera Italia؟', hours ? `${everyDay ? 'يوميًا' : hours.days.join('، ')}، ${hours.opens}–${hours.closes}.` : ''],
       call: ['كيف أتواصل مع Vera Italia؟', `بالهاتف: ${v.phone}.`],
     },
   };
   const t = answers[locale];
 
-  const pairs: [string, string][] = [t.what, t.pizza, t.veg, t.price];
+  // The questions that name the city are asked once it is known (src/lib/venues.ts).
+  const pairs: [string, string][] = [t.what];
+  if (v.city) pairs.push(t.apart);
+  pairs.push(t.pizza);
+  if (v.city && pizzas.length) pairs.push(t.pizzaIn);
+  pairs.push(t.veg, t.price);
   if (sig.length) pairs.push(t.order);
   pairs.push(t.table);
-  if (v.address && v.city) pairs.push(t.where);
+  if (v.city) pairs.push(t.where);
   if (hours) pairs.push(t.when);
   if (v.phone) pairs.push(t.call);
   return pairs.filter(([, a]) => a).map(([q, a]) => ({ q, a }));
@@ -227,8 +249,15 @@ export function veraRestaurantNode(m: SeoMenu, locale: Locale) {
     currenciesAccepted: 'BAM',
     availableLanguage: ['bs', 'en', 'ar'],
     ...(v.phoneHref ? { telephone: v.phoneHref } : {}),
-    ...(v.address && v.city ? {
-      address: { '@type': 'PostalAddress', streetAddress: v.address, addressLocality: v.city, ...(v.country ? { addressCountry: v.country } : {}) },
+    // The city as soon as it is known, the street once the owner gives it.
+    ...(v.city ? {
+      address: {
+        '@type': 'PostalAddress',
+        ...(v.address ? { streetAddress: v.address } : {}),
+        addressLocality: v.city,
+        ...(v.country ? { addressCountry: v.country } : {}),
+      },
+      areaServed: { '@type': 'City', name: v.city, ...(WIKIDATA_CITY[v.city] ? { sameAs: WIKIDATA_CITY[v.city] } : {}) },
     } : {}),
     ...(v.geo ? { geo: { '@type': 'GeoCoordinates', latitude: v.geo.lat, longitude: v.geo.lng } } : {}),
     ...(v.mapsUrl ? { hasMap: v.mapsUrl } : {}),
@@ -330,10 +359,13 @@ function siteBody(m: SeoMenu, locale: Locale): string {
   const v = vera();
   const pick = (c: Record<Locale, string>) => h(c[locale] ?? c.en);
   const facts = v.address
-    ? `<address>${h(v.name)}<br />${h(v.address)}, ${h(v.city)}${v.phone ? `<br /><a href="tel:${h(v.phoneHref)}">${h(v.phone)}</a>` : ''}</address>`
-    : `<p>${pick(SITE.openingSoon)}. ${pick(SITE.visitSoon)}</p>`;
+    ? `<address>${h(v.name)}<br />${h(v.address)}, ${pick(PLACE.city)}, ${pick(PLACE.country)}${v.phone ? `<br /><a href="tel:${h(v.phoneHref)}">${h(v.phone)}</a>` : ''}</address>`
+    : v.city
+      ? `<p>${pick(PLACE.city)}, ${pick(PLACE.country)}. ${pick(SITE.visitSoon)}</p>`
+      : `<p>${pick(SITE.openingSoon)}. ${pick(SITE.visitSoon)}</p>`;
   return [
     `<h1>Vera Italia</h1>`,
+    v.city ? `<p>${pick(SITE.place)}</p>` : '',
     `<p>${pick(SITE.heroLine)}</p>`,
     `<p>${pick(SITE.intro)} ${pick(SITE.introRoom)}</p>`,
     `<h2>${pick(SITE.signatures)}</h2>`,
@@ -394,8 +426,8 @@ export function veraPages(m: SeoMenu): VeraPage[] {
       path, locale: 'en',
       head: {
         path, locale: 'en', venue: v, image: (cover && veraImage(cover)) || VERA_OG_IMAGE, noindex,
-        title: `${c.names.en} — Vera Italia`,
-        description: clip(`${c.names.en} at Vera Italia, an Italian restaurant${line ? `: ${line}` : ''}, ${range(itemsOf(c, false), 'en')}.`),
+        title: courseTitle(c.names.en, 'en'),
+        description: clip(`${c.names.en} at Vera Italia, an Italian restaurant ${PLACE.inCity.en}${line ? `: ${line}` : ''}, ${range(itemsOf(c, false), 'en')}.`),
         jsonLd: { '@context': 'https://schema.org', '@graph': [veraMenuNode(m, c), breadcrumbs([trailHome(), trailMenu(), { name: c.names.en, url: courseUrl(c) }])] },
       },
       body: [`<h1>Vera Italia — ${h(c.names.en)}</h1>`, courseBlock(c, false), `<p><a href="${h(menu)}">${h(VERA.menuTitle.en)}</a></p>`].join('\n'),
@@ -412,8 +444,9 @@ export function veraPages(m: SeoMenu): VeraPage[] {
           path, locale: 'en',
           head: {
             path, locale: 'en', venue: v, image: i.image ?? VERA_OG_IMAGE, noindex,
-            title: `${i.names.en} — ${km(i.price)} · Vera Italia`,
-            description: clip(`${description}${c.names.en} at Vera Italia, an Italian restaurant: ${km(i.price)}.`),
+            title: `${i.names.en} — ${km(i.price)} · Vera Italia, ${PLACE.city.en}`,
+            // Where and how much first: a long description is clipped from the end.
+            description: clip(`${c.names.en} at Vera Italia, an Italian restaurant ${PLACE.inCity.en}, ${km(i.price)}. ${description}`.trim()),
             jsonLd: {
               '@context': 'https://schema.org',
               '@graph': [menuItemNode(i), breadcrumbs([trailHome(), trailMenu(), { name: c.names.en, url: courseUrl(c) }, { name: i.names.en, url: dishUrl(i) }])],
@@ -441,13 +474,15 @@ export function veraPages(m: SeoMenu): VeraPage[] {
 export function veraLlms(m: SeoMenu): { short: string; full: string } {
   const v = vera();
   const all = dishesOf(m);
+  const where = `${PLACE.city.en}, ${PLACE.country.en}`;
   const known = [
-    `- What: an Italian restaurant — ${SITE.heroLine.en}`,
+    `- What: an Italian restaurant${v.city ? ` in ${where}` : ''} — ${SITE.heroLine.en}`,
+    v.city ? `- Known for: ${SITE.apart.en}` : '',
     `- Menu: ${all.length} dishes in ${m.categories.length} courses (${m.categories.map((c) => c.names.en).join(', ')}), in English, Bosnian and Arabic`,
     `- Prices: ${veraPriceRange(m)} (convertible marks, KM / BAM)`,
     `- Vegetarian: ${all.filter(isVegetarian).length} of ${all.length} dishes`,
     `- Ordering: from the table, by scanning the code on it; pay the waiter`,
-    v.address ? `- Address: ${v.address}, ${v.city}` : '- Address: to be announced',
+    v.address ? `- Address: ${v.address}, ${where}` : v.city ? `- Where: ${where} (street address to be announced)` : '- Address: to be announced',
     v.hours?.length ? `- Hours: ${v.hours.map((x) => `${x.days.join(', ')} ${x.opens}–${x.closes}`).join('; ')}` : '- Hours: to be announced',
     v.phone ? `- Phone: ${v.phone}` : '',
     v.instagram ? `- Instagram: ${v.instagram}` : '',
