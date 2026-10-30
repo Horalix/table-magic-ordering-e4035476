@@ -135,10 +135,10 @@ const App = () => (
             {/* The website (lasoul.net). No page transition: its hero is the
                 page's largest paint and should not wait for a fade. On
                 Vera Italia's own site (veraitalia.net, src/lib/home-venue.ts)
-                "/" is Vera Italia's, and La Soul's language pages are not there. */}
+                "/", /bs and /ar are Vera Italia's website in each language. */}
             <Route path="/" element={VERA_HOME ? <VeraSite /> : <SiteHome />} />
-            <Route path="/bs" element={VERA_HOME ? <Navigate to="/" replace /> : <SiteHome locale="bs" />} />
-            <Route path="/ar" element={VERA_HOME ? <Navigate to="/" replace /> : <SiteHome locale="ar" />} />
+            <Route path="/bs" element={VERA_HOME ? <VeraSite locale="bs" /> : <SiteHome locale="bs" />} />
+            <Route path="/ar" element={VERA_HOME ? <VeraSite locale="ar" /> : <SiteHome locale="ar" />} />
             <Route path="/veraitalia" element={VERA_HOME ? <Navigate to="/" replace /> : <VeraSite />} />
             {/* Guest routes wrapped in soft page transition. */}
             <Route path="/menu" element={<MenuRedirect />} />

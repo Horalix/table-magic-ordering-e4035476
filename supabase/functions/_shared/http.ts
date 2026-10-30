@@ -20,7 +20,7 @@ const DEFAULT_ORIGINS = [
   "https://menu.lasoul.net",
   "https://order.lasoul.net",
   "https://lasoulapp.netlify.app",
-  // Vera Italia's own site (src/lib/home-venue.ts): its admin adds waiters there.
+  // Vera Italia's own site (src/lib/home-venue.ts), for card payment there once it is switched on.
   "https://veraitalia.net",
   "https://www.veraitalia.net",
   "https://table-magic-ordering.lovable.app",

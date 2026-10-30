@@ -37,13 +37,35 @@ test.describe('Vera Italia’s own site', () => {
     expect(await (await page.request.get('/manifest.webmanifest')).json()).toMatchObject({ name: 'Vera Italia', start_url: '/menu/veraitalia/' });
   });
 
-  test('its old address and La Soul’s language pages land on its root', async ({ page }) => {
+  test('its old address lands on its root; /bs/ and /ar/ are its website in Bosnian and Arabic', async ({ page }) => {
     await installVeraStubs(page);
-    for (const path of ['/veraitalia', '/bs', '/ar']) {
-      await page.goto(path);
-      await expect(page).toHaveURL(/:\d+\/$/);
-      await expect(page.getByRole('heading', { level: 1, name: 'Vera Italia' })).toBeVisible();
+    await page.goto('/veraitalia');
+    await expect(page).toHaveURL(/:\d+\/$/);
+    await expect(page.getByRole('heading', { level: 1, name: 'Vera Italia' })).toBeVisible();
+
+    await page.goto('/bs/');
+    await expect(page.getByRole('link', { name: 'Pogledajte meni' }).first()).toBeVisible();
+    await page.goto('/ar/');
+    await expect(page.getByRole('link', { name: 'عرض القائمة' }).first()).toBeVisible();
+
+    // What a crawler reads at each: its own language, and the other two linked.
+    for (const [path, lang] of [['/', 'en'], ['/bs/', 'bs'], ['/ar/', 'ar']]) {
+      const html = await (await page.request.get(path)).text();
+      expect(html).toMatch(new RegExp(`<html lang="${lang}"`));
+      for (const other of ['/', '/bs/', '/ar/']) expect(html).toContain(`href="https://veraitalia.net${other}"`);
     }
+  });
+
+  test('every dish has its own page, and the website answers what people ask', async ({ page }) => {
+    const dish = await (await page.request.get('/menu/veraitalia/dish/truffle-pizza/')).text();
+    expect(dish).toContain('<title>Truffle Pizza — 25 KM · Vera Italia</title>');
+    expect(dish).toContain('"priceCurrency":"BAM"');
+
+    const home = await (await page.request.get('/')).text();
+    const ld = JSON.parse(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/.exec(home)![1]) as { '@graph': { '@type': string }[] };
+    expect(ld['@graph'].map((n) => n['@type'])).toEqual(expect.arrayContaining(['Restaurant', 'WebSite', 'FAQPage']));
+    expect(home).toContain('Is the pizza at Vera Italia Neapolitan?');
+    expect(await (await page.request.get('/llms-full.txt')).text()).toContain('[Truffle Pizza](https://veraitalia.net/menu/veraitalia/dish/truffle-pizza/) / ');
   });
 
   test('a bare /menu is Vera Italia’s menu, and the website leads to it', async ({ page }) => {

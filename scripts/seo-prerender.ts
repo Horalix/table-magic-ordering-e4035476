@@ -20,11 +20,9 @@ import path from 'node:path';
 import { loadEnv, type Plugin, type ResolvedConfig } from 'vite';
 import type { Locale } from '../src/lib/i18n';
 import { siteT } from '../src/lib/site-copy';
-import { COURSES, SITE as VERA_SITE, VERA } from '../src/components/vera/copy';
-import { sectionSlug } from '../src/lib/menu-sections';
-import VERA_MENU from './vera-italia/menu.json';
+import { veraLlms, veraPages, veraSeoMenu } from '../src/lib/seo/vera-seo';
 import { HOME_VENUE } from '../src/lib/home-venue';
-import { OWN_SITE_LIVE, SITE_URL, VENUE_URLS } from '../src/lib/seo/site-url';
+import { OWN_SITE_LIVE, VENUE_URLS } from '../src/lib/seo/site-url';
 import { DEFAULT_VENUE, VENUES, type Venue } from '../src/lib/venues';
 import { fetchSeoMenu, type SeoMenu } from '../src/lib/seo/menu-data';
 import { categoryPath, dishGraph, dishPath, homeGraph, LOCALES, menuGraph, menuPath, sitePath } from '../src/lib/seo/structured-data';
@@ -98,81 +96,32 @@ export function seoPrerender(): Plugin {
         writeFileSync(file, html);
       };
 
-      // Vera Italia's pages: its website (src/pages/vera/VeraSite.tsx) at
-      // `root` — "/" on its own site, /veraitalia/ on La Soul's until that is
-      // up — then its menu and each course. Without them those addresses would
-      // be served La Soul's home page, title, canonical and all, to every
-      // crawler and link preview; until it opens, search engines are asked to
-      // leave the menu pages out.
+      // Vera Italia's pages (src/lib/seo/vera-seo.ts): its website — at "/",
+      // /bs/ and /ar/ on its own site, at /veraitalia/ on La Soul's until that
+      // is up — its menu, each course and each dish. Without them those
+      // addresses would be served La Soul's home page, title, canonical and
+      // all, to every crawler and link preview; until it opens, search engines
+      // are asked to leave the menu and dishes out.
       const vera = VENUES.veraitalia;
-      const veraImage = '/site/vera/room-2-1600.webp';
-      type VeraItem = { id: string; name: string; price: number; description?: string; featured_rank?: number };
-      type VeraCourse = { name: string; sections: { name: string; items: VeraItem[] }[] };
-      const veraCourses = VERA_MENU.categories as VeraCourse[];
-      const veraLines = (course: VeraCourse) => [
-        `<h2>${escapeHtml(course.name)}</h2>`,
-        ...course.sections.map((sec) => `<h3>${escapeHtml(sec.name)}</h3><ul>${sec.items.map((d) => `<li>${escapeHtml(d.name)} — ${d.price.toFixed(2)} KM${d.description ? `: ${escapeHtml(d.description)}` : ''}</li>`).join('')}</ul>`),
-      ];
-      const writeVera = (root: string): SitemapEntry[] => {
-        write(root, withBrand(renderPage(template, headTags({
-          path: root, locale: 'en', venue: vera, image: veraImage,
-          title: VERA_SITE.seoTitle.en, description: VERA_SITE.seoDescription.en,
-          jsonLd: {
-            '@context': 'https://schema.org',
-            '@type': 'Restaurant',
-            name: vera.name,
-            url: `${SITE_URL}${root}`,
-            image: `${SITE_URL}${veraImage}`,
-            servesCuisine: ['Italian', 'Pizza'],
-            description: VERA_SITE.seoDescription.en,
-          },
-        }), [
-          '<h1>Vera Italia</h1>',
-          `<p>${escapeHtml(VERA_SITE.intro.en)} ${escapeHtml(VERA_SITE.introRoom.en)}</p>`,
-          ...veraCourses.map((c) => `<h2>${escapeHtml(c.name)}</h2><ul>${c.sections.flatMap((sec) => sec.items).map((d) => `<li>${escapeHtml(d.name)}</li>`).join('')}</ul>`),
-        ].join('\n'), 'en'), vera));
-
-        const signature = veraCourses.flatMap((c) => c.sections.flatMap((sec) => sec.items)).find((d) => d.featured_rank === 1);
-        const veraMenuPath = menuPath(vera.slug);
-        write(veraMenuPath, withBrand(renderPage(template, headTags({
-          path: veraMenuPath, locale: 'en', venue: vera, image: (signature && imageFor(signature.id)) || veraImage, noindex: !vera.live,
-          title: VERA.menuTitle.en, description: VERA.menuDescription.en,
-          jsonLd: { '@context': 'https://schema.org', '@type': 'Menu', name: VERA.menuTitle.en, url: `${SITE_URL}${veraMenuPath}` },
-        }), ['<h1>Vera Italia — Il Menù</h1>', ...veraCourses.flatMap(veraLines)].join('\n'), 'en'), vera));
-        const coursePaths: string[] = [];
-        for (const course of veraCourses) {
-          const p = categoryPath(vera.slug, sectionSlug(course.name));
-          const cover = COURSES[course.name]?.cover;
-          write(p, withBrand(renderPage(template, headTags({
-            path: p, locale: 'en', venue: vera, image: (cover && imageFor(cover)) || veraImage, noindex: !vera.live,
-            title: `${course.name} — Vera Italia`, description: VERA.menuDescription.en,
-            jsonLd: { '@context': 'https://schema.org', '@type': 'MenuSection', name: course.name, url: `${SITE_URL}${p}` },
-          }), ['<h1>Vera Italia</h1>', ...veraLines(course)].join('\n'), 'en'), vera));
-          coursePaths.push(p);
-        }
-        return [
-          { path: root, priority: root === '/' ? 1 : 0.8, images: [veraImage] },
-          ...(vera.live ? [veraMenuPath, ...coursePaths].map((path) => ({ path, priority: 0.8 })) : []),
-        ];
+      const veraMenu = veraSeoMenu();
+      const writeVera = (): SitemapEntry[] => {
+        const pages = veraPages(veraMenu);
+        for (const page of pages) write(page.path, withBrand(renderPage(template, headTags(page.head), page.body, page.locale), vera));
+        return pages.map((page) => page.sitemap).filter((e): e is SitemapEntry => !!e);
       };
 
       // Vera Italia's own site: its pages, and nothing of La Soul's.
       if (HOME_VENUE === 'veraitalia') {
-        const entries = writeVera('/');
+        const pages = veraPages(veraMenu).length;
+        const entries = writeVera();
         const today = new Date().toISOString().slice(0, 10);
-        const llms = [
-          `# Vera Italia`, '',
-          `> ${VERA_SITE.seoDescription.en}`, '',
-          `Website: ${SITE_URL}/`, '',
-          '# Menu (prices in KM)', '',
-          ...veraCourses.flatMap((c) => [`## ${c.name}`, '', ...c.sections.flatMap((sec) => sec.items).map((d) => `- ${d.name} — ${d.price.toFixed(2)} KM${d.description ? `: ${d.description}` : ''}`), '']),
-        ].join('\n');
+        const llms = veraLlms(veraMenu);
         writeFileSync(path.join(outDir, 'robots.txt'), robotsTxt());
         writeFileSync(path.join(outDir, 'sitemap.xml'), sitemapXml(entries, today));
-        writeFileSync(path.join(outDir, 'llms.txt'), llms);
-        writeFileSync(path.join(outDir, 'llms-full.txt'), llms);
+        writeFileSync(path.join(outDir, 'llms.txt'), llms.short);
+        writeFileSync(path.join(outDir, 'llms-full.txt'), llms.full);
         writeFileSync(path.join(outDir, '_redirects'), ownSiteRedirects('veraitalia', VENUE_URLS.lasoul));
-        config.logger.info(`  seo: Vera Italia's own site — ${1 + 1 + veraCourses.length} pages, robots.txt, sitemap.xml, llms.txt, _redirects`);
+        config.logger.info(`  seo: Vera Italia's own site — ${pages} pages (${vera.live ? 'open' : 'menu and dishes not indexed until it opens'}), robots.txt, sitemap.xml, llms.txt, _redirects`);
         return;
       }
 
@@ -229,7 +178,7 @@ export function seoPrerender(): Plugin {
 
       // Until Vera Italia's own site is up, La Soul's serves its pages; then
       // it forwards their addresses there (src/lib/seo/site-url.ts).
-      const veraEntries = OWN_SITE_LIVE.veraitalia ? [] : writeVera('/veraitalia/');
+      const veraEntries = OWN_SITE_LIVE.veraitalia ? [] : writeVera();
       if (OWN_SITE_LIVE.veraitalia) {
         const rules = path.join(outDir, '_redirects');
         const current = existsSync(rules) ? readFileSync(rules, 'utf8') : '';

@@ -1,14 +1,15 @@
-import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { ChevronDown, Clock, MapPin, Phone } from 'lucide-react';
 import LanguageSelector from '@/components/guest/LanguageSelector';
 import SmartImage from '@/components/ui/SmartImage';
 import Reveal from '@/components/site/Reveal';
 import { COURSES, ROMAN, SITE, pick, type Copy } from '@/components/vera/copy';
 import roomImages from '@/components/vera/room-images.json';
-import { useLanguageStore, useT } from '@/lib/i18n';
+import { useLanguageStore, useT, type Locale } from '@/lib/i18n';
 import { HOME_VENUE } from '@/lib/home-venue';
 import { usePageMeta } from '@/lib/seo/page-meta';
+import { VERA_OG_IMAGE, veraSeoMenu, veraSiteAlternates, veraSiteGraph, veraSitePath } from '@/lib/seo/vera-seo';
 import { sectionSlug } from '@/lib/menu-sections';
 import { VENUES, menuCategoryPath, menuPath } from '@/lib/venues';
 import menuData from '../../../scripts/vera-italia/menu.json';
@@ -65,14 +66,39 @@ const Caps = ({ children, light = false }: { children: string; light?: boolean }
 /** The brass rule under a section's label. */
 const Rule = () => <div aria-hidden className="mx-auto mt-5 w-14 vi-hairline" />;
 
-const VeraSite = () => {
+const SEO_MENU = veraSeoMenu();
+
+/**
+ * `locale` is the language its address names: on its own site (veraitalia.net)
+ * the website is at /, /bs/ and /ar/; on La Soul's it is one page, /veraitalia/.
+ */
+const VeraSite = ({ locale: pathLocale }: { locale?: Locale }) => {
   const t = useT();
   const locale = useLanguageStore((s) => s.locale);
   const c = (copy: Copy) => pick(copy, locale);
   const venue = VENUES.veraitalia;
+  const navigate = useNavigate();
 
-  // On its own site (veraitalia.net) the website is the root; on La Soul's, /veraitalia/.
-  usePageMeta({ title: c(SITE.seoTitle), description: c(SITE.seoDescription), path: HOME_VENUE === 'veraitalia' ? '/' : '/veraitalia/', locale });
+  // Before the first paint, so /bs/ never flashes English.
+  useLayoutEffect(() => {
+    if (pathLocale && useLanguageStore.getState().locale !== pathLocale) useLanguageStore.getState().setLocale(pathLocale);
+  }, [pathLocale]);
+
+  // The first render follows the address; after that, on its own site, the address follows the language.
+  const settled = useRef(false);
+  useEffect(() => {
+    if (!settled.current) { settled.current = true; return; }
+    if (HOME_VENUE !== 'veraitalia') return;
+    const target = veraSitePath(locale);
+    if (window.location.pathname !== target) navigate(`${target}${window.location.hash}`, { replace: true });
+  }, [locale, navigate]);
+
+  const shownLocale = pathLocale && !settled.current ? pathLocale : locale;
+  const jsonLd = useMemo(() => veraSiteGraph(SEO_MENU, shownLocale), [shownLocale]);
+  usePageMeta({
+    title: pick(SITE.seoTitle, shownLocale), description: pick(SITE.seoDescription, shownLocale),
+    path: veraSitePath(shownLocale), locale: shownLocale, alternates: veraSiteAlternates(), jsonLd, image: VERA_OG_IMAGE,
+  });
 
   // The header sits on the photograph until the page moves, then on travertine.
   const [scrolled, setScrolled] = useState(false);

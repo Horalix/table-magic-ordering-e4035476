@@ -54,6 +54,94 @@ order: all of it is La Soul's as before.
 Accounts and passwords are created by the owner in the app or in Lovable,
 never in a prompt or a chat.
 
+## Vera Italia's own site — veraitalia.net
+
+One repository, two Netlify sites. La Soul's site (lasoul.net; today
+lasoulapp.netlify.app) is built as it is now. Vera Italia's is a second
+Netlify site built from the **same repository and branch** with one extra
+setting, `VITE_HOME_VENUE=veraitalia` (`src/lib/home-venue.ts`). On it, `/`,
+`/bs/` and `/ar/` are Vera Italia's website, a bare `/menu` is its menu, the
+installed app is its own, and the sitemap, robots.txt, llms.txt and every
+canonical address are veraitalia.net's. Both serve the whole app (menus,
+ordering, staff screens) against the one database. Search engines see two
+separate websites; nothing of La Soul's is on Vera Italia's, and the other
+way round.
+
+**1. The Netlify site** (the owner, in Netlify):
+
+1. *Add new site → Import an existing project → GitHub →*
+   `Horalix/table-magic-ordering-e4035476`.
+2. *Branch to deploy:* `main` once the pull request is merged. To look at it
+   before then, use `feature/two-restaurants` and switch to `main` after the
+   merge (*Site configuration → Build & deploy → Branches*).
+3. *Build command* and *Publish directory*: the same as La Soul's site
+   (La Soul's site → *Site configuration → Build & deploy → Build settings*).
+4. *Environment variables* (*Site configuration → Environment variables*):
+   the same `VITE_SUPABASE_URL`, `VITE_SUPABASE_PROJECT_ID`,
+   `VITE_SUPABASE_PUBLISHABLE_KEY`, `VITE_SENTRY_DSN` and `VITE_MONRI_ENABLED`
+   as La Soul's site, plus **`VITE_HOME_VENUE` = `veraitalia`**. (Set them as
+   shared team variables and both sites read the same ones.)
+5. *Site name:* `veraitalia` → `veraitalia.netlify.app`. Deploy, and open it:
+   Vera Italia's website must be at `/`.
+
+**2. The domain:**
+
+1. Vera Italia's Netlify site → *Domain management → Add a domain* →
+   `veraitalia.net`; make it the **primary domain** (Netlify then sends
+   `www.veraitalia.net` to it).
+2. DNS, either:
+   - **Netlify DNS** (simplest): Netlify shows four name servers; at the
+     registrar where veraitalia.net was bought, replace its name servers with
+     those four. Or
+   - **The registrar's DNS**: the records Netlify shows — an `A` record for
+     `veraitalia.net` to Netlify's load balancer (`75.2.60.5` at the time of
+     writing) and a `CNAME` for `www` to `veraitalia.netlify.app`.
+3. *Domain management → HTTPS*: Netlify issues the certificate once DNS
+   answers (minutes to a few hours). Open `https://veraitalia.net/`.
+4. **Then, in the code:** `OWN_SITE_LIVE.veraitalia = true` in
+   `src/lib/seo/site-url.ts`. La Soul's site then forwards `/veraitalia/` and
+   `/menu/veraitalia/…` to veraitalia.net, and Vera Italia's QR codes are
+   printed with veraitalia.net. **Print its QR codes after this.**
+
+**3. Lovable:** nothing more for the domain. The prompt in
+`docs/lovable-migration-prompt.md` is the same; the staff functions answer any
+address already, and the card-payment functions (switched off) take
+veraitalia.net from `supabase/functions/_shared/http.ts` whenever they are
+next deployed.
+
+**4. Search, maps and AI answers** (the owner, once it has an address):
+
+1. **Google Search Console** — add a *Domain* property `veraitalia.net` (a
+   DNS TXT record), submit `https://veraitalia.net/sitemap.xml`, and request
+   indexing of `/`, `/bs/` and `/ar/`.
+2. **Bing Webmaster Tools** — *Import from Google Search Console*. Bing's index
+   is what ChatGPT search and Copilot read.
+3. **Google Business Profile** — "Vera Italia", primary category *Italian
+   restaurant* (add *Pizza restaurant*), the exact address, phone and hours,
+   website `https://veraitalia.net/`, menu link
+   `https://veraitalia.net/menu/veraitalia/`, and the dish and room
+   photographs. This is what Google Maps, "near me" searches and AI answers
+   about restaurants lean on most.
+4. **Apple Business Connect** (Apple Maps, Siri), **Bing Places**,
+   **TripAdvisor**, **Instagram** and **Facebook** — the same name, address
+   and phone, written the same way everywhere, all linking to veraitalia.net.
+5. The address, phone, hours, Google Maps link, Instagram and review link go
+   in `src/lib/venues.ts`: the website, its structured data, its FAQ ("Where
+   is Vera Italia?", "When is it open?") and llms.txt all take them from
+   there.
+6. When it opens, `live: true` (step 4 of the table above): its menu, four
+   courses and 25 dish pages join the sitemap and search.
+
+What the site already gives search engines and AI engines
+(`src/lib/seo/vera-seo.ts`): the website in English, Bosnian and Arabic with
+hreflang; a `Restaurant` with its cuisine, price range (KM/BAM), menu, logo,
+photographs and, once known, address, hours, phone and profiles; the whole
+menu as `Menu → MenuSection → MenuItem`, every dish priced in BAM, marked
+vegetarian where it is, with its own page and breadcrumbs; a FAQ answered from
+the menu in three languages; `llms.txt` and `llms-full.txt`; a sitemap with
+photographs; and a 1200×630 link-preview image (`public/site/vera/og.jpg`).
+Nothing in it is La Soul's, and nothing the owner has not given is said.
+
 ## Vera Italia — what is ready
 
 - **The menu**: 25 dishes in four courses (`scripts/vera-italia/menu.json` →
@@ -97,6 +185,7 @@ never in a prompt or a chat.
   Soul's listing.
 - Its tables and room QR code (Admin → QR Codes, switched to Vera Italia), its
   printers (Admin → Printing, switched to Vera Italia: their own poll URLs).
-- Whether its website keeps `/veraitalia/` or gets a domain of its own.
+- Its own site at veraitalia.net (bought 30 October 2026): the steps in
+  "Vera Italia's own site" above.
 - Split the suggestion engine's learned totals per restaurant
   (docs/two-restaurants.md, "Still shared").
