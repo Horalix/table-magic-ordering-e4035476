@@ -63,6 +63,9 @@ never in a prompt or a chat.
   re-shot with gpt-image-2.5 (`scripts/vera-photos.mjs`) — the same dish,
   plate, table and room, with a photographer's light, lens and retouching —
   and finished with grain and sharpening (`scripts/vera-italia/import-photos.mjs`).
+  The owner's three photographs of the room, re-shot the same way as an
+  interior photographer would (`scripts/vera-italia/room-photos.mjs` →
+  `site-images.mjs`), are the website's.
 - **The logo**: an arch monogram (VI) over VERA ITALIA / CUCINA ITALIANA, a
   one-line wordmark and the app icons, drawn with gpt-image-2.5
   (`scripts/vera-italia/logo.mjs`, `brand-assets.mjs` → `public/brand/vera/`).
@@ -82,12 +85,6 @@ never in a prompt or a chat.
 - **Its Google review link** (`reviewUrl` in `src/lib/venues.ts`) — until then
   Vera Italia's guests are thanked for a rating without being sent to La
   Soul's listing.
-- **Image credits.** The OpenAI account ran out of credits on 30 October
-  before the rib-eye platter and the three photographs of the room were
-  re-shot: they are the originals, graded by hand. With credits:
-  `node scripts/vera-photos.mjs ribeye-platter`,
-  `node scripts/vera-italia/room-photos.mjs`, then `import-photos.mjs`,
-  `npm run images` and `site-images.mjs`.
 - Its tables and room QR code (Admin → QR Codes, switched to Vera Italia), its
   printers (Admin → Printing, switched to Vera Italia: their own poll URLs).
 - Whether its website keeps `/veraitalia/` or gets a domain of its own.

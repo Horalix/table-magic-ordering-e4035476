@@ -4,32 +4,35 @@
       640,
       960,
       1280,
-      1600
+      1600,
+      2400
     ],
-    "width": 1600,
-    "height": 1200,
-    "blur": "data:image/webp;base64,UklGRqYAAABXRUJQVlA4IJoAAAAwBACdASoUAA8APu1iqU2ppaOiMAgBMB2JZgCdOUAAe7XAuXTiT0pCF4AAzHoNbsTMXtq8Fhv+moiqgA2SUPT+DrN5KIjEsZjZkVjmPZM8nJbke+lpD/s/r0JXz/HZ1LACM5IBF8knDcxgUHOdORnoiCVFedcXdPu7nVH7tUYG3fglGWGxbv/l8mYJPP2TK8D6th8PLIJA9AAA"
+    "width": 2880,
+    "height": 2160,
+    "blur": "data:image/webp;base64,UklGRqQAAABXRUJQVlA4IJgAAABwBACdASoUAA8APu1iqU2ppaOiMAgBMB2JZACdMoBnABnYd71wE/xNnDCdwAD3Sm9C2rtaJlr5e2DuSQytLNNeuawsY3f4OQgmHnptLd+S2bJ5oGFYsP5nqV1Ip0tVkpA2App0g75Ojct5e2k5Xa1L8CZVfXA4E4etKRvUoq+iBqs6A4kjjXLjH8cTmPrwK/NqX7X3HuVcAA=="
   },
   "room-2": {
     "widths": [
       640,
       960,
       1280,
-      1600
+      1600,
+      2400
     ],
-    "width": 1600,
-    "height": 1200,
-    "blur": "data:image/webp;base64,UklGRpoAAABXRUJQVlA4II4AAACwBACdASoUAA8APu1iqU2ppaOiMAgBMB2JQBYfv/wHyLDhLTjhGkbmOor9f80AAP6GjyCHJMm1hyhz5dPpt4dANPouzFj/EsDS92iBzi2vsdBXkLq3dyiFzlGjfk3G1pGr489wTwORN0gDzrwL0B9QI58S6y7YnKDj3LmOvNmu9voHghAADLCWglonbeAA"
+    "width": 2880,
+    "height": 2160,
+    "blur": "data:image/webp;base64,UklGRpYAAABXRUJQVlA4IIoAAADQAwCdASoUAA8APu1iqU2ppaOiMAgBMB2JQBWCP/wGRXBMjVFR+kAA/kf3MXxC9Dg12SW9Zy3x+VrdhC+lY1U5Kp7rUWFqVz0zG/7egDS5vCKtee14e/nbVbm8HK0Tdh0TIGtO+LmNeMiLA7yUtdOFLmABjOBWAbYWXIsC/lq6ErAM+GPgh9wAAAA="
   },
   "room-3": {
     "widths": [
       640,
       960,
       1280,
-      1600
+      1600,
+      2400
     ],
-    "width": 1600,
-    "height": 1200,
-    "blur": "data:image/webp;base64,UklGRqgAAABXRUJQVlA4IJwAAADQBACdASoUAA8APu1iqU2ppaOiMAgBMB2JYgCdMoAlsxig6ZXW0K4xweEMQ85bwAD49coVGHjhZhWkg1wLnEZ2a0+1B4JHdd4yu/ZbgYKuLb0l7jxgOszbJ4Ic5UsTAIrcuma+bY3yv7i+1Can2G7wIN4GT8aKQm+kQJuT9E866k9Hlw/aPQ4y9Eu/87MnAGKb4AG0uYTGH5INIAA="
+    "width": 2880,
+    "height": 2160,
+    "blur": "data:image/webp;base64,UklGRqgAAABXRUJQVlA4IJwAAACwBACdASoUAA8APu1iqU2ppaOiMAgBMB2JZgCdMoAvQTQgnIjqgn+o/ydADZVQAOIYg65houw8UBZCVety1XMBaxjTp+AYbvp2ODSSz3PfdZgpi/Rnz72cxDsegC6prtFW1MeerCVBttTnrv3GQg4a3yv+8LbIhMArDMQ6F9JRQqTVl4TeQPzKZkh5DIEQKhgLRpxJ1B9Ua7MLIAA="
   }
 }

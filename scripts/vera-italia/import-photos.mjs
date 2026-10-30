@@ -63,9 +63,8 @@ async function finish(file, seed) {
 }
 
 /**
- * No re-shoot yet (the image credits ran out on 30 October before the
- * rib-eye): the real photograph itself, graded by hand — a touch warmer,
- * brighter and richer — and finished the same way.
+ * A dish with no re-shoot yet: the real photograph itself, graded by hand —
+ * a touch warmer, brighter and richer — and finished the same way.
  */
 async function graded(slug) {
   const file = join(ORIGINALS, `${slug}.jpg`);
