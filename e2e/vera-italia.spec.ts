@@ -50,6 +50,11 @@ test.describe('Vera Italia’s menu', () => {
     expect(new Set(seen)).toEqual(new Set(['veraitalia']));
     await settle(page);
     await page.screenshot({ path: `test-results/vera-pizza-${test.info().project.name}.png`, fullPage: true });
+
+    // The course tabs go where the home screen's links go: "Pasta & Risotto" is /pasta-risotto/.
+    await page.getByRole('navigation', { name: 'Menu', exact: true }).getByRole('button', { name: 'Pasta' }).click();
+    await expect(page).toHaveURL(/\/menu\/veraitalia\/pasta-risotto\//);
+    await expect(page.getByText('Truffle Pasta').first()).toBeVisible();
   });
 
   test('a seated guest sees their table and can call the waiter', async ({ page }) => {

@@ -5,7 +5,7 @@
  *   node scripts/vera-italia/import-photos.mjs   then   npm run images
  *
  * For every dish in menu.json, takes the chosen re-shoot from
- * assets/vera-photos/out-v3/ (scripts/vera-photos.mjs; the newest take unless
+ * assets/vera-photos/out-v5/ (scripts/vera-photos.mjs; the newest take unless
  * CHOSEN names one), finishes it the way a photographer finishes a file —
  * down to 1400 px (the app's largest size is 1152), a light sharpen, and a fine, even luminance grain, which a
  * real sensor always has and a generated image never does — and writes
@@ -19,8 +19,8 @@ import sharp from 'sharp';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, '..', '..');
-const TAKES = join(ROOT, 'assets', 'vera-photos', 'out-v3');
-const ORIGINALS = join(ROOT, 'assets', 'vera-photos', 'src-v3');
+const TAKES = join(ROOT, 'assets', 'vera-photos', 'out-v5');
+const ORIGINALS = join(ROOT, 'assets', 'vera-photos', 'src-v5');
 const SOURCES = join(ROOT, 'scripts', 'image-sources');
 const SIZE = 1400;
 /** Grain strength, in 8-bit levels (standard deviation). */

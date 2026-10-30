@@ -275,7 +275,8 @@ const GuestMenu = () => {
 
         {hasSession && <RecentOrdersRow />}
 
-        <HomePromotions onOpen={setSheetItem} />
+        {/* Vera Italia leads with its courses, as a printed menu does; its specialities follow them. */}
+        {!vera && <HomePromotions onOpen={setSheetItem} />}
 
         <div className="space-y-3">
           {categoriesLoading && [0, 1, 2].map((i) => <Skeleton key={i} className="w-full aspect-[16/9] rounded-2xl" />)}
@@ -336,9 +337,12 @@ const GuestMenu = () => {
           })}
         </div>
 
+        {vera && <HomePromotions onOpen={setSheetItem} />}
+
         {/* Every section of the menu, one tap away. Guests who know they want
-            a burger should not have to open Food and then find Burgers. */}
-        {subcategories.length > 0 && (
+            a burger should not have to open Food and then find Burgers.
+            Vera Italia's four courses hold a few sections each; it has none. */}
+        {subcategories.length > 0 && !vera && (
           <motion.nav variants={fadeUp} aria-label={t('menu_sections')} className="pt-3 space-y-4">
             <h2 className="font-serif text-lg font-semibold text-foreground">{t('jump_to')}</h2>
             {categories.map((cat) => {

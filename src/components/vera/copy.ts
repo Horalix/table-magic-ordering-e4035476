@@ -9,6 +9,9 @@ export type Copy = Record<Locale, string>;
 
 export const pick = (c: Copy, locale: Locale) => c[locale] ?? c.en;
 
+/** Courses and sections are numbered like a printed menu's. */
+export const ROMAN = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X'];
+
 export const VERA = {
   tagline: { en: 'Cucina Italiana', bs: 'Cucina Italiana', ar: 'مطبخ إيطالي' },
   menu: { en: 'Il Menù', bs: 'Il Menù', ar: 'القائمة' },
@@ -18,7 +21,8 @@ export const VERA = {
     bs: 'Meni restorana Vera Italia: bruschetta i burrata, fettuccine i rižoto s tartufom, deset napolitanskih pizza i rib-eye s entrecôte sosom.',
     ar: 'قائمة Vera Italia: بروسكيتا وبوراتا، فيتوتشيني وريزوتو بالكمأة، عشر بيتزا نابوليتانية وستيك ريب آي بصلصة الأنتريكوت.',
   },
-  courses: { en: 'The courses', bs: 'Jela', ar: 'الأطباق' },
+  courses: { en: 'Le Portate', bs: 'Le Portate', ar: 'الأطباق' },
+  specialita: { en: 'Specialità della Casa', bs: 'Specialità della Casa', ar: 'أطباق البيت' },
 } satisfies Record<string, Copy>;
 
 /** Each course on the menu's home: the dish whose photograph stands for it, and a line under its name. */

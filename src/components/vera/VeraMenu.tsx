@@ -1,10 +1,12 @@
 /**
  * Vera Italia's menu home: the parts that are its own. Ordering, search,
- * the featured dishes and the cart are the same as La Soul's; the room is
- * not. Its arched niches, softly lit from within, are the motif: the logo
- * sits in one, every course is framed in one, and the ceiling's flowing line
- * of light runs across the top.
+ * the featured dishes and the cart are the same as La Soul's; the page is
+ * not. It is laid out like the restaurant's printed menu and its magazine
+ * pages: ivory paper, the lockup, an italic "Il Menù" between brass rules,
+ * and each course as one overhead photograph of a whole dish on travertine,
+ * numbered like a menu's courses.
  */
+import type { ReactNode } from 'react';
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import { MapPin, Phone } from 'lucide-react';
@@ -15,7 +17,7 @@ import { fadeUp, PRESS_SCALE } from '@/lib/motion';
 import { getLocalizedName, useLanguageStore, useT } from '@/lib/i18n';
 import { VENUES } from '@/lib/venues';
 import type { Database } from '@/integrations/supabase/types';
-import { COURSES, VERA, pick } from './copy';
+import { COURSES, ROMAN, VERA, pick } from './copy';
 
 type CategoryRow = Database['public']['Tables']['categories']['Row'];
 
@@ -33,6 +35,15 @@ export const LightLine = ({ className = '' }: { className?: string }) => (
   </svg>
 );
 
+/** A centred heading between two brass rules, the way the printed menu titles its pages. */
+export const RuledTitle = ({ children, className = '' }: { children: ReactNode; className?: string }) => (
+  <div className={`flex items-center gap-4 ${className}`}>
+    <span aria-hidden className="vi-hairline flex-1" />
+    <span className="font-serif italic font-normal leading-none text-foreground">{children}</span>
+    <span aria-hidden className="vi-hairline flex-1" />
+  </div>
+);
+
 interface HeroProps {
   table: string | null;
   showTable: boolean;
@@ -43,41 +54,29 @@ export const VeraMenuHero = ({ table, showTable, onChangeTable }: HeroProps) => 
   const t = useT();
   const locale = useLanguageStore((s) => s.locale);
   return (
-    <header className="relative overflow-hidden px-5 pt-[max(0.75rem,env(safe-area-inset-top))] pb-8 text-center">
-      <LightLine className="absolute inset-x-0 top-3 h-12 w-full" />
-      <div className="relative z-10 flex justify-end">
+    <header className="relative px-5 pt-[max(0.75rem,env(safe-area-inset-top))] pb-7 text-center">
+      <div className="flex justify-end">
         <LanguageSelector />
       </div>
 
-      {/* The backlit niche: a true semicircle on a 3:4 arch, lit from within,
-          holding the logo and the word "menu" as the room's niches hold light. */}
-      <div
-        className="relative mx-auto -mt-3 w-[16rem] max-w-[74vw] aspect-[3/4] vi-arch flex flex-col items-center justify-center px-7"
-        style={{
-          background: 'radial-gradient(75% 60% at 50% 45%, hsl(var(--vi-glow)) 0%, hsl(var(--vi-glow) / 0.7) 50%, hsl(var(--background) / 0) 100%)',
-          boxShadow: 'inset 0 0 44px hsl(var(--vi-glow)), inset 0 0 0 1px hsl(var(--vi-brass) / 0.3), 0 30px 60px -40px hsl(var(--vi-walnut) / 0.45)',
-        }}
-      >
-        <h1 className="w-full pt-6" dir="ltr">
-          <img
-            src="/brand/vera/lockup-ink.webp"
-            alt="Vera Italia"
-            width={1158}
-            height={806}
-            {...{ fetchpriority: 'high' }}
-            className="w-full h-auto"
-          />
-          <span className="sr-only"> — {t('menu')}</span>
-        </h1>
-        <div className="mt-6 flex w-full items-center gap-3" aria-hidden>
-          <span className="vi-hairline flex-1" />
-          <span className="font-serif italic text-[19px] text-accent">{pick(VERA.menu, locale)}</span>
-          <span className="vi-hairline flex-1" />
-        </div>
-      </div>
+      <h1 className="mx-auto mt-1 w-[13rem] max-w-[60vw]" dir="ltr">
+        <img
+          src="/brand/vera/lockup-ink.webp"
+          alt="Vera Italia"
+          width={1158}
+          height={806}
+          {...{ fetchpriority: 'high' }}
+          className="w-full h-auto"
+        />
+        <span className="sr-only"> — {t('menu')}</span>
+      </h1>
+
+      <RuledTitle className="mx-auto mt-8 max-w-[18rem] text-[40px]">
+        <span aria-hidden>{pick(VERA.menu, locale)}</span>
+      </RuledTitle>
 
       {showTable && table && (
-        <div className="relative z-10 mt-6 flex items-center justify-center gap-2">
+        <div className="mt-6 flex items-center justify-center gap-2">
           <button
             onClick={onChangeTable}
             className="px-4 min-h-[44px] rounded-full border border-border bg-card/70 text-xs font-sans font-medium text-foreground tracking-wide rtl:tracking-normal hover:bg-card transition-colors"
@@ -97,44 +96,49 @@ interface CoursesProps {
   onOpen: (categoryName: string) => void;
 }
 
-/** Each course framed in an arch, two to a row. */
+/**
+ * The courses, two to a row: each one's photograph square and whole, the
+ * plate never cropped, with its number and its name under it.
+ */
 export const VeraCourses = ({ categories, onOpen }: CoursesProps) => {
   const locale = useLanguageStore((s) => s.locale);
   return (
-    <div className="grid grid-cols-2 gap-x-3.5 gap-y-7 pt-2">
-      {categories.map((cat, i) => {
-        const course = COURSES[cat.name];
-        const name = getLocalizedName(cat, locale);
-        return (
-          <motion.button
-            key={cat.id}
-            variants={fadeUp}
-            whileTap={{ scale: PRESS_SCALE }}
-            onClick={() => onOpen(cat.name)}
-            className="group text-center tap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-4 rounded-md"
-          >
-            <span className="relative block aspect-[3/4] vi-arch overflow-hidden bg-muted shadow-[0_22px_40px_-26px_rgba(43,33,27,0.7)]">
-              {course && (
-                <SmartImage
-                  id={course.cover}
-                  src={`/menu/${course.cover}/768.webp`}
-                  alt=""
-                  width={300}
-                  height={400}
-                  sizes="(max-width: 640px) 46vw, 300px"
-                  priority={i < 2}
-                  wrapperClassName="absolute inset-0 w-full h-full"
-                  className="w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-[1.03]"
-                />
-              )}
-              <span aria-hidden className="absolute inset-0 vi-arch ring-1 ring-inset ring-[hsl(var(--vi-brass)/0.35)]" />
-            </span>
-            <h2 className="mt-3 font-serif text-[23px] font-medium leading-tight text-foreground">{name}</h2>
-            {course && <span className="block mt-1 px-1 text-[12px] leading-snug font-sans text-muted-foreground">{pick(course.line, locale)}</span>}
-          </motion.button>
-        );
-      })}
-    </div>
+    <section aria-label={pick(VERA.courses, locale)} className="pt-2">
+      <div className="grid grid-cols-2 gap-x-4 gap-y-9">
+        {categories.map((cat, i) => {
+          const course = COURSES[cat.name];
+          const name = getLocalizedName(cat, locale);
+          return (
+            <motion.button
+              key={cat.id}
+              variants={fadeUp}
+              whileTap={{ scale: PRESS_SCALE }}
+              onClick={() => onOpen(cat.name)}
+              className="group text-center tap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-4 rounded-[3px]"
+            >
+              <span className="relative block aspect-square overflow-hidden rounded-[3px] bg-muted">
+                {course && (
+                  <SmartImage
+                    id={course.cover}
+                    src={`/menu/${course.cover}/768.webp`}
+                    alt=""
+                    width={320}
+                    height={320}
+                    sizes="(max-width: 640px) 45vw, 320px"
+                    priority={i < 2}
+                    wrapperClassName="absolute inset-0 w-full h-full"
+                    className="w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-[1.02]"
+                  />
+                )}
+              </span>
+              <span aria-hidden className="mt-4 block vi-caps text-muted-foreground">{ROMAN[i] ?? i + 1}</span>
+              <h2 className="mt-1.5 font-serif italic text-[25px] font-normal leading-[1.1] text-foreground">{name}</h2>
+              {course && <span className="block mt-1.5 px-1 text-[12px] leading-snug font-sans text-muted-foreground">{pick(course.line, locale)}</span>}
+            </motion.button>
+          );
+        })}
+      </div>
+    </section>
   );
 };
 
@@ -144,7 +148,8 @@ export const VeraMenuFooter = () => {
   const locale = useLanguageStore((s) => s.locale);
   const venue = VENUES.veraitalia;
   return (
-    <motion.footer variants={fadeUp} className="pt-8 text-center">
+    <motion.footer variants={fadeUp} className="pt-10 text-center">
+      <div aria-hidden className="mx-auto mb-8 w-16 vi-hairline" />
       <img src="/brand/vera/monogram-ink.webp" alt="" aria-hidden width={501} height={664} className="mx-auto h-12 w-auto opacity-80" />
       <p className="mt-3 vi-caps text-muted-foreground">Vera Italia · {pick(VERA.tagline, locale)}</p>
       {(venue.phone || venue.mapsUrl) && (

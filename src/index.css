@@ -117,46 +117,63 @@
    * its menu and website pages; staff screens keep the shared look.
    */
   :root[data-venue='veraitalia'] {
-    --background: 37 38% 94%;          /* travertine */
-    --foreground: 24 22% 14%;          /* espresso */
+    /* Editorial daylight, like the photographs: ivory paper, espresso ink,
+       terracotta and brass used sparingly, square corners. */
+    --background: 40 30% 96%;          /* ivory */
+    --foreground: 24 22% 11%;          /* espresso ink */
 
-    --card: 40 50% 98%;
-    --card-foreground: 24 22% 14%;
-    --popover: 40 50% 98%;
-    --popover-foreground: 24 22% 14%;
+    --card: 40 33% 99%;
+    --card-foreground: 24 22% 11%;
+    --popover: 40 33% 99%;
+    --popover-foreground: 24 22% 11%;
 
-    /* Terracotta, the dining chairs: 6.2:1 with white, 5.4:1 as text on travertine. */
-    --primary: 17 62% 38%;
-    --primary-foreground: 40 60% 98%;
+    /* Buttons are ink, as on a printed menu: 15:1 with ivory. */
+    --primary: 24 22% 13%;
+    --primary-foreground: 40 33% 97%;
 
-    --secondary: 36 30% 89%;
-    --secondary-foreground: 24 22% 18%;
-    --muted: 36 26% 90%;
-    --muted-foreground: 26 12% 35%;
+    --secondary: 38 24% 91%;
+    --secondary-foreground: 24 22% 14%;
+    --muted: 38 22% 92%;
+    --muted-foreground: 25 9% 36%;
 
-    /* Brass, darkened to read: 5.1:1 on travertine. */
-    --accent: 37 62% 32%;
-    --accent-foreground: 40 60% 98%;
+    /* Terracotta, the dining chairs, for what must catch the eye (allergens,
+       "popular"): 5.6:1 on ivory. */
+    --accent: 17 60% 38%;
+    --accent-foreground: 40 33% 97%;
 
-    /* Olive, the banquette: a sale is never the terracotta of every button. */
+    /* Olive, the banquette: a sale is never the colour of every button. */
     --sale: 62 24% 30%;
-    --sale-foreground: 40 60% 98%;
+    --sale-foreground: 40 33% 97%;
 
-    --border: 34 22% 84%;
-    --input: 34 22% 80%;
-    --ring: 17 62% 38%;
-    --radius: 0.5rem;
+    --border: 35 16% 86%;
+    --input: 35 16% 80%;
+    --ring: 24 22% 13%;
+    --radius: 0.25rem;
 
     --font-serif: 'Cormorant Garamond';
+
+    /* La Soul's named brand colours, which shared screens use directly (the
+       order bar, every button's hover): Vera Italia's own in their place. */
+    --sage: 24 22% 13%;
+    --sage-dark: 24 24% 8%;
+    --sage-light: 38 24% 91%;
+    --hero-sage: 24 24% 11%;
+    --hero-sage-dark: 24 24% 8%;
+    --hero-sage-light: 24 18% 20%;
+    --gold: 38 40% 55%;
+    --gold-light: 38 40% 75%;
+    --cream: 40 30% 96%;
+    --cream-dark: 38 24% 91%;
+    --charcoal: 24 22% 11%;
 
     /* Named for the pieces only Vera Italia has. */
     --vi-stone: 35 27% 86%;
     --vi-walnut: 22 30% 20%;
     --vi-espresso: 24 24% 11%;
-    --vi-terracotta: 17 62% 42%;
+    --vi-terracotta: 17 60% 40%;
     --vi-olive: 60 20% 33%;
     --vi-ochre: 39 62% 48%;
-    --vi-brass: 38 40% 55%;
+    --vi-brass: 38 40% 52%;
     --vi-glow: 40 100% 96%;
   }
 
@@ -220,12 +237,11 @@
      font-size; screens shared with La Soul were sized for Lora. */
   :root[data-venue='veraitalia'] :is(h1, h2, h3, h4, h5, h6, .font-serif) {
     font-size-adjust: 0.46;
+    /* Its figures are old-style by default; a price reads evenly in lining ones. */
+    font-variant-numeric: lining-nums;
   }
-  :root[data-venue='veraitalia'] body {
-    background-image:
-      radial-gradient(120% 60% at 50% -10%, hsl(var(--vi-glow) / 0.9), transparent 60%);
-    background-attachment: fixed;
-  }
+  /* Tailwind's tabular-nums resets the figure style on its own element. */
+  :root[data-venue='veraitalia'] .tabular-nums { --tw-numeric-figure: lining-nums; }
 }
 
 @layer utilities {

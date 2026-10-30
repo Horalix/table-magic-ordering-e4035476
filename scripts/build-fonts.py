@@ -143,7 +143,9 @@ def main():
         font = TTFont(buf)
 
         subsetter = ft_subset.Subsetter(options=ft_subset.Options(
-            layout_features=['kern', 'liga', 'calt', 'tnum'],
+            # lnum: Cormorant's default figures are old-style (a '2' at x-height, a
+            # '5' below the line); Vera Italia's prices ask for lining ones.
+            layout_features=['kern', 'liga', 'calt', 'tnum', 'lnum'],
             drop_tables=['DSIG'],
             notdef_outline=True,
         ))

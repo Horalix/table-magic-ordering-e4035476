@@ -12,7 +12,7 @@
  * rendered. Arabic is in none of them — the ar locale uses the system
  * Arabic font, as before.
  *
- * 2929 KB of source font -> 116 KB shipped.
+ * 2929 KB of source font -> 120 KB shipped.
  */
 
 @font-face {

@@ -32,11 +32,17 @@ const THEME_COLOR: Record<string, string> = {
  * its serif (src/index.css), and the browser's toolbar colour.
  */
 export function VenueTheme() {
-  const venue = useVenue();
+  const { pathname } = useLocation();
+  const venue = venueForPage(pathname);
   useLayoutEffect(() => {
     document.documentElement.dataset.venue = venue.slug;
     const meta = document.querySelector('meta[name="theme-color"]');
     if (meta && THEME_COLOR[venue.slug]) meta.setAttribute('content', THEME_COLOR[venue.slug]);
-  }, [venue.slug]);
+    // Pages that set no title of their own (the table, the order, the tab)
+    // keep the HTML's, which is La Soul's: on another restaurant's pages, its name.
+    if (venue.slug !== DEFAULT_VENUE && document.title.includes('La Soul')) {
+      document.title = `${venue.name} — ${venue.tagline}`;
+    }
+  }, [venue, pathname]);
   return null;
 }
