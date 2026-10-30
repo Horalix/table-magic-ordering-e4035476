@@ -43,25 +43,34 @@ export const VERA = {
   specialita: { en: 'Specialità della Casa', bs: 'Specialità della Casa', ar: 'أطباق البيت' },
 } satisfies Record<string, Copy>;
 
-/** Each course on the menu's home: the dish whose photograph stands for it, and a line under its name. */
-export const COURSES: Record<string, { cover: string; line: Copy; short: Copy }> = {
+/**
+ * Each course on the menu's home: its own picture — several of its dishes
+ * photographed together on travertine (scripts/category-photos.mjs; Carne is
+ * one platter) — the dish whose photograph stands for it on the website and
+ * in link previews, and a line under its name.
+ */
+export const COURSES: Record<string, { picture: string; cover: string; line: Copy; short: Copy }> = {
   'Antipasti & Insalate': {
     short: { en: 'Antipasti', bs: 'Antipasti', ar: 'المقبلات' },
-    cover: 'b7a1d000-0000-4000-8000-000000000001', // Bruschetta
+    picture: '/covers/veraitalia-antipasti', // Caprese, bruschetta, baked feta
+    cover: 'b7a1d000-0000-4000-8000-000000000003', // Insalata Caprese
     line: { en: 'Bruschetta, baked feta, caprese', bs: 'Bruschetta, zapečena feta, caprese', ar: 'بروسكيتا، فيتا مخبوزة، كابريزي' },
   },
   'Pasta & Risotto': {
     short: { en: 'Pasta', bs: 'Pasta', ar: 'الباستا' },
+    picture: '/covers/veraitalia-pasta', // Arrabbiata, truffle pasta, pesto risotto
     cover: 'b7a1d000-0000-4000-8000-000000000005', // Penne all'Arrabbiata
     line: { en: 'Fettuccine, penne and risotto', bs: 'Fettuccine, penne i rižoto', ar: 'فيتوتشيني وبيني وريزوتو' },
   },
   'Pizza Napoletana': {
     short: { en: 'Pizza', bs: 'Pizza', ar: 'البيتزا' },
+    picture: '/covers/veraitalia-pizza', // Margherita, truffle, burrata
     cover: 'b7a1d000-0000-4000-8000-000000000015', // Margherita
     line: { en: 'Ten pizzas from our oven', bs: 'Deset pizza iz naše peći', ar: 'عشر بيتزا من فرننا' },
   },
   Carne: {
     short: { en: 'Carne', bs: 'Carne', ar: 'اللحوم' },
+    picture: '/covers/veraitalia-carne', // The rib-eye platter
     cover: 'b7a1d000-0000-4000-8000-000000000025', // Rib-eye Steak Platter
     line: { en: 'Rib-eye with entrecôte sauce', bs: 'Rib-eye s entrecôte sosom', ar: 'ريب آي بصلصة الأنتريكوت' },
   },

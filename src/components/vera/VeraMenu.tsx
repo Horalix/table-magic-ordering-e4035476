@@ -3,19 +3,20 @@
  * the featured dishes and the cart are the same as La Soul's; the page is
  * not. It is laid out like the restaurant's printed menu and its magazine
  * pages: ivory paper, the lockup, an italic "Il Menù" between brass rules,
- * and each course as one overhead photograph of a whole dish on travertine,
- * numbered like a menu's courses.
+ * and each course as one overhead photograph of several of its dishes on
+ * travertine, numbered like a menu's courses.
  */
 import type { ReactNode } from 'react';
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import { MapPin, Phone } from 'lucide-react';
 import CallWaiterButton from '@/components/guest/CallWaiterButton';
+import CategoryShowcase from '@/components/guest/CategoryShowcase';
 import LanguageSelector from '@/components/guest/LanguageSelector';
-import SmartImage from '@/components/ui/SmartImage';
 import { fadeUp, PRESS_SCALE } from '@/lib/motion';
 import { getLocalizedName, useLanguageStore, useT } from '@/lib/i18n';
 import { VENUES } from '@/lib/venues';
+import type { ShowcasePhoto } from '@/lib/category-showcase';
 import type { Database } from '@/integrations/supabase/types';
 import { COURSES, ROMAN, VERA, pick } from './copy';
 
@@ -93,51 +94,38 @@ export const VeraMenuHero = ({ table, showTable, onChangeTable }: HeroProps) => 
 
 interface CoursesProps {
   categories: CategoryRow[];
+  /** A course without its own picture yet: its dishes' photographs (src/lib/category-showcase.ts). */
+  photosFor: (category: CategoryRow) => ShowcasePhoto[];
   onOpen: (categoryName: string) => void;
 }
 
 /**
- * The courses, two to a row: each one's photograph square and whole, the
- * plate never cropped, with its number and its name under it.
+ * The courses, one to a row like the pages of a printed menu: each its own
+ * picture of several of its dishes together, overhead on travertine, every
+ * plate whole, with the course's number, name and line under it.
  */
-export const VeraCourses = ({ categories, onOpen }: CoursesProps) => {
+export const VeraCourses = ({ categories, photosFor, onOpen }: CoursesProps) => {
   const locale = useLanguageStore((s) => s.locale);
   return (
-    <section aria-label={pick(VERA.courses, locale)} className="pt-2">
-      <div className="grid grid-cols-2 gap-x-4 gap-y-9">
-        {categories.map((cat, i) => {
-          const course = COURSES[cat.name];
-          const name = getLocalizedName(cat, locale);
-          return (
-            <motion.button
-              key={cat.id}
-              variants={fadeUp}
-              whileTap={{ scale: PRESS_SCALE }}
-              onClick={() => onOpen(cat.name)}
-              className="group text-center tap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-4 rounded-[3px]"
-            >
-              <span className="relative block aspect-square overflow-hidden rounded-[3px] bg-muted">
-                {course && (
-                  <SmartImage
-                    id={course.cover}
-                    src={`/menu/${course.cover}/768.webp`}
-                    alt=""
-                    width={320}
-                    height={320}
-                    sizes="(max-width: 640px) 45vw, 320px"
-                    priority={i < 2}
-                    wrapperClassName="absolute inset-0 w-full h-full"
-                    className="w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-[1.02]"
-                  />
-                )}
-              </span>
-              <span aria-hidden className="mt-4 block vi-caps text-muted-foreground">{ROMAN[i] ?? i + 1}</span>
-              <h2 className="mt-1.5 font-serif italic text-[25px] font-normal leading-[1.1] text-foreground">{name}</h2>
-              {course && <span className="block mt-1.5 px-1 text-[12px] leading-snug font-sans text-muted-foreground">{pick(course.line, locale)}</span>}
-            </motion.button>
-          );
-        })}
-      </div>
+    <section aria-label={pick(VERA.courses, locale)} className="pt-2 space-y-12">
+      {categories.map((cat, i) => {
+        const course = COURSES[cat.name];
+        const name = getLocalizedName(cat, locale);
+        return (
+          <motion.button
+            key={cat.id}
+            variants={fadeUp}
+            whileTap={{ scale: PRESS_SCALE }}
+            onClick={() => onOpen(cat.name)}
+            className="group block w-full text-center tap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-4 rounded-[3px]"
+          >
+            <CategoryShowcase picture={course?.picture} photos={course ? [] : photosFor(cat)} radius="rounded-[3px]" priority={i === 0} />
+            <span aria-hidden className="mt-5 block vi-caps text-muted-foreground">{ROMAN[i] ?? i + 1}</span>
+            <h2 className="mt-1.5 font-serif italic text-[30px] font-normal leading-[1.1] text-foreground">{name}</h2>
+            {course && <span className="block mt-1.5 px-1 text-[13px] leading-snug font-sans text-muted-foreground">{pick(course.line, locale)}</span>}
+          </motion.button>
+        );
+      })}
     </section>
   );
 };
