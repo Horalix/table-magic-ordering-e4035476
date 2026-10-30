@@ -9,7 +9,7 @@ there is no rush between them and no step needs the restaurant closed.
 | 1 | **The app** | Merge the branch into `main`; Netlify deploys it | Nothing, except the admin header now says the restaurant's name. The owner gets a La Soul / Vera Italia switch in the admin. Vera Italia's website is at `/veraitalia/`, saying "Opening soon". |
 | 2 | **The database**: the two-restaurant migrations, Vera Italia's menu, and suggestions per restaurant | Lovable runs `docs/migration-runner.sql` (pinned commit, MD5-checked) — the prompt is in `docs/lovable-migration-prompt.md` | Nothing. An app that names no restaurant is La Soul throughout; Vera Italia's 25 dishes are Vera Italia's only. |
 | 3 | **Three edge functions**: `create-waiter`, `delete-waiter`, `cloudprnt` | Lovable redeploys them from `main`, in the same prompt | Nothing. New waiters are created for the restaurant of the admin creating them; printers print their own restaurant's header. |
-| 4 | **Vera Italia opens** | Its tables and room QR code, its staff, its printers; then `live: liveFromEnv(…)` → `live: true` in `src/lib/venues.ts`, and `UPDATE public.venues SET is_live = true WHERE slug = 'veraitalia'` | Nothing. Until then Vera Italia's menu address answers "not found" and its website links to no menu. |
+| 4 | **Vera Italia opens** | `live: true` in `src/lib/venues.ts` — **done 30 October 2026**, once Lovable had applied steps 2 and 3: its menu is at veraitalia.net/menu/veraitalia/, linked from its website and listed for search. Still to do in the admin, switched to Vera Italia: its tables and room QR code, its staff, its printers. (`public.venues.is_live` is a record only; nothing reads it.) | Nothing. |
 
 Lovable works from `main`, where the runner and the functions only are once
 the branch is merged, so the merge comes first. That is safe: a database
@@ -138,8 +138,10 @@ next deployed.
    in `src/lib/venues.ts`: the website, its structured data, its FAQ ("Where
    is Vera Italia?", "When is it open?") and llms.txt all take them from
    there.
-6. When it opens, `live: true` (step 4 of the table above): its menu, four
-   courses and 25 dish pages join the sitemap and search.
+6. It is open (`live: true`, step 4 of the table above, 30 October 2026):
+   its menu, four courses and 25 dish pages are in the sitemap and open to
+   search. Submit the sitemap again in Search Console and Bing so they are
+   read soon.
 
 What the site already gives search engines and AI engines
 (`src/lib/seo/vera-seo.ts`): the website in English, Bosnian and Arabic with
@@ -178,8 +180,7 @@ Nothing in it is La Soul's, and nothing the owner has not given is said.
 - **On the phone**: its own toolbar colour, home-screen icon and name, and
   "Add to Home Screen" installs a Vera Italia app that opens its menu
   (`public/manifest-veraitalia.webmanifest`, `brand` in `src/lib/venues.ts`).
-  A link to its menu or a course previews as Vera Italia; those pages ask
-  search engines to leave them out until it opens.
+  A link to its menu or a course previews as Vera Italia.
 
 ## Vera Italia — still needed from the owner
 
