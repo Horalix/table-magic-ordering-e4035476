@@ -66,14 +66,23 @@ as today. Only ordering and everything behind it is separated.
 So a La Soul waiter needs nothing set up — the database knows where they work
 — and an app that sends no header at all (today's) is La Soul throughout.
 
-### Still shared (on purpose, for now)
+### Suggestions
 
-The suggestion engine's learned totals (`reco_learning`: visit counts and
-per-kind totals) are counted across both restaurants. No dish is ever
-suggested at the other restaurant — every suggestion is filtered to the
-guest's own menu — but Vera Italia's visits will nudge La Soul's learned
-strengths. Split those totals per restaurant before Vera Italia has much
-traffic of its own.
+No dish is ever suggested at the other restaurant: every suggestion is a dish
+of the guest's own menu. And since `20261030130000_suggestions_per_restaurant.sql`
+nothing a suggestion is measured against is shared either:
+
+- the learned counters (`reco_learning`) carry their restaurant — the visit
+  and per-kind totals every learned pair is compared with included — and the
+  learner, the rebuild and every reader count and read one restaurant's;
+- pair strength at order and visit grain (`menu_item_affinity`,
+  `session_item_affinity`, `subcategory_affinity`, `item_section_share`) is
+  computed per restaurant, against that restaurant's own orders and visits;
+- how often guests take a suggestion (`suggestion_priors`) is per restaurant,
+  with its own fallback per placement.
+
+So one restaurant's guests move nothing of the other's suggestions
+(`supabase/tests/suggestions-per-restaurant.test.ts`).
 
 ## What is per restaurant
 

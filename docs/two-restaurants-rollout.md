@@ -7,7 +7,7 @@ there is no rush between them and no step needs the restaurant closed.
 | | What | How | La Soul sees |
 |---|---|---|---|
 | 1 | **The app** | Merge the branch into `main`; Netlify deploys it | Nothing, except the admin header now says the restaurant's name. The owner gets a La Soul / Vera Italia switch in the admin. Vera Italia's website is at `/veraitalia/`, saying "Opening soon". |
-| 2 | **The database**: the two-restaurant migrations and Vera Italia's menu | Lovable runs `docs/migration-runner.sql` (pinned commit, MD5-checked) — the prompt is in `docs/lovable-migration-prompt.md` | Nothing. An app that names no restaurant is La Soul throughout; Vera Italia's 25 dishes are Vera Italia's only. |
+| 2 | **The database**: the two-restaurant migrations, Vera Italia's menu, and suggestions per restaurant | Lovable runs `docs/migration-runner.sql` (pinned commit, MD5-checked) — the prompt is in `docs/lovable-migration-prompt.md` | Nothing. An app that names no restaurant is La Soul throughout; Vera Italia's 25 dishes are Vera Italia's only. |
 | 3 | **Three edge functions**: `create-waiter`, `delete-waiter`, `cloudprnt` | Lovable redeploys them from `main`, in the same prompt | Nothing. New waiters are created for the restaurant of the admin creating them; printers print their own restaurant's header. |
 | 4 | **Vera Italia opens** | Its tables and room QR code, its staff, its printers; then `live: liveFromEnv(…)` → `live: true` in `src/lib/venues.ts`, and `UPDATE public.venues SET is_live = true WHERE slug = 'veraitalia'` | Nothing. Until then Vera Italia's menu address answers "not found" and its website links to no menu. |
 
@@ -36,6 +36,9 @@ between the merge and step 3 a waiter is created the old way, for La Soul.
      Soul's dishes under `…0001`, 25 under `…0002`.
    - `SELECT role, venue_id IS NULL AS owner, count(*) FROM public.user_roles GROUP BY 1, 2;`
      — every admin is an owner (`true`), every staff row has a restaurant.
+   - `SELECT venue_id, count(*) FROM public.reco_learning GROUP BY 1;` and the
+     same for `public.suggestion_priors` — what the suggestions learned so far
+     is La Soul's (`…0001`) only (docs/two-restaurants.md, "Suggestions").
 
 Then open the admin, the kitchen and the waiter screens and place one test
 order: all of it is La Soul's as before.
@@ -187,5 +190,3 @@ Nothing in it is La Soul's, and nothing the owner has not given is said.
   printers (Admin → Printing, switched to Vera Italia: their own poll URLs).
 - Its own site at veraitalia.net (bought 30 October 2026): the steps in
   "Vera Italia's own site" above.
-- Split the suggestion engine's learned totals per restaurant
-  (docs/two-restaurants.md, "Still shared").
