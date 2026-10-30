@@ -1,9 +1,35 @@
-import { defineConfig } from "vite";
+import { readFileSync } from "fs";
+import { defineConfig, loadEnv } from "vite";
 import react from "@vitejs/plugin-react-swc";
 import path from "path";
 import { componentTagger } from "lovable-tagger";
 import { VitePWA } from "vite-plugin-pwa";
 import { seoPrerender } from "./scripts/seo-prerender";
+
+/**
+ * The app a phone installs. Vera Italia's own site (veraitalia.net) is this
+ * code built with VITE_HOME_VENUE=veraitalia (src/lib/home-venue.ts); there
+ * the installed app is Vera Italia's, from its own manifest file.
+ */
+const LA_SOUL_MANIFEST = {
+  name: "La Soul",
+  short_name: "La Soul",
+  description: "La Soul — order from your table",
+  theme_color: "#7E9B79",
+  background_color: "#F7F4EC",
+  display: "standalone" as const,
+  start_url: "/menu/lasoul/",
+  scope: "/",
+  icons: [
+    { src: "/icons/icon-192.png", sizes: "192x192", type: "image/png" },
+    { src: "/icons/icon-512.png", sizes: "512x512", type: "image/png" },
+    { src: "/icons/maskable-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
+  ],
+};
+const homeVenue = (mode: string) => process.env.VITE_HOME_VENUE ?? loadEnv(mode, process.cwd(), "VITE_").VITE_HOME_VENUE;
+const manifestFor = (mode: string) => (homeVenue(mode) === "veraitalia"
+  ? JSON.parse(readFileSync(path.resolve(__dirname, "public/manifest-veraitalia.webmanifest"), "utf8"))
+  : LA_SOUL_MANIFEST);
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({
@@ -25,21 +51,7 @@ export default defineConfig(({ mode }) => ({
       registerType: "prompt",
       injectRegister: false,
       includeAssets: ["favicon.ico", "icons/apple-touch-icon.png", "brand/wordmark-white.webp", "brand/branch-white.webp"],
-      manifest: {
-        name: "La Soul",
-        short_name: "La Soul",
-        description: "La Soul — order from your table",
-        theme_color: "#7E9B79",
-        background_color: "#F7F4EC",
-        display: "standalone",
-        start_url: "/menu/lasoul/",
-        scope: "/",
-        icons: [
-          { src: "/icons/icon-192.png", sizes: "192x192", type: "image/png" },
-          { src: "/icons/icon-512.png", sizes: "512x512", type: "image/png" },
-          { src: "/icons/maskable-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
-        ],
-      },
+      manifest: manifestFor(mode),
       workbox: {
         globPatterns: ["**/*.{js,css,html,woff2}"],
         globIgnores: ["**/menu/**"], // huge optimized image set — runtime-cache instead

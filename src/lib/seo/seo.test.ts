@@ -11,7 +11,9 @@ import { VENUES } from '../venues';
 import { assignDishSlugs, buildSeoMenu } from './menu-data';
 import { SITE_URL } from './site-url';
 import { dishGraph, dishPath, faqEntries, homeGraph, LOCALES, menuGraph, sitePath } from './structured-data';
-import { headTags, homeBody, jsonForScript, llmsFullTxt, llmsTxt, menuBody, robotsTxt, sitemapXml } from './static-pages';
+import {
+  forwardToOwnSite, headTags, homeBody, jsonForScript, llmsFullTxt, llmsTxt, menuBody, ownSiteRedirects, robotsTxt, sitemapXml,
+} from './static-pages';
 
 const venue = VENUES.lasoul;
 
@@ -150,5 +152,33 @@ describe('the prerendered pages', () => {
     expect(llms).toContain('Butmirska cesta 16A | 16B');
     expect(llms).toContain(`(${SITE_URL}/menu/lasoul/food/): Burgers`);
     expect(llmsFullTxt(venue, menu)).toContain(`[La Soul Burger](${SITE_URL}/menu/lasoul/dish/la-soul-burger/) / برجر La Soul — 15.50 KM. Beef & cheddar`);
+  });
+});
+
+describe('Vera Italia on its own site (veraitalia.net)', () => {
+  const rules = (text: string) => text.split('\n').filter((l) => l && !l.startsWith('#')).map((l) => l.split(/\s+/));
+
+  it('sends its old address to its root and La Soul’s menu to La Soul’s site, and serves the app for the rest', () => {
+    const own = rules(ownSiteRedirects('veraitalia', 'https://lasoul.net'));
+    expect(own).toEqual([
+      ['/veraitalia', '/', '301!'],
+      ['/veraitalia/*', '/', '301!'],
+      ['/menu/lasoul', 'https://lasoul.net/menu/lasoul/', '301!'],
+      ['/menu/lasoul/*', 'https://lasoul.net/menu/lasoul/:splat', '301!'],
+      // Last: every rule above must win over the app's catch-all.
+      ['/*', '/index.html', '200'],
+    ]);
+  });
+
+  it('is where La Soul’s site forwards its pages once it is up, never to itself', () => {
+    const forward = rules(forwardToOwnSite('veraitalia', 'https://veraitalia.net'));
+    expect(forward).toEqual([
+      ['/veraitalia', 'https://veraitalia.net/', '301!'],
+      ['/veraitalia/*', 'https://veraitalia.net/', '301!'],
+      ['/menu/veraitalia', 'https://veraitalia.net/menu/veraitalia/', '301!'],
+      ['/menu/veraitalia/*', 'https://veraitalia.net/menu/veraitalia/:splat', '301!'],
+    ]);
+    // Nothing of La Soul's own is touched.
+    expect(forward.some(([from]) => /lasoul|^\/\*$|^\/$/.test(from))).toBe(false);
   });
 });

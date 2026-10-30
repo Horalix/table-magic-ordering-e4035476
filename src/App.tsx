@@ -10,6 +10,9 @@ import { ClockProvider } from "./lib/clock";
 import LocaleShell from "./components/LocaleShell";
 import { menuCategoryPath, menuHome, venueBySlug } from "./lib/venues";
 import { currentVenueSlug } from "./lib/current-venue";
+import { HOME_VENUE } from "./lib/home-venue";
+
+const VERA_HOME = HOME_VENUE === "veraitalia";
 import { VenueTheme } from "./hooks/useVenue";
 import { AppUpdater } from "./lib/app-update";
 
@@ -130,11 +133,13 @@ const App = () => (
         <Suspense fallback={<RouteFallback />}>
           <Routes>
             {/* The website (lasoul.net). No page transition: its hero is the
-                page's largest paint and should not wait for a fade. */}
-            <Route path="/" element={<SiteHome />} />
-            <Route path="/bs" element={<SiteHome locale="bs" />} />
-            <Route path="/ar" element={<SiteHome locale="ar" />} />
-            <Route path="/veraitalia" element={<VeraSite />} />
+                page's largest paint and should not wait for a fade. On
+                Vera Italia's own site (veraitalia.net, src/lib/home-venue.ts)
+                "/" is Vera Italia's, and La Soul's language pages are not there. */}
+            <Route path="/" element={VERA_HOME ? <VeraSite /> : <SiteHome />} />
+            <Route path="/bs" element={VERA_HOME ? <Navigate to="/" replace /> : <SiteHome locale="bs" />} />
+            <Route path="/ar" element={VERA_HOME ? <Navigate to="/" replace /> : <SiteHome locale="ar" />} />
+            <Route path="/veraitalia" element={VERA_HOME ? <Navigate to="/" replace /> : <VeraSite />} />
             {/* Guest routes wrapped in soft page transition. */}
             <Route path="/menu" element={<MenuRedirect />} />
             <Route path="/menu/:venue" element={<VenueMenu />} />

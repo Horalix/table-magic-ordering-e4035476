@@ -12,12 +12,15 @@
  *   else needs one: the database knows where a waiter or a restaurant admin
  *   works, and ignores a header naming a restaurant they do not.
  * - The website and anything else send none, which the database reads as
- *   La Soul.
+ *   La Soul. On Vera Italia's own site (src/lib/home-venue.ts) they send
+ *   Vera Italia, and so do a guest or staff page nothing else has placed.
  *
  * A database from before the two restaurants ignores the header, and one
  * that does not know a slug answers for La Soul, so this is safe to ship
  * ahead of it. (No import of src/lib/venues.ts here: it imports this.)
  */
+import { HOME_VENUE } from './home-venue';
+
 const GUEST_KEY = 'lasoul.guest-venue';
 const STAFF_KEY = 'lasoul.staff-venue';
 
@@ -26,6 +29,8 @@ const GUEST_PATHS = /^\/(cart|tab|table|start)(\/|$)/;
 const STAFF_PATHS = /^\/(admin|kitchen|waiter)(\/|$)/;
 /** A restaurant's own website, /<slug>/ (La Soul's is the root). */
 const SITE_PATHS = /^\/(veraitalia)(\/|$)/;
+/** What an address that names no restaurant means here: nothing on La Soul's site, Vera Italia on its own. */
+const HOME_SLUG = HOME_VENUE === 'lasoul' ? null : HOME_VENUE;
 
 function read(key: string): string | null {
   try {
@@ -52,9 +57,9 @@ export function venueForPath(pathname: string): string | null {
   if (menu && SLUG.test(menu[1])) return menu[1];
   const site = SITE_PATHS.exec(pathname);
   if (site) return site[1];
-  if (GUEST_PATHS.test(pathname)) return read(GUEST_KEY);
-  if (STAFF_PATHS.test(pathname)) return read(STAFF_KEY);
-  return null;
+  if (GUEST_PATHS.test(pathname)) return read(GUEST_KEY) ?? HOME_SLUG;
+  if (STAFF_PATHS.test(pathname)) return read(STAFF_KEY) ?? HOME_SLUG;
+  return HOME_SLUG;
 }
 
 /** The restaurant of the page open right now. */

@@ -321,3 +321,39 @@ export function llmsFullTxt(venue: Venue, menu: SeoMenu | null): string {
     dishes || `See ${absoluteUrl(menuPath(venue.slug))}`, '',
   ].join('\n');
 }
+
+const rule = (from: string, to: string, status: string) => `${from.padEnd(22)} ${to.padEnd(52)} ${status}`;
+
+/**
+ * Netlify's rules for a restaurant's own site (src/lib/home-venue.ts), in
+ * place of La Soul's public/_redirects. Its old address on La Soul's site,
+ * /<slug>/, is its root here; La Soul's menu is on La Soul's site; anything
+ * else is the app.
+ */
+export function ownSiteRedirects(slug: string, laSoulUrl: string): string {
+  return [
+    `# ${slug}'s own site. Written by scripts/seo-prerender.ts; La Soul's site uses public/_redirects.`,
+    rule(`/${slug}`, '/', '301!'),
+    rule(`/${slug}/*`, '/', '301!'),
+    rule('/menu/lasoul', `${laSoulUrl}/menu/lasoul/`, '301!'),
+    rule('/menu/lasoul/*', `${laSoulUrl}/menu/lasoul/:splat`, '301!'),
+    rule('/*', '/index.html', '200'),
+    '',
+  ].join('\n');
+}
+
+/**
+ * The rules La Soul's site puts first once a restaurant's own site is up:
+ * its website and its menu, which La Soul's site served until then, forward
+ * there — bookmarks, shared links and codes printed before the move.
+ */
+export function forwardToOwnSite(slug: string, url: string): string {
+  return [
+    `# ${slug} has its own site (src/lib/seo/site-url.ts, OWN_SITE_LIVE).`,
+    rule(`/${slug}`, `${url}/`, '301!'),
+    rule(`/${slug}/*`, `${url}/`, '301!'),
+    rule(`/menu/${slug}`, `${url}/menu/${slug}/`, '301!'),
+    rule(`/menu/${slug}/*`, `${url}/menu/${slug}/:splat`, '301!'),
+    '',
+  ].join('\n');
+}

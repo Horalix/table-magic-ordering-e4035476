@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { chooseStaffVenue, staffVenue } from '@/lib/current-venue';
-import { DEFAULT_VENUE, VENUES, venueByDbId, type Venue } from '@/lib/venues';
+import { HOME_VENUE } from '@/lib/home-venue';
+import { VENUES, venueByDbId, type Venue } from '@/lib/venues';
 
 export interface StaffVenue {
   /** The restaurant these screens show. */
@@ -33,14 +34,15 @@ export function useStaffVenue(userId: string | null): StaffVenue | null {
       const rows = (data ?? []) as unknown as RoleRow[];
       const owner = rows.some((r) => r.role === 'admin' && 'venue_id' in r && r.venue_id === null);
       if (owner) {
-        setState({ owner, venue: VENUES[staffVenue() ?? DEFAULT_VENUE] ?? VENUES[DEFAULT_VENUE] });
+        // Until they pick, the restaurant whose site this is.
+        setState({ owner, venue: VENUES[staffVenue() ?? HOME_VENUE] ?? VENUES[HOME_VENUE] });
         return;
       }
       // Anyone else works at one restaurant, which the database already knows;
       // a choice the owner left on this device must not follow them.
       chooseStaffVenue(null);
       const own = rows.map((r) => venueByDbId(r.venue_id)).find(Boolean);
-      setState({ owner, venue: own ?? VENUES[DEFAULT_VENUE] });
+      setState({ owner, venue: own ?? VENUES[HOME_VENUE] });
     })();
     return () => { cancelled = true; };
   }, [userId]);

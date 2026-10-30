@@ -7,6 +7,7 @@ import Reveal from '@/components/site/Reveal';
 import { COURSES, ROMAN, SITE, pick, type Copy } from '@/components/vera/copy';
 import roomImages from '@/components/vera/room-images.json';
 import { useLanguageStore, useT } from '@/lib/i18n';
+import { HOME_VENUE } from '@/lib/home-venue';
 import { usePageMeta } from '@/lib/seo/page-meta';
 import { sectionSlug } from '@/lib/menu-sections';
 import { VENUES, menuCategoryPath, menuPath } from '@/lib/venues';
@@ -70,7 +71,8 @@ const VeraSite = () => {
   const c = (copy: Copy) => pick(copy, locale);
   const venue = VENUES.veraitalia;
 
-  usePageMeta({ title: c(SITE.seoTitle), description: c(SITE.seoDescription), path: '/veraitalia/', locale });
+  // On its own site (veraitalia.net) the website is the root; on La Soul's, /veraitalia/.
+  usePageMeta({ title: c(SITE.seoTitle), description: c(SITE.seoDescription), path: HOME_VENUE === 'veraitalia' ? '/' : '/veraitalia/', locale });
 
   // The header sits on the photograph until the page moves, then on travertine.
   const [scrolled, setScrolled] = useState(false);

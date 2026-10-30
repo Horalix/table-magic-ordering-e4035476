@@ -11,6 +11,8 @@
  * is not known yet is null and its part of the site stays hidden.
  */
 import { guestVenue } from './current-venue';
+import { HOME_VENUE } from './home-venue';
+import { OWN_SITE_LIVE, VENUE_URLS } from './seo/site-url';
 
 export type Weekday = 'Monday' | 'Tuesday' | 'Wednesday' | 'Thursday' | 'Friday' | 'Saturday' | 'Sunday';
 export const EVERY_DAY: Weekday[] = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
@@ -142,16 +144,28 @@ export function venueBySlug(slug: string | undefined): Venue | null {
 
 /**
  * The restaurant a guest is in right now: the menu being browsed, else the
- * table they last sat down at, else La Soul. Every menu address below
- * defaults to it, so "back to the menu" from the cart, the tab or a page
- * that was not found returns a Vera Italia guest to Vera Italia's menu.
+ * table they last sat down at, else the restaurant whose site this is (La
+ * Soul; Vera Italia on veraitalia.net, src/lib/home-venue.ts). Every menu
+ * address below defaults to it, so "back to the menu" from the cart, the tab
+ * or a page that was not found returns a Vera Italia guest to Vera Italia's
+ * menu, and a bare /menu on veraitalia.net is Vera Italia's.
  */
 export function activeVenue(): string {
   const path = typeof location === 'undefined' ? '' : location.pathname;
   const browsing = /^\/menu\/([^/]+)/.exec(path)?.[1];
   if (browsing && VENUES[browsing]) return browsing;
   const sat = guestVenue();
-  return sat && VENUES[sat] ? sat : DEFAULT_VENUE;
+  return sat && VENUES[sat] ? sat : HOME_VENUE;
+}
+
+/**
+ * The address a restaurant's printed QR codes point at: its own site once
+ * that is up (src/lib/seo/site-url.ts, OWN_SITE_LIVE), else this one — the
+ * page's own address, so a preview deploy prints codes for itself.
+ */
+export function qrOrigin(slug: string): string {
+  if (slug !== HOME_VENUE && OWN_SITE_LIVE[slug] && VENUE_URLS[slug]) return VENUE_URLS[slug];
+  return typeof location === 'undefined' ? VENUE_URLS[HOME_VENUE] : location.origin;
 }
 
 /** "/menu/lasoul" — the prefix every address in a venue's menu starts with. */

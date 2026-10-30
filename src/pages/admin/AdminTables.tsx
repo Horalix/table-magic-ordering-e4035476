@@ -17,6 +17,8 @@ import { useElapsed, formatDuration } from '@/lib/timing';
 import { outstandingFor } from '@/lib/staff-api';
 import FreeTableDialog from '@/components/staff/FreeTableDialog';
 import type { Database } from '@/integrations/supabase/types';
+import { HOME_VENUE } from '@/lib/home-venue';
+import { qrOrigin, venueByDbId } from '@/lib/venues';
 
 type Section = Pick<Database['public']['Tables']['sections']['Row'], 'id' | 'name' | 'color'>;
 type TableRow = Database['public']['Tables']['tables']['Row'] & {
@@ -116,7 +118,9 @@ const AdminTables = () => {
     setFreeing({ sessionId, tableNumber, owed: outstandingFor(data ?? []) });
   };
 
-  const getQRUrl = (table: TableRow) => `${window.location.origin}/table/${table.table_number}?token=${table.qr_token}`;
+  // Its own restaurant's address, as in Admin → QR Codes.
+  const getQRUrl = (table: TableRow) =>
+    `${qrOrigin(venueByDbId((table as { venue_id?: string | null }).venue_id)?.slug ?? HOME_VENUE)}/table/${table.table_number}?token=${table.qr_token}`;
 
   return (
     <div>
