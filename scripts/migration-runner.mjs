@@ -29,7 +29,7 @@ const args = process.argv.slice(2);
 const arg = (k) => { const i = args.indexOf(k); return i >= 0 ? args[i + 1] : undefined; };
 const git = (...a) => execFileSync('git', a, { cwd: ROOT, encoding: 'utf8' }).trim();
 
-const FROM = arg('--from') ?? '20261027090000';
+const FROM = arg('--from') ?? '20261028090000';
 const commit = arg('--commit') ?? git('log', '-1', '--format=%H', '--', 'supabase/migrations');
 const remote = git('remote', 'get-url', 'origin').match(/github\.com[/:]([^/]+\/[^/.]+)/)?.[1];
 if (!remote) throw new Error('origin is not a GitHub repository');

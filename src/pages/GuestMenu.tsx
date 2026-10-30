@@ -30,6 +30,9 @@ import DishSheet from '@/components/guest/DishSheet';
 import { rememberPrices } from '@/lib/promotions';
 import type { MenuItemRow } from '@/lib/promotions-api';
 import { track } from '@/lib/analytics';
+import { useVenue } from '@/hooks/useVenue';
+import { VeraCourses, VeraMenuFooter, VeraMenuHero } from '@/components/vera/VeraMenu';
+import { VERA, pick } from '@/components/vera/copy';
 import type { Database } from '@/integrations/supabase/types';
 
 type CategoryRow = Database['public']['Tables']['categories']['Row'];
@@ -60,11 +63,13 @@ const GuestMenu = () => {
   const [searchParams] = useSearchParams();
   const t = useT();
   const locale = useLanguageStore((s) => s.locale);
+  // Vera Italia's menu is the same app in its own room (src/components/vera).
+  const vera = useVenue().slug === 'veraitalia';
   // Search engines: the same title and description the prerendered page for
   // this address carries (scripts/seo-prerender.ts), in the guest's language.
   usePageMeta({
-    title: siteT('seo_menu_title', locale),
-    description: siteT('seo_menu_description', locale),
+    title: vera ? pick(VERA.menuTitle, locale) : siteT('seo_menu_title', locale),
+    description: vera ? pick(VERA.menuDescription, locale) : siteT('seo_menu_description', locale),
     path: menuPath(),
     locale,
   });
@@ -181,9 +186,12 @@ const GuestMenu = () => {
   }, []);
 
   return (
-    <div className="min-h-screen flex flex-col bg-background">
-      {/* A short brand band, not a full-screen splash: the first thing a guest
-          at a table wants is the menu, so the photos sit above the fold. */}
+    <div className={`min-h-screen flex flex-col ${vera ? '' : 'bg-background'}`}>
+      {vera ? (
+        <VeraMenuHero table={table} showTable={hasSession} onChangeTable={onChangeTable} />
+      ) : (
+      /* A short brand band, not a full-screen splash: the first thing a guest
+          at a table wants is the menu, so the photos sit above the fold. */
       <motion.header
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
@@ -244,12 +252,13 @@ const GuestMenu = () => {
           </div>
         )}
       </motion.header>
+      )}
 
       <motion.main
         variants={staggerContainer()}
         initial="hidden"
         animate="show"
-        className="flex-1 bg-background px-5 pt-5 pb-36 space-y-4 -mt-5 rounded-t-3xl relative z-10"
+        className={`flex-1 px-5 pb-36 space-y-4 relative z-10 ${vera ? 'pt-1' : 'bg-background pt-5 -mt-5 rounded-t-3xl'}`}
       >
         {/* Find-by-name across every category, before anything else —
             it is the first thing a guest looking for one specific thing wants. */}
@@ -266,7 +275,8 @@ const GuestMenu = () => {
 
         {hasSession && <RecentOrdersRow />}
 
-        <HomePromotions onOpen={setSheetItem} />
+        {/* Vera Italia leads with its courses, as a printed menu does; its specialities follow them. */}
+        {!vera && <HomePromotions onOpen={setSheetItem} />}
 
         <div className="space-y-3">
           {categoriesLoading && [0, 1, 2].map((i) => <Skeleton key={i} className="w-full aspect-[16/9] rounded-2xl" />)}
@@ -281,7 +291,8 @@ const GuestMenu = () => {
               </button>
             </div>
           )}
-          {categories.map((cat, i) => {
+          {vera && <VeraCourses categories={categories} onOpen={(name) => openCategory(name)} />}
+          {!vera && categories.map((cat, i) => {
             const localizedName = getLocalizedName(cat as CategoryRow, locale);
             const cover = coverMap[cat.name];
             return (
@@ -326,9 +337,12 @@ const GuestMenu = () => {
           })}
         </div>
 
+        {vera && <HomePromotions onOpen={setSheetItem} />}
+
         {/* Every section of the menu, one tap away. Guests who know they want
-            a burger should not have to open Food and then find Burgers. */}
-        {subcategories.length > 0 && (
+            a burger should not have to open Food and then find Burgers.
+            Vera Italia's four courses hold a few sections each; it has none. */}
+        {subcategories.length > 0 && !vera && (
           <motion.nav variants={fadeUp} aria-label={t('menu_sections')} className="pt-3 space-y-4">
             <h2 className="font-serif text-lg font-semibold text-foreground">{t('jump_to')}</h2>
             {categories.map((cat) => {
@@ -366,6 +380,7 @@ const GuestMenu = () => {
 
         <InstallPrompt />
 
+        {vera ? <VeraMenuFooter /> : (
         <motion.footer variants={fadeUp} className="pt-4 border-t border-border/60 space-y-1">
           <a href={PHONE_HREF} className="flex items-center gap-3 py-2.5 text-sm font-sans text-foreground hover:text-primary transition-colors">
             <span className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center shrink-0"><Phone className="w-4 h-4 text-primary" /></span>
@@ -385,6 +400,7 @@ const GuestMenu = () => {
             {t('privacy_security')}
           </Link>
         </motion.footer>
+        )}
       </motion.main>
 
       <AnimatePresence>

@@ -16,6 +16,7 @@ import RollingNumber from '@/components/guest/RollingNumber';
 import { PriceTag, SaleBadge, NewBadge, ComboBadge } from '@/components/guest/PriceTag';
 import { useComboMap } from '@/lib/promotions-api';
 import { unorderableReason } from '@/lib/availability';
+import { useVenue } from '@/hooks/useVenue';
 import {
   comboRegularPrice, comboSaving, comboUnitPrice, fixedChoices, isFixedSlot, isNew, missingSlots,
   saleEndsPhrase, saleView, type ComboChoices, type ComboDef, type ComboSlot, type NewFields, type SaleFields,
@@ -88,6 +89,9 @@ const MenuItemDetail = ({ item, onClose, onAdded, canOrder = true, unavailableLa
   const dragControls = useDragControls();
 
   const localizedName = getLocalizedName(item, locale);
+  // Vera Italia photographs every dish from above, the whole plate in a
+  // square: a wide band would cut the plate, so its sheet shows the square.
+  const vera = useVenue().slug === 'veraitalia';
   const localizedDesc = getLocalizedDescription(item, locale);
   const orderable = canOrder && !unavailableLabel;
 
@@ -219,13 +223,13 @@ const MenuItemDetail = ({ item, onClose, onAdded, canOrder = true, unavailableLa
               layoutId={`item-img-${item.id}`}
               alt={localizedName}
               width={800}
-              height={520}
+              height={vera ? 800 : 520}
               // Full width of the sheet: the default assumes a half-width
               // card, which fetched a 384px photo for a 375px slot on a 2x
               // phone and made the dish look out of focus.
               sizes="(max-width: 512px) 100vw, 512px"
               priority
-              wrapperClassName={`w-full h-56 ${unavailableLabel ? 'opacity-60 saturate-50' : ''}`}
+              wrapperClassName={`w-full ${vera ? 'aspect-square max-h-[50dvh]' : 'h-56'} ${unavailableLabel ? 'opacity-60 saturate-50' : ''}`}
             />
             </MotionConfig>
           ) : (
@@ -242,7 +246,7 @@ const MenuItemDetail = ({ item, onClose, onAdded, canOrder = true, unavailableLa
                 {fresh && <NewBadge />}
               </div>
             )}
-            <h2 id="item-detail-title" className="font-serif text-2xl font-bold text-foreground">{localizedName}</h2>
+            <h2 id="item-detail-title" className={`font-serif text-foreground ${vera ? 'text-[30px] font-medium leading-tight' : 'text-2xl font-bold'}`}>{localizedName}</h2>
             <p className="text-lg font-sans font-semibold text-foreground mt-1.5">
               <PriceTag price={unit} regular={regular} bare={false} />
             </p>

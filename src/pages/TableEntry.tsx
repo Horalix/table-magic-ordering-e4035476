@@ -8,12 +8,14 @@ import { Button } from '@/components/ui/button';
 import GuestNameModal from '@/components/guest/GuestNameModal';
 import { useT } from '@/lib/i18n';
 import { menuPath, menuHome } from '@/lib/venues';
+import { guestVenue, rememberGuestVenue } from '@/lib/current-venue';
 import {
   autoApproveJoinRequest,
   getJoinRequest,
   inspectTable,
   requestJoin,
   startTableSession,
+  tableVenue,
   type GuestJoinResult,
 } from '@/lib/guest-api';
 
@@ -29,7 +31,7 @@ const TableEntry = () => {
   const { tableNumber } = useParams<{ tableNumber: string }>();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const { setTable, setSession, setGuestName, startHeartbeat, clientId } = useCartStore();
+  const { setTable, setSession, setGuestName, startHeartbeat, clearCart, clientId } = useCartStore();
   const t = useT();
 
   const [phase, setPhase] = useState<Phase>('loading');
@@ -58,10 +60,18 @@ const TableEntry = () => {
       const parsedTable = tableNumber ? Number.parseInt(tableNumber, 10) : Number.NaN;
       if (!tableNumber || !token || Number.isNaN(parsedTable)) { setError(t('invalid_qr')); setPhase('error'); return; }
       try {
-        const entry = await inspectTable(parsedTable, token, clientId);
+        const [entry, venue] = await Promise.all([
+          inspectTable(parsedTable, token, clientId),
+          tableVenue(parsedTable, token),
+        ]);
         if (cancelled) return;
         if (entry.status === 'invalid') { setError(t('qr_expired')); setPhase('error'); return; }
 
+        // The code says which restaurant this is; from here the visit is that
+        // restaurant's. A cart filled at the other one is the other menu's.
+        const previous = guestVenue();
+        if (previous && previous !== venue) clearCart();
+        rememberGuestVenue(venue);
         setTable(parsedTable, token);
 
         if (entry.status === 'empty') {
@@ -90,7 +100,7 @@ const TableEntry = () => {
       }
     })();
     return () => { cancelled = true; };
-  }, [clientId, enterMenu, setTable, t, tableNumber, token]);
+  }, [clearCart, clientId, enterMenu, setTable, t, tableNumber, token]);
 
   const createJoinRequest = useCallback(async (sid: string, name: string) => {
     if (!tableNumber || !token) { setError(t('invalid_qr')); setPhase('error'); return; }

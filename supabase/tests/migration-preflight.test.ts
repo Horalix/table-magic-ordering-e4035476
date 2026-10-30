@@ -18,7 +18,7 @@ import { describe, expect, it } from 'vitest';
 import { createTestDatabase } from '../../scripts/db-harness.mjs';
 
 /** The first file not yet applied on production (the October batch is live). */
-const FIRST_PENDING = '20261027090000';
+const FIRST_PENDING = '20261028090000';
 const SQL = readFileSync(path.join(__dirname, '..', '..', 'docs', 'migration-preflight.sql'), 'utf8');
 
 describe('migration preflight', () => {

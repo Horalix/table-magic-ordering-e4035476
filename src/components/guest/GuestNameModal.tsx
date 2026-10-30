@@ -4,6 +4,7 @@ import { duration, springSuccess } from '@/lib/motion';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useT } from '@/lib/i18n';
+import BrandEmblem from '@/components/BrandEmblem';
 
 interface Props {
   /** May be async; the button stays disabled until it settles. */
@@ -50,7 +51,7 @@ const GuestNameModal = ({ onSubmit }: Props) => {
           className="w-24 h-24 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-6"
         >
           {/* Brand dark on the light dialog: the old white artwork vanished here. */}
-          <img src="/brand/emblem-dark.webp" alt="La Soul" width={480} height={480} className="w-16 h-16" />
+          <BrandEmblem className="w-16 h-16" />
         </motion.div>
 
         <h2 className="font-serif text-2xl font-bold text-foreground">{t('welcome')}</h2>

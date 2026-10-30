@@ -6,7 +6,8 @@
  * redirects from the old static site (public/_redirects) can be written by
  * hand, and so a link survives the restaurant reordering its menu.
  */
-import { menuCategoryPath } from '@/lib/venues';
+// Relative, not '@/': scripts/seo-prerender.ts imports this at build time.
+import { menuCategoryPath } from './venues';
 
 /** A top-level category's slug. Unknown names fall back to their slugged form. */
 const CATEGORY_SLUGS: Record<string, string> = {

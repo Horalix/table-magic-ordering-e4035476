@@ -11,7 +11,9 @@ import { toast } from 'sonner';
 import { springPill } from '@/lib/motion';
 import { useStaffDocument } from '@/components/staff/useStaffDocument';
 import { useLearningHeartbeat } from '@/hooks/useLearningHeartbeat';
+import { switchStaffVenue, useStaffVenue } from '@/hooks/useStaffVenue';
 import AdminMobileTabs from '@/components/admin/AdminMobileTabs';
+import { VENUES } from '@/lib/venues';
 import type { User } from '@supabase/supabase-js';
 
 // Grouped so the sidebar reads as a hierarchy, not a flat list.
@@ -61,6 +63,8 @@ const AdminLayout = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [user, setUser] = useState<User | null>(null);
   const [authChecked, setAuthChecked] = useState(false);
+  const staffVenue = useStaffVenue(user?.id ?? null);
+  const venueName = staffVenue?.venue.name ?? 'La Soul';
 
   // English, left-to-right, whatever a guest last picked on this device.
   useStaffDocument();
@@ -160,8 +164,31 @@ const AdminLayout = () => {
       `}>
         <div className="flex flex-col h-full">
           <div className="px-6 py-6 border-b border-sidebar-border">
-            <h1 className="font-serif text-xl font-bold text-sidebar-foreground">La Soul</h1>
+            <h1 className="font-serif text-xl font-bold text-sidebar-foreground">{venueName}</h1>
             <p className="text-xs text-sidebar-foreground/60 font-sans mt-0.5">Admin Dashboard</p>
+            {/* The owner looks at one restaurant at a time; everyone else only ever has theirs. */}
+            {staffVenue?.owner && (
+              <div role="group" aria-label="Restaurant" className="mt-3 grid grid-cols-2 gap-1 rounded-lg bg-sidebar-accent/40 p-1">
+                {Object.values(VENUES).map((v) => {
+                  const current = v.slug === staffVenue.venue.slug;
+                  return (
+                    <button
+                      key={v.slug}
+                      type="button"
+                      aria-pressed={current}
+                      onClick={() => { if (!current) switchStaffVenue(v.slug); }}
+                      className={`min-h-9 rounded-md px-2 text-xs font-sans transition-colors ${
+                        current
+                          ? 'bg-sidebar text-sidebar-foreground font-semibold shadow-sm'
+                          : 'text-sidebar-foreground/70 hover:text-sidebar-foreground'
+                      }`}
+                    >
+                      {v.name}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
           <nav className="flex-1 px-3 py-4 overflow-y-auto space-y-4">
@@ -230,7 +257,7 @@ const AdminLayout = () => {
             {sidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
           </button>
           <div className="min-w-0 leading-tight">
-            <p className="font-serif text-base font-semibold truncate">La Soul admin</p>
+            <p className="font-serif text-base font-semibold truncate">{venueName} admin</p>
             <p className="text-xs text-muted-foreground truncate">{currentLabel}</p>
           </div>
         </div>

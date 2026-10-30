@@ -6,34 +6,47 @@ import { QRCodeSVG } from 'qrcode.react';
 import { Printer, LayoutGrid, Square, ScanLine, AlertTriangle, Copy, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import type { Database } from '@/integrations/supabase/types';
+import { HOME_VENUE } from '@/lib/home-venue';
+import { qrOrigin, venueByDbId } from '@/lib/venues';
 
 type Mode = 'sheet' | 'single' | 'venue';
 const UNIFY_SQL = "WITH s AS (SELECT encode(gen_random_bytes(32),'hex') AS tok)\nUPDATE public.tables SET qr_token = (SELECT tok FROM s);";
 type TableRow = Database['public']['Tables']['tables']['Row'];
 
+/**
+ * Each code carries its own restaurant's address: a Vera Italia table's code
+ * opens veraitalia.net once that site is up, whichever site the owner prints
+ * it from. Rows from before the second restaurant have no restaurant: here.
+ */
+const originFor = (venueId?: string | null) => qrOrigin(venueByDbId(venueId)?.slug ?? HOME_VENUE);
+
 const AdminQRCodes = () => {
   const [tables, setTables] = useState<TableRow[]>([]);
   const [mode, setMode] = useState<Mode>('venue');
   const [venueToken, setVenueToken] = useState<string | null>(null);
+  const [settingsVenue, setSettingsVenue] = useState<string | null>(null);
   const [rotatedAt, setRotatedAt] = useState<string | null>(null);
   const [rotating, setRotating] = useState(false);
 
   const load = async () => {
     const [{ data: rows }, { data: settings }] = await Promise.all([
       supabase.from('tables').select('*').order('table_number'),
-      supabase.from('restaurant_settings').select('venue_qr_token, venue_qr_rotated_at').eq('id', 1).maybeSingle(),
+      // One row: the access rules show this restaurant's settings only.
+      // '*', not a column list: venue_id exists only once the two-restaurant migration is in.
+      supabase.from('restaurant_settings').select('*').maybeSingle(),
     ]);
     setTables(rows || []);
     setVenueToken((settings as { venue_qr_token?: string } | null)?.venue_qr_token ?? null);
     setRotatedAt((settings as { venue_qr_rotated_at?: string } | null)?.venue_qr_rotated_at ?? null);
+    setSettingsVenue((settings as { venue_id?: string | null } | null)?.venue_id ?? null);
   };
 
   useEffect(() => { void load(); }, []);
 
   const getQRUrl = (table: TableRow) =>
-    `${window.location.origin}/table/${table.table_number}?token=${table.qr_token}`;
+    `${originFor((table as { venue_id?: string | null }).venue_id)}/table/${table.table_number}?token=${table.qr_token}`;
 
-  const venueUrl = `${window.location.origin}/start?token=${venueToken ?? ''}`;
+  const venueUrl = `${originFor(settingsVenue)}/start?token=${venueToken ?? ''}`;
 
   /**
    * Rotating kills every printed code instantly. That is the point — it is the

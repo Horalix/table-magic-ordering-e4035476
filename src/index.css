@@ -105,6 +105,76 @@
     --cream: 40 33% 97%;
     --cream-dark: 40 25% 92%;
     --charcoal: 150 10% 15%;
+
+    /* Headings and dish names; Vera Italia swaps it (below). */
+    --font-serif: 'Lora';
+  }
+
+  /*
+   * Vera Italia (docs/two-restaurants.md): the same app, in its own room.
+   * Travertine plaster lit by glowing arches, walnut, terracotta and olive
+   * velvet, ochre cushions, brass. <VenueTheme> sets data-venue on <html> on
+   * its menu and website pages; staff screens keep the shared look.
+   */
+  :root[data-venue='veraitalia'] {
+    /* Editorial daylight, like the photographs: ivory paper, espresso ink,
+       terracotta and brass used sparingly, square corners. */
+    --background: 40 30% 96%;          /* ivory */
+    --foreground: 24 22% 11%;          /* espresso ink */
+
+    --card: 40 33% 99%;
+    --card-foreground: 24 22% 11%;
+    --popover: 40 33% 99%;
+    --popover-foreground: 24 22% 11%;
+
+    /* Buttons are ink, as on a printed menu: 15:1 with ivory. */
+    --primary: 24 22% 13%;
+    --primary-foreground: 40 33% 97%;
+
+    --secondary: 38 24% 91%;
+    --secondary-foreground: 24 22% 14%;
+    --muted: 38 22% 92%;
+    --muted-foreground: 25 9% 36%;
+
+    /* Terracotta, the dining chairs, for what must catch the eye (allergens,
+       "popular"): 5.6:1 on ivory. */
+    --accent: 17 60% 38%;
+    --accent-foreground: 40 33% 97%;
+
+    /* Olive, the banquette: a sale is never the colour of every button. */
+    --sale: 62 24% 30%;
+    --sale-foreground: 40 33% 97%;
+
+    --border: 35 16% 86%;
+    --input: 35 16% 80%;
+    --ring: 24 22% 13%;
+    --radius: 0.25rem;
+
+    --font-serif: 'Cormorant Garamond';
+
+    /* La Soul's named brand colours, which shared screens use directly (the
+       order bar, every button's hover): Vera Italia's own in their place. */
+    --sage: 24 22% 13%;
+    --sage-dark: 24 24% 8%;
+    --sage-light: 38 24% 91%;
+    --hero-sage: 24 24% 11%;
+    --hero-sage-dark: 24 24% 8%;
+    --hero-sage-light: 24 18% 20%;
+    --gold: 38 40% 55%;
+    --gold-light: 38 40% 75%;
+    --cream: 40 30% 96%;
+    --cream-dark: 38 24% 91%;
+    --charcoal: 24 22% 11%;
+
+    /* Named for the pieces only Vera Italia has. */
+    --vi-stone: 35 27% 86%;
+    --vi-walnut: 22 30% 20%;
+    --vi-espresso: 24 24% 11%;
+    --vi-terracotta: 17 60% 40%;
+    --vi-olive: 60 20% 33%;
+    --vi-ochre: 39 62% 48%;
+    --vi-brass: 38 40% 52%;
+    --vi-glow: 40 100% 96%;
   }
 
   .dark {
@@ -160,13 +230,45 @@
   }
 
   h1, h2, h3, h4, h5, h6 {
-    font-family: 'Lora', serif;
+    font-family: var(--font-serif), serif;
   }
+
+  /* Cormorant's small x-height reads a size smaller than Lora at the same
+     font-size; screens shared with La Soul were sized for Lora. */
+  :root[data-venue='veraitalia'] :is(h1, h2, h3, h4, h5, h6, .font-serif) {
+    font-size-adjust: 0.46;
+    /* Its figures are old-style by default; a price reads evenly in lining ones. */
+    font-variant-numeric: lining-nums;
+  }
+  /* Tailwind's tabular-nums resets the figure style on its own element. */
+  :root[data-venue='veraitalia'] .tabular-nums { --tw-numeric-figure: lining-nums; }
 }
 
 @layer utilities {
-  .font-serif { font-family: 'Lora', serif; }
+  .font-serif { font-family: var(--font-serif), serif; }
   .font-sans { font-family: 'Inter', sans-serif; }
+
+  /* ---- Vera Italia ------------------------------------------------------
+     The arched niche of the dining room, the brass hairline, the label caps. */
+  .vi-arch {
+    /* A semicircle on a 3:4 box: the top radius is half the width (37.5% of the height). */
+    border-radius: 50% 50% 0.375rem 0.375rem / 37.5% 37.5% 0.375rem 0.375rem;
+  }
+  .vi-arch-square {
+    border-radius: 50% 50% 0.375rem 0.375rem / 50% 50% 0.375rem 0.375rem;
+  }
+  .vi-caps {
+    font-family: 'Inter', sans-serif;
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 0.32em;
+    text-transform: uppercase;
+  }
+  html:lang(ar) .vi-caps { letter-spacing: normal; font-size: 12px; }
+  .vi-hairline {
+    height: 1px;
+    background: linear-gradient(90deg, transparent, hsl(var(--vi-brass)) 18%, hsl(var(--vi-brass)) 82%, transparent);
+  }
 
   /* Arabic. Lora and Inter have no Arabic letters, so headings fell back to
      the platform's serif and body text to its sans: two unrelated Arabic

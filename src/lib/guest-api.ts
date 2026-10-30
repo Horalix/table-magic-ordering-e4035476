@@ -1,5 +1,6 @@
 import { supabase } from '@/integrations/supabase/client';
 import type { Json } from '@/integrations/supabase/types';
+import { DEFAULT_VENUE, VENUES } from '@/lib/venues';
 
 type JsonRecord = Record<string, Json | undefined>;
 
@@ -347,11 +348,29 @@ export interface VenueTokenCheck {
   ordering_enabled: boolean;
   paused_message: string | null;
   max_table_number: number | null;
+  /** The restaurant the room code belongs to (absent before the second restaurant). */
+  venue?: string;
 }
 
 /** Validate the venue QR before asking the guest which table they are at. */
 export const checkVenueToken = (token: string) =>
   rpcJson<VenueTokenCheck>('guest_check_venue_token', { _token: token });
+
+/**
+ * The restaurant a table's own QR code belongs to, so the guest lands on that
+ * restaurant's menu. A database from before the second restaurant has no
+ * such function, and a code it cannot place is not this question's to fail:
+ * both are La Soul.
+ */
+export const tableVenue = async (tableNumber: number, qrToken: string): Promise<string> => {
+  try {
+    const result = await rpcJson<{ venue?: string | null } | null>(
+      'guest_table_venue' as never, { _table_number: tableNumber, _qr_token: qrToken });
+    return result?.venue && VENUES[result.venue] ? result.venue : DEFAULT_VENUE;
+  } catch {
+    return DEFAULT_VENUE;
+  }
+};
 
 export interface ResumeResult {
   status: 'active' | 'closed' | 'expired' | 'unknown';

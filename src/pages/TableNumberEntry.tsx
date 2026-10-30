@@ -7,7 +7,8 @@ import { useT } from '@/lib/i18n';
 import { useCartStore } from '@/lib/cart-store';
 import { checkVenueToken, type VenueTokenCheck } from '@/lib/guest-api';
 import { prefersReducedMotion, duration, easeEnter } from '@/lib/motion';
-import { menuPath } from '@/lib/venues';
+import { VENUES, menuPath } from '@/lib/venues';
+import { useVenue } from '@/hooks/useVenue';
 
 /**
  * Single-QR entry.
@@ -51,6 +52,14 @@ const TableNumberEntry = () => {
   }, [token]);
 
   const max = check?.max_table_number ?? null;
+  // The room code names its restaurant: browsing goes to that menu.
+  const browse = () => navigate(menuPath(check?.venue && VENUES[check.venue] ? check.venue : undefined));
+  // And it wears that restaurant's colours: La Soul's sage, Vera Italia's walnut evening.
+  const pageVenue = useVenue();
+  const brand = (check?.venue && VENUES[check.venue]) || pageVenue;
+  const vera = brand.slug === 'veraitalia';
+  const bg = { backgroundColor: vera ? 'hsl(24, 24%, 11%)' : 'hsl(140, 12%, 53%)' };
+  const onLight = vera ? 'text-[hsl(24,24%,11%)]' : 'text-primary';
   const parsed = Number.parseInt(value, 10);
   const outOfRange = Number.isInteger(parsed) && max !== null && (parsed < 1 || parsed > max);
   const canSubmit = Number.isInteger(parsed) && parsed > 0 && !outOfRange;
@@ -66,7 +75,7 @@ const TableNumberEntry = () => {
 
   if (phase === 'checking') {
     return (
-      <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: 'hsl(140, 12%, 53%)' }}>
+      <div className="min-h-screen flex items-center justify-center" style={bg}>
         <Loader2 className="w-7 h-7 animate-spin text-white/80" aria-hidden />
         <span className="sr-only">{t('setting_up_table')}</span>
       </div>
@@ -75,15 +84,15 @@ const TableNumberEntry = () => {
 
   if (phase === 'invalid') {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center px-6" style={{ backgroundColor: 'hsl(140, 12%, 53%)' }}>
+      <div className="min-h-screen flex flex-col items-center justify-center px-6" style={bg}>
         <div className="w-full max-w-sm text-center">
           <div className="w-16 h-16 rounded-full bg-white/15 grid place-items-center mx-auto mb-5">
             <AlertTriangle className="w-8 h-8 text-white" aria-hidden />
           </div>
           <h1 className="font-serif text-2xl font-bold text-white">{t('qr_expired')}</h1>
           <Button
-            onClick={() => navigate(menuPath())}
-            className="mt-6 w-full h-12 rounded-2xl bg-white text-primary hover:bg-white/90 font-sans font-semibold"
+            onClick={browse}
+            className={`mt-6 w-full h-12 rounded-2xl bg-white ${onLight} hover:bg-white/90 font-sans font-semibold`}
           >
             {t('browse_menu')}
           </Button>
@@ -93,14 +102,16 @@ const TableNumberEntry = () => {
   }
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center px-6" style={{ backgroundColor: 'hsl(140, 12%, 53%)' }}>
+    <div className="min-h-screen flex flex-col items-center justify-center px-6" style={bg}>
       <motion.div
         initial={reduced ? false : { opacity: 0, y: 12 }}
         animate={reduced ? undefined : { opacity: 1, y: 0 }}
         transition={{ duration: duration.emphasis, ease: easeEnter }}
         className="w-full max-w-sm text-center"
       >
-        <img src="/brand/lockup-white.webp" alt="La Soul" width={645} height={960} className="h-40 w-auto mx-auto mb-7" />
+        {vera
+          ? <img src="/brand/vera/lockup-cream.webp" alt="Vera Italia" width={1158} height={806} className="w-60 max-w-[70vw] h-auto mx-auto mb-9" />
+          : <img src="/brand/lockup-white.webp" alt="La Soul" width={645} height={960} className="h-40 w-auto mx-auto mb-7" />}
         <h1 className="font-serif text-2xl font-bold text-white">{t('which_table')}</h1>
         <p className="text-white/70 font-sans text-sm mt-2 leading-relaxed">{t('which_table_sub')}</p>
 
@@ -135,13 +146,13 @@ const TableNumberEntry = () => {
           <Button
             type="submit"
             disabled={!canSubmit}
-            className="w-full h-14 rounded-2xl bg-white text-primary hover:bg-white/90 disabled:opacity-50 font-sans font-semibold text-base gap-2"
+            className={`w-full h-14 rounded-2xl bg-white ${onLight} hover:bg-white/90 disabled:opacity-50 font-sans font-semibold text-base gap-2`}
           >
             {t('continue')} <ArrowRight className="w-4 h-4 rtl:rotate-180" aria-hidden />
           </Button>
         </form>
 
-        <button onClick={() => navigate(menuPath())} className="mt-6 text-xs text-white/60 underline underline-offset-4 font-sans">
+        <button onClick={browse} className="mt-6 text-xs text-white/60 underline underline-offset-4 font-sans">
           {t('browse_menu')}
         </button>
       </motion.div>

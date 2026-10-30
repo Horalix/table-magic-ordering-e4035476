@@ -9,17 +9,26 @@
  * database (read-only). If the database cannot be reached, or the build is
  * offline (the e2e build, SEO_OFFLINE=1), the menu pages are written without
  * dishes and the build carries on.
+ *
+ * Built as Vera Italia's own site (VITE_HOME_VENUE=veraitalia,
+ * src/lib/home-venue.ts) it writes Vera Italia's pages instead — its website
+ * at "/", its menu and courses — with its own sitemap, robots.txt, llms.txt
+ * and Netlify rules.
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { loadEnv, type Plugin, type ResolvedConfig } from 'vite';
 import type { Locale } from '../src/lib/i18n';
 import { siteT } from '../src/lib/site-copy';
-import { DEFAULT_VENUE, VENUES } from '../src/lib/venues';
+import { veraLlms, veraPages, veraSeoMenu } from '../src/lib/seo/vera-seo';
+import { HOME_VENUE } from '../src/lib/home-venue';
+import { OWN_SITE_LIVE, VENUE_URLS } from '../src/lib/seo/site-url';
+import { DEFAULT_VENUE, VENUES, type Venue } from '../src/lib/venues';
 import { fetchSeoMenu, type SeoMenu } from '../src/lib/seo/menu-data';
 import { categoryPath, dishGraph, dishPath, homeGraph, LOCALES, menuGraph, menuPath, sitePath } from '../src/lib/seo/structured-data';
 import {
-  dishBody, headTags, homeBody, llmsFullTxt, llmsTxt, menuBody, robotsTxt, sitemapXml, type SitemapEntry,
+  dishBody, escapeHtml, forwardToOwnSite, headTags, homeBody, llmsFullTxt, llmsTxt, menuBody, ownSiteRedirects, robotsTxt, sitemapXml,
+  type SitemapEntry,
 } from '../src/lib/seo/static-pages';
 
 /** The app hides the plain HTML the moment its code runs; crawlers that run none read it. */
@@ -35,6 +44,22 @@ export function renderPage(template: string, head: string, body: string, locale:
     .replace(/\s*<meta (?:name|property)="(?:description|author|og:[^"]+|twitter:[^"]+)"[^>]*>/g, '')
     .replace('</head>', `    ${head}\n    ${PRERENDER_STYLE}\n  </head>`)
     .replace('<div id="root"></div>', `<div id="root"><div data-prerender>\n${body}\n</div></div>`);
+}
+
+/**
+ * The template's phone-facing identity is La Soul's: the toolbar colour, the
+ * home-screen icon and name, the web manifest. Another restaurant's pages
+ * carry their own, so a link preview, a bookmark or "Add to Home Screen" on
+ * them is that restaurant's (the app keeps them right as it navigates:
+ * VenueTheme in src/hooks/useVenue.ts).
+ */
+export function withBrand(html: string, venue: Venue): string {
+  return html
+    .replace(/(<meta name="theme-color" content=")[^"]*/, `$1${venue.brand.themeColor}`)
+    .replace(/(<meta name="apple-mobile-web-app-title" content=")[^"]*/, `$1${escapeHtml(venue.name)}`)
+    .replace(/(<link rel="apple-touch-icon" href=")[^"]*/, `$1${venue.brand.appleTouchIcon}`)
+    .replace(/(<link rel="icon"[^>]*href=")[^"]*/, `$1${venue.brand.icon}`)
+    .replace(/(<link rel="manifest" href=")[^"]*/, `$1${venue.brand.manifest}`);
 }
 
 export function seoPrerender(): Plugin {
@@ -61,7 +86,7 @@ export function seoPrerender(): Plugin {
         const v = manifest[id]?.v;
         return `/menu/${id}/${widths.includes(768) ? 768 : widths[widths.length - 1]}.webp${v ? `?v=${v}` : ''}`;
       };
-      const menu: SeoMenu | null = offline || !env.VITE_SUPABASE_URL || !env.VITE_SUPABASE_PUBLISHABLE_KEY
+      const menu: SeoMenu | null = HOME_VENUE !== 'lasoul' || offline || !env.VITE_SUPABASE_URL || !env.VITE_SUPABASE_PUBLISHABLE_KEY
         ? null
         : await fetchSeoMenu(env.VITE_SUPABASE_URL, env.VITE_SUPABASE_PUBLISHABLE_KEY, imageFor);
 
@@ -70,6 +95,35 @@ export function seoPrerender(): Plugin {
         mkdirSync(path.dirname(file), { recursive: true });
         writeFileSync(file, html);
       };
+
+      // Vera Italia's pages (src/lib/seo/vera-seo.ts): its website — at "/",
+      // /bs/ and /ar/ on its own site, at /veraitalia/ on La Soul's until that
+      // is up — its menu, each course and each dish. Without them those
+      // addresses would be served La Soul's home page, title, canonical and
+      // all, to every crawler and link preview; until it opens, search engines
+      // are asked to leave the menu and dishes out.
+      const vera = VENUES.veraitalia;
+      const veraMenu = veraSeoMenu();
+      const writeVera = (): SitemapEntry[] => {
+        const pages = veraPages(veraMenu);
+        for (const page of pages) write(page.path, withBrand(renderPage(template, headTags(page.head), page.body, page.locale), vera));
+        return pages.map((page) => page.sitemap).filter((e): e is SitemapEntry => !!e);
+      };
+
+      // Vera Italia's own site: its pages, and nothing of La Soul's.
+      if (HOME_VENUE === 'veraitalia') {
+        const pages = veraPages(veraMenu).length;
+        const entries = writeVera();
+        const today = new Date().toISOString().slice(0, 10);
+        const llms = veraLlms(veraMenu);
+        writeFileSync(path.join(outDir, 'robots.txt'), robotsTxt());
+        writeFileSync(path.join(outDir, 'sitemap.xml'), sitemapXml(entries, today));
+        writeFileSync(path.join(outDir, 'llms.txt'), llms.short);
+        writeFileSync(path.join(outDir, 'llms-full.txt'), llms.full);
+        writeFileSync(path.join(outDir, '_redirects'), ownSiteRedirects('veraitalia', VENUE_URLS.lasoul));
+        config.logger.info(`  seo: Vera Italia's own site — ${pages} pages (${vera.live ? 'open' : 'menu and dishes not indexed until it opens'}), robots.txt, sitemap.xml, llms.txt, _redirects`);
+        return;
+      }
 
       // The website, once per language, each pointing at the others.
       const alternates: Record<string, string> = { ...Object.fromEntries(LOCALES.map((l) => [l, sitePath(l)])), 'x-default': '/' };
@@ -122,6 +176,15 @@ export function seoPrerender(): Plugin {
         }
       }
 
+      // Until Vera Italia's own site is up, La Soul's serves its pages; then
+      // it forwards their addresses there (src/lib/seo/site-url.ts).
+      const veraEntries = OWN_SITE_LIVE.veraitalia ? [] : writeVera();
+      if (OWN_SITE_LIVE.veraitalia) {
+        const rules = path.join(outDir, '_redirects');
+        const current = existsSync(rules) ? readFileSync(rules, 'utf8') : '';
+        writeFileSync(rules, forwardToOwnSite('veraitalia', VENUE_URLS.veraitalia) + '\n' + current);
+      }
+
       const today = new Date().toISOString().slice(0, 10);
       const entries: SitemapEntry[] = [
         ...LOCALES.map((l) => ({ path: sitePath(l), alternates, priority: l === 'en' ? 1 : 0.9, images: ['/site/hero-wide-1600.webp'] })),
@@ -130,6 +193,7 @@ export function seoPrerender(): Plugin {
         // Only prerendered pages: anything else is served the home page's
         // HTML until the app runs, canonical and all.
         ...dishEntries,
+        ...veraEntries,
       ];
       writeFileSync(path.join(outDir, 'robots.txt'), robotsTxt());
       writeFileSync(path.join(outDir, 'sitemap.xml'), sitemapXml(entries, today));

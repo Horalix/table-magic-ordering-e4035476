@@ -42,6 +42,8 @@ export interface PageHead {
   venue: Venue;
   /** Site-relative preview image; the website's own by default. */
   image?: string | null;
+  /** Kept out of search results: a restaurant's menu before it opens. */
+  noindex?: boolean;
 }
 
 /** Everything a page says about itself in <head>. */
@@ -55,7 +57,7 @@ export function headTags(p: PageHead): string {
     `<link rel="canonical" href="${url}" />`,
     ...Object.entries(p.alternates ?? {}).map(([lang, path]) =>
       `<link rel="alternate" hreflang="${lang}" href="${absoluteUrl(path)}" />`),
-    `<meta name="robots" content="index, follow, max-image-preview:large" />`,
+    `<meta name="robots" content="${p.noindex ? 'noindex, follow' : 'index, follow, max-image-preview:large'}" />`,
     `<meta property="og:type" content="website" />`,
     `<meta property="og:site_name" content="${escapeHtml(p.venue.name)}" />`,
     `<meta property="og:title" content="${escapeHtml(p.title)}" />`,
@@ -70,8 +72,11 @@ export function headTags(p: PageHead): string {
     `<meta name="twitter:description" content="${escapeHtml(p.description)}" />`,
     `<meta name="twitter:image" content="${image}" />`,
     // Sarajevo Canton (ISO 3166-2:BA-09), and the pin on the venue's Google Maps listing.
-    `<meta name="geo.region" content="BA-09" />`,
-    `<meta name="geo.placename" content="${escapeHtml(p.venue.city)}" />`,
+    // (Not for a restaurant whose address is not known yet.)
+    ...(p.venue.city ? [
+      `<meta name="geo.region" content="BA-09" />`,
+      `<meta name="geo.placename" content="${escapeHtml(p.venue.city)}" />`,
+    ] : []),
     ...(p.venue.geo ? [
       `<meta name="geo.position" content="${p.venue.geo.lat};${p.venue.geo.lng}" />`,
       `<meta name="ICBM" content="${p.venue.geo.lat}, ${p.venue.geo.lng}" />`,
@@ -314,5 +319,41 @@ export function llmsFullTxt(venue: Venue, menu: SeoMenu | null): string {
     '## Questions', '', faq, '',
     `# Menu (prices in KM; everything halal and alcohol-free)`, '',
     dishes || `See ${absoluteUrl(menuPath(venue.slug))}`, '',
+  ].join('\n');
+}
+
+const rule = (from: string, to: string, status: string) => `${from.padEnd(22)} ${to.padEnd(52)} ${status}`;
+
+/**
+ * Netlify's rules for a restaurant's own site (src/lib/home-venue.ts), in
+ * place of La Soul's public/_redirects. Its old address on La Soul's site,
+ * /<slug>/, is its root here; La Soul's menu is on La Soul's site; anything
+ * else is the app.
+ */
+export function ownSiteRedirects(slug: string, laSoulUrl: string): string {
+  return [
+    `# ${slug}'s own site. Written by scripts/seo-prerender.ts; La Soul's site uses public/_redirects.`,
+    rule(`/${slug}`, '/', '301!'),
+    rule(`/${slug}/*`, '/', '301!'),
+    rule('/menu/lasoul', `${laSoulUrl}/menu/lasoul/`, '301!'),
+    rule('/menu/lasoul/*', `${laSoulUrl}/menu/lasoul/:splat`, '301!'),
+    rule('/*', '/index.html', '200'),
+    '',
+  ].join('\n');
+}
+
+/**
+ * The rules La Soul's site puts first once a restaurant's own site is up:
+ * its website and its menu, which La Soul's site served until then, forward
+ * there — bookmarks, shared links and codes printed before the move.
+ */
+export function forwardToOwnSite(slug: string, url: string): string {
+  return [
+    `# ${slug} has its own site (src/lib/seo/site-url.ts, OWN_SITE_LIVE).`,
+    rule(`/${slug}`, `${url}/`, '301!'),
+    rule(`/${slug}/*`, `${url}/`, '301!'),
+    rule(`/menu/${slug}`, `${url}/menu/${slug}/`, '301!'),
+    rule(`/menu/${slug}/*`, `${url}/menu/${slug}/:splat`, '301!'),
+    '',
   ].join('\n');
 }

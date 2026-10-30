@@ -118,8 +118,13 @@ const backend: CloudPrintBackend = {
     return out;
   },
 
-  settings: async () => {
-    const { data } = await admin.from("restaurant_settings").select("print_header, print_footer").eq("id", 1).maybeSingle();
+  // The printer's own restaurant's header and footer: Vera Italia's tickets
+  // never say La Soul.
+  settings: async (token) => {
+    const { data: printer } = await admin.from("printers").select("venue_id").eq("poll_token", token).maybeSingle();
+    const venueId = rec(printer).venue_id;
+    if (typeof venueId !== "string") return { header: null, footer: null };
+    const { data } = await admin.from("restaurant_settings").select("print_header, print_footer").eq("venue_id", venueId).maybeSingle();
     const row = rec(data);
     return {
       header: typeof row.print_header === "string" ? row.print_header : null,

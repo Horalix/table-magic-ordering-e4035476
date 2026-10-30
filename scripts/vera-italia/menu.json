@@ -1,0 +1,616 @@
+{
+  "venue_id": "a5000000-0000-4000-8000-000000000002",
+  "source": "vera italia.docx and menu cijene.xlsx from the owner, 30 October 2026; the Za'atar and Egg & Spinach pizzas' recipes from La Soul Café Menu (HOT KITCHEN).docx. Allergens are read from the recipes and must be confirmed by the kitchen.",
+  "categories": [
+    {
+      "id": "b7a1c000-0000-4000-8000-000000000001",
+      "sort_order": 1,
+      "name": "Antipasti & Insalate",
+      "name_bs": "Antipasti & Insalate",
+      "name_ar": "المقبلات والسلطات",
+      "sections": [
+        {
+          "id": "b7a15000-0000-4000-8000-000000000011",
+          "sort_order": 1,
+          "name": "Antipasti",
+          "name_bs": "Antipasti",
+          "name_ar": "المقبلات",
+          "items": [
+            {
+              "id": "b7a1d000-0000-4000-8000-000000000001",
+              "slug": "bruschetta",
+              "price": 11,
+              "name": "Bruschetta",
+              "name_bs": "Bruschetta",
+              "name_ar": "بروسكيتا",
+              "description": "Toasted baguette rubbed with garlic, olive oil and parmesan, crowned with diced tomato, garlic, basil and cracked black pepper, finished with extra virgin olive oil and balsamic glaze.",
+              "description_bs": "Prepečeni baguette natrljan bijelim lukom, maslinovim uljem i parmezanom, s kockicama paradajza, bijelim lukom, bosiljkom i svježe mljevenim biberom, završen ekstra djevičanskim maslinovim uljem i balzamiko glazurom.",
+              "description_ar": "خبز باغيت محمّص مدهون بالثوم وزيت الزيتون والبارميزان، تعلوه مكعبات الطماطم والثوم والريحان والفلفل الأسود المطحون، مع زيت زيتون بكر ممتاز وصلصة البلسميك.",
+              "allergens": [
+                "gluten",
+                "dairy",
+                "sulphites"
+              ],
+              "dietary_tags": [
+                "vegetarian"
+              ],
+              "meal_role": "starter",
+              "thumb_zoom": 1
+            },
+            {
+              "id": "b7a1d000-0000-4000-8000-000000000002",
+              "slug": "feta-dip",
+              "price": 12.5,
+              "name": "Baked Feta Dip",
+              "name_bs": "Zapečeni feta dip",
+              "name_ar": "غموس الفيتا المخبوز",
+              "description": "Creamy feta and cream cheese baked with cherry tomatoes, green and black olives and herbs in olive oil, with garlic-toasted baguette and parmesan.",
+              "description_bs": "Kremasti feta i krem-sir zapečeni s čeri paradajzom, zelenim i crnim maslinama i začinskim biljem u maslinovom ulju, uz prepečeni baguette s bijelim lukom i parmezanom.",
+              "description_ar": "جبن فيتا كريمي مع جبن كريمي مخبوزان مع الطماطم الكرزية والزيتون الأخضر والأسود والأعشاب بزيت الزيتون، يُقدَّمان مع باغيت محمّص بالثوم والبارميزان.",
+              "allergens": [
+                "gluten",
+                "dairy"
+              ],
+              "dietary_tags": [
+                "vegetarian"
+              ],
+              "meal_role": "starter",
+              "thumb_zoom": 1
+            }
+          ]
+        },
+        {
+          "id": "b7a15000-0000-4000-8000-000000000012",
+          "sort_order": 2,
+          "name": "Insalate",
+          "name_bs": "Insalate",
+          "name_ar": "السلطات",
+          "items": [
+            {
+              "id": "b7a1d000-0000-4000-8000-000000000003",
+              "slug": "caprese",
+              "price": 14,
+              "name": "Insalata Caprese",
+              "name_bs": "Insalata Caprese",
+              "name_ar": "سلطة كابريزي",
+              "description": "Whole-milk mozzarella and ripe tomato with fresh basil, sea salt and black pepper, extra virgin olive oil and balsamic glaze.",
+              "description_bs": "Mocarela od punomasnog mlijeka i zreli paradajz sa svježim bosiljkom, morskom solju i biberom, ekstra djevičanskim maslinovim uljem i balzamiko glazurom.",
+              "description_ar": "موزاريلا من الحليب كامل الدسم وطماطم ناضجة مع ريحان طازج وملح بحري وفلفل أسود، زيت زيتون بكر ممتاز وصلصة البلسميك.",
+              "allergens": [
+                "dairy",
+                "sulphites"
+              ],
+              "dietary_tags": [
+                "vegetarian",
+                "gluten_free"
+              ],
+              "meal_role": "starter"
+            },
+            {
+              "id": "b7a1d000-0000-4000-8000-000000000004",
+              "slug": "grilled-vegetables",
+              "price": 10,
+              "name": "Grilled Vegetable Salad",
+              "name_bs": "Salata od grilovanog povrća",
+              "name_ar": "سلطة الخضار المشوية",
+              "description": "Grilled bell peppers and red onion over rocket, radicchio and iceberg, dressed in balsamic and finished with crumbled feta.",
+              "description_bs": "Grilovane paprike i crveni luk na rukoli, radiču i ajsbergu, s balzamiko dresingom i izmrvljenim feta sirom.",
+              "description_ar": "فلفل حلو وبصل أحمر مشويان على الجرجير والراديكيو والخس، بصلصة البلسميك مع فتات جبن الفيتا.",
+              "allergens": [
+                "dairy",
+                "sulphites"
+              ],
+              "dietary_tags": [
+                "vegetarian",
+                "gluten_free"
+              ],
+              "meal_role": "starter"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "b7a1c000-0000-4000-8000-000000000002",
+      "sort_order": 2,
+      "name": "Pasta & Risotto",
+      "name_bs": "Pasta & Risotto",
+      "name_ar": "الباستا والريزوتو",
+      "sections": [
+        {
+          "id": "b7a15000-0000-4000-8000-000000000021",
+          "sort_order": 1,
+          "name": "Pasta",
+          "name_bs": "Pasta",
+          "name_ar": "الباستا",
+          "items": [
+            {
+              "id": "b7a1d000-0000-4000-8000-000000000005",
+              "slug": "arrabbiata",
+              "price": 7,
+              "name": "Penne all'Arrabbiata",
+              "name_bs": "Penne all'Arrabbiata",
+              "name_ar": "بيني أرابياتا",
+              "description": "Penne in a fiery tomato arrabbiata sauce with shaved parmesan and fresh herbs.",
+              "description_bs": "Penne u ljutom paradajz sosu arrabbiata s listićima parmezana i svježim biljem.",
+              "description_ar": "بيني بصلصة الطماطم الأرابياتا الحارة مع رقائق البارميزان والأعشاب الطازجة.",
+              "allergens": [
+                "gluten",
+                "dairy"
+              ],
+              "dietary_tags": [
+                "vegetarian",
+                "spicy"
+              ],
+              "meal_role": "main",
+              "thumb_zoom": 1
+            },
+            {
+              "id": "b7a1d000-0000-4000-8000-000000000006",
+              "slug": "pesto-fettuccine",
+              "price": 13,
+              "name": "Pesto Alfredo Fettuccine",
+              "name_bs": "Fettuccine Alfredo s pestom",
+              "name_ar": "فيتوتشيني ألفريدو بالبيستو",
+              "description": "Fettuccine in a creamy basil-pesto alfredo with grated parmesan and fresh herbs.",
+              "description_bs": "Fettuccine u kremastom alfredo sosu s pestom od bosiljka, rendanim parmezanom i svježim biljem.",
+              "description_ar": "فيتوتشيني بصلصة ألفريدو الكريمية مع بيستو الريحان والبارميزان المبشور والأعشاب الطازجة.",
+              "allergens": [
+                "gluten",
+                "dairy",
+                "nuts"
+              ],
+              "dietary_tags": [
+                "vegetarian"
+              ],
+              "meal_role": "main",
+              "thumb_zoom": 1
+            },
+            {
+              "id": "b7a1d000-0000-4000-8000-000000000007",
+              "slug": "alfredo-fettuccine",
+              "price": 10.5,
+              "name": "Mushroom Alfredo Fettuccine",
+              "name_bs": "Fettuccine Alfredo s gljivama",
+              "name_ar": "فيتوتشيني ألفريدو بالفطر",
+              "description": "Fettuccine in a silky alfredo sauce with grilled mushrooms, grated parmesan and fresh herbs.",
+              "description_bs": "Fettuccine u svilenkastom alfredo sosu s grilovanim gljivama, rendanim parmezanom i svježim biljem.",
+              "description_ar": "فيتوتشيني بصلصة ألفريدو الناعمة مع الفطر المشوي والبارميزان المبشور والأعشاب الطازجة.",
+              "allergens": [
+                "gluten",
+                "dairy"
+              ],
+              "dietary_tags": [
+                "vegetarian"
+              ],
+              "meal_role": "main",
+              "thumb_zoom": 1
+            },
+            {
+              "id": "b7a1d000-0000-4000-8000-000000000008",
+              "slug": "truffle-pasta",
+              "price": 13,
+              "name": "Truffle Pasta",
+              "name_bs": "Pasta s tartufom",
+              "name_ar": "باستا الكمأة",
+              "description": "Fettuccine in a creamy alfredo sauce with black truffle paste and grated parmesan.",
+              "description_bs": "Fettuccine u kremastom alfredo sosu s pastom od crnog tartufa i rendanim parmezanom.",
+              "description_ar": "فيتوتشيني بصلصة ألفريدو الكريمية مع معجون الكمأة السوداء والبارميزان المبشور.",
+              "allergens": [
+                "gluten",
+                "dairy"
+              ],
+              "dietary_tags": [
+                "vegetarian"
+              ],
+              "meal_role": "main",
+              "featured_rank": 3,
+              "featured_note": "Black truffle, folded into alfredo",
+              "featured_note_bs": "Crni tartuf u alfredo sosu",
+              "featured_note_ar": "كمأة سوداء في صلصة ألفريدو",
+              "thumb_zoom": 1
+            },
+            {
+              "id": "b7a1d000-0000-4000-8000-000000000009",
+              "slug": "eggplant-spaghetti",
+              "price": 14,
+              "name": "Eggplant & Truffle Spaghetti",
+              "name_bs": "Špageti s patlidžanom i tartufom",
+              "name_ar": "سباغيتي الباذنجان والكمأة",
+              "description": "Spaghetti in a creamy rosé sauce with truffle paste, topped with crisp fried eggplant and parmesan.",
+              "description_bs": "Špageti u kremastom roze sosu s pastom od tartufa, preliveni hrskavim prženim patlidžanom i parmezanom.",
+              "description_ar": "سباغيتي بصلصة وردية كريمية مع معجون الكمأة، تعلوها شرائح باذنجان مقلية مقرمشة والبارميزان.",
+              "allergens": [
+                "gluten",
+                "dairy"
+              ],
+              "dietary_tags": [
+                "vegetarian"
+              ],
+              "meal_role": "main",
+              "thumb_zoom": 1
+            }
+          ]
+        },
+        {
+          "id": "b7a15000-0000-4000-8000-000000000022",
+          "sort_order": 2,
+          "name": "Risotto",
+          "name_bs": "Rižoto",
+          "name_ar": "الريزوتو",
+          "items": [
+            {
+              "id": "b7a1d000-0000-4000-8000-000000000010",
+              "slug": "pesto-risotto",
+              "price": 15,
+              "name": "Pesto Risotto",
+              "name_bs": "Rižoto s pestom",
+              "name_ar": "ريزوتو بالبيستو",
+              "description": "Creamy risotto with alfredo and basil pesto, finished with fresh herbs.",
+              "description_bs": "Kremasti rižoto s alfredo sosom i pestom od bosiljka, završen svježim biljem.",
+              "description_ar": "ريزوتو كريمي بصلصة ألفريدو وبيستو الريحان مع الأعشاب الطازجة.",
+              "allergens": [
+                "dairy",
+                "nuts"
+              ],
+              "dietary_tags": [
+                "vegetarian"
+              ],
+              "meal_role": "main",
+              "thumb_zoom": 1
+            },
+            {
+              "id": "b7a1d000-0000-4000-8000-000000000011",
+              "slug": "mushroom-risotto",
+              "price": 14,
+              "name": "Mushroom Risotto",
+              "name_bs": "Rižoto s gljivama",
+              "name_ar": "ريزوتو بالفطر",
+              "description": "Creamy risotto in a white alfredo sauce with grilled button mushrooms and fresh herbs.",
+              "description_bs": "Kremasti rižoto u bijelom alfredo sosu s grilovanim šampinjonima i svježim biljem.",
+              "description_ar": "ريزوتو كريمي بصلصة ألفريدو البيضاء مع فطر المشروم المشوي والأعشاب الطازجة.",
+              "allergens": [
+                "dairy"
+              ],
+              "dietary_tags": [
+                "vegetarian"
+              ],
+              "meal_role": "main",
+              "thumb_zoom": 1
+            },
+            {
+              "id": "b7a1d000-0000-4000-8000-000000000012",
+              "slug": "truffle-risotto",
+              "price": 15,
+              "name": "Truffle Risotto",
+              "name_bs": "Rižoto s tartufom",
+              "name_ar": "ريزوتو الكمأة",
+              "description": "Creamy alfredo risotto with black truffle paste, finished with fresh herbs.",
+              "description_bs": "Kremasti alfredo rižoto s pastom od crnog tartufa, završen svježim biljem.",
+              "description_ar": "ريزوتو ألفريدو كريمي مع معجون الكمأة السوداء والأعشاب الطازجة.",
+              "allergens": [
+                "dairy"
+              ],
+              "dietary_tags": [
+                "vegetarian"
+              ],
+              "meal_role": "main",
+              "thumb_zoom": 1
+            },
+            {
+              "id": "b7a1d000-0000-4000-8000-000000000013",
+              "slug": "pink-risotto",
+              "price": 15,
+              "name": "Pink Sauce Risotto",
+              "name_bs": "Rižoto u roze sosu",
+              "name_ar": "ريزوتو بالصلصة الوردية",
+              "description": "Risotto in a creamy rosé sauce with cherry tomatoes, black olives and a drizzle of balsamic cream.",
+              "description_bs": "Rižoto u kremastom roze sosu s čeri paradajzom, crnim maslinama i balzamiko kremom.",
+              "description_ar": "ريزوتو بصلصة وردية كريمية مع الطماطم الكرزية والزيتون الأسود ورشّة من كريمة البلسميك.",
+              "allergens": [
+                "dairy",
+                "sulphites"
+              ],
+              "dietary_tags": [
+                "vegetarian"
+              ],
+              "meal_role": "main",
+              "thumb_zoom": 1
+            }
+          ]
+        },
+        {
+          "id": "b7a15000-0000-4000-8000-000000000023",
+          "sort_order": 3,
+          "name": "Extras",
+          "name_bs": "Dodaci",
+          "name_ar": "إضافات",
+          "items": [
+            {
+              "id": "b7a1d000-0000-4000-8000-000000000014",
+              "slug": "grilled-chicken",
+              "price": 2,
+              "name": "Grilled Chicken",
+              "name_bs": "Grilovana piletina",
+              "name_ar": "دجاج مشوي",
+              "description": "Add sliced grilled chicken to any pasta or risotto.",
+              "description_bs": "Dodajte grilovanu piletinu bilo kojoj pasti ili rižotu.",
+              "description_ar": "أضف شرائح الدجاج المشوي إلى أي طبق باستا أو ريزوتو.",
+              "allergens": [],
+              "dietary_tags": [
+                "gluten_free",
+                "dairy_free"
+              ],
+              "meal_role": "side",
+              "no_photo": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "b7a1c000-0000-4000-8000-000000000003",
+      "sort_order": 3,
+      "name": "Pizza Napoletana",
+      "name_bs": "Pizza Napoletana",
+      "name_ar": "البيتزا النابوليتانية",
+      "sections": [
+        {
+          "id": "b7a15000-0000-4000-8000-000000000031",
+          "sort_order": 1,
+          "name": "Classiche",
+          "name_bs": "Classiche",
+          "name_ar": "الكلاسيكية",
+          "items": [
+            {
+              "id": "b7a1d000-0000-4000-8000-000000000015",
+              "slug": "margherita",
+              "price": 15,
+              "name": "Margherita",
+              "name_bs": "Margherita",
+              "name_ar": "مارغريتا",
+              "description": "Neapolitan dough, tomato sauce, fior di latte, parmesan and fresh basil, finished with oregano and extra virgin olive oil.",
+              "description_bs": "Napolitansko tijesto, paradajz sos, fior di latte, parmezan i svježi bosiljak, završeno origanom i ekstra djevičanskim maslinovim uljem.",
+              "description_ar": "عجينة نابوليتانية، صلصة طماطم، موزاريلا فيور دي لاتيه، بارميزان وريحان طازج، مع الأوريغانو وزيت الزيتون البكر الممتاز.",
+              "allergens": [
+                "gluten",
+                "dairy"
+              ],
+              "dietary_tags": [
+                "vegetarian"
+              ],
+              "meal_role": "main"
+            },
+            {
+              "id": "b7a1d000-0000-4000-8000-000000000016",
+              "slug": "pepperoni",
+              "price": 15,
+              "name": "Pepperoni",
+              "name_bs": "Pepperoni",
+              "name_ar": "بيبروني",
+              "description": "Neapolitan dough, tomato sauce, fior di latte, pepperoni and parmesan.",
+              "description_bs": "Napolitansko tijesto, paradajz sos, fior di latte, pepperoni i parmezan.",
+              "description_ar": "عجينة نابوليتانية، صلصة طماطم، موزاريلا فيور دي لاتيه، بيبروني وبارميزان.",
+              "allergens": [
+                "gluten",
+                "dairy"
+              ],
+              "dietary_tags": [],
+              "meal_role": "main"
+            },
+            {
+              "id": "b7a1d000-0000-4000-8000-000000000017",
+              "slug": "quattro-formaggi",
+              "price": 15,
+              "name": "Quattro Formaggi",
+              "name_bs": "Quattro Formaggi",
+              "name_ar": "كواترو فورماجي",
+              "description": "White cream, fior di latte, gorgonzola, edam and grana padano, the crust brushed with extra virgin olive oil.",
+              "description_bs": "Bijeli krem sos, fior di latte, gorgonzola, edamer i grana padano, rub premazan ekstra djevičanskim maslinovim uljem.",
+              "description_ar": "صلصة كريمة بيضاء، فيور دي لاتيه، غورغونزولا، إيدام وغرانا بادانو، مع حافة مدهونة بزيت الزيتون البكر الممتاز.",
+              "allergens": [
+                "gluten",
+                "dairy"
+              ],
+              "dietary_tags": [
+                "vegetarian"
+              ],
+              "meal_role": "main"
+            },
+            {
+              "id": "b7a1d000-0000-4000-8000-000000000018",
+              "slug": "burrata-pizza",
+              "price": 24.5,
+              "name": "Burrata Pizza",
+              "name_bs": "Pizza s burratom",
+              "name_ar": "بيتزا البوراتا",
+              "description": "White cream, fior di latte, burrata, basil pesto and cherry tomatoes, finished with black pepper, sea salt and extra virgin olive oil.",
+              "description_bs": "Bijeli krem sos, fior di latte, burrata, pesto od bosiljka i čeri paradajz, završeno crnim biberom, morskom solju i ekstra djevičanskim maslinovim uljem.",
+              "description_ar": "صلصة كريمة بيضاء، فيور دي لاتيه، جبن البوراتا، بيستو الريحان والطماطم الكرزية، مع الفلفل الأسود وملح البحر وزيت الزيتون البكر الممتاز.",
+              "allergens": [
+                "gluten",
+                "dairy",
+                "nuts"
+              ],
+              "dietary_tags": [
+                "vegetarian"
+              ],
+              "meal_role": "main",
+              "featured_rank": 2,
+              "featured_note": "Burrata, pesto and cherry tomatoes",
+              "featured_note_bs": "Burrata, pesto i čeri paradajz",
+              "featured_note_ar": "بوراتا وبيستو وطماطم كرزية"
+            }
+          ]
+        },
+        {
+          "id": "b7a15000-0000-4000-8000-000000000032",
+          "sort_order": 2,
+          "name": "Speciali",
+          "name_bs": "Speciali",
+          "name_ar": "الخاصة",
+          "items": [
+            {
+              "id": "b7a1d000-0000-4000-8000-000000000019",
+              "slug": "truffle-pizza",
+              "price": 25,
+              "name": "Truffle Pizza",
+              "name_bs": "Pizza s tartufom",
+              "name_ar": "بيتزا الكمأة",
+              "description": "White cream, fior di latte, sautéed and button mushrooms and truffle cream, finished with parmesan, truffle oil and freshly grated truffle.",
+              "description_bs": "Bijeli krem sos, fior di latte, pirjane gljive i šampinjoni te krem od tartufa, završeno parmezanom, uljem od tartufa i svježe rendanim tartufom.",
+              "description_ar": "صلصة كريمة بيضاء، فيور دي لاتيه، فطر مطهو وفطر المشروم وكريمة الكمأة، مع البارميزان وزيت الكمأة والكمأة المبشورة طازجة.",
+              "allergens": [
+                "gluten",
+                "dairy"
+              ],
+              "dietary_tags": [
+                "vegetarian"
+              ],
+              "meal_role": "main",
+              "featured_rank": 1,
+              "featured_note": "Freshly grated truffle, from the oven",
+              "featured_note_bs": "Svježe rendani tartuf, iz peći",
+              "featured_note_ar": "كمأة مبشورة طازجة من الفرن"
+            },
+            {
+              "id": "b7a1d000-0000-4000-8000-000000000020",
+              "slug": "ricotta-honey-pizza",
+              "price": 17.5,
+              "name": "Ricotta & Honey Pizza",
+              "name_bs": "Pizza s rikotom i medom",
+              "name_ar": "بيتزا الريكوتا والعسل",
+              "description": "White cream, fior di latte and ricotta, finished with honey and chopped walnuts.",
+              "description_bs": "Bijeli krem sos, fior di latte i rikota, završeno medom i sjeckanim orasima.",
+              "description_ar": "صلصة كريمة بيضاء، فيور دي لاتيه وريكوتا، مع العسل والجوز المفروم.",
+              "allergens": [
+                "gluten",
+                "dairy",
+                "nuts"
+              ],
+              "dietary_tags": [
+                "vegetarian",
+                "contains_nuts"
+              ],
+              "meal_role": "main"
+            },
+            {
+              "id": "b7a1d000-0000-4000-8000-000000000021",
+              "slug": "short-rib-pizza",
+              "price": 25,
+              "name": "Short Rib Pizza",
+              "name_bs": "Pizza s junećim rebrima",
+              "name_ar": "بيتزا الضلوع البقرية",
+              "description": "BBQ sauce, fior di latte and tender beef short rib, finished with shaved grana padano.",
+              "description_bs": "BBQ sos, fior di latte i mekana juneća rebra, završeno listićima grana padana.",
+              "description_ar": "صلصة باربكيو، فيور دي لاتيه وضلوع بقر طرية، مع رقائق غرانا بادانو.",
+              "allergens": [
+                "gluten",
+                "dairy"
+              ],
+              "dietary_tags": [],
+              "meal_role": "main"
+            },
+            {
+              "id": "b7a1d000-0000-4000-8000-000000000022",
+              "slug": "musakhan-pizza",
+              "price": 22.5,
+              "name": "Musakhan Pizza",
+              "name_bs": "Musakhan pizza",
+              "name_ar": "بيتزا المسخّن",
+              "description": "White cream, fior di latte, house musakhan chicken and caramelised onion, finished with yoghurt, pomegranate seeds and pomegranate molasses.",
+              "description_bs": "Bijeli krem sos, fior di latte, piletina musakhan po kućnom receptu i karamelizirani luk, završeno jogurtom, zrnima nara i melasom od nara.",
+              "description_ar": "صلصة كريمة بيضاء، فيور دي لاتيه، دجاج مسخّن على طريقة البيت وبصل مكرمل، مع اللبن وحبوب الرمان ودبس الرمان.",
+              "allergens": [
+                "gluten",
+                "dairy"
+              ],
+              "dietary_tags": [],
+              "meal_role": "main"
+            },
+            {
+              "id": "b7a1d000-0000-4000-8000-000000000023",
+              "slug": "zaatar-pizza",
+              "price": 14.5,
+              "name": "Za'atar Pizza",
+              "name_bs": "Za'atar pizza",
+              "name_ar": "بيتزا الزعتر",
+              "description": "White cream, fior di latte and za'atar with pomegranate seeds, cream cheese and rocket, the crust brushed with extra virgin olive oil.",
+              "description_bs": "Bijeli krem sos, fior di latte i za'atar sa zrnima nara, krem-sirom i rukolom, rub premazan ekstra djevičanskim maslinovim uljem.",
+              "description_ar": "صلصة كريمة بيضاء، فيور دي لاتيه والزعتر مع حبوب الرمان والجبن الكريمي والجرجير، وحافة مدهونة بزيت الزيتون البكر الممتاز.",
+              "allergens": [
+                "gluten",
+                "dairy",
+                "sesame"
+              ],
+              "dietary_tags": [
+                "vegetarian"
+              ],
+              "meal_role": "main"
+            },
+            {
+              "id": "b7a1d000-0000-4000-8000-000000000024",
+              "slug": "egg-spinach-pizza",
+              "price": 12,
+              "name": "Egg & Spinach Pizza",
+              "name_bs": "Pizza s jajem i špinatom",
+              "name_ar": "بيتزا البيض والسبانخ",
+              "description": "White cream, fior di latte, spinach, egg and hollandaise, the crust brushed with extra virgin olive oil.",
+              "description_bs": "Bijeli krem sos, fior di latte, špinat, jaje i holandez sos, rub premazan ekstra djevičanskim maslinovim uljem.",
+              "description_ar": "صلصة كريمة بيضاء، فيور دي لاتيه، سبانخ وبيض وصلصة هولنديز، مع حافة مدهونة بزيت الزيتون البكر الممتاز.",
+              "allergens": [
+                "gluten",
+                "dairy",
+                "eggs"
+              ],
+              "dietary_tags": [
+                "vegetarian"
+              ],
+              "meal_role": "main"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "b7a1c000-0000-4000-8000-000000000004",
+      "sort_order": 4,
+      "name": "Carne",
+      "name_bs": "Carne",
+      "name_ar": "اللحوم",
+      "sections": [
+        {
+          "id": "b7a15000-0000-4000-8000-000000000041",
+          "sort_order": 1,
+          "name": "Bistecca",
+          "name_bs": "Bistecca",
+          "name_ar": "ستيك",
+          "items": [
+            {
+              "id": "b7a1d000-0000-4000-8000-000000000025",
+              "slug": "ribeye-platter",
+              "price": 64,
+              "name": "Rib-eye Steak Platter",
+              "name_bs": "Rib-eye steak plata",
+              "name_ar": "طبق ستيك ريب آي",
+              "description": "Rib-eye steak with the famous entrecôte sauce, served with fries in entrecôte sauce, a walnut salad of iceberg and radicchio with Caesar dressing and candied walnuts, and toasted baguette.",
+              "description_bs": "Rib-eye steak s čuvenim entrecôte sosom, uz pomfrit u entrecôte sosu, salatu od ajsberga i radiča s Cezar dresingom i karameliziranim orasima te prepečeni baguette.",
+              "description_ar": "ستيك ريب آي بصلصة الأنتريكوت الشهيرة، يُقدَّم مع بطاطا مقلية بصلصة الأنتريكوت، وسلطة الجوز من الخس والراديكيو بصلصة السيزر والجوز المكرمل، وخبز باغيت محمّص.",
+              "allergens": [
+                "gluten",
+                "dairy",
+                "eggs",
+                "nuts"
+              ],
+              "dietary_tags": [
+                "contains_nuts"
+              ],
+              "meal_role": "main",
+              "thumb_zoom": 1
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

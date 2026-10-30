@@ -5,12 +5,14 @@
  * which cost two extra handshakes before any text could paint and sent every
  * guest's IP to a third party while /privacy promised otherwise.
  *
- * Variable fonts with the weight axis kept, so these two files cover every
- * weight the UI uses. Subset to Latin plus the Bosnian diacritics and the
- * punctuation actually rendered. Arabic was never in either family and still
- * is not — the ar locale uses the system Arabic font, as before.
+ * Variable fonts with the weight axis kept, so one file per face covers every
+ * weight the UI uses. Lora and Inter are La Soul's; Cormorant Garamond is
+ * Vera Italia's, and a browser fetches it only on Vera Italia's pages.
+ * Subset to Latin plus the Bosnian diacritics and the punctuation actually
+ * rendered. Arabic is in none of them — the ar locale uses the system
+ * Arabic font, as before.
  *
- * 1063 KB of source font -> 61 KB shipped.
+ * 2929 KB of source font -> 120 KB shipped.
  */
 
 @font-face {
@@ -27,4 +29,20 @@
   font-weight: 400 700;
   font-display: swap;
   src: url('/fonts/inter.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Cormorant Garamond';
+  font-style: normal;
+  font-weight: 300 700;
+  font-display: swap;
+  src: url('/fonts/cormorant.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Cormorant Garamond';
+  font-style: italic;
+  font-weight: 300 600;
+  font-display: swap;
+  src: url('/fonts/cormorant-italic.woff2') format('woff2');
 }

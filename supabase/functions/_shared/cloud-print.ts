@@ -53,7 +53,8 @@ export interface CloudPrintBackend {
   report(token: string, ticketId: string | null, ok: boolean, error: string | null): Promise<string | null>;
   testDone(token: string, ok: boolean, error: string | null): Promise<void>;
   loadOrder(orderId: string): Promise<TicketOrder | null>;
-  settings(): Promise<{ header: string | null; footer: string | null }>;
+  /** The ticket header and footer of the restaurant this printer (its poll token) belongs to. */
+  settings(token: string): Promise<{ header: string | null; footer: string | null }>;
   /**
    * menu_items.allergens for these menu item ids: a combo part's OWN
    * allergens, which the order line does not store. Optional — without it a
@@ -110,10 +111,11 @@ interface Rendered { lines: ReturnType<typeof buildTicket> }
 
 async function render(
   backend: CloudPrintBackend,
+  token: string,
   order: TicketOrder,
   options: { paperWidth: number; station: 'kitchen' | 'bar' | null; reprintOf: string | null; test?: boolean; now?: Date },
 ): Promise<Rendered> {
-  const settings = await backend.settings().catch(() => ({ header: null, footer: null }));
+  const settings = await backend.settings(token).catch(() => ({ header: null, footer: null }));
   return {
     lines: buildTicket(order, {
       paperWidth: options.paperWidth,
@@ -187,7 +189,7 @@ async function starJob(url: URL, token: string, backend: CloudPrintBackend, now:
     const printer = await backend.checkin(token, 'star_cloudprnt', url.searchParams.get('mac'), null);
     if (!printer) return text('Unknown printer', 404);
     plain = printer.plain_text;
-    rendered = await render(backend, testOrder(now), { paperWidth: printer.paper_width, station: null, reprintOf: null, test: true, now });
+    rendered = await render(backend, token, testOrder(now), { paperWidth: printer.paper_width, station: null, reprintOf: null, test: true, now });
   } else {
     const claimed = await backend.claim(token, jobToken);
     if (!claimed) return text('No job', 404);
@@ -197,7 +199,7 @@ async function starJob(url: URL, token: string, backend: CloudPrintBackend, now:
       return text('No job', 404);
     }
     plain = claimed.plain_text;
-    rendered = await render(backend, order, {
+    rendered = await render(backend, token, order, {
       paperWidth: claimed.paper_width,
       station: stationOfTicket(claimed.ticket_type),
       reprintOf: claimed.original_printed_at,
@@ -264,7 +266,7 @@ async function epson(req: Request, token: string, backend: CloudPrintBackend, no
   if (kind !== 'GetRequest') return text('', 200, EPSON_XML);
 
   if (printer.test_pending) {
-    const rendered = await render(backend, testOrder(now), { paperWidth: printer.paper_width, station: null, reprintOf: null, test: true, now });
+    const rendered = await render(backend, token, testOrder(now), { paperWidth: printer.paper_width, station: null, reprintOf: null, test: true, now });
     return text(epsonPrintRequest(ticketToEposXml(rendered.lines), TEST_JOB), 200, EPSON_XML);
   }
 
@@ -276,7 +278,7 @@ async function epson(req: Request, token: string, backend: CloudPrintBackend, no
     await backend.report(token, claimed.ticket_id, false, 'The order could not be loaded');
     return text('', 200, EPSON_XML);
   }
-  const rendered = await render(backend, order, {
+  const rendered = await render(backend, token, order, {
     paperWidth: claimed.paper_width,
     station: stationOfTicket(claimed.ticket_type),
     reprintOf: claimed.original_printed_at,

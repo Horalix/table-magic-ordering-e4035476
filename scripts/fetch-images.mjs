@@ -65,6 +65,11 @@ const THUMB_ZOOM_EXCEPTIONS = {
   '4bdf76b3-b150-46f5-b059-0f228d48c56d': 0.92, // Churros: the long tray needs the width
   '99162c3d-f38b-4720-9cbf-97066369220d': 1, // Sky Cola Zero: the can fills the frame top to bottom
 };
+// Vera Italia's photographs are overhead, the plate centred with stone all
+// round and no props above it: thumbnails zoom less, and on the middle, so
+// the whole plate stays in them (items can set their own in menu.json).
+const VERA_THUMB_ZOOM = 0.9;
+const THUMB_MIDDLE = new Set();
 // Where across a landscape photo the square thumbnail is centred (0 = left
 // edge, 1 = right), for photos where the attention crop picks the props: the
 // Chemex stands at the right of its tray, and the crop chose the two glasses.
@@ -212,7 +217,7 @@ async function processRow(row, manifest, counters) {
     if (zoom < 1) {
       const box = Math.round(Math.min(srcW, srcH) * zoom);
       const left = Math.round((srcW - box) / 2);
-      const top = Math.min(srcH - box, Math.max(0, Math.round(srcH * 0.56 - box / 2)));
+      const top = Math.min(srcH - box, Math.max(0, Math.round(srcH * (THUMB_MIDDLE.has(id) ? 0.5 : 0.56) - box / 2)));
       thumbSource = await sharp(input).rotate().extract({ left, top, width: box, height: box }).toBuffer();
     } else if (THUMB_CENTRE[id] !== undefined && srcW > srcH) {
       const left = Math.min(srcW - srcH, Math.max(0, Math.round(srcW * THUMB_CENTRE[id] - srcH / 2)));
@@ -277,6 +282,16 @@ async function main() {
 
   const rows = [...(items ?? []), ...(cats ?? [])];
   console.log(`  ${rows.length} images referenced in Supabase${FORCE ? ' (rebuilding all)' : ''}\n`);
+  // Vera Italia's dishes, from its menu file, until its menu migration is
+  // live (20261030120000_vera_italia_menu.sql); then the database lists
+  // them too. Without this the pruning below would delete their photos.
+  const known = new Set(rows.map((r) => r.id));
+  const vera = JSON.parse(readFileSync(resolve(__dirname, 'vera-italia/menu.json'), 'utf8'));
+  for (const it of vera.categories.flatMap((c) => c.sections.flatMap((s) => s.items))) {
+    if (!it.no_photo && !known.has(it.id)) rows.push({ id: it.id, image_url: `/menu/${it.id}/1152.webp` });
+    THUMB_ZOOM_EXCEPTIONS[it.id] = it.thumb_zoom ?? VERA_THUMB_ZOOM;
+    THUMB_MIDDLE.add(it.id);
+  }
 
   const counters = { downloaded: 0, skipped: 0, failed: 0, errors: [] };
 

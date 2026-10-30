@@ -24,6 +24,7 @@
  * Those last events — order_placed above all — are the ones the funnel most
  * needs.
  */
+import { currentVenueSlug } from './current-venue';
 
 /** The complete event vocabulary. Adding one here is a deliberate act. */
 export type AnalyticsEvent =
@@ -142,6 +143,9 @@ function endpoint(): Endpoint | null {
   // supabase-js sends for an anonymous caller. The newer publishable keys are
   // not JWTs and must not be presented as one.
   if (key.startsWith('eyJ')) headers.Authorization = `Bearer ${key}`;
+  // Counted for the restaurant being browsed (src/lib/current-venue.ts).
+  const venue = currentVenueSlug();
+  if (venue) headers['x-venue'] = venue;
   return { url: `${base.replace(/\/+$/, '')}/rest/v1/rpc/record_analytics_events`, headers };
 }
 

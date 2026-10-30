@@ -16,6 +16,8 @@ import { toast } from 'sonner';
 import { cardPaymentStatus, type CardPaymentStatus } from '@/lib/payments';
 
 interface Settings {
+  /** This restaurant's row (La Soul's is 1). */
+  id: number;
   ordering_enabled: boolean;
   reco_weight_curated: number;
   reco_weight_observed: number;
@@ -95,7 +97,8 @@ const AdminService = () => {
   const load = useCallback(async () => {
     setLoadError(null);
     const [{ data: s, error: sErr }, { data: r, error: rErr }, { data: m, error: mErr }] = await Promise.all([
-      supabase.from('restaurant_settings').select('*').eq('id', 1).maybeSingle(),
+      // One row: the access rules show this restaurant's settings only.
+      supabase.from('restaurant_settings').select('*').maybeSingle(),
       supabase.from('menu_item_recommendations').select('*').order('priority', { ascending: false }).limit(200),
       supabase.from('menu_items').select('id, name').order('name').limit(500),
     ]);
@@ -130,7 +133,8 @@ const AdminService = () => {
 
   const patch = async (changes: Partial<Settings>) => {
     setSettings((prev) => (prev ? { ...prev, ...changes } : prev));
-    const { error } = await supabase.from('restaurant_settings').update(changes as never).eq('id', 1);
+    if (!settings) return;
+    const { error } = await supabase.from('restaurant_settings').update(changes as never).eq('id', settings.id);
     if (error) { toast.error(error.message); void load(); return; }
     toast.success('Saved');
   };

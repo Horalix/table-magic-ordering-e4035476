@@ -222,6 +222,7 @@ const translations: Record<string, Record<Locale, string>> = {
 
   // No items
   'no_items_category': { en: 'No items available in this category yet.', bs: 'Još nema stavki u ovoj kategoriji.', ar: 'لا توجد أصناف في هذه الفئة بعد.' },
+  'search_placeholder_menu': { en: 'Search the menu…', bs: 'Pretražite meni…', ar: 'ابحث في القائمة…' },
   'search_placeholder': { en: 'Search dishes, drinks, desserts…', bs: 'Pretraži jela, pića, deserte…', ar: 'ابحث عن الأطباق والمشروبات والحلويات…' },
   'no_results_title': { en: 'No dishes found', bs: 'Nema rezultata', ar: 'لم يتم العثور على أطباق' },
   'no_results_hint': { en: 'Try another search or browse categories.', bs: 'Pokušajte s drugim pojmom ili pogledajte kategorije.', ar: 'جرب بحثًا آخر أو تصفح الفئات.' },
@@ -237,7 +238,7 @@ const translations: Record<string, Record<Locale, string>> = {
   'how_was_experience': { en: 'How was your experience?', bs: 'Kako vam se svidjelo kod nas?', ar: 'كيف كانت تجربتك؟' },
   'rate_your_visit': { en: 'Tap a star to rate your visit', bs: 'Dodirnite zvjezdicu i ocijenite posjet', ar: 'اضغط على نجمة لتقييم زيارتك' },
   'thank_you_feedback': { en: 'Thank you for your feedback!', bs: 'Hvala na ocjeni!', ar: 'شكراً لملاحظاتك!' },
-  'help_discover_lasoul': { en: 'Help others discover La Soul', bs: 'Pomozite drugima da otkriju La Soul', ar: 'ساعد الآخرين في اكتشاف La Soul' },
+  'help_discover_venue': { en: 'Help others discover {name}', bs: 'Pomozite drugima da otkriju {name}', ar: 'ساعد الآخرين في اكتشاف {name}' },
   'leave_google_review': { en: 'Leave a Google Review', bs: 'Ostavite Google recenziju', ar: 'اترك تقييماً على Google' },
   'close': { en: 'Close', bs: 'Zatvori', ar: 'إغلاق' },
 
@@ -491,7 +492,7 @@ const translations: Record<string, Record<Locale, string>> = {
   'plus_amount': { en: '+{amount}', bs: '+{amount}', ar: '+{amount}' },
   'combo_open': { en: 'Choose', bs: 'Odaberi', ar: 'اختر' },
   'combo_choose_for': { en: 'Choose what comes in {name}', bs: 'Odaberite šta ide u {name}', ar: 'اختر مكونات {name}' },
-  'new_at_lasoul': { en: 'New at La Soul', bs: 'Novo u La Soulu', ar: 'جديد في La Soul' },
+  'new_at_venue': { en: 'New at {name}', bs: 'Novo · {name}', ar: 'جديد في {name}' },
   'featured_title': { en: 'Our picks', bs: 'Naš izbor', ar: 'اختياراتنا' },
   'offers_title': { en: 'Special offers', bs: 'Posebne ponude', ar: 'عروض خاصة' },
   'combos_title': { en: 'Combos — more for less', bs: 'Meniji — više za manje', ar: 'الوجبات — المزيد بسعر أقل' },

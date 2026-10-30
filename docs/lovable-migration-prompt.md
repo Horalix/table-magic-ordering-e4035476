@@ -2,7 +2,50 @@
 
 Copy everything between the rules into Lovable. Nothing else needs to be said.
 
-## Now: the mojito wording, and two functions (no migration)
+## Next: two restaurants — La Soul and Vera Italia (docs/two-restaurants-rollout.md)
+
+Send this **after** `feature/two-restaurants` is merged into `main`: the
+runner, the preflight and the three functions are only on `main` from then.
+La Soul keeps working exactly as today through every step; Vera Italia stays
+switched off (its menu answers "not found") until it opens.
+
+---
+
+> **Task: apply three migrations with `docs/migration-runner.sql`, then
+> redeploy three Edge Functions. Do not retype the migration files and do not
+> write any other SQL.**
+>
+> Make sure your checkout is the latest `main`.
+>
+> 1. Run `docs/migration-preflight.sql` (read-only) and paste the result;
+>    every row should be true. If one is false, stop and report it.
+> 2. Run `docs/migration-runner.sql` step by step, each step as its own query:
+>    Step 0 (pg_net installed), Step 1 (queue the downloads, expect 3 rows),
+>    Step 2 (expect 3 rows, all `arrived_exactly = true`), then Step 3 — its
+>    three blocks one at a time, in order (1 of 3, 2 of 3, 3 of 3). If anything
+>    fails, stop and report the exact error; a failed block changes nothing.
+> 3. Check, and paste the raw output of each:
+>    ```sql
+>    SELECT slug, name, is_live FROM public.venues ORDER BY slug;
+>    SELECT venue_id, count(*) FROM public.orders GROUP BY 1;
+>    SELECT venue_id, count(*) FROM public.menu_items GROUP BY 1;
+>    SELECT role, venue_id IS NULL AS owner, count(*) FROM public.user_roles GROUP BY 1, 2;
+>    ```
+>    Expected: `lasoul` live and `veraitalia` not; every order under
+>    `a5000000-0000-4000-8000-000000000001`; La Soul's dishes under `…0001`
+>    and 25 under `…0002`; every admin row an owner (`true`), every staff row
+>    with a restaurant (`false`).
+> 4. Redeploy the Edge Functions `create-waiter`, `delete-waiter` and
+>    `cloudprnt` from `supabase/functions/` with the settings in
+>    `supabase/config.toml` (`cloudprnt` has `verify_jwt = false`). Paste the
+>    deploy result.
+>
+> Do not create or change any user account, password or credential, do not
+> set Vera Italia live, and do not enable online card payments.
+
+---
+
+## Separate, if not sent yet: the mojito wording, and two functions (no migration)
 
 1. **Seven mojitos say "cocktail"** in all three languages (Classic, Mango,
    Peach, Raspberry, Strawberry, Passion Fruit, Blue Ocean) — on a fully halal,

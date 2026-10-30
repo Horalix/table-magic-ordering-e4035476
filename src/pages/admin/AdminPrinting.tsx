@@ -94,23 +94,29 @@ const AdminPrinting = () => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [previewStation, setPreviewStation] = useState<PreviewStation>('kitchen');
+  /** This restaurant's settings row (La Soul's is 1). */
+  const [rowId, setRowId] = useState<number | null>(null);
 
   const load = useCallback(async () => {
+    // One row: the access rules show this restaurant's settings only.
     const { data } = await supabase
       .from('restaurant_settings')
-      .select(PRINT_FIELDS.join(','))
-      .eq('id', 1)
+      .select(['id', ...PRINT_FIELDS].join(','))
       .maybeSingle();
-    if (data) setCfg(pickPrintFields(data as unknown as Record<string, unknown>));
+    if (data) {
+      setRowId((data as unknown as { id: number }).id);
+      setCfg(pickPrintFields(data as unknown as Record<string, unknown>));
+    }
     setLoading(false);
   }, []);
   useEffect(() => { void load(); }, [load]);
 
   const save = async () => {
+    if (rowId === null) return;
     setSaving(true);
     const { error } = await supabase.from('restaurant_settings')
       .update({ ...pickPrintFields(cfg as unknown as Record<string, unknown>), updated_at: new Date().toISOString() })
-      .eq('id', 1);
+      .eq('id', rowId);
     setSaving(false);
     if (error) { toast.error(error.message); return; }
     toast.success('Printing settings saved');

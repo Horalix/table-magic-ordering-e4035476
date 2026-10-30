@@ -20,7 +20,7 @@ import { useSessionHeartbeat } from '@/hooks/useSessionHeartbeat';
 import { duration, easeEnter, exitTransition, springPill, springSheet } from '@/lib/motion';
 import { DIET_TAGS, DIET_BY_KEY, getItemTags, matchesDietFilter, useDietFilterStore } from '@/lib/dietary';
 import { merchBadges, unorderableReason, windowLabel } from '@/lib/availability';
-import { sectionSlug } from '@/lib/menu-sections';
+import { categoryPath, sectionSlug } from '@/lib/menu-sections';
 import { PriceTag, SaleBadge, NewBadge, ComboBadge } from '@/components/guest/PriceTag';
 import { useComboMap } from '@/lib/promotions-api';
 import { menuCategoryPath, menuHome } from '@/lib/venues';
@@ -30,6 +30,9 @@ import {
   comboRegularPrice, comboUnitPrice, fixedChoices, isNew, missingSlots, nextPriceChange, rememberPrices, saleView, type ComboDef,
 } from '@/lib/promotions';
 import type { Database } from '@/integrations/supabase/types';
+import { useVenue } from '@/hooks/useVenue';
+// Vera Italia's courses have long Italian names; the tabs use their short ones.
+import { COURSES, VERA, pick } from '@/components/vera/copy';
 
 type CategoryRow = Database['public']['Tables']['categories']['Row'];
 type MenuItemRow = import('@/lib/promotions-api').MenuItemRow;
@@ -50,10 +53,14 @@ const fetchCategoriesList = async () => {
   if (error) throw error;
   return data;
 };
+// By name ("Food"), or by the slug in its address ("pizza-napoletana" for
+// Vera Italia's "Pizza Napoletana"). The access rules return only the
+// restaurant being browsed, so two restaurants may share a name.
 const fetchCategory = async (name: string) => {
-  const { data, error } = await supabase.from('categories').select('*').eq('name', name).single();
-  if (error) throw error;
-  return data;
+  const data = await fetchCategoriesList();
+  const found = data.find((c) => c.name === name) ?? data.find((c) => sectionSlug(c.name) === name);
+  if (!found) throw new Error(`No category "${name}"`);
+  return found;
 };
 const fetchSubcategories = async (categoryId: string) => {
   const { data, error } = await supabase.from('subcategories').select('*').eq('category_id', categoryId).order('sort_order');
@@ -79,14 +86,34 @@ const fetchCategoryItems = async (subIds: string[]) => {
  * mean back to the home screen, find the card, tap it: three steps for the
  * most common move on a menu. The active tab is the page's heading.
  */
-const CategoryTabs = ({ categories, current, locale, label, onSelect }: {
+const CategoryTabs = ({ categories, current, locale, label, onSelect, printed = false }: {
   categories: CategoryRow[];
   current: string;
   locale: Parameters<typeof getLocalizedName>[1];
   label: string;
   onSelect: (category: CategoryRow) => void;
+  /** Vera Italia: the courses as words on a printed menu, the current one underlined. */
+  printed?: boolean;
 }) => (
   <nav aria-label={label} className="flex-1 min-w-0">
+    {printed ? (
+      <div className="flex items-center justify-around">
+        {categories.map((c) => {
+          const active = c.name === current;
+          return (
+            <button
+              key={c.id}
+              onClick={() => { if (!active) onSelect(c); }}
+              aria-current={active ? 'page' : undefined}
+              className={`relative h-10 px-1 font-serif text-[15.5px] transition-colors ${active ? 'text-foreground italic' : 'text-muted-foreground hover:text-foreground'}`}
+            >
+              <span className="block truncate">{COURSES[c.name] ? pick(COURSES[c.name].short, locale) : getLocalizedName(c, locale)}</span>
+              {active && <motion.span layoutId="category-tab-line" transition={springPill} className="absolute inset-x-1 bottom-1.5 h-px bg-foreground" />}
+            </button>
+          );
+        })}
+      </div>
+    ) : (
     <div className="grid gap-0.5 p-1 rounded-full bg-muted/70" style={{ gridTemplateColumns: `repeat(${categories.length}, minmax(0, 1fr))` }}>
       {categories.map((c) => {
         const active = c.name === current;
@@ -103,6 +130,7 @@ const CategoryTabs = ({ categories, current, locale, label, onSelect }: {
         );
       })}
     </div>
+    )}
   </nav>
 );
 
@@ -144,7 +172,7 @@ const stop = (e: React.SyntheticEvent) => e.stopPropagation();
 type Opening = { id: string; phase: 1 | 2 } | null;
 const OpeningContext = createContext<Opening>(null);
 
-const OpeningPhoto = ({ itemId, src, alt, sizes }: { itemId: string; src: string; alt: string; sizes: string }) => {
+const OpeningPhoto = ({ itemId, src, alt, sizes, shape = 'rounded-2xl' }: { itemId: string; src: string; alt: string; sizes: string; shape?: string }) => {
   const opening = useContext(OpeningContext);
   if (!opening || opening.id !== itemId) return null;
   return (
@@ -159,7 +187,7 @@ const OpeningPhoto = ({ itemId, src, alt, sizes }: { itemId: string; src: string
         square
         sizes={sizes}
         data-phase={opening.phase}
-        wrapperClassName="absolute inset-0 w-full h-full rounded-2xl z-[1]"
+        wrapperClassName={`absolute inset-0 w-full h-full ${shape} z-[1]`}
       />
     </MotionConfig>
   );
@@ -209,6 +237,11 @@ const CategoryPage = () => {
   const rtl = locale === 'ar';
 
   const categoryName = categoryNameMap[type || ''] || type;
+  // Vera Italia's pages read like its printed menu: course names as words,
+  // dishes as lines with a dotted leader to the price, and each dish's
+  // overhead photograph square and whole, never cropped into a shape.
+  const vera = useVenue().slug === 'veraitalia';
+  const thumbShape = vera ? 'rounded-[3px]' : 'rounded-2xl';
 
   const { data: category, isError: categoryFailed, refetch: refetchCategory } = useQuery({
     queryKey: ['category', categoryName],
@@ -419,6 +452,7 @@ const CategoryPage = () => {
   };
 
   // Keeps the table and token, and replaces history so Back still goes home.
+  // The same address the home screen links to: "Pasta & Risotto" is /pasta-risotto/.
   const switchCategory = (c: CategoryRow) => {
     haptic('tick');
     const params = new URLSearchParams();
@@ -426,7 +460,7 @@ const CategoryPage = () => {
     if (token) params.set('token', token);
     const qs = params.toString();
     window.scrollTo({ top: 0 });
-    navigate(`${menuCategoryPath(c.name.toLowerCase())}${qs ? `?${qs}` : ''}`, { replace: true, state: location.state });
+    navigate(`${categoryPath(c.name)}${qs ? `?${qs}` : ''}`, { replace: true, state: location.state });
   };
 
   const closeSearch = () => { setSearch(''); setSearchOpen(false); };
@@ -502,8 +536,8 @@ const CategoryPage = () => {
   // the prerendered page for the same address says the same (scripts/seo-prerender.ts).
   const categoryLabel = category ? getLocalizedName(category, locale) : (categoryName ?? '');
   usePageMeta({
-    title: siteT('seo_category_title', locale, { category: categoryLabel }),
-    description: siteT('seo_category_description', locale, { category: categoryLabel }),
+    title: vera ? `${categoryLabel} — Vera Italia` : siteT('seo_category_title', locale, { category: categoryLabel }),
+    description: vera ? pick(VERA.menuDescription, locale) : siteT('seo_category_description', locale, { category: categoryLabel }),
     path: menuCategoryPath(type ?? ''),
     locale,
   });
@@ -653,17 +687,17 @@ const CategoryPage = () => {
             sizes="(max-width: 640px) 46vw, 220px"
             priority={eager && i < 4}
             fallbackText={name}
-            wrapperClassName={`w-full aspect-square rounded-2xl ${blocked ? 'opacity-45 saturate-50' : ''}`}
+            wrapperClassName={`w-full aspect-square ${thumbShape} ${blocked ? 'opacity-45 saturate-50' : ''}`}
           />
-          {item.image_url && <OpeningPhoto itemId={item.id} src={item.image_url} alt={name} sizes="(max-width: 640px) 46vw, 220px" />}
+          {item.image_url && <OpeningPhoto itemId={item.id} src={item.image_url} alt={name} sizes="(max-width: 640px) 46vw, 220px" shape={thumbShape} />}
           {hasSession && !blocked && <div className="absolute bottom-2 end-2 z-[2]">{renderStepper(item, name, 'grid')}</div>}
         </div>
-        <div className="pt-2 pe-1">
+        <div className={vera ? 'pt-2.5 px-0.5 text-center' : 'pt-2 pe-1'}>
           <h3 className="leading-snug">
-            <button type="button" className={`text-start font-serif text-[15px] font-semibold line-clamp-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded ${blocked ? 'text-muted-foreground' : 'text-foreground'}`}>{name}</button>
+            <button type="button" className={`${vera ? 'text-center text-[19px] font-medium' : 'text-start text-[15px] font-semibold'} font-serif line-clamp-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded ${blocked ? 'text-muted-foreground' : 'text-foreground'}`}>{name}</button>
           </h3>
           {renderBadges(item, false)}
-          <p className={`text-[15px] font-sans font-semibold mt-0.5 ${blocked ? 'text-muted-foreground' : 'text-foreground'}`}>{renderPrice(item, !!blocked)}</p>
+          <p className={`${vera ? 'font-serif text-[18px] font-medium' : 'text-[15px] font-sans font-semibold'} mt-0.5 ${blocked ? 'text-muted-foreground' : 'text-foreground'}`}>{renderPrice(item, !!blocked)}</p>
         </div>
       </ImpressionCard>
     );
@@ -678,6 +712,63 @@ const CategoryPage = () => {
       item.prep_minutes != null && !blocked ? t('prep_about', { n: item.prep_minutes }) : null,
       item.portion_note,
     ].filter(Boolean).join(' · ');
+    if (vera) {
+      // A line of the printed menu: the photograph first, then the name, a
+      // dotted leader and the price on the name's last line, the description under.
+      return (
+        <ImpressionCard
+          key={item.id}
+          itemId={item.id}
+          onOpen={() => openItem(item)}
+          className="relative flex gap-4 py-5 cursor-pointer transition-colors active:bg-muted/40"
+        >
+          {item.image_url && (
+            <div className="relative shrink-0 w-[96px] self-start">
+              <SmartImage
+                src={item.image_url}
+                id={item.id}
+                alt=""
+                width={96}
+                height={96}
+                square
+                sizes="96px"
+                priority={eager && i < 4}
+                fallbackText={localizedName}
+                wrapperClassName={`w-[96px] h-[96px] ${thumbShape} ${blocked ? 'opacity-45 saturate-50' : ''}`}
+              />
+              <OpeningPhoto itemId={item.id} src={item.image_url} alt="" sizes="96px" shape={thumbShape} />
+              {hasSession && !blocked && (
+                <div className={`z-[2] ${inCartQty(item) > 0 ? 'absolute -bottom-3 inset-x-0 flex justify-center' : 'absolute -bottom-2 -end-2'}`}>
+                  {renderStepper(item, localizedName, 'list')}
+                </div>
+              )}
+            </div>
+          )}
+          <div className="flex-1 min-w-0">
+            <div className="flex items-end gap-2">
+              <h3 className="min-w-0 leading-tight">
+                <button type="button" className={`text-start font-serif text-[20px] font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded ${blocked ? 'text-muted-foreground' : 'text-foreground'}`}>
+                  {localizedName}
+                </button>
+              </h3>
+              <span aria-hidden className="flex-1 min-w-4 mb-[6px] border-b border-dotted border-foreground/35" />
+              <p className={`shrink-0 leading-tight font-serif text-[19px] font-medium ${blocked ? 'text-muted-foreground' : 'text-foreground'}`}>{renderPrice(item, !!blocked)}</p>
+            </div>
+            {renderBadges(item, isSearch)}
+            {localizedDesc && <p className="text-[13.5px] leading-relaxed text-muted-foreground font-sans mt-1.5 line-clamp-3">{localizedDesc}</p>}
+            {(meta || tags.length > 0) && (
+              <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                {meta && <span className="text-xs font-sans text-muted-foreground">{meta}</span>}
+                {tags.map((k) => (
+                  <span key={k} className="text-sm leading-none" title={t(DIET_BY_KEY[k].labelKey)} aria-label={t(DIET_BY_KEY[k].labelKey)}>{DIET_BY_KEY[k].emoji}</span>
+                ))}
+              </div>
+            )}
+          </div>
+          {!item.image_url && hasSession && !blocked && <div className="shrink-0 self-center">{renderStepper(item, localizedName, 'list')}</div>}
+        </ImpressionCard>
+      );
+    }
     return (
       <ImpressionCard
         key={item.id}
@@ -713,9 +804,9 @@ const CategoryPage = () => {
               sizes="108px"
               priority={eager && i < 4}
               fallbackText={localizedName}
-              wrapperClassName={`w-[108px] h-[108px] rounded-2xl ${blocked ? 'opacity-45 saturate-50' : ''}`}
+              wrapperClassName={`w-[108px] h-[108px] ${thumbShape} ${blocked ? 'opacity-45 saturate-50' : ''}`}
             />
-            <OpeningPhoto itemId={item.id} src={item.image_url} alt="" sizes="108px" />
+            <OpeningPhoto itemId={item.id} src={item.image_url} alt="" sizes="108px" shape={thumbShape} />
             {hasSession && !blocked && (
               // "+" sits on the corner; once the dish is in the order the wider
               // "− 2 +" pill centres under the photo instead of hanging off it.
@@ -753,8 +844,10 @@ const CategoryPage = () => {
   const renderItems = (list: MenuItemRow[], isSearch: boolean, eager: boolean) => {
     if (list.length === 0) return renderEmpty(isSearch);
     if (deferredView === 'grid') {
-      return <div className="px-4 pt-3 grid grid-cols-2 gap-x-3 gap-y-5">{list.map((it, i) => renderGridCard(it, i, eager))}</div>;
+      return <div className={`grid grid-cols-2 ${vera ? 'px-5 pt-5 gap-x-4 gap-y-7' : 'px-4 pt-3 gap-x-3 gap-y-5'}`}>{list.map((it, i) => renderGridCard(it, i, eager))}</div>;
     }
+    // Vera Italia: lines on the page, ruled, not rows in a card.
+    if (vera) return <div className="mx-5 mt-2 divide-y divide-border">{list.map((it, i) => renderListRow(it, i, isSearch, eager))}</div>;
     return (
       <div className="mx-4 mt-3 rounded-3xl bg-card border border-border/70 shadow-[0_1px_2px_rgba(20,30,25,0.04)] divide-y divide-border/70 overflow-hidden">
         {list.map((it, i) => renderListRow(it, i, isSearch, eager))}
@@ -776,20 +869,29 @@ const CategoryPage = () => {
         ref={(el) => { sectionRefs.current[sub.id] = el; }}
         id={`section-${sectionSlug(sub.name)}`}
         aria-labelledby={`section-title-${sub.id}`}
-        className={si === 0 ? 'pt-4' : 'pt-8'}
+        className={vera ? (si === 0 ? 'pt-7' : 'pt-12') : si === 0 ? 'pt-4' : 'pt-8'}
       >
-        <div className="px-5 flex items-baseline justify-between gap-3">
-          <h2 id={`section-title-${sub.id}`} className="font-serif text-[22px] font-semibold text-foreground tracking-tight">
-            {getLocalizedName(sub as SubcategoryRow, locale)}
-          </h2>
-          <span className="text-xs font-sans font-medium text-muted-foreground tabular-nums">{items.length}</span>
-        </div>
+        {vera ? (
+          <div className="px-6 text-center">
+            <h2 id={`section-title-${sub.id}`} className="font-serif italic text-[30px] font-normal leading-tight text-foreground">
+              {getLocalizedName(sub as SubcategoryRow, locale)}
+            </h2>
+            <div aria-hidden className="mx-auto mt-3 w-12 vi-hairline" />
+          </div>
+        ) : (
+          <div className="px-5 flex items-baseline justify-between gap-3">
+            <h2 id={`section-title-${sub.id}`} className="font-serif text-[22px] font-semibold text-foreground tracking-tight">
+              {getLocalizedName(sub as SubcategoryRow, locale)}
+            </h2>
+            <span className="text-xs font-sans font-medium text-muted-foreground tabular-nums">{items.length}</span>
+          </div>
+        )}
         {renderItems(items, false, sub.id === eagerSectionId)}
       </section>
     )),
     // renderItems is recreated each render; the value deps below fully determine its output.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [sections, deferredView, locale, popularIds, cartItems, hasSession, subNameById, t, eagerSectionId, comboMap, priceNow],
+    [sections, deferredView, locale, popularIds, cartItems, hasSession, subNameById, t, eagerSectionId, comboMap, priceNow, vera],
   );
 
   const loadFailed = categoryFailed || subsFailed || itemsFailed;
@@ -819,7 +921,7 @@ const CategoryPage = () => {
             <ArrowLeft className="w-5 h-5 rtl:rotate-180" aria-hidden />
           </button>
           {categories.length > 1
-            ? <CategoryTabs categories={categories} current={categoryName as string} locale={locale} label={t('menu')} onSelect={switchCategory} />
+            ? <CategoryTabs categories={categories} current={categoryName as string} locale={locale} label={t('menu')} onSelect={switchCategory} printed={vera} />
             : <Skeleton className="w-32 h-6 rounded" />}
         </div>
         <div className="px-4 space-y-3 mt-4">
@@ -866,7 +968,7 @@ const CategoryPage = () => {
             <>
               <h1 className="sr-only">{localizedCategory}</h1>
               {categories.length > 1 ? (
-                <CategoryTabs categories={categories} current={category.name} locale={locale} label={t('menu')} onSelect={switchCategory} />
+                <CategoryTabs categories={categories} current={category.name} locale={locale} label={t('menu')} onSelect={switchCategory} printed={vera} />
               ) : (
                 <div className="flex-1 min-w-0 ps-1">
                   <p aria-hidden className="truncate font-serif text-xl font-semibold text-foreground leading-tight">{localizedCategory}</p>
@@ -934,7 +1036,28 @@ const CategoryPage = () => {
           )}
         </AnimatePresence>
 
-        {sections.length > 1 && !searching && (
+        {sections.length > 1 && !searching && vera && (
+          <nav className="pb-1 overflow-x-auto scrollbar-hide" aria-label={t('menu_sections')}>
+            <div className="flex gap-6 w-max mx-auto px-5">
+            {sections.map(({ sub }) => {
+              const isActive = activeSubId === sub.id;
+              return (
+                <button
+                  key={sub.id}
+                  ref={(el) => { pillRefs.current[sub.id] = el; }}
+                  onClick={() => selectSub(sub.id)}
+                  aria-current={isActive ? 'true' : undefined}
+                  className={`relative h-9 shrink-0 vi-caps whitespace-nowrap transition-colors ${isActive ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+                >
+                  {getLocalizedName(sub as SubcategoryRow, locale)}
+                  {isActive && <motion.span layoutId="active-sub-line" transition={springPill} className="absolute inset-x-0 bottom-1.5 h-px bg-foreground" />}
+                </button>
+              );
+            })}
+            </div>
+          </nav>
+        )}
+        {sections.length > 1 && !searching && !vera && (
           <nav className="flex gap-1.5 px-3 pb-2 overflow-x-auto scrollbar-hide" aria-label={t('menu_sections')}>
             {sections.map(({ sub }) => {
               const isActive = activeSubId === sub.id;
@@ -953,7 +1076,7 @@ const CategoryPage = () => {
             })}
           </nav>
         )}
-        <div className="h-px bg-gradient-to-r from-transparent via-primary/20 to-transparent" />
+        <div className={vera ? 'h-px bg-border' : 'h-px bg-gradient-to-r from-transparent via-primary/20 to-transparent'} />
       </div>
 
       {allLoading ? (
@@ -975,7 +1098,7 @@ const CategoryPage = () => {
       ) : (
         <div className="pb-40">
           {/* Said once, so every row can show a bare "12,50". */}
-          <p className="px-5 pt-3 -mb-1 text-[11px] font-sans text-muted-foreground">{t('prices_in_km')}</p>
+          <p className={vera ? 'px-5 pt-4 -mb-2 text-center font-serif italic text-[15px] text-muted-foreground' : 'px-5 pt-3 -mb-1 text-[11px] font-sans text-muted-foreground'}>{t('prices_in_km')}</p>
           {sectionsView}
         </div>
       )}

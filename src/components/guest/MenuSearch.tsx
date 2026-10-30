@@ -5,6 +5,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useT, useLanguageStore, getLocalizedName, getLocalizedDescription, useI18n } from '@/lib/i18n';
 import { useCartStore } from '@/lib/cart-store';
 import SmartImage from '@/components/ui/SmartImage';
+import { useVenue } from '@/hooks/useVenue';
 import { track } from '@/lib/analytics';
 import { haptic } from '@/lib/haptics';
 import { emitAdd } from '@/lib/cart-fx';
@@ -49,6 +50,8 @@ interface Props {
  */
 const MenuSearch = ({ canOrder, onOpenItem }: Props) => {
   const t = useT();
+  // La Soul serves drinks and desserts; Vera Italia's menu is food only.
+  const placeholderKey = useVenue().slug === 'lasoul' ? 'search_placeholder' : 'search_placeholder_menu';
   const { priceBare } = useI18n();
   const locale = useLanguageStore((s) => s.locale);
   const addItem = useCartStore((s) => s.addItem);
@@ -96,7 +99,7 @@ const MenuSearch = ({ canOrder, onOpenItem }: Props) => {
           type="search"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder={t('search_placeholder')}
+          placeholder={t(placeholderKey)}
           aria-label={t('search')}
           className="w-full h-12 rounded-2xl border border-border bg-card ps-11 pe-11 font-sans text-[15px] text-foreground placeholder:text-muted-foreground/70 outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
         />
