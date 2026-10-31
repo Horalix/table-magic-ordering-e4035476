@@ -2,15 +2,57 @@
 
 Copy everything between the rules into Lovable. Nothing else needs to be said.
 
-## Next: Vera Italia's suggestions, separation of the two restaurants, the owner's view
+## Next: suggestions a head waiter would sign
 
-Send this once `main` has the runner for these five migrations (merged from
-`feature/phone-polish`): Vera Italia's suggestions and print header, the
-admin and service separation of the two restaurants, and the owner's
-overview. Publish the app in the same session: the redeployed functions
-expect the new app (an old open admin page sends no restaurant and is
-refused until it reloads). Nothing of La Soul's menu, suggestions or tickets
-changes.
+Send this once `main` has the runner for this one migration (merged from
+`feature/reco-quality`). There is no Edge Function and no app change, so
+nothing needs republishing. Guests at both restaurants get better
+suggestions. No menu, order, ticket, staff or analytics data changes. The one
+exception is three of Vera Italia's rib-eye pairing priorities, and only
+where the owner has not already edited them.
+
+---
+
+> **Task: apply one migration with `docs/migration-runner.sql`. Do not retype
+> the migration file and do not write any other SQL.**
+>
+> Make sure your checkout is the latest `main`.
+>
+> 1. Run `docs/migration-runner.sql` step by step, each step as its own query:
+>    Step 0 (pg_net installed), Step 1 (queue the download, expect 1 row),
+>    Step 2 (expect 1 row, `arrived_exactly = true`), then Step 3, its one
+>    block (1 of 1). If it fails, stop and report the exact error; a failed
+>    block changes nothing. If it prints the notice `learned counters not
+>    recounted here`, that is expected: the nightly refresh recounts them.
+>    Say so.
+> 2. Check, and paste the raw output of each:
+>    ```sql
+>    SELECT to_regprocedure('public.reco_rank_scored(uuid[],text,text,integer,uuid,text[],integer[])') IS NOT NULL AS ranker,
+>           to_regprocedure('public.reco_kind_group(text)') IS NOT NULL AS groups;
+>    SELECT table_name FROM information_schema.columns
+>     WHERE table_schema = 'public' AND column_name = 'venue_id'
+>       AND table_name IN ('reco_fit', 'reco_clash') ORDER BY 1;
+>    SELECT id, priority FROM public.menu_item_recommendations
+>     WHERE id IN ('b7a1e000-0000-4000-8000-000000000013',
+>                  'b7a1e000-0000-4000-8000-000000000014',
+>                  'b7a1e000-0000-4000-8000-000000000015') ORDER BY id;
+>    SELECT venue_id, count(*) FROM public.menu_item_recommendations GROUP BY 1 ORDER BY 1;
+>    ```
+>    Expected: `true`, `true`; `reco_clash` and `reco_fit`; priorities 45,
+>    55, 75 in that order; and the same rule counts per restaurant as before
+>    (Vera Italia's `…0002` has 15).
+>
+> Do not create or change any user account, password or credential, and do
+> not enable online card payments.
+
+---
+
+## Done: Vera Italia's suggestions, separation of the two restaurants, the owner's view (31 October 2026)
+
+Five migrations, five Edge Functions and the Auth password minimum, applied
+and deployed by Lovable on 31 October 2026. It then regenerated
+`src/integrations/supabase/types.ts` and added `venue_id` to AdminWaiters'
+query. The prompt as sent:
 
 ---
 
