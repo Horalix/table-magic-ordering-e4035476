@@ -53,7 +53,7 @@ const AdminWaiters = () => {
 
   const fetchAll = useCallback(async () => {
     const [w, s, a] = await Promise.all([
-      supabase.from('waiters').select('id, display_name, username, is_active, has_pin, user_id, created_at, pin_set_at').order('display_name'),
+      supabase.from('waiters').select('id, display_name, username, is_active, has_pin, user_id, created_at, pin_set_at, venue_id').order('display_name'),
       supabase.from('sections').select('id, name, color').order('sort_order'),
       // The rota is keyed by trading day (business_day(), 05:00 to 05:00), so
       // at 00:30 "today's sections" are the ones from the shift still running.
