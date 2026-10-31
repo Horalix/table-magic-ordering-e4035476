@@ -185,6 +185,8 @@ const translations: Record<string, Record<Locale, string>> = {
   'call_waiter': { en: 'Call Waiter', bs: 'Pozovi konobara', ar: 'استدعاء النادل' },
   'calling': { en: 'Calling...', bs: 'Pozivam...', ar: 'جارٍ الاستدعاء...' },
   'waiter_notified': { en: 'Waiter notified', bs: 'Konobar je obaviješten', ar: 'تم إخطار النادل' },
+  // The call button once pressed: short, so the table row never wraps on a narrow phone.
+  'waiter_on_way': { en: 'On the way', bs: 'Stiže', ar: 'في الطريق' },
 
   // QR Scan prompts
   'scan_qr_order': { en: 'Scan the QR code at your table to place an order', bs: 'Skenirajte QR kod na stolu da biste naručili.', ar: 'امسح رمز QR على طاولتك لتقديم طلب' },
@@ -223,7 +225,7 @@ const translations: Record<string, Record<Locale, string>> = {
   // No items
   'no_items_category': { en: 'No items available in this category yet.', bs: 'Još nema stavki u ovoj kategoriji.', ar: 'لا توجد أصناف في هذه الفئة بعد.' },
   'search_placeholder_menu': { en: 'Search the menu…', bs: 'Pretražite meni…', ar: 'ابحث في القائمة…' },
-  'search_placeholder': { en: 'Search dishes, drinks, desserts…', bs: 'Pretraži jela, pića, deserte…', ar: 'ابحث عن الأطباق والمشروبات والحلويات…' },
+  'search_placeholder': { en: 'Search dishes and drinks…', bs: 'Pretraži jela i pića…', ar: 'ابحث عن الأطباق والمشروبات…' },
   'no_results_title': { en: 'No dishes found', bs: 'Nema rezultata', ar: 'لم يتم العثور على أطباق' },
   'no_results_hint': { en: 'Try another search or browse categories.', bs: 'Pokušajte s drugim pojmom ili pogledajte kategorije.', ar: 'جرب بحثًا آخر أو تصفح الفئات.' },
   'added_to_order': { en: 'Added to order', bs: 'Dodano u narudžbu', ar: 'تمت الإضافة إلى الطلب' },

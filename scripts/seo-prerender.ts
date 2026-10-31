@@ -59,7 +59,9 @@ export function withBrand(html: string, venue: Venue): string {
     .replace(/(<meta name="apple-mobile-web-app-title" content=")[^"]*/, `$1${escapeHtml(venue.name)}`)
     .replace(/(<link rel="apple-touch-icon" href=")[^"]*/, `$1${venue.brand.appleTouchIcon}`)
     .replace(/(<link rel="icon"[^>]*href=")[^"]*/, `$1${venue.brand.icon}`)
-    .replace(/(<link rel="manifest" href=")[^"]*/, `$1${venue.brand.manifest}`);
+    .replace(/(<link rel="manifest" href=")[^"]*/, `$1${venue.brand.manifest}`)
+    // The heading face it uses, not La Soul's Lora (index.html preloads that).
+    .replace(/(<link rel="preload" as="font" type="font\/woff2" href=")\/fonts\/lora\.woff2/, `$1${venue.brand.headingFont}`);
 }
 
 export function seoPrerender(): Plugin {

@@ -523,11 +523,11 @@ const CartPage = () => {
                 </div>
                 {/* At one, the minus becomes a bin: removing is the same gesture
                     as lowering, and Undo is right there if it was a slip. */}
-                <div className="flex items-center h-10 rounded-full border border-border bg-background shrink-0">
+                <div className="flex items-center h-11 rounded-full border border-border bg-background shrink-0">
                   <button
                     onClick={() => { haptic('tick'); if (item.quantity <= 1) removeWithUndo(item); else updateQuantity(item.id, item.quantity - 1); }}
                     aria-label={item.quantity <= 1 ? t('remove_item', { name }) : t('decrease_item', { name })}
-                    className="w-10 h-10 rounded-full flex items-center justify-center text-foreground tap-sm"
+                    className="w-11 h-11 rounded-full flex items-center justify-center text-foreground tap-sm"
                   >
                     {item.quantity <= 1 ? <Trash2 className="w-4 h-4 text-muted-foreground" aria-hidden /> : <Minus className="w-4 h-4" aria-hidden />}
                   </button>
@@ -536,7 +536,7 @@ const CartPage = () => {
                     onClick={() => { haptic('tick'); updateQuantity(item.id, item.quantity + 1); }}
                     disabled={item.quantity >= 10 || blocked}
                     aria-label={t('increase_item', { name })}
-                    className="w-10 h-10 rounded-full flex items-center justify-center text-primary tap-sm disabled:opacity-40"
+                    className="w-11 h-11 rounded-full flex items-center justify-center text-primary tap-sm disabled:opacity-40"
                   >
                     <Plus className="w-4 h-4" strokeWidth={2.5} aria-hidden />
                   </button>

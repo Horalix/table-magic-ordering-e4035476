@@ -264,9 +264,10 @@ const MenuItemDetail = ({ item, onClose, onAdded, canOrder = true, unavailableLa
             {(item.portion_note || item.prep_minutes) && (
               <p className="text-sm text-muted-foreground font-sans mt-2 flex items-center gap-1.5">
                 {item.prep_minutes ? <Clock className="w-3.5 h-3.5" aria-hidden /> : null}
-                {[item.portion_note, item.prep_minutes ? t('prep_about', { n: item.prep_minutes }) : null]
-                  .filter(Boolean)
-                  .join(' · ')}
+                {/* <bdi>: "220 g" stays "220 g" inside Arabic text, not "g 220". */}
+                {item.portion_note && <bdi>{item.portion_note}</bdi>}
+                {item.portion_note && item.prep_minutes ? ' · ' : null}
+                {item.prep_minutes ? t('prep_about', { n: item.prep_minutes }) : null}
               </p>
             )}
 
@@ -478,8 +479,8 @@ const MenuItemDetail = ({ item, onClose, onAdded, canOrder = true, unavailableLa
                   <span className="sr-only">{`${t('add_to_order')} · ${price(Math.round(unit * 100) * quantity / 100)}`}</span>
                   <span aria-hidden className="flex flex-wrap items-baseline justify-center gap-x-1.5 whitespace-normal leading-tight text-center">
                     <span>{t('add_to_order')}</span>
-                    <span>·</span>
-                    <span className="whitespace-nowrap">{price(Math.round(unit * 100) * quantity / 100)}</span>
+                    {/* The dot travels with the price, never left at the end of the first line. */}
+                    <span className="whitespace-nowrap">· {price(Math.round(unit * 100) * quantity / 100)}</span>
                   </span>
                 </>
               )}

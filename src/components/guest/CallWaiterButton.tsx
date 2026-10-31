@@ -50,7 +50,7 @@ const CallWaiterButton = ({ variant = 'default' }: Props) => {
       disabled={called || loading}
       aria-busy={loading}
       whileTap={{ scale: PRESS_SCALE }}
-      className={`flex items-center gap-2 px-4 py-2.5 rounded-full font-sans text-sm font-medium transition-all duration-300 ${
+      className={`flex shrink-0 items-center gap-2 px-4 min-h-[44px] whitespace-nowrap rounded-full font-sans text-sm font-medium transition-all duration-300 ${
         called
           ? isHero
             ? 'bg-white/20 text-white border border-white/30'
@@ -64,7 +64,7 @@ const CallWaiterButton = ({ variant = 'default' }: Props) => {
         {called ? (
           <motion.span key="check" initial={{ scale: 0 }} animate={{ scale: 1 }} className="flex items-center gap-2">
             <Check className="w-4 h-4" />
-            {t('waiter_notified')}
+            {t('waiter_on_way')}
           </motion.span>
         ) : (
           <motion.span key="call" initial={{ scale: 0 }} animate={{ scale: 1 }} className="flex items-center gap-2">

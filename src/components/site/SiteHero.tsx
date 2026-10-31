@@ -58,10 +58,11 @@ const SiteHero = ({ venue }: { venue: Venue }) => {
 
         {/* A cream veil where the words sit, so they stay legible over any
             crop of the photograph; the photo itself keeps its full colour.
-            On a tablet the words sit below the photo, which just fades out. */}
+            On a tablet the words sit below the photo, which just fades out.
+            On a narrow or short phone the words start higher, so the veil does too. */}
         <div
           aria-hidden
-          className="absolute inset-0 bg-gradient-to-t from-ls-cream from-[18%] via-ls-cream/80 via-[40%] to-transparent to-[62%] sm:from-ls-cream sm:from-0% sm:via-ls-cream/0 sm:via-[22%] sm:to-transparent sm:to-100% lg:bg-gradient-to-r lg:from-ls-cream/95 lg:from-[8%] lg:via-ls-cream/60 lg:via-[34%] lg:to-transparent lg:to-[58%] lg:rtl:bg-gradient-to-l"
+          className="absolute inset-0 bg-gradient-to-t from-ls-cream from-[18%] via-ls-cream/80 via-[40%] to-transparent to-[62%] max-[389px]:via-[50%] max-[389px]:to-[74%] [@media(max-height:700px)]:via-[52%] [@media(max-height:700px)]:to-[76%] sm:from-ls-cream sm:from-0% sm:via-ls-cream/0 sm:via-[22%] sm:to-transparent sm:to-100% lg:bg-gradient-to-r lg:from-ls-cream/95 lg:from-[8%] lg:via-ls-cream/60 lg:via-[34%] lg:to-transparent lg:to-[58%] lg:rtl:bg-gradient-to-l"
         />
       </div>
 
@@ -74,7 +75,7 @@ const SiteHero = ({ venue }: { venue: Venue }) => {
           <motion.h1
             id="hero-title"
             {...enter(0.12)}
-            className="mt-5 font-serif text-[2.6rem] font-medium leading-[1.04] tracking-[-0.015em] text-ls-forest text-balance sm:text-[3.4rem] lg:text-[clamp(3.5rem,5.4vw,5.25rem)] rtl:lg:text-[clamp(3.25rem,4.8vw,4.6rem)] rtl:font-semibold rtl:leading-[1.3] rtl:tracking-normal"
+            className="mt-5 font-serif text-[2.6rem] max-[389px]:text-[2.25rem] [@media(max-height:700px)]:text-[2.25rem] font-medium leading-[1.04] tracking-[-0.015em] text-ls-forest text-balance sm:text-[3.4rem] lg:text-[clamp(3.5rem,5.4vw,5.25rem)] rtl:lg:text-[clamp(3.25rem,4.8vw,4.6rem)] rtl:font-semibold rtl:leading-[1.3] rtl:tracking-normal"
           >
             {st('hero_title')}
           </motion.h1>

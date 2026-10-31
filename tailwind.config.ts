@@ -13,6 +13,13 @@ export default {
     "!./src/components/site/**", "!./src/pages/site/**",
   ],
   prefix: "",
+  /*
+   * hover: styles only where something can hover. On a phone a tapped
+   * outline button kept its hover fill, so in the cash confirm "Cancel" sat
+   * there solid ochre like the main action. Nothing here needs hover to work:
+   * the one hover-revealed control (the toast close) is also shown on focus.
+   */
+  future: { hoverOnlyWhenSupported: true },
   theme: {
     container: {
       center: true,

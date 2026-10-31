@@ -28,14 +28,12 @@ const ServerRatingStep = ({ waiterName, onSubmit, onSkip }: ServerRatingStepProp
 
   return (
     <div className="flex flex-col items-center gap-4 py-2">
-      <div className="text-center">
-        <p className="font-serif text-base text-foreground">{t('rate_your_server')}</p>
-        {waiterName && (
-          <p className="font-sans text-sm text-muted-foreground mt-1">
-            {t('served_by')} <span className="font-medium text-foreground">{waiterName}</span>
-          </p>
-        )}
-      </div>
+      {/* The question itself is the dialog's title (ReviewPrompt). */}
+      {waiterName && (
+        <p className="text-center font-sans text-sm text-muted-foreground">
+          {t('served_by')} <span className="font-medium text-foreground">{waiterName}</span>
+        </p>
+      )}
 
       <div className="flex justify-center gap-1.5">
         {[1, 2, 3, 4, 5].map((star) => (
@@ -48,7 +46,7 @@ const ServerRatingStep = ({ waiterName, onSubmit, onSkip }: ServerRatingStepProp
             onClick={() => setRating(star)}
             aria-label={t('rate_n_stars', { n: star })}
             aria-pressed={star <= rating}
-            className="p-1 min-w-[40px] min-h-[40px] flex items-center justify-center"
+            className="p-1 min-w-[44px] min-h-[44px] flex items-center justify-center"
           >
             <Star
               className={`w-8 h-8 transition-colors ${

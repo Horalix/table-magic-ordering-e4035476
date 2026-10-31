@@ -361,7 +361,7 @@ const AdminOrders = () => {
                       </span>
                     )}
                     {order.guest_name && (
-                      <span className="text-sm font-sans text-muted-foreground">- {order.guest_name}</span>
+                      <span className="text-sm font-sans text-muted-foreground">{order.guest_name}</span>
                     )}
                     {/* A held order is "pending" in the enum but has not
                         reached the kitchen; calling it New hid it in the list. */}

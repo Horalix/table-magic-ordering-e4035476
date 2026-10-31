@@ -106,7 +106,9 @@ const PrintQueue = () => {
                       {t.orders?.order_code && <span className="ml-1.5 text-xs tabular-nums text-muted-foreground">#{t.orders.order_code}</span>}
                       <span className="ml-1.5 text-[11px] uppercase px-1.5 py-0.5 rounded bg-muted text-muted-foreground">{t.ticket_type}</span>
                     </p>
-                    <p className={`text-xs font-sans truncate ${TONE[state.tone]}`}>
+                    {/* Wraps: cut to one line, the reason ("Printer offline (Bar
+                        printer)") was the part that did not fit. */}
+                    <p className={`text-xs font-sans break-words ${TONE[state.tone]}`}>
                       {state.label}{t.attempts > 1 ? ` · ${t.attempts} attempts` : ''}
                     </p>
                   </div>

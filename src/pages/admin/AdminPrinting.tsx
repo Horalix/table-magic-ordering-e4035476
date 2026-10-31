@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useOutletContext } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -13,6 +14,7 @@ import PrinterSetupGuide from '@/components/admin/PrinterSetupGuide';
 import CloudPrinters from '@/components/admin/CloudPrinters';
 import PrintQueue from '@/components/admin/PrintQueue';
 import TicketPreview from '@/components/admin/TicketPreview';
+import type { AdminOutletContext } from '@/components/admin/AdminLayout';
 
 interface PrintConfig {
   print_enabled: boolean;
@@ -24,9 +26,10 @@ interface PrintConfig {
   print_copies: number;
 }
 
+/** No header of its own: one restaurant's name must never default onto the other's tickets. */
 const DEFAULTS: PrintConfig = {
   print_enabled: true, print_auto: true, print_paper_width: 80,
-  print_header: 'La Soul', print_footer: 'Hvala / Thank you', print_show_prices: true, print_copies: 1,
+  print_header: '', print_footer: 'Hvala / Thank you', print_show_prices: true, print_copies: 1,
 };
 
 /**
@@ -90,6 +93,7 @@ const Segmented = ({ value, options, onChange, label }: {
 
 
 const AdminPrinting = () => {
+  const venueName = useOutletContext<AdminOutletContext | null>()?.venueName ?? null;
   const [cfg, setCfg] = useState<PrintConfig>(DEFAULTS);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -166,7 +170,9 @@ const AdminPrinting = () => {
       <CloudPrinters />
       <PrintQueue />
 
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,420px)] items-start">
+      {/* One column that may shrink: an auto track grew to the 80 mm preview
+          and pushed a 360px phone 4px sideways. */}
+      <div className="grid gap-4 grid-cols-[minmax(0,1fr)] lg:grid-cols-[minmax(0,1fr)_minmax(0,420px)] items-start">
         {loading ? (
           <Skeleton className="h-80 w-full rounded-xl" />
         ) : (
@@ -198,7 +204,7 @@ const AdminPrinting = () => {
               <CardContent className="p-4 sm:p-5 pt-0 space-y-3">
                 <div>
                   <Label htmlFor="print-header" className="text-xs text-muted-foreground">Top line</Label>
-                  <Input id="print-header" value={cfg.print_header} onChange={(e) => setCfg({ ...cfg, print_header: e.target.value })} className="mt-1 h-11" placeholder="La Soul" />
+                  <Input id="print-header" value={cfg.print_header} onChange={(e) => setCfg({ ...cfg, print_header: e.target.value })} className="mt-1 h-11" placeholder={venueName ?? undefined} />
                 </div>
                 <div>
                   <Label htmlFor="print-footer" className="text-xs text-muted-foreground">Bottom line</Label>

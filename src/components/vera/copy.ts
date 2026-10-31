@@ -125,6 +125,8 @@ export const SITE = {
     ar: 'الفرن الأبيض ذو القبة داخل قوس أسود خلف المنضدة، وفوقه مصابيح زجاجية',
   },
   menuTitle: { en: 'The menu', bs: 'Meni', ar: 'القائمة' },
+  /** The small label over it: Italian, like the others, except where Italian can't be read. */
+  menuCaps: { en: 'Il Menù', bs: 'Il Menù', ar: 'القائمة' },
   room: { en: 'Il locale', bs: 'Il locale', ar: 'المكان' },
   roomTitle: { en: 'The room', bs: 'Prostor', ar: 'القاعة' },
   roomBody: {

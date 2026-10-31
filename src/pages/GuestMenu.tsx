@@ -257,7 +257,7 @@ const GuestMenu = () => {
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: duration.base, ease: easeEnter }}
               onClick={onChangeTable}
-              className="px-4 min-h-[40px] rounded-full border border-white/25 bg-white/10 text-xs font-sans font-medium text-white tracking-wide rtl:tracking-normal hover:bg-white/20 transition-colors"
+              className="px-4 min-h-[44px] rounded-full border border-white/25 bg-white/10 text-xs font-sans font-medium text-white tracking-wide rtl:tracking-normal hover:bg-white/20 transition-colors"
               title={t('not_your_table')}
             >
               {t('table_n', { n: table })} · <span className="underline underline-offset-2">{t('change_table')}</span>

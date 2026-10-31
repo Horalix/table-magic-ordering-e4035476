@@ -513,7 +513,7 @@ const MenuItemDialog = ({ open, onOpenChange, subcategoryId, item, onSaved, star
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-lg max-h-[90dvh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="font-serif">{isEdit ? 'Edit item' : 'Add item'}</DialogTitle>
         </DialogHeader>
@@ -547,7 +547,7 @@ const MenuItemDialog = ({ open, onOpenChange, subcategoryId, item, onSaved, star
                     </Button>
                   )}
                 </div>
-                <Input placeholder="…or paste image URL" value={imageUrl} onChange={(e) => setImageUrl(e.target.value)} className="h-8 text-xs" />
+                <Input placeholder="…or paste image URL" value={imageUrl} onChange={(e) => setImageUrl(e.target.value)} className="h-10 text-base md:h-8 md:text-xs" />
               </div>
             </div>
           </div>
@@ -843,9 +843,11 @@ const MenuItemDialog = ({ open, onOpenChange, subcategoryId, item, onSaved, star
           </div>
         </div>
 
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-          <Button onClick={save} disabled={saving || uploading}>
+        {/* Pinned to the bottom of the dialog: on a phone Save was some
+            1,500px of scrolling below the price. */}
+        <DialogFooter className="sticky -bottom-6 -mx-6 -mb-6 px-6 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] bg-background border-t border-border flex-row gap-2">
+          <Button variant="outline" className="flex-1 sm:flex-none min-h-[44px]" onClick={() => onOpenChange(false)}>Cancel</Button>
+          <Button className="flex-1 sm:flex-none min-h-[44px]" onClick={save} disabled={saving || uploading}>
             {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : isEdit ? 'Save changes' : 'Add item'}
           </Button>
         </DialogFooter>

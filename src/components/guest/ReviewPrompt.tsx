@@ -74,13 +74,16 @@ const ReviewPrompt = ({ open, onClose, sessionId, sessionToken }: ReviewPromptPr
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
       <DialogContent className="sm:max-w-md rounded-2xl" closeLabel={t('close')}>
         <DialogHeader>
+          {/* Each step's own question: the waiter step asks about the waiter, not the visit again. */}
           <DialogTitle className="font-serif text-center text-xl">
-            {step === 'final' ? t('thank_you_feedback') : t('how_was_experience')}
+            {step === 'final' ? t('thank_you_feedback') : step === 'server' ? t('rate_your_server') : t('how_was_experience')}
           </DialogTitle>
-          <DialogDescription className="text-center font-sans">
-            {step !== 'final'
+          <DialogDescription className={`text-center font-sans ${step === 'server' ? 'sr-only' : ''}`}>
+            {step === 'overall'
               ? t('rate_your_visit')
-              : venue.reviewUrl ? t('help_discover_venue', { name: venue.name }) : <span className="sr-only">{t('thank_you_feedback')}</span>}
+              : step === 'server'
+                ? t('rate_your_server')
+                : venue.reviewUrl ? t('help_discover_venue', { name: venue.name }) : <span className="sr-only">{t('thank_you_feedback')}</span>}
           </DialogDescription>
         </DialogHeader>
 

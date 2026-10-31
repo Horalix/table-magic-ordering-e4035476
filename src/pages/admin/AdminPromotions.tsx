@@ -264,7 +264,7 @@ const AdminPromotions = () => {
               id="new-combo-section"
               value={newComboSection}
               onChange={(e) => setNewComboSection(e.target.value)}
-              className="h-10 rounded-md border border-input bg-background px-2 text-sm"
+              className="h-10 rounded-md border border-input bg-background px-2 text-base md:text-sm"
             >
               <option value="">choose a section…</option>
               {sections.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}

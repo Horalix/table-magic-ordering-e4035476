@@ -1,5 +1,5 @@
 import React, { useDeferredValue, useEffect, useMemo, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Search, X, Plus } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useT, useLanguageStore, getLocalizedName, getLocalizedDescription, useI18n } from '@/lib/i18n';
@@ -87,6 +87,16 @@ const MenuSearch = ({ canOrder, onOpenItem }: Props) => {
     return () => clearTimeout(timer);
   }, [trimmed, isFetching, isError, data.length]);
 
+  // A result's course in the guest's language: the category row both menu pages
+  // have already loaded, else the app's own word for it, else its name as it is.
+  const queryClient = useQueryClient();
+  const courseName = (name: string) => {
+    const row = queryClient.getQueryData<Parameters<typeof getLocalizedName>[0][]>(['categories'])?.find((c) => c.name === name);
+    if (row) return getLocalizedName(row, locale);
+    const translated = t(name.toLowerCase());
+    return translated === name.toLowerCase() ? name : translated;
+  };
+
   const grouped = useMemo(() => data, [data]);
   const comboMap = useComboMap();
   const active = trimmed.length >= 2;
@@ -101,7 +111,9 @@ const MenuSearch = ({ canOrder, onOpenItem }: Props) => {
           onChange={(e) => setQuery(e.target.value)}
           placeholder={t(placeholderKey)}
           aria-label={t('search')}
-          className="w-full h-12 rounded-2xl border border-border bg-card ps-11 pe-11 font-sans text-[15px] text-foreground placeholder:text-muted-foreground/70 outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+          // 16px: anything smaller and iOS zooms the page in on focus and leaves it zoomed.
+          // Our own × clears it, so not the browser's as well.
+          className="w-full h-12 rounded-2xl border border-border bg-card ps-11 pe-11 font-sans text-base text-foreground placeholder:text-muted-foreground/70 outline-none focus-visible:ring-2 focus-visible:ring-primary/40 [&::-webkit-search-cancel-button]:appearance-none"
         />
         {query && (
           <button
@@ -148,7 +160,7 @@ const MenuSearch = ({ canOrder, onOpenItem }: Props) => {
                     />
                     <div className="flex-1 min-w-0">
                       <p className="font-serif text-[15px] font-semibold text-foreground leading-tight truncate">{name}</p>
-                      <p className="text-xs text-muted-foreground font-sans">{t(item.category_name.toLowerCase()) || item.category_name}</p>
+                      <p className="text-xs text-muted-foreground font-sans">{courseName(item.category_name)}</p>
                       {description && (
                         <p className="text-xs text-muted-foreground font-sans truncate">{description}</p>
                       )}

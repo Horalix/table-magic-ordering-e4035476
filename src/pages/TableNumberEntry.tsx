@@ -152,7 +152,7 @@ const TableNumberEntry = () => {
           </Button>
         </form>
 
-        <button onClick={browse} className="mt-6 text-xs text-white/60 underline underline-offset-4 font-sans">
+        <button onClick={browse} className="mt-4 px-4 min-h-[44px] text-sm text-white/80 underline underline-offset-4 font-sans">
           {t('browse_menu')}
         </button>
       </motion.div>

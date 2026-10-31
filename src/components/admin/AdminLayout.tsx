@@ -54,6 +54,12 @@ const navGroups = [
   },
 ];
 
+/** What every admin page can read with useOutletContext(). */
+export interface AdminOutletContext {
+  /** The restaurant these pages are about; null while the account's roles load. */
+  venueName: string | null;
+}
+
 const AdminLayout = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -66,8 +72,9 @@ const AdminLayout = () => {
   const staffVenue = useStaffVenue(user?.id ?? null);
   const venueName = staffVenue?.venue.name ?? 'La Soul';
 
-  // English, left-to-right, whatever a guest last picked on this device.
-  useStaffDocument();
+  // English, left-to-right, whatever a guest last picked on this device; the
+  // tab named after the page and the restaurant.
+  useStaffDocument(`${currentLabel} · ${venueName} admin`);
   useLearningHeartbeat();
 
   useEffect(() => {
@@ -156,9 +163,11 @@ const AdminLayout = () => {
 
   return (
     <div className="min-h-screen bg-background flex">
-      {/* Sidebar */}
+      {/* Sidebar. On a phone it opens between the top bar and the tab bar
+          (56px + its 1px border + the home indicator): drawn over them, the
+          bar hid the restaurant's name and the tab bar hid Sign Out. */}
       <aside className={`
-        fixed lg:static inset-y-0 left-0 z-40 w-64 bg-sidebar border-r border-sidebar-border
+        fixed lg:static top-14 bottom-[calc(57px+env(safe-area-inset-bottom))] lg:inset-y-0 left-0 z-40 w-64 bg-sidebar border-r border-sidebar-border
         transform transition-transform duration-200
         ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
       `}>
@@ -262,7 +271,7 @@ const AdminLayout = () => {
           </div>
         </div>
         <div className="px-4 py-5 pb-24 sm:p-6 sm:pb-24 lg:p-8 max-w-7xl mx-auto w-full">
-          <Outlet />
+          <Outlet context={{ venueName: staffVenue?.venue.name ?? null } satisfies AdminOutletContext} />
         </div>
       </main>
       <AdminMobileTabs onMore={() => setSidebarOpen(true)} />

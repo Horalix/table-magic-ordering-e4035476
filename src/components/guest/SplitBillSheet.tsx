@@ -81,7 +81,7 @@ const SplitBillSheet = ({ open, total, orders, members, myName, billRequested, r
                 <button
                   key={m}
                   onClick={() => setMode(m)}
-                  className={`py-2 rounded-full text-sm font-sans font-medium transition-colors ${mode === m ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground'}`}
+                  className={`min-h-[44px] rounded-full text-sm font-sans font-medium transition-colors ${mode === m ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground'}`}
                 >
                   {m === 'even' ? t('split_evenly') : t('split_by_person')}
                 </button>
