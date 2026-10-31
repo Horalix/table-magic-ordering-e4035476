@@ -84,6 +84,41 @@ nothing a suggestion is measured against is shared either:
 So one restaurant's guests move nothing of the other's suggestions
 (`supabase/tests/suggestions-per-restaurant.test.ts`).
 
+**What Vera Italia's guests are suggested** (`20261031090000_vera_suggestions.sql`).
+Anything that is not the owner's own pairing must pass the "goes with" rules
+(`reco_fit`), which are La Soul's café rules: a drink with food, fries with a
+burger, a salad with pasta, coffee and dessert after the meal. Vera Italia has
+no drinks, desserts or coffee, so until this migration its guests were
+suggested nothing — not even after weeks of orders. Now:
+
+- **its house pairings**, written in `scripts/vera-italia/menu.json`
+  (`pairings`) and generated into the migration by fixed id
+  (`node scripts/vera-italia/pairings-sql.mjs`): pasta and risotto → the
+  grilled chicken, then a salad; a classic pizza → grilled vegetables, a
+  bruschetta or the feta dip; a white-cream pizza → a caprese, grilled
+  vegetables or a bruschetta; the rib-eye platter (fries, salad and bread
+  already on it) → a starter to share. Ordinary rules: the owner can switch
+  them off or change them in Admin → Service & suggestions;
+- **Italian section names are understood**: Insalate are salads, Antipasti
+  starters, Extras an extra — so "a salad with pasta" covers every pizza,
+  pasta, risotto and the steak too, and what Vera Italia's tables teach the
+  engine comes through;
+- **the chicken is not hidden by a guessed diet**: every pasta and risotto is
+  vegetarian, and one in the cart used to read as "this table is vegetarian".
+  An add-on the owner chose for the dish is now exempt; a guest who switched
+  the vegetarian filter on still never sees it.
+
+Nothing is offered while the table waits or after the meal — those moments
+offer drinks, coffee and dessert, which Vera Italia does not serve; once it
+adds them (with their meal role set), they work as at La Soul.
+
+Suggestion rules (`menu_item_recommendations`) carry their restaurant like
+every other restaurant-owned row: a rule is the restaurant of the dish it
+suggests, cannot mix the two, and staff read — admins change — only the rules
+of the restaurant they are looking at and work at. Guests are unaffected: the
+ranker reads the rules as their owner. `supabase/tests/vera-suggestions.test.ts`
+checks all of it, and that La Soul's suggestions are exactly what they were.
+
 ## What is per restaurant
 
 | | Was | Now |

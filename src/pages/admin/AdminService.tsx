@@ -6,7 +6,9 @@ import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import {
+  Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectSeparator, SelectTrigger, SelectValue,
+} from '@/components/ui/select';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
@@ -59,6 +61,8 @@ const hhmm = (t: string | null) => (t ? t.slice(0, 5) : '');
 interface Reco {
   id: string;
   source_item_id: string | null;
+  /** A section rule: any dish of this section on the table. */
+  source_subcategory_id: string | null;
   recommended_item_id: string;
   recommendation_type: string;
   priority: number;
@@ -88,31 +92,44 @@ const AdminService = () => {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [recos, setRecos] = useState<Reco[]>([]);
   const [items, setItems] = useState<MenuOption[]>([]);
+  const [sections, setSections] = useState<MenuOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   /** Turning ordering OFF stops every table ordering; it gets a confirmation. */
   const [confirmPause, setConfirmPause] = useState(false);
+  /** `source` is a dish id, or `section:<id>` for any dish of a section. */
   const [draft, setDraft] = useState({ source: '', target: '', type: 'pair_with', priority: 60 });
 
   const load = useCallback(async () => {
     setLoadError(null);
-    const [{ data: s, error: sErr }, { data: r, error: rErr }, { data: m, error: mErr }] = await Promise.all([
+    const [
+      { data: s, error: sErr }, { data: r, error: rErr }, { data: m, error: mErr }, { data: subs, error: subErr },
+    ] = await Promise.all([
       // One row: the access rules show this restaurant's settings only.
       supabase.from('restaurant_settings').select('*').maybeSingle(),
-      supabase.from('menu_item_recommendations').select('*').order('priority', { ascending: false }).limit(200),
+      supabase.from('menu_item_recommendations').select('*').order('priority', { ascending: false }).limit(500),
+      // The menu, sections and dishes, of the restaurant being shown.
       supabase.from('menu_items').select('id, name').order('name').limit(500),
+      supabase.from('subcategories').select('id, name').order('name').limit(200),
     ]);
     // A failed load used to leave the skeleton up forever, which on the page
     // holding the "stop orders" switch is the worst place to be stuck.
-    const error = sErr ?? rErr ?? mErr;
+    const error = sErr ?? rErr ?? mErr ?? subErr;
     if (error || !s) {
       setLoadError(error?.message ?? 'The service settings row is missing');
       setLoading(false);
       return;
     }
     setSettings(s as unknown as Settings);
-    setRecos((r ?? []) as unknown as Reco[]);
+    /*
+     * Only this restaurant's rules: those that suggest one of its dishes. The
+     * database keeps to one restaurant's rules too (20261031090000); a
+     * database from before that still holds both, and they must not mix here.
+     */
+    const ours = new Set((m ?? []).map((i) => i.id));
+    setRecos(((r ?? []) as unknown as Reco[]).filter((x) => ours.has(x.recommended_item_id)));
     setItems((m ?? []) as MenuOption[]);
+    setSections((subs ?? []) as MenuOption[]);
     setLoading(false);
   }, []);
 
@@ -159,6 +176,10 @@ const AdminService = () => {
   };
 
   const nameOf = (id: string | null) => (id ? items.find((i) => i.id === id)?.name ?? 'Unknown item' : 'Any order');
+  /** What a rule goes with: one dish, any dish of a section, or (after the meal) the whole order. */
+  const sourceOf = (r: Reco) => (!r.source_item_id && r.source_subcategory_id
+    ? `Anything from ${sections.find((s) => s.id === r.source_subcategory_id)?.name ?? 'a section'}`
+    : nameOf(r.source_item_id));
 
   const addReco = async () => {
     if (!draft.target) { toast.error('Choose the item to recommend'); return; }
@@ -166,8 +187,11 @@ const AdminService = () => {
       toast.error('Choose what it should be recommended with, or use "After the meal"');
       return;
     }
+    const section = draft.type !== 'after_meal' && draft.source.startsWith('section:')
+      ? draft.source.slice('section:'.length) : null;
     const { error } = await supabase.from('menu_item_recommendations').insert({
-      source_item_id: draft.type === 'after_meal' ? null : draft.source,
+      source_item_id: draft.type === 'after_meal' || section ? null : draft.source,
+      source_subcategory_id: section,
       recommended_item_id: draft.target,
       recommendation_type: draft.type,
       priority: draft.priority,
@@ -487,7 +511,19 @@ const AdminService = () => {
                 <Select value={draft.source} onValueChange={(v) => setDraft((d) => ({ ...d, source: v }))}>
                   <SelectTrigger className="mt-1"><SelectValue placeholder={draft.type === 'after_meal' ? 'Any order' : 'Choose an item'} /></SelectTrigger>
                   <SelectContent className="max-h-72">
-                    {items.map((i) => <SelectItem key={i.id} value={i.id}>{i.name}</SelectItem>)}
+                    {sections.length > 0 && (
+                      <>
+                        <SelectGroup>
+                          <SelectLabel>Any dish of a section</SelectLabel>
+                          {sections.map((s) => <SelectItem key={s.id} value={`section:${s.id}`}>Anything from {s.name}</SelectItem>)}
+                        </SelectGroup>
+                        <SelectSeparator />
+                      </>
+                    )}
+                    <SelectGroup>
+                      <SelectLabel>One dish</SelectLabel>
+                      {items.map((i) => <SelectItem key={i.id} value={i.id}>{i.name}</SelectItem>)}
+                    </SelectGroup>
                   </SelectContent>
                 </Select>
               </div>
@@ -526,7 +562,8 @@ const AdminService = () => {
 
           {recos.length === 0 ? (
             <p className="text-sm text-muted-foreground font-sans py-4 text-center">
-              No curated suggestions yet — guests are shown popular items instead.
+              No suggestions of your own yet. Guests are offered only what the built-in rules say goes
+              with their order (a drink with food, a salad with pasta) — and nothing when nothing does.
             </p>
           ) : (
             <ul className="divide-y divide-border">
@@ -534,7 +571,7 @@ const AdminService = () => {
                 <li key={r.id} className="flex items-center gap-3 py-3">
                   <div className="flex-1 min-w-0">
                     <p className="font-sans text-sm text-foreground">
-                      <span className="text-muted-foreground">{nameOf(r.source_item_id)}</span>
+                      <span className="text-muted-foreground">{sourceOf(r)}</span>
                       {' → '}
                       <strong>{nameOf(r.recommended_item_id)}</strong>
                     </p>

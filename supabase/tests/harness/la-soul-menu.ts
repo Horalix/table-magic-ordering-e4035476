@@ -25,9 +25,21 @@ const MENU = JSON.parse(readFileSync(path.join(__dirname, '..', 'fixtures', 'la-
 };
 
 export const MENU_TABLE = 'dddddddd-0000-0000-0000-0000000000bb';
+const VERA = 'a5000000-0000-4000-8000-000000000002';
 
 export async function laSoulDatabase(): Promise<Db> {
   const db = (await createTestDatabase({ quiet: true })) as unknown as Db;
+  /*
+   * La Soul as it was when its October files ran: before Vera Italia had a
+   * menu. Those files find sections and dishes by name, and the two menus
+   * share some ("Pasta", "Risotto", "Truffle Pasta"...); left in, Vera
+   * Italia's could be the ones they found.
+   */
+  await db.exec(`
+    DELETE FROM public.menu_items WHERE venue_id = '${VERA}';
+    DELETE FROM public.subcategories WHERE venue_id = '${VERA}';
+    DELETE FROM public.categories WHERE venue_id = '${VERA}';
+  `);
   await db.query(
     `INSERT INTO public.categories(id, name, sort_order)
      SELECT (c->>'id')::uuid, c->>'name', (c->>'sort_order')::int FROM jsonb_array_elements($1::jsonb) c`,
@@ -59,6 +71,9 @@ export async function laSoulDatabase(): Promise<Db> {
   await db.exec(migration('20261026110000_reco_adaptive.sql'));
   // ...and that restored its learner and readers from before suggestions were per restaurant.
   await db.exec(migration('20261030130000_suggestions_per_restaurant.sql'));
+  // Both also restored a ranker from before the two restaurants: this brings
+  // back the live one (with Vera Italia's changes, which move nothing here).
+  await db.exec(migration('20261031090000_vera_suggestions.sql'));
   await db.exec(`
     UPDATE public.restaurant_settings
        SET recommendations_enabled = true, reco_holdout_pct = 0, reco_exploration = 0

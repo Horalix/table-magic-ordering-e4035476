@@ -181,6 +181,8 @@ let db: Db;
 const ids = new Map<string, string>();
 const names = new Map<string, string>();
 const TABLE = 'dddddddd-0000-0000-0000-0000000000aa';
+const LA_SOUL = 'a5000000-0000-4000-8000-000000000001';
+const VERA = 'a5000000-0000-4000-8000-000000000002';
 
 const idOf = (name: string) => {
   const id = ids.get(name.toLowerCase());
@@ -229,6 +231,17 @@ const describeRow = (s: Scenario) => {
 
 beforeAll(async () => {
   db = (await createTestDatabase({ quiet: true })) as unknown as Db;
+  /*
+   * La Soul as it was when its October files ran: before Vera Italia had a
+   * menu. Those files find sections and dishes by name, and the two menus
+   * share some ("Pasta", "Risotto", "Truffle Pasta"...); left in, Vera
+   * Italia's could be the ones they found.
+   */
+  await db.exec(`
+    DELETE FROM public.menu_items WHERE venue_id = '${VERA}';
+    DELETE FROM public.subcategories WHERE venue_id = '${VERA}';
+    DELETE FROM public.categories WHERE venue_id = '${VERA}';
+  `);
   await db.query(
     `INSERT INTO public.categories(id, name, sort_order)
      SELECT (c->>'id')::uuid, c->>'name', (c->>'sort_order')::int FROM jsonb_array_elements($1::jsonb) c`,
@@ -263,6 +276,9 @@ beforeAll(async () => {
   await db.exec(migration('20261026110000_reco_adaptive.sql'));
   // ...and that restored its learner and readers from before suggestions were per restaurant.
   await db.exec(migration('20261030130000_suggestions_per_restaurant.sql'));
+  // Both also restored a ranker from before the two restaurants: this brings
+  // back the live one (with Vera Italia's changes, which move nothing here).
+  await db.exec(migration('20261031090000_vera_suggestions.sql'));
   await db.exec(`
     UPDATE public.restaurant_settings
        SET recommendations_enabled = true, reco_holdout_pct = 0, reco_exploration = 0
@@ -272,7 +288,8 @@ beforeAll(async () => {
   `);
   await actAs(db, null);
 
-  const { rows } = await db.query<{ id: string; name: string }>(`SELECT id, btrim(name) AS name FROM public.menu_items`);
+  const { rows } = await db.query<{ id: string; name: string }>(
+    `SELECT id, btrim(name) AS name FROM public.menu_items WHERE venue_id = '${LA_SOUL}'`);
   for (const r of rows) {
     ids.set(r.name.toLowerCase(), r.id);
     names.set(r.id, r.name);

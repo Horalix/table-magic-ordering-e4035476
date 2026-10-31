@@ -612,5 +612,127 @@
         }
       ]
     }
+  ],
+  "pairings": [
+    {
+      "id": "b7a1e000-0000-4000-8000-000000000001",
+      "with": "Pasta",
+      "suggest": "grilled-chicken",
+      "type": "add_on",
+      "priority": 95,
+      "why": "The menu offers grilled chicken on any pasta: the add-on a waiter would mention first."
+    },
+    {
+      "id": "b7a1e000-0000-4000-8000-000000000002",
+      "with": "Pasta",
+      "suggest": "grilled-vegetables",
+      "type": "pair_with",
+      "priority": 40,
+      "why": "A salad beside the pasta, after the chicken: low enough that the chicken still leads while the engine explores."
+    },
+    {
+      "id": "b7a1e000-0000-4000-8000-000000000003",
+      "with": "Pasta",
+      "suggest": "caprese",
+      "type": "pair_with",
+      "priority": 35,
+      "why": "A salad beside the pasta, after the chicken: low enough that the chicken still leads while the engine explores."
+    },
+    {
+      "id": "b7a1e000-0000-4000-8000-000000000004",
+      "with": "Risotto",
+      "suggest": "grilled-chicken",
+      "type": "add_on",
+      "priority": 95,
+      "why": "The menu offers grilled chicken on any risotto."
+    },
+    {
+      "id": "b7a1e000-0000-4000-8000-000000000005",
+      "with": "Risotto",
+      "suggest": "grilled-vegetables",
+      "type": "pair_with",
+      "priority": 40,
+      "why": "A salad beside the risotto, after the chicken: low enough that the chicken still leads while the engine explores."
+    },
+    {
+      "id": "b7a1e000-0000-4000-8000-000000000006",
+      "with": "Risotto",
+      "suggest": "caprese",
+      "type": "pair_with",
+      "priority": 35,
+      "why": "A salad beside the risotto, after the chicken: low enough that the chicken still leads while the engine explores."
+    },
+    {
+      "id": "b7a1e000-0000-4000-8000-000000000007",
+      "with": "Classiche",
+      "suggest": "grilled-vegetables",
+      "type": "pair_with",
+      "priority": 75,
+      "why": "The classics already carry tomato and mozzarella: grilled vegetables rather than a caprese."
+    },
+    {
+      "id": "b7a1e000-0000-4000-8000-000000000008",
+      "with": "Classiche",
+      "suggest": "bruschetta",
+      "type": "pair_with",
+      "priority": 65,
+      "why": "A starter to share before the pizza."
+    },
+    {
+      "id": "b7a1e000-0000-4000-8000-000000000009",
+      "with": "Classiche",
+      "suggest": "feta-dip",
+      "type": "pair_with",
+      "priority": 55,
+      "why": "A starter to share before the pizza."
+    },
+    {
+      "id": "b7a1e000-0000-4000-8000-000000000010",
+      "with": "Speciali",
+      "suggest": "caprese",
+      "type": "pair_with",
+      "priority": 75,
+      "why": "Fresh tomato and mozzarella beside a white-cream pizza."
+    },
+    {
+      "id": "b7a1e000-0000-4000-8000-000000000011",
+      "with": "Speciali",
+      "suggest": "grilled-vegetables",
+      "type": "pair_with",
+      "priority": 65,
+      "why": "A salad beside the pizza."
+    },
+    {
+      "id": "b7a1e000-0000-4000-8000-000000000012",
+      "with": "Speciali",
+      "suggest": "bruschetta",
+      "type": "pair_with",
+      "priority": 60,
+      "why": "A starter to share before the pizza."
+    },
+    {
+      "id": "b7a1e000-0000-4000-8000-000000000013",
+      "with": "Bistecca",
+      "suggest": "feta-dip",
+      "type": "pair_with",
+      "priority": 75,
+      "why": "The platter already has fries, a walnut salad and baguette: a starter to share."
+    },
+    {
+      "id": "b7a1e000-0000-4000-8000-000000000014",
+      "with": "Bistecca",
+      "suggest": "bruschetta",
+      "type": "pair_with",
+      "priority": 70,
+      "why": "A starter to share before the steak."
+    },
+    {
+      "id": "b7a1e000-0000-4000-8000-000000000015",
+      "with": "Bistecca",
+      "suggest": "caprese",
+      "type": "pair_with",
+      "priority": 55,
+      "why": "A lighter starter before the steak."
+    }
   ]
 }
