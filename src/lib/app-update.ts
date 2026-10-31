@@ -32,9 +32,12 @@ const STAFF_PATH = /^\/(admin|kitchen|waiter)(\/|$)/;
 const FRESH_START_MS = 15_000;
 
 let updateSW: ((reloadPage?: boolean) => Promise<void>) | null = null;
+let checkForUpdate: () => void = () => {};
 let waiting = false;
 let started = false;
 let touchedSinceLoad = false;
+/** A "not found" page is on screen. */
+let missingPage = false;
 
 /** Register the service worker and start looking for new versions. Once per page. */
 export function startAppUpdates(): void {
@@ -45,27 +48,54 @@ export function startAppUpdates(): void {
   window.addEventListener('keydown', touched, { once: true });
   updateSW = registerSW({
     immediate: true,
-    onNeedRefresh() {
-      waiting = true;
-      // Still opening and untouched: nothing to lose, so take it now.
-      if (performance.now() < FRESH_START_MS && !touchedSinceLoad
-        && !window.location.pathname.startsWith('/cart') && !busy()) {
-        applyWaitingUpdate();
-      }
-    },
+    onNeedRefresh: newVersionReady,
     onRegisteredSW(_url, registration) {
       if (!registration) return;
-      const check = () => { if (navigator.onLine) void registration.update().catch(() => { /* next time */ }); };
-      setInterval(check, CHECK_EVERY_MS);
-      document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') check(); });
+      // The browser looks for a new version as the page loads, and is often
+      // downloading it before the page has registered. workbox-window only
+      // announces a download that starts after that, so this one waited for
+      // the next visit: the phone showed the old version once more.
+      const next = registration.installing ?? registration.waiting;
+      if (next && navigator.serviceWorker.controller) {
+        if (next.state === 'installed') newVersionReady();
+        else next.addEventListener('statechange', () => { if (next.state === 'installed') newVersionReady(); });
+      }
+      checkForUpdate = () => { if (navigator.onLine) void registration.update().catch(() => { /* next time */ }); };
+      setInterval(checkForUpdate, CHECK_EVERY_MS);
+      document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') checkForUpdate(); });
     },
   });
+}
+
+/** A new version is downloaded and waiting. */
+function newVersionReady(): void {
+  waiting = true;
+  // On "not found", or still opening and untouched: nothing to lose, so take it now.
+  const opening = performance.now() < FRESH_START_MS && !touchedSinceLoad;
+  if ((missingPage || opening) && !window.location.pathname.startsWith('/cart') && !busy()) {
+    applyWaitingUpdate();
+  }
+}
+
+/**
+ * A "not found" page may be one a newer version has. A phone still on the
+ * version from before Vera Italia opened answered its menu, and every dish
+ * link from Google, "not found" — and "back to the menu" led to the same
+ * page. Look for a new version now and take it the moment it is in. Returns
+ * the cleanup for when the page goes.
+ */
+export function lookForMissingPage(): () => void {
+  missingPage = true;
+  if (!applyWaitingUpdate()) checkForUpdate();
+  return () => { missingPage = false; };
 }
 
 /** Take the waiting version now: the new worker takes over and the page reloads. */
 export function applyWaitingUpdate(): boolean {
   if (!waiting || !updateSW) return false;
   waiting = false;
+  // workbox-window reloads only for a version it announced itself.
+  navigator.serviceWorker.addEventListener('controllerchange', () => window.location.reload(), { once: true });
   void updateSW(true);
   return true;
 }
