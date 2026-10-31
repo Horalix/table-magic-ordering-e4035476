@@ -2,39 +2,57 @@
 
 Copy everything between the rules into Lovable. Nothing else needs to be said.
 
-## Next: Vera Italia's suggestions, and its tickets headed with its own name
+## Next: Vera Italia's suggestions, separation of the two restaurants, the owner's view
 
-Send this once `main` has the runner for these two migrations (merged from
-`feature/phone-polish`). Nothing of La Soul's changes: its dishes, suggestions
-and tickets stay exactly as they are.
+Send this once `main` has the runner for these five migrations (merged from
+`feature/phone-polish`): Vera Italia's suggestions and print header, the
+admin and service separation of the two restaurants, and the owner's
+overview. Publish the app in the same session: the redeployed functions
+expect the new app (an old open admin page sends no restaurant and is
+refused until it reloads). Nothing of La Soul's menu, suggestions or tickets
+changes.
 
 ---
 
-> **Task: apply two migrations with `docs/migration-runner.sql`. Do not
-> retype the migration files and do not write any other SQL.**
+> **Task: apply five migrations with `docs/migration-runner.sql`, deploy five
+> Edge Functions, and set one Auth setting. Do not retype the migration files
+> and do not write any other SQL.**
 >
 > Make sure your checkout is the latest `main`.
 >
 > 1. Run `docs/migration-runner.sql` step by step, each step as its own query:
->    Step 0 (pg_net installed), Step 1 (queue the downloads, expect 2 rows),
->    Step 2 (expect 2 rows, all `arrived_exactly = true`), then Step 3 — its
->    two blocks one at a time, in order (1 of 2, 2 of 2). If anything fails,
->    stop and report the exact error; a failed block changes nothing.
-> 2. Check, and paste the raw output of each:
+>    Step 0 (pg_net installed), Step 1 (queue the downloads, expect 5 rows),
+>    Step 2 (expect 5 rows, all `arrived_exactly = true`), then Step 3 — its
+>    five blocks one at a time, in order (1 of 5 … 5 of 5). If anything fails,
+>    stop and report the exact error; a failed block changes nothing. If
+>    block 3 prints the notice `menu-images policies NOT changed`, run that
+>    file's section 2 again as the storage owner and say so.
+> 2. Deploy these Edge Functions from `supabase/functions/` with the settings
+>    in `supabase/config.toml`: `create-waiter`, `delete-waiter`,
+>    `translate-menu`, `migrate-images`, and the new `manage-admins`. Paste the
+>    deploy result.
+> 3. In Authentication settings, set the minimum password length to 10.
+>    Leave public sign-ups off.
+> 4. Check, and paste the raw output of each:
 >    ```sql
 >    SELECT count(*) AS rules, count(DISTINCT source_subcategory_id) AS sections
 >      FROM public.menu_item_recommendations WHERE venue_id = 'a5000000-0000-4000-8000-000000000002';
 >    SELECT venue_id, count(*) FROM public.menu_item_recommendations GROUP BY 1;
->    SELECT count(*) FROM public.menu_item_recommendations r
->      JOIN public.menu_items mi ON mi.id = r.recommended_item_id WHERE r.venue_id IS DISTINCT FROM mi.venue_id;
->    SELECT count(*) FROM public.menu_items mi JOIN public.subcategories s ON s.id = mi.subcategory_id
->     WHERE mi.venue_id = 'a5000000-0000-4000-8000-000000000001' AND s.name ~* '(antipast|insalat|^extras$|^dodaci$)';
->    SELECT policyname FROM pg_policies WHERE tablename = 'menu_item_recommendations' ORDER BY 1;
 >    SELECT venue_id, print_header FROM public.restaurant_settings ORDER BY venue_id;
+>    SELECT proname FROM pg_proc WHERE pronamespace = 'public'::regnamespace
+>       AND prosrc ~* 'has_role\s*\(\s*auth\.uid\(\)\s*,\s*''admin''';
+>    SELECT qual FROM pg_policies WHERE tablename = 'user_roles' AND policyname = 'Admins can manage roles';
+>    SELECT count(*) FROM public.session_experiment_assignment a
+>      JOIN public.table_sessions s ON s.id = a.session_id
+>      JOIN public.experiments e ON e.id = a.experiment_id WHERE e.venue_id <> s.venue_id;
+>    SELECT to_regprocedure('public.owner_overview(date)') IS NOT NULL AS overview,
+>           to_regprocedure('public.menu_venue()') IS NOT NULL AS menu_venue,
+>           to_regprocedure('public.guest_order_eta(uuid)') IS NULL AS old_eta_gone;
 >    ```
->    Expected: 15 rules over 5 sections for Vera Italia (`…0002`); La Soul's
->    (`…0001`) rule count the same as before; `0`; `0`; the rules' policies;
->    La Soul's header unchanged and Vera Italia's `Vera Italia`.
+>    Expected: 15 rules over 5 sections for Vera Italia (`…0002`), La Soul's
+>    (`…0001`) count the same as before; La Soul's header unchanged and Vera
+>    Italia's `Vera Italia`; only `is_staff_member`; a rule containing
+>    `role <> 'admin'`; `0`; `true`, `true`, `true`.
 >
 > Do not create or change any user account, password or credential, and do
 > not enable online card payments.
