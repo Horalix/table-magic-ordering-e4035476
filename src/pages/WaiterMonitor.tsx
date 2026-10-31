@@ -18,6 +18,7 @@ import {
   playOrderAlert, playWaiterCallAlert, playBillRequestAlert, useAudioUnlock, useReminderChime,
 } from '@/lib/kitchen-sounds';
 import { useStaffDocument } from '@/components/staff/useStaffDocument';
+import { useStaffVenue } from '@/hooks/useStaffVenue';
 import { useWakeLock } from '@/lib/wake-lock';
 import { isHeld, isInKitchen, kitchenStart } from '@/components/staff/order-status';
 import HeldOrdersCard from '@/components/staff/HeldOrdersCard';
@@ -64,7 +65,6 @@ const LAST_WAITER_KEY = 'monitor:lastWaiterId';
 const IDLE_MS = 5 * 60 * 1000;
 
 const WaiterMonitor = () => {
-  useStaffDocument();
   // A wall or counter screen that dims is a floor nobody is watching.
   useWakeLock(true);
   const [tables, setTables] = useState<TableRow[]>([]);
@@ -89,6 +89,9 @@ const WaiterMonitor = () => {
   const [mode, setMode] = useState<'rail' | 'mine' | 'all'>('rail');
   const [openTableId, setOpenTableId] = useState<string | null>(null);
   const [meId, setMeId] = useState<string | null>(null);
+  /** Which restaurant's floor this is — the heading said La Soul at both. */
+  const venueName = useStaffVenue(meId)?.venue.name ?? null;
+  useStaffDocument(venueName ? `Floor · ${venueName}` : 'Floor');
   const [activeWaiterId, setActiveWaiterId] = useState<string | null>(null);
 
   const [pinTarget, setPinTarget] = useState<Waiter | null>(null);
@@ -409,7 +412,7 @@ const WaiterMonitor = () => {
             )}
             <div className="min-w-0">
               <h1 className="font-serif text-xl sm:text-2xl font-semibold leading-tight truncate">
-                {mode === 'mine' && activeWaiter ? `${activeWaiter.display_name}'s floor` : mode === 'all' ? 'All tables' : 'La Soul · Floor'}
+                {mode === 'mine' && activeWaiter ? `${activeWaiter.display_name}'s floor` : mode === 'all' ? 'All tables' : venueName ? `${venueName} · Floor` : 'Floor'}
               </h1>
               {/* Restaurant time, 24-hour, and a date a Sarajevo team reads at
                   a glance — not "01:58 AM | 10/25/2026". */}
@@ -432,8 +435,9 @@ const WaiterMonitor = () => {
           </div>
         </div>
         {/* One row of status, scrolling sideways on a narrow phone rather than
-            wrapping the header to three lines. */}
-        <div className="px-4 sm:px-6 pb-3 flex items-center gap-2 overflow-x-auto scrollbar-hide">
+            wrapping the header to three lines. The faded right edge says
+            there is more; a chip simply cut in half did not. */}
+        <div className="px-4 sm:px-6 pb-3 pe-10 sm:pe-6 flex items-center gap-2 overflow-x-auto scrollbar-hide [mask-image:linear-gradient(to_right,#000_calc(100%-2.5rem),transparent)] sm:[mask-image:none]">
           <ConnectionPill state={connection} className="shrink-0" />
           {/* Never an unmuted speaker over a context the browser has suspended. */}
           {soundOn && !audioUnlocked && (

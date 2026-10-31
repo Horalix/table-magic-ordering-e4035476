@@ -39,6 +39,7 @@ import FreeTableDialog from '@/components/staff/FreeTableDialog';
 import HeldOrdersCard from '@/components/staff/HeldOrdersCard';
 import { useStaffDocument } from '@/components/staff/useStaffDocument';
 import { useLearningHeartbeat } from '@/hooks/useLearningHeartbeat';
+import { useStaffVenue } from '@/hooks/useStaffVenue';
 import {
   useCoalesced, useLatestRequest, useStaffRealtime, useStaffRealtimeEvent, useStaffRefresh,
 } from '@/lib/realtime';
@@ -61,9 +62,10 @@ interface PrintConfig {
   print_show_prices: boolean;
   print_copies: number;
 }
+/** Until this restaurant's settings row loads; the header is then its name (see printTicket). */
 const DEFAULT_PRINT: PrintConfig = {
   print_enabled: true, print_auto: true, print_paper_width: 80,
-  print_header: 'La Soul', print_footer: '', print_show_prices: true, print_copies: 1,
+  print_header: '', print_footer: '', print_show_prices: true, print_copies: 1,
 };
 const toPrintSettings = (c: PrintConfig): KitchenPrintSettings => ({
   paperWidth: c.print_paper_width, header: c.print_header, footer: c.print_footer,
@@ -215,7 +217,10 @@ const UndoLastChip = ({ bump, windowSeconds, onUndo }: { bump: LastBump; windowS
 };
 
 const KitchenDisplay = () => {
-  useStaffDocument();
+  /** The signed-in account, for which restaurant this board is. */
+  const [userId, setUserId] = useState<string | null>(null);
+  const venueName = useStaffVenue(userId)?.venue.name ?? null;
+  useStaffDocument(venueName ? `Kitchen · ${venueName}` : 'Kitchen');
   useLearningHeartbeat();
   const [orders, setOrders] = useState<KitchenOrder[]>([]);
   /** Latest board, for callbacks that must not be re-created on every refetch. */
@@ -377,6 +382,7 @@ const KitchenDisplay = () => {
     void (async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
+      if (!cancelled) setUserId(session.user.id);
       const { data: admin } = await supabase.rpc('has_role', { _user_id: session.user.id, _role: 'admin' });
       if (!cancelled) setIsAdmin(admin === true);
     })();
@@ -421,7 +427,12 @@ const KitchenDisplay = () => {
     type: TicketType,
     reprintOf: string | null = null,
   ) => {
-    const settings = { ...toPrintSettings(printConfig), station: type, reprintOf };
+    const settings = {
+      ...toPrintSettings(printConfig),
+      // No settings row yet: head it with this restaurant's name, never another's.
+      ...(printConfig === DEFAULT_PRINT ? { header: venueName ?? '' } : {}),
+      station: type, reprintOf,
+    };
     // An order with nothing for this station has no ticket. Printing a blank
     // one teaches staff to ignore that printer.
     if (!ticketHasLines(order, type)) return;
@@ -456,7 +467,7 @@ const KitchenDisplay = () => {
         if (!outcome.ok) toast.error(`Table ${order.table_number}: ${outcome.reason}`);
       },
     });
-  }, [printConfig]);
+  }, [printConfig, venueName]);
 
   /**
    * Auto-print what the database has queued for this device's stations.
@@ -1220,6 +1231,15 @@ const KitchenDisplay = () => {
   const myPrinters = cloudPrinters.filter((p) => p.enabled
     && (station === 'all' || p.station === 'all' || p.station === station));
 
+  /** The sticky header, so a jump lands a column's heading just below it. */
+  const headerRef = useRef<HTMLDivElement>(null);
+  const jumpToColumn = (key: string) => {
+    const column = document.getElementById(`kds-column-${key}`);
+    if (!column) return;
+    const top = column.getBoundingClientRect().top + window.scrollY - (headerRef.current?.offsetHeight ?? 0) - 8;
+    window.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
+  };
+
   const renderCard = (order: KitchenOrder, showStatus: boolean) => (
     <KitchenOrderCard
       key={order.id}
@@ -1244,11 +1264,14 @@ const KitchenDisplay = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      <div className="sticky top-0 z-30 glass border-b border-border">
+      <div ref={headerRef} className="sticky top-0 z-30 glass border-b border-border">
         {/*
           `flex-1 min-w-0` lets the left block own the remaining width, so a
           status chip appearing or vanishing inside it cannot slide the control
-          cluster sideways mid-tap.
+          cluster sideways mid-tap. `basis-80` keeps it at least that wide: with
+          a zero basis a 1024px tablet put the whole cluster beside it and
+          squeezed the title and chips into a 170px column, under the buttons.
+          Short of room, the cluster now takes its own row instead.
 
           It is the belt to the braces: the actual cure for the swallowed first
           tap is unlocking audio on `click` rather than `pointerdown` (see the
@@ -1259,12 +1282,16 @@ const KitchenDisplay = () => {
           Note what is NOT here: `shrink-0` on the cluster. It looked like the
           symmetric fix and it broke the board on a phone — the cluster stopped
           shrinking, overflowed the viewport, and its own container then
-          intercepted every tap aimed at the buttons inside it.
+          intercepted every tap aimed at the buttons inside it. On a phone the
+          cluster is one row that scrolls sideways inside itself instead of
+          three rows of header over the board — its items keep their size
+          (`shrink-0` on them, not on it) or the pill groups collapse.
         */}
-        <div className="flex items-center justify-between px-6 py-4 gap-4 flex-wrap">
-          <div className="flex-1 min-w-0">
+        <div className="flex items-center justify-between px-4 py-3 sm:px-6 sm:py-4 gap-x-4 gap-y-2 flex-wrap">
+          <div className="flex-1 basis-80 min-w-0">
             <h1 className="font-serif text-2xl font-bold text-foreground">
               {station === 'bar' ? 'Bar Display' : station === 'kitchen' ? 'Kitchen Display' : 'Kitchen & Bar'}
+              {venueName && <span className="ml-2 align-middle text-sm font-sans font-medium text-muted-foreground">{venueName}</span>}
             </h1>
             <div className="flex items-center gap-2 flex-wrap">
               <p className="text-sm text-muted-foreground font-sans">{visible.length} orders</p>
@@ -1344,9 +1371,11 @@ const KitchenDisplay = () => {
               {/* Never show an unmuted speaker over a context the browser has
                   suspended — the kitchen would stop watching and start listening. */}
               {soundEnabled && !audioUnlocked && (
+                // Chip-sized to sit in the status line, thumb-sized to tap: the
+                // invisible ::before takes the hit area to 44px tall.
                 <button
                   onClick={testSound}
-                  className="inline-flex items-center gap-1 text-[11px] font-sans font-medium px-2 py-0.5 rounded-full bg-destructive/10 text-destructive hover:bg-destructive/20 transition-colors"
+                  className="relative inline-flex items-center gap-1 text-[11px] font-sans font-medium px-2 py-0.5 rounded-full bg-destructive/10 text-destructive hover:bg-destructive/20 transition-colors before:absolute before:inset-x-0 before:-inset-y-3 before:content-['']"
                 >
                   <VolumeX className="w-3 h-3" /> Sound blocked — tap to enable
                 </button>
@@ -1372,7 +1401,7 @@ const KitchenDisplay = () => {
             </div>
           </div>
 
-          <div className="flex gap-2 flex-wrap items-center">
+          <div className="flex gap-2 items-center w-full md:w-auto whitespace-nowrap overflow-x-auto scrollbar-hide md:flex-wrap md:overflow-visible [&>*]:shrink-0">
             {/* Station first: it changes what this whole screen means. */}
             <div className="inline-flex rounded-full border border-border overflow-hidden" role="group" aria-label="Station">
               {STATIONS.map((s) => (
@@ -1380,7 +1409,7 @@ const KitchenDisplay = () => {
                   key={s.key}
                   onClick={() => { setStation(s.key); localStorage.setItem('kitchen:station', s.key); }}
                   aria-pressed={station === s.key}
-                  className={`px-3 min-h-[44px] text-sm font-sans transition-colors ${
+                  className={`px-3 min-h-[44px] min-w-[44px] text-sm font-sans transition-colors ${
                     station === s.key ? 'bg-foreground text-background' : 'bg-card text-muted-foreground hover:text-foreground'
                   }`}
                 >
@@ -1389,26 +1418,47 @@ const KitchenDisplay = () => {
               ))}
             </div>
 
+            {/* Second, so it is on screen on a phone, where this row scrolls. */}
+            <div className="inline-flex rounded-full border border-border overflow-hidden" role="group" aria-label="View">
+              {([
+                { key: 'active', label: 'Board' },
+                { key: 'allday', label: 'All day' },
+                { key: 'history', label: 'History' },
+              ] as const).map((v) => (
+                <button
+                  key={v.key}
+                  onClick={() => setView(v.key)}
+                  aria-pressed={view === v.key}
+                  className={`px-3 min-h-[44px] text-sm font-sans transition-colors ${
+                    view === v.key ? 'bg-foreground text-background' : 'bg-card text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  {v.key === 'allday' ? <span className="inline-flex items-center gap-1"><LayoutList className="w-3.5 h-3.5" />{v.label}</span> : v.label}
+                </button>
+              ))}
+            </div>
+
             {sections.length > 0 && (
               <select
                 value={sectionFilter}
                 onChange={(e) => { setSectionFilter(e.target.value); localStorage.setItem('kitchen:section', e.target.value); }}
-                className="rounded-full border border-border bg-card px-3 text-sm font-sans min-h-[44px]"
+                className="rounded-full border border-border bg-card px-3 text-base md:text-sm font-sans min-h-[44px]"
                 aria-label="Filter by section"
               >
                 <option value="all">All sections</option>
                 {sections.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
               </select>
             )}
+            {/* Worded, not a bare printer icon: it makes THIS device print every ticket. */}
             <Button
               variant={isPrinter ? 'default' : 'ghost'}
-              size="icon"
+              size="sm"
               onClick={() => { const next = !isPrinter; setIsPrinter(next); localStorage.setItem('kitchen:isPrinter', String(next)); toast.success(next ? 'This device will auto-print new orders' : 'Auto-print off for this device'); }}
-              className="rounded-full min-h-[44px] min-w-[44px]"
+              className="rounded-full min-h-[44px] min-w-[44px] gap-1.5 text-xs font-sans"
               aria-label="Use this device as the ticket printer"
               title="Auto-print new orders from this device"
             >
-              <Printer className="w-5 h-5" />
+              <Printer className="w-5 h-5" /> Print here
             </Button>
             {isAdmin && (
               <Button asChild variant="ghost" size="icon" className="rounded-full min-h-[44px] min-w-[44px]" title="Printing settings">
@@ -1457,27 +1507,39 @@ const KitchenDisplay = () => {
             >
               <Keyboard className="w-5 h-5" />
             </Button>
-
-            <div className="inline-flex rounded-full border border-border overflow-hidden" role="group" aria-label="View">
-              {([
-                { key: 'active', label: 'Board' },
-                { key: 'allday', label: 'All day' },
-                { key: 'history', label: 'History' },
-              ] as const).map((v) => (
-                <button
-                  key={v.key}
-                  onClick={() => setView(v.key)}
-                  aria-pressed={view === v.key}
-                  className={`px-3 min-h-[44px] text-sm font-sans transition-colors ${
-                    view === v.key ? 'bg-foreground text-background' : 'bg-card text-muted-foreground hover:text-foreground'
-                  }`}
-                >
-                  {v.key === 'allday' ? <span className="inline-flex items-center gap-1"><LayoutList className="w-3.5 h-3.5" />{v.label}</span> : v.label}
-                </button>
-              ))}
-            </div>
           </div>
         </div>
+
+        {/* A new order is impossible to miss: a banner that flashes, a chime
+            that repeats until someone says "got it" or starts cooking. Inside
+            the sticky header, so a cook scrolled down the board sees it too —
+            below it, it scrolled away with the page. */}
+        <AnimatePresence>
+          {fresh.length > 0 && view === 'active' && (
+            <motion.div
+              initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
+              role="alert"
+              aria-live="assertive"
+              className="mx-4 sm:mx-6 mb-3 rounded-xl bg-primary text-primary-foreground px-4 py-3 flex items-center gap-3 shadow-lux-lg kds-flash"
+            >
+              <BellRing className="w-7 h-7 shrink-0" aria-hidden />
+              <div className="min-w-0 flex-1">
+                <p className="font-sans font-bold text-lg leading-tight">
+                  {fresh.length === 1 ? 'New order' : `${fresh.length} new orders`}
+                </p>
+                <p className="text-sm font-sans opacity-90 truncate">
+                  {fresh.map((f) => `Table ${f.table}${f.code ? ` #${f.code}` : ''}`).join(' · ')}
+                </p>
+              </div>
+              <Button
+                onClick={() => setFresh([])}
+                className="min-h-[52px] px-6 rounded-xl bg-primary-foreground text-primary hover:bg-primary-foreground/90 font-sans font-bold text-base"
+              >
+                Got it
+              </Button>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
 
       {/* The connection, said in a sentence when it matters. Orders are safe
@@ -1492,35 +1554,6 @@ const KitchenDisplay = () => {
           </p>
         </div>
       )}
-
-      {/* A new order is impossible to miss: a banner that flashes, a chime
-          that repeats until someone says "got it" or starts cooking. */}
-      <AnimatePresence>
-        {fresh.length > 0 && view === 'active' && (
-          <motion.div
-            initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
-            role="alert"
-            aria-live="assertive"
-            className="mx-4 sm:mx-6 mt-3 rounded-xl bg-primary text-primary-foreground px-4 py-3 flex items-center gap-3 shadow-lux-lg kds-flash"
-          >
-            <BellRing className="w-7 h-7 shrink-0" aria-hidden />
-            <div className="min-w-0 flex-1">
-              <p className="font-sans font-bold text-lg leading-tight">
-                {fresh.length === 1 ? 'New order' : `${fresh.length} new orders`}
-              </p>
-              <p className="text-sm font-sans opacity-90 truncate">
-                {fresh.map((f) => `Table ${f.table}${f.code ? ` #${f.code}` : ''}`).join(' · ')}
-              </p>
-            </div>
-            <Button
-              onClick={() => setFresh([])}
-              className="min-h-[52px] px-6 rounded-xl bg-primary-foreground text-primary hover:bg-primary-foreground/90 font-sans font-bold text-base"
-            >
-              Got it
-            </Button>
-          </motion.div>
-        )}
-      </AnimatePresence>
 
       {/* Above the calls: a held order is a guest waiting for food nobody is making. */}
       <HeldOrdersCard soundEnabled={soundEnabled} className="mx-4 sm:mx-6 mt-3" onChanged={refetchOrders} />
@@ -1600,12 +1633,17 @@ const KitchenDisplay = () => {
         </div>
       )}
 
+      {/* Ready is food waiting at the pass, and it used to come after every new
+          ticket. A portrait tablet stacks it under Preparing, beside New (the
+          1fr row takes New's extra height, so Ready starts right after
+          Preparing); a phone stacks all three and gets a bar that jumps to
+          each, with its count. */}
       {view === 'active' && visible.length > 0 && (
-        <div className="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 items-start">
+        <div className="p-4 pb-24 md:pb-4 grid grid-cols-1 md:grid-cols-2 md:grid-rows-[auto_1fr] lg:grid-cols-3 lg:grid-rows-none gap-4 items-start">
           {KANBAN.map((col) => {
             const colOrders = visible.filter((o) => col.statuses.includes(o.status));
             return (
-              <div key={col.key} className="min-w-0">
+              <div key={col.key} id={`kds-column-${col.key}`} className={`min-w-0 ${col.key === 'new' ? 'md:row-span-2 lg:row-span-1' : ''}`}>
                 <div className="flex items-center gap-2 mb-3 px-1">
                   <span className={`w-2 h-2 rounded-full ${col.dot}`} />
                   <h2 className="font-serif text-sm font-bold uppercase tracking-wide text-foreground/80">{col.label}</h2>
@@ -1623,6 +1661,30 @@ const KitchenDisplay = () => {
             );
           })}
         </div>
+      )}
+
+      {view === 'active' && visible.length > 0 && (
+        <nav
+          aria-label="Board columns"
+          className="md:hidden fixed bottom-0 inset-x-0 z-30 border-t border-border bg-background/95 backdrop-blur pb-[env(safe-area-inset-bottom)]"
+        >
+          <div className="grid grid-cols-3">
+            {KANBAN.map((col) => (
+              <button
+                key={col.key}
+                type="button"
+                onClick={() => jumpToColumn(col.key)}
+                className="min-h-[52px] flex items-center justify-center gap-1.5 text-sm font-sans font-semibold"
+              >
+                <span className={`w-2 h-2 rounded-full ${col.dot}`} aria-hidden />
+                {col.label}{' '}
+                <span className="text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground tabular-nums">
+                  {visible.filter((o) => col.statuses.includes(o.status)).length}
+                </span>
+              </button>
+            ))}
+          </div>
+        </nav>
       )}
 
       <Dialog open={showKeys} onOpenChange={setShowKeys}>

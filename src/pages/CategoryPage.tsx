@@ -7,6 +7,7 @@ import { track } from '@/lib/analytics';
 import { haptic } from '@/lib/haptics';
 import { emitAdd } from '@/lib/cart-fx';
 import RollingNumber from '@/components/guest/RollingNumber';
+import NotFound from './NotFound';
 import { useItemImpression } from '@/lib/impressions';
 import { supabase } from '@/integrations/supabase/client';
 import { useCartStore } from '@/lib/cart-store';
@@ -25,6 +26,7 @@ import { PriceTag, SaleBadge, NewBadge, ComboBadge } from '@/components/guest/Pr
 import { useComboMap } from '@/lib/promotions-api';
 import { menuCategoryPath, menuHome } from '@/lib/venues';
 import { usePageMeta } from '@/lib/seo/page-meta';
+import { dishMeta } from '@/lib/seo/static-pages';
 import { siteT } from '@/lib/site-copy';
 import {
   comboRegularPrice, comboUnitPrice, fixedChoices, isNew, missingSlots, nextPriceChange, rememberPrices, saleView, type ComboDef,
@@ -32,7 +34,7 @@ import {
 import type { Database } from '@/integrations/supabase/types';
 import { useVenue } from '@/hooks/useVenue';
 // Vera Italia's courses have long Italian names; the tabs use their short ones.
-import { COURSES, VERA, courseTitle, pick } from '@/components/vera/copy';
+import { COURSES, VERA, courseTitle, dishMeta as veraDishMeta, pick } from '@/components/vera/copy';
 
 type CategoryRow = Database['public']['Tables']['categories']['Row'];
 type MenuItemRow = import('@/lib/promotions-api').MenuItemRow;
@@ -55,12 +57,11 @@ const fetchCategoriesList = async () => {
 };
 // By name ("Food"), or by the slug in its address ("pizza-napoletana" for
 // Vera Italia's "Pizza Napoletana"). The access rules return only the
-// restaurant being browsed, so two restaurants may share a name.
+// restaurant being browsed, so two restaurants may share a name. Null when
+// there is none: a mistyped address is "not found", not "check your connection".
 const fetchCategory = async (name: string) => {
   const data = await fetchCategoriesList();
-  const found = data.find((c) => c.name === name) ?? data.find((c) => sectionSlug(c.name) === name);
-  if (!found) throw new Error(`No category "${name}"`);
-  return found;
+  return data.find((c) => c.name === name) ?? data.find((c) => sectionSlug(c.name) === name) ?? null;
 };
 const fetchSubcategories = async (categoryId: string) => {
   const { data, error } = await supabase.from('subcategories').select('*').eq('category_id', categoryId).order('sort_order');
@@ -96,8 +97,10 @@ const CategoryTabs = ({ categories, current, locale, label, onSelect, printed = 
   printed?: boolean;
 }) => (
   <nav aria-label={label} className="flex-1 min-w-0">
+    {/* On a narrow phone the four course names are set a size smaller, and the
+        row scrolls rather than running under the search button beside it. */}
     {printed ? (
-      <div className="flex items-center justify-around">
+      <div className="flex items-center justify-between gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {categories.map((c) => {
           const active = c.name === current;
           return (
@@ -105,7 +108,7 @@ const CategoryTabs = ({ categories, current, locale, label, onSelect, printed = 
               key={c.id}
               onClick={() => { if (!active) onSelect(c); }}
               aria-current={active ? 'page' : undefined}
-              className={`relative h-10 px-1 font-serif text-[15.5px] transition-colors ${active ? 'text-foreground italic' : 'text-muted-foreground hover:text-foreground'}`}
+              className={`relative shrink-0 h-11 px-1 font-serif text-[15.5px] max-[379px]:text-[14px] transition-colors ${active ? 'text-foreground italic' : 'text-muted-foreground hover:text-foreground'}`}
             >
               <span className="block truncate">{COURSES[c.name] ? pick(COURSES[c.name].short, locale) : getLocalizedName(c, locale)}</span>
               {active && <motion.span layoutId="category-tab-line" transition={springPill} className="absolute inset-x-1 bottom-1.5 h-px bg-foreground" />}
@@ -122,7 +125,7 @@ const CategoryTabs = ({ categories, current, locale, label, onSelect, printed = 
             key={c.id}
             onClick={() => { if (!active) onSelect(c); }}
             aria-current={active ? 'page' : undefined}
-            className={`relative h-9 px-1.5 rounded-full text-[13px] font-sans font-semibold transition-colors tap-sm ${active ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+            className={`relative h-11 px-1.5 rounded-full text-[13px] font-sans font-semibold transition-colors tap-sm ${active ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
           >
             {active && <motion.span layoutId="category-tab" transition={springPill} className="absolute inset-0 rounded-full bg-card shadow-sm" />}
             <span className="relative z-10 block truncate">{getLocalizedName(c, locale)}</span>
@@ -265,12 +268,23 @@ const CategoryPage = () => {
     staleTime: 5 * 60 * 1000,
   });
 
+  /*
+   * "Popular": this restaurant's best sellers of the last 30 days. Twelve on
+   * La Soul's long menu, three on Vera Italia's short one, where twelve would
+   * star half the menu. On Vera Italia never an extra (chicken on the pasta is
+   * popular because the pasta is), so a few more are asked for and passed over.
+   */
+  const popularLimit = vera ? 3 : 12;
   const { data: popular = [] } = useQuery({
-    queryKey: ['popular-items'],
+    queryKey: ['popular-items', popularLimit],
     queryFn: async () => {
-      const { data, error } = await supabase.rpc('get_popular_items' as never, { _limit: 12, _days: 30 } as never);
+      const { data, error } = await supabase.rpc('get_popular_items' as never, { _limit: vera ? popularLimit + 6 : popularLimit, _days: 30 } as never);
       if (error) return [] as { menu_item_id: string }[];
-      return (data ?? []) as { menu_item_id: string }[];
+      const rows = (data ?? []) as { menu_item_id: string }[];
+      if (!vera || rows.length === 0) return rows;
+      const { data: roles } = await supabase.from('menu_items').select('id, meal_role').in('id', rows.map((r) => r.menu_item_id));
+      const sides = new Set((roles ?? []).filter((r) => r.meal_role === 'side').map((r) => r.id));
+      return rows.filter((r) => !sides.has(r.menu_item_id)).slice(0, popularLimit);
     },
     staleTime: 10 * 60 * 1000,
   });
@@ -534,13 +548,27 @@ const CategoryPage = () => {
 
   // What this page says about itself to search engines, in the guest's language;
   // the prerendered page for the same address says the same (scripts/seo-prerender.ts).
+  //
+  // Except while a dish opened from its own address is on screen. DishLink
+  // brings it here and says which address that was; until it is closed this
+  // is that dish's page, as the HTML served there says — its canonical, its
+  // title — or a search engine that runs the app reads the dish's page as a
+  // copy of the category's.
   const categoryLabel = category ? getLocalizedName(category, locale) : (categoryName ?? '');
-  usePageMeta({
+  const dishPage = (location.state as { dishPage?: string } | null)?.dishPage;
+  const linked = dishPage && selectedItem?.id === dishParam ? selectedItem : null;
+  const dish = linked && {
+    name: getLocalizedName(linked, locale), price: Number(linked.price), description: getLocalizedDescription(linked, locale),
+  };
+  const dishHead = dish && (vera
+    ? veraDishMeta(categoryLabel, dish.name, dish.price, dish.description, locale)
+    : dishMeta(dish.name, dish.price, dish.description, locale));
+  usePageMeta(dishPage && dishHead ? { ...dishHead, path: dishPage, locale } : {
     title: vera ? courseTitle(categoryLabel, locale) : siteT('seo_category_title', locale, { category: categoryLabel }),
     description: vera ? pick(VERA.menuDescription, locale) : siteT('seo_category_description', locale, { category: categoryLabel }),
     path: menuCategoryPath(type ?? ''),
     locale,
-  });
+  }, category !== null);
 
   const closeItem = () => {
     setSelectedItem(null);
@@ -648,7 +676,11 @@ const CategoryPage = () => {
             <Star className="w-3 h-3 fill-current" aria-hidden /> {t('popular')}
           </span>
         )}
-        {section && <span className="text-xs text-muted-foreground font-sans">· {section}</span>}
+        {section && (
+          <span className="text-xs text-muted-foreground font-sans">
+            {(blocked || sale || combo || fresh || marketing || popular) ? '· ' : ''}{section}
+          </span>
+        )}
       </div>
     );
   };
@@ -708,9 +740,10 @@ const CategoryPage = () => {
     const localizedDesc = getLocalizedDescription(item, locale);
     const blocked = blockedLabel(item);
     const tags = getItemTags(item).slice(0, 3).filter((k) => DIET_BY_KEY[k]);
+    // The portion note isolated (U+2068…U+2069, a <bdi> in text): "220 g", not "g 220", in Arabic.
     const meta = [
       item.prep_minutes != null && !blocked ? t('prep_about', { n: item.prep_minutes }) : null,
-      item.portion_note,
+      item.portion_note ? `⁨${item.portion_note}⁩` : null,
     ].filter(Boolean).join(' · ');
     if (vera) {
       // A line of the printed menu: the photograph first, then the name, a
@@ -913,6 +946,8 @@ const CategoryPage = () => {
     );
   }
 
+  if (category === null) return <NotFound />;
+
   if (!category) {
     return (
       <div className="min-h-screen bg-background">
@@ -958,7 +993,7 @@ const CategoryPage = () => {
                 onKeyDown={(e) => { if (e.key === 'Escape') closeSearch(); }}
                 placeholder={t('search_in_category', { category: localizedCategory })}
                 aria-label={t('search_in_category', { category: localizedCategory }).replace('…', '')}
-                className="w-full h-11 ps-9 pe-11 rounded-full bg-muted/70 border border-border/60 text-base font-sans text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
+                className="w-full h-11 ps-9 pe-11 rounded-full bg-muted/70 border border-border/60 text-base font-sans text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 [&::-webkit-search-cancel-button]:appearance-none"
               />
               <button onClick={closeSearch} aria-label={t('clear_search')} className="absolute end-0 top-1/2 -translate-y-1/2 w-11 h-11 rounded-full flex items-center justify-center text-muted-foreground">
                 <X className="w-4 h-4" aria-hidden />

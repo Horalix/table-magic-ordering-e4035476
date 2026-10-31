@@ -11,6 +11,7 @@ import { VENUES } from '../venues';
 import { assignDishSlugs } from './menu-data';
 import { LOCALES } from './structured-data';
 import { km, veraFaq, veraLlms, veraPages, veraPriceRange, veraSeoMenu, veraSiteGraph } from './vera-seo';
+import { dishMeta } from '../../components/vera/copy';
 
 const menu = veraSeoMenu();
 const rows = (VERA_MENU.categories as { sections: { name: string; items: { id: string; name: string; price: number; dietary_tags?: string[] }[] }[] }[])
@@ -139,6 +140,27 @@ describe('Vera Italia’s pages', () => {
       expect(p.sitemap === null).toBe(notLive);
     }
     expect(pages.find((p) => p.path === '/veraitalia/')?.head.noindex).toBeFalsy();
+  });
+
+  it('give a dish the title and description the app shows while that dish is open from its address', () => {
+    for (const c of menu.categories) {
+      for (const i of c.sections.flatMap((s) => s.items)) {
+        const page = pages.find((p) => p.path === `/menu/veraitalia/dish/${i.slug}/`)!;
+        expect(dishMeta(c.names.en, i.names.en, i.price, i.descriptions.en, 'en')).toEqual({ title: page.head.title, description: page.head.description });
+      }
+    }
+    // In the guest's language in the app: Bosnian prices with a decimal comma.
+    expect(dishMeta('Antipasti', 'Burrata', 10.5, 'Kremasta', 'bs')).toEqual({
+      title: 'Burrata — 10,50 KM · Vera Italia, Sarajevo',
+      description: 'Antipasti — Vera Italia, italijanski restoran u Sarajevu, 10,50 KM. Kremasta.',
+    });
+    expect(dishMeta('Antipasti', 'Burrata', 12, null, 'ar').title).toBe('Burrata — 12 KM · Vera Italia، سراييفو');
+  });
+
+  it('name other languages only on its website, where each has an address of its own', () => {
+    // The menu, its courses and its dishes are one address in every language
+    // (the guest picks one in the app), so they name none.
+    for (const p of pages.filter((x) => x.path.startsWith('/menu/'))) expect(p.head.alternates).toBeUndefined();
   });
 
   it('say "Italian restaurant in Sarajevo" in their titles, and no longer "Opening soon"', () => {

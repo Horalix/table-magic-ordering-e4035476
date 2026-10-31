@@ -47,6 +47,7 @@ import FreeTableDialog from '@/components/staff/FreeTableDialog';
 import { useStaffDocument } from '@/components/staff/useStaffDocument';
 import { isHeld, isInKitchen, kitchenStart, orderStatusLabel } from '@/components/staff/order-status';
 import HeldOrdersCard from '@/components/staff/HeldOrdersCard';
+import { useStaffVenue } from '@/hooks/useStaffVenue';
 import type { Database } from '@/integrations/supabase/types';
 
 type OrderStatus = Database['public']['Enums']['order_status'];
@@ -98,7 +99,10 @@ const tableOf = (row: { table_sessions: { tables: { table_number: number } | nul
   row.table_sessions?.tables?.table_number ?? '?';
 
 const WaiterDashboard = () => {
-  useStaffDocument();
+  /** The signed-in account, for which restaurant this phone works at. */
+  const [userId, setUserId] = useState<string | null>(null);
+  const venueName = useStaffVenue(userId)?.venue.name ?? null;
+  useStaffDocument(venueName ? `Waiter · ${venueName}` : 'Waiter');
   const navigate = useNavigate();
   const [waiter, setWaiter] = useState<WaiterInfo | null>(null);
   const [tables, setTables] = useState<WaiterSession[]>([]);
@@ -225,6 +229,7 @@ const WaiterDashboard = () => {
         navigate('/waiter/login');
         return;
       }
+      if (mounted) setUserId(session.user.id);
 
       const { data: waiterProfile, error } = await supabase
         .from('waiters')
@@ -422,6 +427,43 @@ const WaiterDashboard = () => {
   }, 0);
   const totalOwed = tables.reduce((sum, t) => sum + owedFor(t.id).amount, 0);
 
+  /*
+   * A call that came in while the waiter was scrolled down — settling a table
+   * in "My tables" — landed above the screen, under a header that counted
+   * only money and minutes. Once "Attention needed" has gone up under the
+   * header, the header says what is waiting, and one tap goes back to it.
+   */
+  const headerRef = useRef<HTMLElement>(null);
+  const attentionRef = useRef<HTMLElement>(null);
+  const [attentionAbove, setAttentionAbove] = useState(false);
+  useEffect(() => {
+    if (loading) return;
+    const check = () => {
+      const header = headerRef.current;
+      const section = attentionRef.current;
+      if (header && section) setAttentionAbove(section.getBoundingClientRect().top < header.getBoundingClientRect().bottom);
+    };
+    check();
+    window.addEventListener('scroll', check, { passive: true });
+    window.addEventListener('resize', check);
+    return () => {
+      window.removeEventListener('scroll', check);
+      window.removeEventListener('resize', check);
+    };
+  }, [loading, attentionCount]);
+  const showAttention = () => {
+    const section = attentionRef.current;
+    if (!section) return;
+    const top = section.getBoundingClientRect().top + window.scrollY - (headerRef.current?.offsetHeight ?? 0) - 12;
+    window.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
+  };
+  /** Same order as the list: food going cold, a guest waiting, the bill. */
+  const attentionSummary = [
+    ...readyToRun.map((o) => `T${tableOf(o)} food is up`),
+    ...waiterCalls.map((c) => `T${tableOf(c)} needs you`),
+    ...billRequests.map((b) => `T${tableOf(b)} wants the bill`),
+  ].join(' · ');
+
   const initials = (waiter?.display_name || '?')
     .split(' ')
     .map((part) => part[0])
@@ -569,7 +611,7 @@ const WaiterDashboard = () => {
 
   return (
     <div className="min-h-screen bg-background pb-[env(safe-area-inset-bottom)]">
-      <header className="sticky top-0 z-40 border-b border-border/60 bg-background/80 backdrop-blur-md">
+      <header ref={headerRef} className="sticky top-0 z-40 border-b border-border/60 bg-background/80 backdrop-blur-md">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between gap-2">
           <div className="flex items-center gap-3 min-w-0">
             <div className="w-10 h-10 shrink-0 rounded-full bg-gradient-to-br from-primary to-accent text-primary-foreground grid place-items-center font-serif font-bold text-sm">
@@ -577,8 +619,12 @@ const WaiterDashboard = () => {
             </div>
             <div className="min-w-0">
               <h1 className="font-serif text-lg sm:text-xl font-bold leading-tight truncate">{waiter?.display_name}</h1>
-              <div className="flex items-center gap-2 text-sm text-muted-foreground mt-0.5">
+              {/* Wraps rather than running under the buttons: "Offline ·
+                  retrying" next to "3 tables" is wider than a 360px phone
+                  leaves here. */}
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-sm text-muted-foreground mt-0.5">
                 <span className="whitespace-nowrap">{tables.length} table{tables.length !== 1 ? 's' : ''}</span>
+                {venueName && <span className="whitespace-nowrap">· {venueName}</span>}
                 <ConnectionPill state={connection} />
               </div>
             </div>
@@ -622,7 +668,12 @@ const WaiterDashboard = () => {
         )}
 
         <div className="max-w-6xl mx-auto px-4 sm:px-6 pb-3 grid grid-cols-3 gap-2 text-center">
-          <StatChip label="Owed" value={totalOwed > 0 ? km(totalOwed) : '—'} tone={totalOwed > 0 ? 'warn' : 'idle'} />
+          <StatChip
+            label="Owed"
+            // The unit small, so "114.00 KM" stays on one line in a third of a phone.
+            value={totalOwed > 0 ? <>{totalOwed.toFixed(2)}<span className="text-xs font-medium"> KM</span></> : '—'}
+            tone={totalOwed > 0 ? 'warn' : 'idle'}
+          />
           <StatChip label="In kitchen" value={ordersWaiting} tone={ordersWaiting > 0 ? 'active' : 'idle'} />
           <StatChip
             label="Oldest wait"
@@ -630,13 +681,32 @@ const WaiterDashboard = () => {
             tone={oldestOrderMs > 10 * 60_000 ? 'urgent' : oldestOrderMs > 5 * 60_000 ? 'warn' : 'idle'}
           />
         </div>
+
+        {/* Over the content rather than in the header's flow: a header that
+            grew when a call came in would move the list under a finger. */}
+        {attentionAbove && attentionCount > 0 && (
+          <div className="absolute inset-x-0 top-full pointer-events-none">
+            <div className="max-w-6xl mx-auto px-4 sm:px-6 pt-2">
+              <button
+                key={attentionSummary}
+                type="button"
+                onClick={showAttention}
+                className="pointer-events-auto w-full min-h-[48px] rounded-xl bg-amber-400 text-amber-950 shadow-lux-lg px-3 py-2 flex items-center gap-2 text-left text-sm font-sans font-semibold kds-flash"
+              >
+                <Bell className="w-5 h-5 shrink-0" aria-hidden />
+                <span className="min-w-0 flex-1 truncate">{attentionSummary}</span>
+                <span className="shrink-0 rounded-lg bg-amber-950/10 px-2.5 py-1">Show</span>
+              </button>
+            </div>
+          </div>
+        )}
       </header>
 
       <main className="max-w-6xl mx-auto px-4 sm:px-6 py-5 space-y-7">
         {/* Every held order in the venue, not just this waiter's tables: whoever
             is nearest the table is the one who can tell if anyone is there. */}
         <HeldOrdersCard soundEnabled={soundOn} onChanged={refetch} />
-        <section>
+        <section ref={attentionRef}>
           <SectionTitle icon={<Bell className="w-4 h-4" />} title="Attention needed" count={attentionCount} />
           {attentionCount === 0 ? (
             <div className="rounded-xl border border-dashed border-border/60 bg-muted/30 px-4 py-6 text-center text-sm text-muted-foreground flex items-center justify-center gap-2">
@@ -805,7 +875,7 @@ const StatChip = ({
   return (
     <div className={`rounded-xl ${toneCls} px-2 py-2`}>
       <p className="text-xs font-medium opacity-75 leading-none">{label}</p>
-      <p className="font-sans font-semibold text-lg leading-tight tabular-nums mt-1">{value}</p>
+      <p className="font-sans font-semibold text-base sm:text-lg leading-tight tabular-nums whitespace-nowrap mt-1">{value}</p>
     </div>
   );
 };

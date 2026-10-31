@@ -96,11 +96,13 @@ const AdminQRCodes = () => {
                 : 'One QR for the whole venue — guests pick their table after scanning.'}
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        {/* Wraps as a whole (Print to the next line) rather than each label
+            breaking in two on a 360px phone. */}
+        <div className="flex flex-wrap items-center gap-2">
           <div className="inline-flex rounded-md border border-border bg-card p-0.5">
             <button
               onClick={() => setMode('venue')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-sans transition-colors ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 min-h-[44px] whitespace-nowrap rounded text-xs font-sans transition-colors ${
                 mode === 'venue' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'
               }`}
             >
@@ -108,7 +110,7 @@ const AdminQRCodes = () => {
             </button>
             <button
               onClick={() => setMode('sheet')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-sans transition-colors ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 min-h-[44px] whitespace-nowrap rounded text-xs font-sans transition-colors ${
                 mode === 'sheet' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'
               }`}
             >
@@ -116,7 +118,7 @@ const AdminQRCodes = () => {
             </button>
             <button
               onClick={() => setMode('single')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-sans transition-colors ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 min-h-[44px] whitespace-nowrap rounded text-xs font-sans transition-colors ${
                 mode === 'single' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground'
               }`}
             >

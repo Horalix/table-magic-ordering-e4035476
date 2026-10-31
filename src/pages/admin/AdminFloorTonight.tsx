@@ -8,12 +8,15 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { CalendarDays, UserPlus, Check, Users2, MapPin, Plus, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 import { addSectionWaiter, removeSectionAssignment, todayISO, type SectionAssignment } from '@/lib/assignments';
+import { useStaffTables } from '@/lib/realtime';
 
 interface Section { id: string; name: string; color: string; sort_order: number; }
 interface Waiter { id: string; display_name: string; }
 interface Table { id: string; section_id: string | null; }
 
 const initials = (name: string) => name.split(' ').map((s) => s[0]).join('').slice(0, 2).toUpperCase();
+
+const TONIGHT_TABLES = ['section_assignments'] as const;
 
 const AdminFloorTonight = () => {
   const [sections, setSections] = useState<Section[]>([]);
@@ -52,12 +55,10 @@ const AdminFloorTonight = () => {
 
   useEffect(() => {
     void fetchAll();
-    const ch = supabase
-      .channel('tonight')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'section_assignments' }, () => { void fetchAll(); })
-      .subscribe();
-    return () => { supabase.removeChannel(ch); };
   }, [fetchAll]);
+  // The tab's shared channel: only the restaurant shown, and polled where the
+  // socket cannot see it (the owner looking at Vera Italia).
+  useStaffTables(TONIGHT_TABLES, useCallback(() => { void fetchAll(); }, [fetchAll]));
 
   const tableCount = useMemo(() => {
     const m = new Map<string, number>();

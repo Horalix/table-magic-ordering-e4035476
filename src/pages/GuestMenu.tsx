@@ -9,6 +9,8 @@ import { useCartStore } from '@/lib/cart-store';
 import CartBar from '@/components/guest/CartBar';
 import LanguageSelector from '@/components/guest/LanguageSelector';
 import SmartImage from '@/components/ui/SmartImage';
+import CategoryShowcase from '@/components/guest/CategoryShowcase';
+import { pickShowcase } from '@/lib/category-showcase';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -38,11 +40,17 @@ import type { Database } from '@/integrations/supabase/types';
 type CategoryRow = Database['public']['Tables']['categories']['Row'];
 type SubcategoryRow = Database['public']['Tables']['subcategories']['Row'];
 
-/** Photographed covers, cropped 16:9 from the old menu site's section images. */
-const coverMap: Record<string, string> = {
-  Drinks: 'drinks',
-  Food: 'food',
-  Desserts: 'desserts',
+/**
+ * Each of La Soul's categories' own picture on the menu home: several of its
+ * dishes photographed together (scripts/category-photos.mjs — the burger,
+ * the truffle egg Benedict and the truffle pasta; a Spanish latte, a raspberry
+ * mojito and an orange juice; the cheesecake, the lava cake and the crème
+ * brûlée). Vera Italia's are in src/components/vera/copy.ts.
+ */
+const PICTURE: Record<string, string> = {
+  Food: '/covers/lasoul-food',
+  Drinks: '/covers/lasoul-drinks',
+  Desserts: '/covers/lasoul-desserts',
 };
 
 const descKeyMap: Record<string, string> = {
@@ -140,6 +148,12 @@ const GuestMenu = () => {
     }
     return map;
   }, [subcategories, thumbs]);
+
+  // A category without its own picture yet shows its dishes' photographs.
+  const photosFor = (cat: CategoryRow) =>
+    pickShowcase([], subcategories.filter((s) => s.category_id === cat.id).map((s) => s.id), thumbs);
+  // "Jump to" only when some category has sections to jump to.
+  const jumpable = categories.some((cat) => (sectionsByCategory.get(cat.id)?.length ?? 0) >= 2);
 
   // Once per visit, and only after the session check has settled. Keying it on
   // `hasSession` sent one event with has_session:false while the guard was
@@ -243,7 +257,7 @@ const GuestMenu = () => {
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: duration.base, ease: easeEnter }}
               onClick={onChangeTable}
-              className="px-4 min-h-[40px] rounded-full border border-white/25 bg-white/10 text-xs font-sans font-medium text-white tracking-wide rtl:tracking-normal hover:bg-white/20 transition-colors"
+              className="px-4 min-h-[44px] rounded-full border border-white/25 bg-white/10 text-xs font-sans font-medium text-white tracking-wide rtl:tracking-normal hover:bg-white/20 transition-colors"
               title={t('not_your_table')}
             >
               {t('table_n', { n: table })} · <span className="underline underline-offset-2">{t('change_table')}</span>
@@ -278,8 +292,8 @@ const GuestMenu = () => {
         {/* Vera Italia leads with its courses, as a printed menu does; its specialities follow them. */}
         {!vera && <HomePromotions onOpen={setSheetItem} />}
 
-        <div className="space-y-3">
-          {categoriesLoading && [0, 1, 2].map((i) => <Skeleton key={i} className="w-full aspect-[16/9] rounded-2xl" />)}
+        <div className="space-y-8">
+          {categoriesLoading && [0, 1, 2].map((i) => <Skeleton key={i} className="w-full aspect-[3/2] rounded-xl" />)}
           {categoriesFailed && (
             <div className="p-5 rounded-2xl border border-border bg-card text-center" role="alert">
               <p className="text-sm font-sans text-foreground">{t('load_failed')}</p>
@@ -291,45 +305,29 @@ const GuestMenu = () => {
               </button>
             </div>
           )}
-          {vera && <VeraCourses categories={categories} onOpen={(name) => openCategory(name)} />}
+          {vera && <VeraCourses categories={categories} photosFor={photosFor} onOpen={(name) => openCategory(name)} />}
+          {/* Each category as its own picture of several of its dishes, with its name under it. */}
           {!vera && categories.map((cat, i) => {
             const localizedName = getLocalizedName(cat as CategoryRow, locale);
-            const cover = coverMap[cat.name];
+            const picture = PICTURE[cat.name];
             return (
               <motion.button
                 key={cat.id}
                 variants={fadeUp}
                 whileTap={{ scale: PRESS_SCALE }}
                 onClick={() => openCategory(cat.name)}
-                className="relative block w-full aspect-[16/9] overflow-hidden rounded-2xl bg-muted text-start shadow-sm tap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                className="group block w-full text-start tap rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-4"
               >
-                {cover ? (
-                  <img
-                    src={`/covers/${cover}-640.webp`}
-                    srcSet={`/covers/${cover}-640.webp 640w, /covers/${cover}-1080.webp 1080w`}
-                    sizes="(max-width: 640px) 100vw, 600px"
-                    alt=""
-                    width={640}
-                    height={358}
-                    loading={i === 0 ? 'eager' : 'lazy'}
-                    // React 18 only passes the lowercase attribute through.
-                    {...({ fetchpriority: i === 0 ? 'high' : 'auto' } as Record<string, string>)}
-                    decoding="async"
-                    className="absolute inset-0 w-full h-full object-cover"
-                  />
-                ) : cat.image_url ? (
-                  <img src={cat.image_url} alt="" loading="lazy" decoding="async" className="absolute inset-0 w-full h-full object-cover" />
-                ) : null}
-                <span className="absolute inset-0 bg-gradient-to-t from-black/65 via-black/15 to-transparent" aria-hidden />
-                <span className="absolute inset-x-0 bottom-0 p-4 flex items-end justify-between gap-3">
+                <CategoryShowcase picture={picture} photos={picture ? [] : photosFor(cat as CategoryRow)} radius="rounded-2xl" priority={i === 0} />
+                <span className="mt-3 flex items-center justify-between gap-3">
                   <span className="min-w-0">
-                    <h2 className="font-serif text-2xl font-semibold text-white drop-shadow-sm">{localizedName}</h2>
+                    <h2 className="font-serif text-2xl font-semibold text-foreground">{localizedName}</h2>
                     {descKeyMap[cat.name] && (
-                      <span className="block text-[13px] text-white/85 font-sans mt-0.5">{t(descKeyMap[cat.name])}</span>
+                      <span className="block text-[13px] text-muted-foreground font-sans mt-0.5">{t(descKeyMap[cat.name])}</span>
                     )}
                   </span>
-                  <span className="shrink-0 w-9 h-9 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center" aria-hidden>
-                    <ChevronRight className={`w-4 h-4 text-white ${rtl ? 'rotate-180' : ''}`} />
+                  <span className="shrink-0 w-11 h-11 rounded-full bg-primary/10 flex items-center justify-center transition-colors group-hover:bg-primary/15" aria-hidden>
+                    <ChevronRight className={`w-[18px] h-[18px] text-primary ${rtl ? 'rotate-180' : ''}`} />
                   </span>
                 </span>
               </motion.button>
@@ -342,7 +340,7 @@ const GuestMenu = () => {
         {/* Every section of the menu, one tap away. Guests who know they want
             a burger should not have to open Food and then find Burgers.
             Vera Italia's four courses hold a few sections each; it has none. */}
-        {subcategories.length > 0 && !vera && (
+        {jumpable && !vera && (
           <motion.nav variants={fadeUp} aria-label={t('menu_sections')} className="pt-3 space-y-4">
             <h2 className="font-serif text-lg font-semibold text-foreground">{t('jump_to')}</h2>
             {categories.map((cat) => {
@@ -396,7 +394,7 @@ const GuestMenu = () => {
               <span className="block">{t('address')}</span>
             </span>
           </a>
-          <Link to="/privacy" className="block text-center text-[11px] text-muted-foreground/70 font-sans hover:text-primary transition-colors pt-3">
+          <Link to="/privacy/" className="block text-center text-[11px] text-muted-foreground/70 font-sans hover:text-primary transition-colors pt-3">
             {t('privacy_security')}
           </Link>
         </motion.footer>

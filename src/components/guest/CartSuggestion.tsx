@@ -270,7 +270,10 @@ const CartSuggestion = ({ placement, disabled, forItemIds }: Props) => {
           fallbackText={name}
         />
         <div className="flex-1 min-w-0">
-          <p className="font-serif text-base font-semibold text-foreground leading-tight truncate">
+          {/* Two lines, not one: beside the photo and the two buttons a phone
+              leaves this column a dozen letters wide, and one line cut most
+              names to their first word ("Regula…"). */}
+          <p className="font-serif text-base font-semibold text-foreground leading-tight line-clamp-2 break-words">
             {offered > 1 ? t('reco_qty_name', { n: offered, name }) : name}
           </p>
           <p className="text-sm font-sans font-semibold text-foreground tabular-nums mt-0.5">

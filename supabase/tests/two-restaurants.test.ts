@@ -448,11 +448,20 @@ describe('the kitchen, the printers and the numbers are each restaurant\'s own',
         SELECT 'd0000000-0000-0000-0000-0000000000da', 'Soul lemonade ' || n, 4 + n, true, 'bar' FROM generate_series(1, 4) n;
       INSERT INTO public.menu_items(subcategory_id, name, price, is_available, station)
         SELECT 'd0000000-0000-0000-0000-0000000000db', 'Limonata ' || n, 4 + n, true, 'bar' FROM generate_series(1, 4) n;
-      -- Each dish's own pairing, and one a slip of the admin's hand made across restaurants.
+      -- Each dish's own pairing.
       INSERT INTO public.menu_item_recommendations(source_item_id, recommended_item_id, recommendation_type, priority)
         SELECT '${DISH_V}'::uuid, id, 'pair_with', 90 FROM public.menu_items WHERE name = 'Limonata 1'
-        UNION ALL SELECT '${DISH_L}'::uuid, id, 'pair_with', 90 FROM public.menu_items WHERE name = 'Soul lemonade 1'
-        UNION ALL SELECT '${DISH_V}'::uuid, '${DISH_L}'::uuid, 'pair_with', 95;
+        UNION ALL SELECT '${DISH_L}'::uuid, id, 'pair_with', 90 FROM public.menu_items WHERE name = 'Soul lemonade 1';
+    `);
+    // A slip of the admin's hand across restaurants is refused (20261031090000)...
+    const slip = `INSERT INTO public.menu_item_recommendations(source_item_id, recommended_item_id, recommendation_type, priority)
+                  VALUES ('${DISH_V}', '${DISH_L}', 'pair_with', 95)`;
+    await expect(db.exec(slip)).rejects.toThrow(/Not available at this restaurant/);
+    // ...but one made before that could still be there, and must never reach a guest.
+    await db.exec(`
+      ALTER TABLE public.menu_item_recommendations DISABLE TRIGGER ab_same_venue;
+      ${slip};
+      ALTER TABLE public.menu_item_recommendations ENABLE TRIGGER ab_same_venue;
     `);
     // A few visits at each, so popularity has something to go on.
     for (let i = 0; i < 3; i++) {

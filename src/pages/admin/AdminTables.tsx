@@ -19,12 +19,15 @@ import FreeTableDialog from '@/components/staff/FreeTableDialog';
 import type { Database } from '@/integrations/supabase/types';
 import { HOME_VENUE } from '@/lib/home-venue';
 import { qrOrigin, venueByDbId } from '@/lib/venues';
+import { useStaffTables } from '@/lib/realtime';
 
 type Section = Pick<Database['public']['Tables']['sections']['Row'], 'id' | 'name' | 'color'>;
 type TableRow = Database['public']['Tables']['tables']['Row'] & {
   sections?: Pick<Database['public']['Tables']['sections']['Row'], 'name' | 'color'> | null;
   table_sessions?: Pick<Database['public']['Tables']['table_sessions']['Row'], 'id' | 'is_active' | 'opened_at' | 'guest_name'>[] | null;
 };
+
+const TABLE_TABLES = ['table_sessions', 'tables'] as const;
 
 const AdminTables = () => {
   const [tables, setTables] = useState<TableRow[]>([]);
@@ -62,13 +65,10 @@ const AdminTables = () => {
 
   useEffect(() => {
     void fetchTables();
-    const channel = supabase
-      .channel('admin-tables')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'table_sessions' }, () => { void fetchTables(); })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'tables' }, () => { void fetchTables(); })
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
   }, [fetchTables]);
+  // The tab's shared channel: only the restaurant shown, and polled where the
+  // socket cannot see it (the owner looking at Vera Italia).
+  useStaffTables(TABLE_TABLES, useCallback(() => { void fetchTables(); }, [fetchTables]));
 
   const generateTables = async () => {
     const n = parseInt(count);
@@ -167,11 +167,12 @@ const AdminTables = () => {
               <Card key={table.id} className={`border-border card-lux-hover ${activeSession ? 'border-primary/30 bg-primary/5' : ''}`}>
                 <CardContent className="p-4 text-center">
                   <div className="flex items-start justify-between">
-                    <span className="w-6" />
+                    {/* Balances the delete button's 32px (44 to tap, 12 of it over the padding). */}
+                    <span className="w-8" />
                     <p className="font-serif text-2xl font-bold text-foreground">{table.table_number}</p>
                     <AlertDialog>
                       <AlertDialogTrigger asChild>
-                        <Button variant="ghost" size="icon" className="h-6 w-6 -mr-1 -mt-1" aria-label={`Delete table ${table.table_number}`}>
+                        <Button variant="ghost" size="icon" className="h-11 w-11 -mr-3 -mt-3" aria-label={`Delete table ${table.table_number}`}>
                           <Trash2 className="w-3.5 h-3.5 text-muted-foreground hover:text-destructive" />
                         </Button>
                       </AlertDialogTrigger>
@@ -204,7 +205,7 @@ const AdminTables = () => {
 
                   {/* Section picker */}
                   <Select value={table.section_id ?? 'none'} onValueChange={(v) => setSection(table.id, v === 'none' ? null : v)}>
-                    <SelectTrigger className="h-8 mt-3 text-xs">
+                    <SelectTrigger className="h-11 md:h-8 mt-3 text-xs">
                       <SelectValue placeholder="Section">
                         {table.sections ? (
                           <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full" style={{ background: table.sections.color }} />{table.sections.name}</span>

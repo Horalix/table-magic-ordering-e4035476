@@ -206,7 +206,7 @@ const RunningTabPage = () => {
               </div>
               <button
                 onClick={() => setSplitOpen(true)}
-                className="shrink-0 inline-flex items-center gap-1.5 px-3.5 min-h-[40px] rounded-full border border-border text-sm font-sans font-medium text-foreground hover:bg-muted transition-colors"
+                className="shrink-0 inline-flex items-center gap-1.5 px-3.5 min-h-[44px] rounded-full border border-border text-sm font-sans font-medium text-foreground hover:bg-muted transition-colors"
               >
                 <Users className="w-4 h-4" aria-hidden /> {t('split_bill')}
               </button>

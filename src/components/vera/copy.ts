@@ -26,6 +26,35 @@ export const PLACE = {
 /** A course's title — "Pizza Napoletana in Sarajevo — Vera Italia" — the same in the app and on the prerendered page. */
 export const courseTitle = (course: string, locale: Locale) => `${course} ${pick(PLACE.inCity, locale)} — Vera Italia`;
 
+/** "12 KM", "10.50 KM" (10,50 in Bosnian). */
+export function km(n: number, locale: Locale = 'en'): string {
+  const s = Number.isInteger(n) ? String(n) : n.toFixed(2);
+  return `${locale === 'bs' ? s.replace('.', ',') : s} KM`;
+}
+
+/** A description cut at a word to what a search result shows. */
+export const clip = (s: string, n = 158) => (s.length <= n ? s : `${s.slice(0, n - 1).replace(/\s+\S*$/, '')}…`);
+
+const AT_VERA: Copy = {
+  en: 'at Vera Italia, an Italian restaurant in Sarajevo,',
+  bs: '— Vera Italia, italijanski restoran u Sarajevu,',
+  ar: '— Vera Italia، مطعم إيطالي في سراييفو،',
+};
+
+/**
+ * A dish's title and description — "Truffle Pizza — 25 KM · Vera Italia,
+ * Sarajevo"; where and how much first, as a long description is clipped from
+ * the end. Its own page's (/menu/veraitalia/dish/<slug>/, in English), and
+ * the app's in the guest's language while that dish is open from that address.
+ */
+export function dishMeta(course: string, name: string, price: number, description: string | null | undefined, locale: Locale) {
+  const sentence = description ? `${description.replace(/\s+$/, '').replace(/([^.!?])$/, '$1.')} ` : '';
+  return {
+    title: `${name} — ${km(price, locale)} · Vera Italia${locale === 'ar' ? '، ' : ', '}${pick(PLACE.city, locale)}`,
+    description: clip(`${course} ${pick(AT_VERA, locale)} ${km(price, locale)}. ${sentence}`.trim()),
+  };
+}
+
 export const VERA = {
   tagline: { en: 'Cucina Italiana', bs: 'Cucina Italiana', ar: 'مطبخ إيطالي' },
   menu: { en: 'Il Menù', bs: 'Il Menù', ar: 'القائمة' },
@@ -43,25 +72,34 @@ export const VERA = {
   specialita: { en: 'Specialità della Casa', bs: 'Specialità della Casa', ar: 'أطباق البيت' },
 } satisfies Record<string, Copy>;
 
-/** Each course on the menu's home: the dish whose photograph stands for it, and a line under its name. */
-export const COURSES: Record<string, { cover: string; line: Copy; short: Copy }> = {
+/**
+ * Each course on the menu's home: its own picture — several of its dishes
+ * photographed together on travertine (scripts/category-photos.mjs; Carne is
+ * one platter) — the dish whose photograph stands for it on the website and
+ * in link previews, and a line under its name.
+ */
+export const COURSES: Record<string, { picture: string; cover: string; line: Copy; short: Copy }> = {
   'Antipasti & Insalate': {
     short: { en: 'Antipasti', bs: 'Antipasti', ar: 'المقبلات' },
-    cover: 'b7a1d000-0000-4000-8000-000000000001', // Bruschetta
+    picture: '/covers/veraitalia-antipasti', // Caprese, bruschetta, baked feta
+    cover: 'b7a1d000-0000-4000-8000-000000000003', // Insalata Caprese
     line: { en: 'Bruschetta, baked feta, caprese', bs: 'Bruschetta, zapečena feta, caprese', ar: 'بروسكيتا، فيتا مخبوزة، كابريزي' },
   },
   'Pasta & Risotto': {
     short: { en: 'Pasta', bs: 'Pasta', ar: 'الباستا' },
+    picture: '/covers/veraitalia-pasta', // Arrabbiata, truffle pasta, pesto risotto
     cover: 'b7a1d000-0000-4000-8000-000000000005', // Penne all'Arrabbiata
     line: { en: 'Fettuccine, penne and risotto', bs: 'Fettuccine, penne i rižoto', ar: 'فيتوتشيني وبيني وريزوتو' },
   },
   'Pizza Napoletana': {
     short: { en: 'Pizza', bs: 'Pizza', ar: 'البيتزا' },
+    picture: '/covers/veraitalia-pizza', // Margherita, truffle, burrata
     cover: 'b7a1d000-0000-4000-8000-000000000015', // Margherita
     line: { en: 'Ten pizzas from our oven', bs: 'Deset pizza iz naše peći', ar: 'عشر بيتزا من فرننا' },
   },
   Carne: {
     short: { en: 'Carne', bs: 'Carne', ar: 'اللحوم' },
+    picture: '/covers/veraitalia-carne', // The rib-eye platter
     cover: 'b7a1d000-0000-4000-8000-000000000025', // Rib-eye Steak Platter
     line: { en: 'Rib-eye with entrecôte sauce', bs: 'Rib-eye s entrecôte sosom', ar: 'ريب آي بصلصة الأنتريكوت' },
   },
@@ -116,6 +154,8 @@ export const SITE = {
     ar: 'الفرن الأبيض ذو القبة داخل قوس أسود خلف المنضدة، وفوقه مصابيح زجاجية',
   },
   menuTitle: { en: 'The menu', bs: 'Meni', ar: 'القائمة' },
+  /** The small label over it: Italian, like the others, except where Italian can't be read. */
+  menuCaps: { en: 'Il Menù', bs: 'Il Menù', ar: 'القائمة' },
   room: { en: 'Il locale', bs: 'Il locale', ar: 'المكان' },
   roomTitle: { en: 'The room', bs: 'Prostor', ar: 'القاعة' },
   roomBody: {

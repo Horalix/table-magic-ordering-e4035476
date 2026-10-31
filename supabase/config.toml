@@ -20,6 +20,12 @@ verify_jwt = false
 [functions.monri-create-payment]
 verify_jwt = true
 
+# manage-admins (Admin -> Team) appoints and revokes restaurant admins. It
+# requires a valid JWT, and inside checks that the caller is the owner (an
+# admin of no one restaurant) before using the service role.
+[functions.manage-admins]
+verify_jwt = true
+
 # cloudprnt is polled by a network thermal printer (no Supabase JWT); each
 # printer is identified by the secret last path segment of its own poll URL
 # (printers.poll_token, made in Admin -> Printing).

@@ -45,12 +45,16 @@ function setCanonical(href: string) {
  * address says (scripts/seo-prerender.ts) — Google reads the page after the
  * app has run, and it must find the same thing a crawler without JavaScript
  * found. Every public page calls this; each one overwrites the last.
+ *
+ * `enabled` false: the page is showing "not found" in its place, which says
+ * the opposite (useNoIndex, ./noindex.ts) and must not be overwritten by it.
  */
-export function usePageMeta(meta: PageMeta) {
+export function usePageMeta(meta: PageMeta, enabled = true) {
   const { title, description, path, locale, alternates, jsonLd, image } = meta;
   const alternatesKey = JSON.stringify(alternates ?? {});
   const jsonLdKey = jsonLd === undefined ? '' : JSON.stringify(jsonLd);
   useEffect(() => {
+    if (!enabled) return;
     const url = absoluteUrl(path);
     const img = absoluteUrl(image || OG_IMAGE_PATH);
     document.title = title;
@@ -81,5 +85,5 @@ export function usePageMeta(meta: PageMeta) {
       script.textContent = jsonForScript(JSON.parse(jsonLdKey));
       document.head.appendChild(script);
     }
-  }, [title, description, path, locale, alternatesKey, jsonLdKey, image]);
+  }, [enabled, title, description, path, locale, alternatesKey, jsonLdKey, image]);
 }

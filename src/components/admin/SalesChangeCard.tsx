@@ -112,9 +112,11 @@ const SalesChangeCard = () => {
           </div>
         )}
 
+        {/* No minimum width: at 320px a phone's card scrolled the table and cut
+            off Net sales, the column the card is about. */}
         {week.dayparts.length > 0 && (
           <div className="overflow-x-auto -mx-2 px-2">
-            <table className="w-full text-xs font-sans min-w-[320px]">
+            <table className="w-full text-xs font-sans">
               <thead>
                 <tr className="text-left uppercase tracking-wide text-muted-foreground border-b border-border">
                   <th className="pb-1.5 font-medium">When</th>

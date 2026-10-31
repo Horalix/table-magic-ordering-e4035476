@@ -264,7 +264,7 @@
     letter-spacing: 0.32em;
     text-transform: uppercase;
   }
-  html:lang(ar) .vi-caps { letter-spacing: normal; font-size: 12px; }
+  html:lang(ar) .vi-caps { letter-spacing: normal; font-size: 14px; }
   .vi-hairline {
     height: 1px;
     background: linear-gradient(90deg, transparent, hsl(var(--vi-brass)) 18%, hsl(var(--vi-brass)) 82%, transparent);
@@ -282,6 +282,8 @@
     font-family: 'Inter', 'SF Arabic', 'Geeza Pro', 'Noto Sans Arabic', 'Segoe UI', Tahoma, sans-serif;
   }
   html:lang(ar) .text-\[10px\], html:lang(ar) .text-\[11px\] { font-size: 12px; }
+  /* Arabic has no italic: the browser would slant the letters, which reads as broken. */
+  html:lang(ar) .italic { font-style: normal; }
   /* [ART] Frosted glass effect */
   .glass {
     @apply bg-card/80 backdrop-blur-xl border-b border-border/50;

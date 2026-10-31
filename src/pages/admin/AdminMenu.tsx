@@ -22,6 +22,7 @@ import InlinePrice from '@/components/admin/InlinePrice';
 import { DIET_BY_KEY, getItemTags } from '@/lib/dietary';
 import { Link } from 'react-router-dom';
 import { isNew, saleScheduled } from '@/lib/promotions';
+import { shownVenueSlug } from '@/lib/current-venue';
 import type { Database } from '@/integrations/supabase/types';
 
 type CategoryInsert = Database['public']['Tables']['categories']['Insert'];
@@ -109,7 +110,9 @@ const AvailabilitySwitch = ({ item, onToggle }: { item: MenuItemRow; onToggle: (
     >
       <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-background shadow transition-transform ${item.is_available ? 'translate-x-4' : 'translate-x-0.5'}`} />
     </span>
-    <span className="w-[54px] text-left">{item.is_available ? 'Available' : 'Sold out'}</span>
+    {/* The word only where there is room for it and the dish's name; the
+        switch's own label says it either way. */}
+    <span className="hidden sm:inline w-[54px] text-left">{item.is_available ? 'Available' : 'Sold out'}</span>
   </button>
 );
 
@@ -134,6 +137,8 @@ const AdminMenu = () => {
   const [confirmRetranslate, setConfirmRetranslate] = useState(false);
   /** An item whose delete was asked for — one dialog, reachable from the inline button and the phone menu. */
   const [pendingDelete, setPendingDelete] = useState<MenuItemRow | null>(null);
+  /** The same, for a category deleted from the phone menu. */
+  const [pendingCategoryDelete, setPendingCategoryDelete] = useState<AdminCategory | null>(null);
   /** An item the database refused to delete because past orders point at it. */
   const [undeletable, setUndeletable] = useState<MenuItemRow | null>(null);
 
@@ -349,7 +354,8 @@ const AdminMenu = () => {
   const translateMenu = async (force = false) => {
     setIsTranslating(true);
     try {
-      const { data, error } = await supabase.functions.invoke<TranslateMenuResponse>('translate-menu', { body: { force } });
+      // The restaurant shown: the owner must name one; a restaurant admin's own is used regardless.
+      const { data, error } = await supabase.functions.invoke<TranslateMenuResponse>('translate-menu', { body: { force, venue: shownVenueSlug() } });
       if (error) throw error;
       toast.success(`Translation complete: ${data?.message ?? 'menu updated'}`);
       await fetchMenu();
@@ -361,7 +367,7 @@ const AdminMenu = () => {
   const migrateImages = async () => {
     setIsMigrating(true); setMigrateResult(null);
     try {
-      const { data, error } = await supabase.functions.invoke<MigrateImagesResponse>('migrate-images');
+      const { data, error } = await supabase.functions.invoke<MigrateImagesResponse>('migrate-images', { body: { venue: shownVenueSlug() } });
       if (error) throw error;
       if (!data) throw new Error('Image migration returned no result');
       const msg = `Migrated ${data.migrated} · Skipped ${data.skipped} · Failed ${data.failed}`;
@@ -465,7 +471,7 @@ const AdminMenu = () => {
                     <p className={`text-sm font-sans font-medium truncate ${item.is_available ? 'text-foreground' : 'text-muted-foreground line-through'}`}>
                       {item.name}
                     </p>
-                    <p className="text-xs text-muted-foreground truncate flex items-center gap-1">
+                    <p className="text-xs text-muted-foreground truncate flex flex-wrap items-center gap-x-1">
                       <span className="truncate">{path} ·</span>
                       <InlinePrice name={item.name} price={Number(item.price)} onSave={(p) => changePrice(item, p)} />
                     </p>
@@ -520,9 +526,36 @@ const AdminMenu = () => {
                     {categoryOpen ? <ChevronDown className="w-4 h-4 shrink-0" /> : <ChevronRight className="w-4 h-4 shrink-0" />}
                     <span className="font-serif font-semibold text-foreground truncate">{cat.name}</span>
                     {cat.name_bs && <span className="text-xs text-muted-foreground truncate">({cat.name_bs})</span>}
-                    <span className="text-xs text-muted-foreground ml-2 shrink-0">{subs.length} subcategories</span>
+                    <span className="text-xs text-muted-foreground ml-2 shrink-0">{subs.length} {subs.length === 1 ? 'subcategory' : 'subcategories'}</span>
                   </button>
-                  <div className="flex gap-0.5 items-center shrink-0">
+                  {/* Five 32px buttons left a phone 0–9px for the category's
+                      name; there they live behind one menu button, as on a dish. */}
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" size="icon" className="md:hidden h-11 w-11 shrink-0" aria-label={`More actions for ${cat.name}`}>
+                        <MoreVertical className="w-4 h-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem className="min-h-[44px]" onSelect={() => { setEditing({ kind: 'category', id: cat.id }); setExpandedCategory(cat.id); }}>
+                        <Pencil className="w-4 h-4 mr-2" /> Rename
+                      </DropdownMenuItem>
+                      <DropdownMenuItem className="min-h-[44px]" onSelect={() => { setAddingSubFor(cat.id); setExpandedCategory(cat.id); }}>
+                        <Plus className="w-4 h-4 mr-2" /> Add subcategory
+                      </DropdownMenuItem>
+                      <DropdownMenuItem className="min-h-[44px]" disabled={catIdx === 0} onSelect={() => move('categories', categories, cat.id, 'up')}>
+                        <ChevronUp className="w-4 h-4 mr-2" /> Move up
+                      </DropdownMenuItem>
+                      <DropdownMenuItem className="min-h-[44px]" disabled={catIdx === categories.length - 1} onSelect={() => move('categories', categories, cat.id, 'down')}>
+                        <ChevronDown className="w-4 h-4 mr-2" /> Move down
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem className="min-h-[44px] text-destructive focus:text-destructive" onSelect={() => setPendingCategoryDelete(cat)}>
+                        <Trash2 className="w-4 h-4 mr-2" /> Delete
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                  <div className="hidden md:flex gap-0.5 items-center shrink-0">
                     <Button variant="ghost" size="icon" className="h-8 w-8" disabled={catIdx === 0} aria-label="Move up" onClick={() => move('categories', categories, cat.id, 'up')}><ChevronUp className="w-4 h-4" /></Button>
                     <Button variant="ghost" size="icon" className="h-8 w-8" disabled={catIdx === categories.length - 1} aria-label="Move down" onClick={() => move('categories', categories, cat.id, 'down')}><ChevronDown className="w-4 h-4" /></Button>
                     <Button variant="ghost" size="icon" className="h-8 w-8" aria-label={`Rename ${cat.name}`} onClick={() => { setEditing({ kind: 'category', id: cat.id }); setExpandedCategory(cat.id); }}><Pencil className="w-4 h-4" /></Button>
@@ -557,10 +590,10 @@ const AdminMenu = () => {
                               <span className="text-xs text-muted-foreground shrink-0">{items.length} items</span>
                             </button>
                             <div className="flex gap-0.5 shrink-0">
-                              <Button variant="ghost" size="icon" className="h-7 w-7" aria-label={`Rename ${sub.name}`} onClick={() => { setEditing({ kind: 'subcategory', id: sub.id }); setExpandedSubcategory(sub.id); }}><Pencil className="w-3.5 h-3.5" /></Button>
-                              <Button variant="ghost" size="icon" className="h-7 w-7" aria-label={`Add item to ${sub.name}`} onClick={() => { setItemDialog({ subcategoryId: sub.id }); setExpandedSubcategory(sub.id); }}><Plus className="w-3.5 h-3.5" /></Button>
+                              <Button variant="ghost" size="icon" className="h-11 w-11 md:h-7 md:w-7" aria-label={`Rename ${sub.name}`} onClick={() => { setEditing({ kind: 'subcategory', id: sub.id }); setExpandedSubcategory(sub.id); }}><Pencil className="w-3.5 h-3.5" /></Button>
+                              <Button variant="ghost" size="icon" className="h-11 w-11 md:h-7 md:w-7" aria-label={`Add item to ${sub.name}`} onClick={() => { setItemDialog({ subcategoryId: sub.id }); setExpandedSubcategory(sub.id); }}><Plus className="w-3.5 h-3.5" /></Button>
                               <ConfirmDelete
-                                trigger={<Button variant="ghost" size="icon" className="h-7 w-7" aria-label={`Delete subcategory ${sub.name}`}><Trash2 className="w-3.5 h-3.5 text-destructive" /></Button>}
+                                trigger={<Button variant="ghost" size="icon" className="h-11 w-11 md:h-7 md:w-7" aria-label={`Delete subcategory ${sub.name}`}><Trash2 className="w-3.5 h-3.5 text-destructive" /></Button>}
                                 title={`Delete “${sub.name}”?`}
                                 description="This permanently deletes the subcategory and all of its items."
                                 onConfirm={() => remove('subcategories', sub.id)}
@@ -585,7 +618,7 @@ const AdminMenu = () => {
                                       : <div className="w-10 h-10 rounded-lg bg-muted shrink-0 flex items-center justify-center text-muted-foreground/40 font-serif">{item.name[0]}</div>}
                                     <div className="min-w-0">
                                       <div className="flex items-center gap-1.5 min-w-0">
-                                        <p className={`text-sm font-sans font-medium truncate ${item.is_available ? 'text-foreground' : 'text-muted-foreground line-through'}`}>{item.name}</p>
+                                        <p className={`text-sm font-sans font-medium line-clamp-2 break-words ${item.is_available ? 'text-foreground' : 'text-muted-foreground line-through'}`}>{item.name}</p>
                                         {getItemTags(item).length > 0 && (
                                           <span className="shrink-0 text-xs leading-none">{getItemTags(item).slice(0, 4).map((k) => DIET_BY_KEY[k]?.emoji).filter(Boolean).join(' ')}</span>
                                         )}
@@ -668,6 +701,26 @@ const AdminMenu = () => {
               onClick={() => { void translateMenu(true); }}
             >
               Overwrite all
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={pendingCategoryDelete !== null} onOpenChange={(open) => { if (!open) setPendingCategoryDelete(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete “{pendingCategoryDelete?.name}”?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This permanently deletes the category and all of its subcategories and items. This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="min-h-[44px]">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="min-h-[44px] bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => { if (pendingCategoryDelete) void remove('categories', pendingCategoryDelete.id); setPendingCategoryDelete(null); }}
+            >
+              Delete
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

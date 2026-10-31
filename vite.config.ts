@@ -5,6 +5,7 @@ import path from "path";
 import { componentTagger } from "lovable-tagger";
 import { VitePWA } from "vite-plugin-pwa";
 import { seoPrerender } from "./scripts/seo-prerender";
+import { menuDataCacheKey } from "./src/lib/current-venue";
 
 /**
  * The app a phone installs. Vera Italia's own site (veraitalia.net) is this
@@ -68,7 +69,20 @@ export default defineConfig(({ mode }) => ({
           {
             urlPattern: ({ url }) => /\/rest\/v1\/(categories|subcategories|menu_items)/.test(url.pathname),
             handler: "NetworkFirst",
-            options: { cacheName: "menu-data", networkTimeoutSeconds: 3, expiration: { maxEntries: 60, maxAgeSeconds: 60 * 60 * 24 } },
+            options: {
+              /*
+               * One address, two menus: the database answers it for the
+               * restaurant in the request's x-venue header. Kept per
+               * restaurant (and per session) by menuDataCacheKey, so a slow
+               * network never shows one restaurant's guests the other's menu.
+               * A new name, so nothing cached under the address alone is
+               * ever read again.
+               */
+              cacheName: "menu-data-by-venue",
+              networkTimeoutSeconds: 3,
+              expiration: { maxEntries: 60, maxAgeSeconds: 60 * 60 * 24 },
+              plugins: [{ cacheKeyWillBeUsed: menuDataCacheKey }],
+            },
           },
           /*
            * No font CDN rule any more. The faces are self-hosted under

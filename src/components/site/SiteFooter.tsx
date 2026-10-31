@@ -30,7 +30,7 @@ const SiteFooter = ({ venue }: { venue: Venue }) => {
               <li><Link to={menuPath(venue.slug)} className={linkClass}>{st('footer_menu')}</Link></li>
               <li><a href="#story" className={linkClass}>{st('nav_story')}</a></li>
               <li><a href="#visit" className={linkClass}>{st('nav_visit')}</a></li>
-              <li><Link to="/privacy" className={linkClass}>{st('footer_privacy')}</Link></li>
+              <li><Link to="/privacy/" className={linkClass}>{st('footer_privacy')}</Link></li>
             </ul>
           </nav>
         </div>

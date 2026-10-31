@@ -3,7 +3,7 @@ import { Navigate, useParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { sectionSlug } from '@/lib/menu-sections';
 import { assignDishSlugs } from '@/lib/seo/menu-data';
-import { menuCategoryPath } from '@/lib/venues';
+import { menuBase, menuCategoryPath } from '@/lib/venues';
 import NotFound from './NotFound';
 
 type Row = { id: string; name: string; subcategories: { name: string; categories: { name: string } | null } | null };
@@ -15,6 +15,10 @@ type Row = { id: string; name: string; subcategories: { name: string; categories
  * (scripts/seo-prerender.ts). A person who follows the link is taken to the
  * dish on the real menu, open, in its category and section. Slugs come from
  * the same function the build uses, over the same rows: available dishes.
+ *
+ * The category page is told which address the dish came from, and while the
+ * dish is open it keeps that page's canonical and title (CategoryPage): Google
+ * runs the app here too, and must still find the dish's page, not a category.
  */
 const DishLink = () => {
   const { dishSlug } = useParams<{ dishSlug: string }>();
@@ -47,7 +51,7 @@ const DishLink = () => {
       </div>
     );
   }
-  return target ? <Navigate to={target} replace /> : <NotFound />;
+  return target ? <Navigate to={target} replace state={{ dishPage: `${menuBase()}/dish/${dishSlug}/` }} /> : <NotFound />;
 };
 
 export default DishLink;

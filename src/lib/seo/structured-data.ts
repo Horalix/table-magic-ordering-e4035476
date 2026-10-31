@@ -28,6 +28,9 @@ const IN_LANGUAGE: Record<Locale, string> = { en: 'en', bs: 'bs', ar: 'ar' };
 /** The website's address in each language: / for English, /bs/ and /ar/. */
 export const sitePath = (locale: Locale) => (locale === 'en' ? '/' : `/${locale}/`);
 
+/** The privacy notice and ordering terms, one address in every language (src/lib/privacy.ts). */
+export const PRIVACY_PATH = '/privacy/';
+
 /** "Every day" when a run covers the whole week; otherwise the days, in English (schema.org names). */
 export function hoursDays(h: OpeningHours, locale: Locale): string {
   return EVERY_DAY.every((d) => h.days.includes(d)) ? siteT('hours_every_day', locale) : h.days.join(', ');

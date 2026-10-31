@@ -136,7 +136,7 @@ const VeraSite = ({ locale: pathLocale }: { locale?: Locale }) => {
               alt="Vera Italia"
               width={1434}
               height={193}
-              className="h-[15px] sm:h-[18px] w-auto"
+              className="h-5 sm:h-[22px] w-auto"
             />
           </a>
           <div className="flex items-center gap-2">
@@ -168,7 +168,7 @@ const VeraSite = ({ locale: pathLocale }: { locale?: Locale }) => {
             <p className={`${venue.city ? 'mt-3' : 'mt-7'} font-serif italic text-[22px] sm:text-2xl text-[hsl(var(--vi-glow))]`}>{c(SITE.heroLine)}</p>
             <div className="mt-9">{menuCta(true)}</div>
           </div>
-          <a href="#benvenuti" aria-label={c(SITE.welcome)} className="absolute bottom-6 left-1/2 z-10 -translate-x-1/2 text-white/70 hover:text-white">
+          <a href="#benvenuti" aria-label={c(SITE.welcome)} className="absolute bottom-4 left-1/2 z-10 -translate-x-1/2 grid h-11 w-11 place-items-center text-white/70 hover:text-white">
             <ChevronDown className="h-6 w-6 animate-bounce" aria-hidden />
           </a>
         </section>
@@ -251,7 +251,7 @@ const VeraSite = ({ locale: pathLocale }: { locale?: Locale }) => {
         {/* ---- The menu, by course --------------------------------------- */}
         <section className="px-5 sm:px-8 py-24 sm:py-32">
           <Reveal className="text-center">
-            <Caps>Il Menù</Caps>
+            <Caps>{c(SITE.menuCaps)}</Caps>
             <Rule />
             <h2 className="mt-6 font-serif italic text-[40px] sm:text-6xl font-light">{c(SITE.menuTitle)}</h2>
           </Reveal>
@@ -337,7 +337,7 @@ const VeraSite = ({ locale: pathLocale }: { locale?: Locale }) => {
         <img src="/brand/vera/lockup-cream.webp" alt="Vera Italia" width={1158} height={806} className="mx-auto w-40 h-auto opacity-90" />
         <div className="mt-8 flex justify-center gap-6 font-sans text-[13px]">
           {venue.live && <Link to={menuPath('veraitalia')} className="hover:text-white">{c(SITE.menuTitle)}</Link>}
-          <Link to="/privacy" className="hover:text-white">{t('privacy_security')}</Link>
+          <Link to="/privacy/" className="hover:text-white">{t('privacy_security')}</Link>
         </div>
         <p className="mt-6 vi-caps text-[hsl(var(--vi-glow))]/50">© {new Date().getFullYear()} Vera Italia{venue.city ? ` · ${c(PLACE.city)}, ${c(PLACE.country)}` : ''}</p>
       </footer>

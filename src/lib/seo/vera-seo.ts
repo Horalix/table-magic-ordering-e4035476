@@ -14,7 +14,7 @@
  * Relative imports only: the build imports this module outside the app.
  */
 import type { Locale } from '../i18n';
-import { COURSES, PLACE, SITE, VERA, courseTitle } from '../../components/vera/copy';
+import { COURSES, PLACE, SITE, VERA, clip, courseTitle, dishMeta, km } from '../../components/vera/copy';
 import VERA_MENU from '../../../scripts/vera-italia/menu.json';
 import IMAGE_MANIFEST from '../image-manifest.json';
 import { HOME_VENUE } from '../home-venue';
@@ -99,11 +99,8 @@ const dishesOf = (m: SeoMenu) => m.categories.flatMap((c) => itemsOf(c, false));
 const course = (m: SeoMenu, en: string) => m.categories.find((c) => c.names.en === en);
 const isVegetarian = (i: SeoMenuItem) => i.dietaryTags.includes('vegetarian');
 
-/** "12 KM", "10.50 KM" (10,50 in Bosnian). */
-export function km(n: number, locale: Locale = 'en'): string {
-  const s = Number.isInteger(n) ? String(n) : n.toFixed(2);
-  return `${locale === 'bs' ? s.replace('.', ',') : s} KM`;
-}
+/** "12 KM", "10.50 KM" (10,50 in Bosnian): components/vera/copy.ts, where the app reads it too. */
+export { km };
 const range = (list: SeoMenuItem[], locale: Locale) => {
   if (!list.length) return '';
   const prices = list.map((i) => i.price);
@@ -381,8 +378,6 @@ function siteBody(m: SeoMenu, locale: Locale): string {
   ].filter(Boolean).join('\n');
 }
 
-const clip = (s: string, n = 158) => (s.length <= n ? s : `${s.slice(0, n - 1).replace(/\s+\S*$/, '')}…`);
-
 /** Every page of Vera Italia's the build writes: its website, its menu, each course and each dish. */
 export function veraPages(m: SeoMenu): VeraPage[] {
   const v = vera();
@@ -439,14 +434,12 @@ export function veraPages(m: SeoMenu): VeraPage[] {
     for (const s of c.sections) {
       for (const i of s.items) {
         const path = dishPath(SLUG, i);
-        const description = i.descriptions.en ? `${i.descriptions.en.replace(/\s+$/, '').replace(/([^.!?])$/, '$1.')} ` : '';
         pages.push({
           path, locale: 'en',
           head: {
             path, locale: 'en', venue: v, image: i.image ?? VERA_OG_IMAGE, noindex,
-            title: `${i.names.en} — ${km(i.price)} · Vera Italia, ${PLACE.city.en}`,
-            // Where and how much first: a long description is clipped from the end.
-            description: clip(`${c.names.en} at Vera Italia, an Italian restaurant ${PLACE.inCity.en}, ${km(i.price)}. ${description}`.trim()),
+            // The same title and description the app shows while this dish is open from here.
+            ...dishMeta(c.names.en, i.names.en, i.price, i.descriptions.en, 'en'),
             jsonLd: {
               '@context': 'https://schema.org',
               '@graph': [menuItemNode(i), breadcrumbs([trailHome(), trailMenu(), { name: c.names.en, url: courseUrl(c) }, { name: i.names.en, url: dishUrl(i) }])],

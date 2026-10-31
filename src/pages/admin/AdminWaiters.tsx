@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { businessDayISO } from '@/lib/reporting';
-import { staffVenue } from '@/lib/current-venue';
+import { shownVenueSlug } from '@/lib/current-venue';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -100,9 +100,11 @@ const AdminWaiters = () => {
           password,
           display_name: name.trim(),
           pin: pin || undefined,
-          // The owner adds to the restaurant they are looking at; a restaurant
-          // admin always adds to their own, whatever this says.
-          venue: staffVenue() ?? undefined,
+          // The owner adds to the restaurant this page shows — the one the
+          // switch picked, or this site's own before any pick (the function
+          // refuses the owner a request that names none). A restaurant admin
+          // always adds to their own, whatever this says.
+          venue: shownVenueSlug(),
         },
       });
 

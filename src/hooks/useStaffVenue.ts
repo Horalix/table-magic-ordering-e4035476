@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { chooseStaffVenue, staffVenue } from '@/lib/current-venue';
+import {
+  answeredVenueId, chooseStaffVenue, currentVenueSlug, staffVenue, type StaffRoleRow,
+} from '@/lib/current-venue';
 import { HOME_VENUE } from '@/lib/home-venue';
-import { VENUES, venueByDbId, type Venue } from '@/lib/venues';
+import { DEFAULT_VENUE, VENUES, venueByDbId, type Venue } from '@/lib/venues';
 
 export interface StaffVenue {
   /** The restaurant these screens show. */
@@ -11,10 +13,19 @@ export interface StaffVenue {
   owner: boolean;
 }
 
-interface RoleRow {
-  role: string;
-  /** Absent on a database from before the second restaurant. */
-  venue_id?: string | null;
+type RoleRow = StaffRoleRow;
+
+/**
+ * The restaurant the database answers an account's requests for on this
+ * page (current_venue()), as a Venue: the one the page names if the account
+ * works there, else the first of its roles — admin before staff — the same
+ * order the database takes. An account that waits tables at one restaurant
+ * and manages the other used to see one restaurant's name over the other's
+ * data.
+ */
+export function venueOfRoles(rows: readonly RoleRow[], askedSlug: string | null): Venue | null {
+  const asked = askedSlug ? VENUES[askedSlug]?.dbId ?? null : null;
+  return venueByDbId(answeredVenueId(rows, asked, VENUES[DEFAULT_VENUE].dbId));
 }
 
 /**
@@ -38,11 +49,16 @@ export function useStaffVenue(userId: string | null): StaffVenue | null {
         setState({ owner, venue: VENUES[staffVenue() ?? HOME_VENUE] ?? VENUES[HOME_VENUE] });
         return;
       }
-      // Anyone else works at one restaurant, which the database already knows;
-      // a choice the owner left on this device must not follow them.
+      // Anyone else works where the database already knows; a choice the
+      // owner left on this device must not follow them. What this page still
+      // names (this site's own restaurant) counts only where they work.
       chooseStaffVenue(null);
-      const own = rows.map((r) => venueByDbId(r.venue_id)).find(Boolean);
-      setState({ owner, venue: own ?? VENUES[HOME_VENUE] });
+      const venue = venueOfRoles(rows, currentVenueSlug()) ?? VENUES[HOME_VENUE];
+      // From now on these screens name it: the menus follow the page for
+      // everyone (menu_venue(), 20261031100500), so La Soul's staff on Vera
+      // Italia's site must not ask for Vera Italia's.
+      chooseStaffVenue(venue.slug);
+      setState({ owner, venue });
     })();
     return () => { cancelled = true; };
   }, [userId]);

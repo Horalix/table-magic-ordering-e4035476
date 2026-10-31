@@ -119,8 +119,12 @@ const OrderStatusTimeline = ({ status, changedAt, held = false }: Props) => {
         })}
       </div>
       <div className="flex justify-between mt-1.5">
+        {/* Each label one line under its dot: centred, the first and last held to the edges. */}
         {STAGES.map((s, i) => (
-          <span key={s.key} className={`text-[10px] font-sans text-center w-7 ${i === current ? 'text-primary font-semibold' : 'text-muted-foreground'}`}>
+          <span
+            key={s.key}
+            className={`w-7 flex whitespace-nowrap text-[10px] font-sans ${i === 0 ? 'justify-start' : i === STAGES.length - 1 ? 'justify-end' : 'justify-center'} ${i === current ? 'text-primary font-semibold' : 'text-muted-foreground'}`}
+          >
             {t(s.labelKey)}
           </span>
         ))}

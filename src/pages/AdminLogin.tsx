@@ -5,8 +5,11 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
+import { useStaffDocument } from '@/components/staff/useStaffDocument';
+import { HOME, STAFF_BRAND as BRAND } from '@/components/staff/staff-brand';
 
 const AdminLogin = () => {
+  useStaffDocument(`${HOME.name} admin sign in`);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -87,12 +90,12 @@ const AdminLogin = () => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-6" style={{ backgroundColor: 'hsl(140, 12%, 53%)' }}>
+    <div className="min-h-screen flex items-center justify-center px-6" style={{ backgroundColor: BRAND.background }}>
       <div className="w-full max-w-sm">
-        {/* [ART] Logo + branding on sage background */}
+        {/* [ART] The restaurant's mark on its own colour: La Soul's sage, Vera Italia's dark. */}
         <div className="text-center mb-8">
-          <img src="/brand/emblem-white.webp" alt="La Soul" width={480} height={480} className="w-24 h-24 mx-auto mb-4" />
-          <h1 className="font-serif text-2xl font-bold text-white">La Soul Admin</h1>
+          <img src={BRAND.mark} alt={HOME.name} width={BRAND.width} height={BRAND.height} className="w-auto h-24 mx-auto mb-4 object-contain" />
+          <h1 className="font-serif text-2xl font-bold text-white">{HOME.name} Admin</h1>
           <p className="text-sm text-white/60 font-sans mt-1">Sign in to manage your restaurant</p>
         </div>
 
@@ -115,7 +118,7 @@ const AdminLogin = () => {
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="admin@lasoul.net"
+              placeholder={BRAND.adminEmail}
               required
               autoFocus
               className="mt-1.5"

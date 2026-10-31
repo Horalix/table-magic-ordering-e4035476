@@ -222,10 +222,9 @@ describe('what a person is asked to look at', () => {
 describe('the nightly job', () => {
   it('closes stale orders as part of maintenance', async () => {
     const id = await order({ hoursAgo: 200, status: 'awaiting_payment' });
-    await actAs(db, STAFF);
+    // What pg_cron runs (20261031100000: the nightly job is the scheduler's).
     const { rows } = await db.query<{ r: { stale_orders_closed: { total: number } } }>(
-      `SELECT public.run_daily_maintenance() AS r`);
-    await actAs(db, null);
+      `SELECT public.run_scheduled_maintenance() AS r`);
 
     expect(rows[0].r.stale_orders_closed.total).toBe(1);
     expect((await statusOf(id)).status).toBe('cancelled');

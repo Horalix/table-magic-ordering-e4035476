@@ -23,7 +23,7 @@ import {
 import { isHeld } from '@/components/staff/order-status';
 import { heldReasonLabel } from '@/lib/held-orders';
 import { businessDayISO, businessDayRange } from '@/lib/reporting';
-import { useCoalesced, useLatestRequest } from '@/lib/realtime';
+import { useCoalesced, useLatestRequest, useStaffTables } from '@/lib/realtime';
 import type { Database } from '@/integrations/supabase/types';
 
 type OrderStatus = Database['public']['Enums']['order_status'];
@@ -46,6 +46,7 @@ type AdminOrder = Database['public']['Tables']['orders']['Row'] & {
  * there — and nothing said so. It now shows one trading day, in pages.
  */
 const PAGE_SIZE = 50;
+const ORDER_TABLES = ['orders'] as const;
 
 const tableOf = (order: AdminOrder) => order.table_sessions?.tables?.table_number ?? '?';
 
@@ -135,13 +136,9 @@ const AdminOrders = () => {
     void fetchOrders();
   }, [fetchOrders]);
 
-  useEffect(() => {
-    const channel = supabase
-      .channel('admin-orders')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => { refetchSoon(); })
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
-  }, [refetchSoon]);
+  // The tab's shared channel: only the restaurant shown, and polled where the
+  // socket cannot see it (the owner looking at Vera Italia).
+  useStaffTables(ORDER_TABLES, refetchSoon);
 
   // A different day or filter starts again from the first page.
   useEffect(() => { setPages(1); }, [day, filter]);
@@ -361,7 +358,7 @@ const AdminOrders = () => {
                       </span>
                     )}
                     {order.guest_name && (
-                      <span className="text-sm font-sans text-muted-foreground">- {order.guest_name}</span>
+                      <span className="text-sm font-sans text-muted-foreground">{order.guest_name}</span>
                     )}
                     {/* A held order is "pending" in the enum but has not
                         reached the kitchen; calling it New hid it in the list. */}

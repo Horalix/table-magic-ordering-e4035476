@@ -91,7 +91,8 @@ describe('retention has a floor', () => {
         ('v2', 'item_viewed', '{}'::jsonb, now() - interval '100 days');
     `);
 
-    await actAs(db, STAFF);
+    // Pruning spans both restaurants: the owner's (20261031100000_admin_separation.sql).
+    await actAs(db, ADMIN);
     await db.query(`SELECT public.prune_analytics_events(7)`);
     await actAs(db, null);
 
@@ -105,7 +106,7 @@ describe('retention has a floor', () => {
         ('v2', 'item_viewed', '{}'::jsonb, now() - interval '500 days');
     `);
 
-    await actAs(db, STAFF);
+    await actAs(db, ADMIN);
     const { rows } = await db.query<{ n: number }>(`SELECT public.prune_analytics_events(400) AS n`);
     await actAs(db, null);
 
@@ -126,7 +127,7 @@ describe('retention has a floor', () => {
       `INSERT INTO public.suggestion_conversions(order_id, recommended_item_id, placement, line_total, decision_id)
        VALUES ($1, $2, 'cart', 3, $3)`, [o[0].id, BURGER, d[0].id]);
 
-    await actAs(db, STAFF);
+    await actAs(db, ADMIN);
     await db.query(`SELECT public.prune_recommendation_decisions(400)`);
     await actAs(db, null);
 
@@ -140,13 +141,13 @@ describe('retention has a floor', () => {
 });
 
 describe('the daily job', () => {
+  // The scheduler's (pg_cron's) entry point: since 20261031100000 the nightly
+  // job covers both restaurants and is not a signed-in person's to run.
   it('runs once and then declines', async () => {
-    await actAs(db, STAFF);
     const { rows: first } = await db.query<{ r: { ran: boolean } }>(
-      `SELECT public.run_daily_maintenance() AS r`);
+      `SELECT public.run_scheduled_maintenance() AS r`);
     const { rows: second } = await db.query<{ r: { ran: boolean; reason: string } }>(
-      `SELECT public.run_daily_maintenance() AS r`);
-    await actAs(db, null);
+      `SELECT public.run_scheduled_maintenance() AS r`);
 
     expect(first[0].r.ran).toBe(true);
     expect(second[0].r.ran).toBe(false);
@@ -156,31 +157,25 @@ describe('the daily job', () => {
   it('is safe to call repeatedly, which is the point', async () => {
     // It is meant to be pointed at a scheduler, or called from anywhere that
     // happens to be awake. Cheap and idempotent beats carefully orchestrated.
-    await actAs(db, STAFF);
-    for (let i = 0; i < 5; i += 1) await db.query(`SELECT public.run_daily_maintenance()`);
+    for (let i = 0; i < 5; i += 1) await db.query(`SELECT public.run_scheduled_maintenance()`);
     const { rows } = await db.query<{ n: number }>(
       `SELECT count(*)::int AS n FROM public.maintenance_runs WHERE job = 'daily'`);
-    await actAs(db, null);
     expect(rows[0].n).toBe(1);
   });
 
   it('records what it did', async () => {
-    await actAs(db, STAFF);
-    await db.query(`SELECT public.run_daily_maintenance()`);
+    await db.query(`SELECT public.run_scheduled_maintenance()`);
     const { rows } = await db.query<{ last_result: { ran: boolean } }>(
       `SELECT last_result FROM public.maintenance_runs WHERE job = 'daily'`);
-    await actAs(db, null);
     expect(rows[0].last_result.ran).toBe(true);
   });
 
   it('releases its lock even when something fails', async () => {
     // A stranded advisory lock would silently stop maintenance forever.
-    await actAs(db, STAFF);
-    await db.query(`SELECT public.run_daily_maintenance()`);
+    await db.query(`SELECT public.run_scheduled_maintenance()`);
     const { rows } = await db.query<{ held: number }>(
       `SELECT count(*)::int AS held FROM pg_locks
         WHERE locktype = 'advisory' AND objid = (hashtext('lasoul.daily_maintenance')::bigint & 2147483647)`);
-    await actAs(db, null);
     expect(rows[0].held).toBe(0);
   });
 });

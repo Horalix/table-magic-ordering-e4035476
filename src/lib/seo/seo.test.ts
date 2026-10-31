@@ -5,14 +5,18 @@
  * the FAQ, the menu as structured data, the prerendered pages and the crawler
  * files — is true, complete in three languages, and well-formed.
  */
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { renderPage } from '../../../scripts/seo-prerender';
+import { PRIVACY_PATH, privacyBody, privacyGraph } from '../privacy';
 import { VENUES } from '../venues';
 import { assignDishSlugs, buildSeoMenu } from './menu-data';
 import { SITE_URL } from './site-url';
 import { dishGraph, dishPath, faqEntries, homeGraph, LOCALES, menuGraph, sitePath } from './structured-data';
 import {
-  forwardToOwnSite, headTags, homeBody, jsonForScript, llmsFullTxt, llmsTxt, menuBody, ownSiteRedirects, robotsTxt, sitemapXml,
+  APP_ROUTES, appRedirects, dishMeta, forwardToOwnSite, headTags, homeBody, jsonForScript, llmsFullTxt, llmsTxt, menuBody,
+  ownSiteRedirects, robotsTxt, sitemapXml,
 } from './static-pages';
 
 const venue = VENUES.lasoul;
@@ -134,6 +138,36 @@ describe('the prerendered pages', () => {
     expect(dishPath('lasoul', menu.categories[0].sections[0].items[0])).toBe('/menu/lasoul/dish/espresso/');
   });
 
+  it('give a dish the same title and description on its page and in the app, in each language', () => {
+    // The page's (scripts/seo-prerender.ts) is the English one.
+    expect(dishMeta('La Soul Burger', 15.5, 'Beef & cheddar', 'en')).toEqual({
+      title: 'La Soul Burger — 15.50 KM · La Soul, Sarajevo',
+      description: 'La Soul Burger at La Soul in Sarajevo, 15.50 KM. Beef & cheddar. Fully halal and alcohol-free. Order it from your table.',
+    });
+    expect(dishMeta('Espresso', 3, null, 'en').description).toBe('Espresso at La Soul in Sarajevo, 3.00 KM. Fully halal and alcohol-free. Order it from your table.');
+    expect(dishMeta('Kafa', 3, 'Domaća', 'bs').description).toBe('Kafa u La Soulu u Sarajevu, 3.00 KM. Domaća. Potpuno halal i bez alkohola. Naručite sa svog stola.');
+  });
+
+  it('include the privacy notice and terms, at the address the app shows them', () => {
+    expect(PRIVACY_PATH).toBe('/privacy/');
+    expect(homeBody(venue, 'en')).toContain('<a href="/privacy/">Privacy</a>');
+    const body = privacyBody(venue);
+    expect(body).toContain('<h1>Trust, Privacy &amp; Terms</h1>');
+    expect(body).toContain('La Soul respects your privacy');
+    expect(body).toContain('<h2>Card payments are PCI-safe</h2>');
+    expect(body).toContain('contact La Soul directly (Butmirska cesta 16A | 16B · +387 33 877 779).');
+    expect(privacyGraph(venue, 'bs')).toMatchObject({
+      '@type': 'WebPage', url: `${SITE_URL}/privacy/`, name: 'Povjerenje, privatnost i uslovi — La Soul', isPartOf: { '@id': `${SITE_URL}/#website` },
+    });
+  });
+
+  it('give Vera Italia its own privacy notice: its name, and no address until the owner gives one', () => {
+    const body = privacyBody(VENUES.veraitalia);
+    expect(body).toContain('Vera Italia respects your privacy');
+    expect(body).toContain('contact Vera Italia directly.');
+    expect(body).not.toMatch(/La Soul|Butmirska|877 779/);
+  });
+
   it('come with robots.txt, a sitemap, and llms.txt for answer engines', () => {
     const robots = robotsTxt();
     for (const bot of ['GPTBot', 'ClaudeBot', 'PerplexityBot', 'Google-Extended']) expect(robots).toContain(`User-agent: ${bot}\nAllow: /`);
@@ -165,9 +199,10 @@ describe('Vera Italia on its own site (veraitalia.net)', () => {
       ['/veraitalia/*', '/', '301!'],
       ['/menu/lasoul', 'https://lasoul.net/menu/lasoul/', '301!'],
       ['/menu/lasoul/*', 'https://lasoul.net/menu/lasoul/:splat', '301!'],
-      // Last: every rule above must win over the app's catch-all.
-      ['/*', '/index.html', '200'],
+      // Last: every rule above must win over the app's addresses and "not found".
+      ...appRedirects().map((l) => l.split(/\s+/)),
     ]);
+    expect(own[own.length - 1]).toEqual(['/*', '/index.html', '404']);
   });
 
   it('is where La Soul’s site forwards its pages once it is up, never to itself', () => {
@@ -180,5 +215,27 @@ describe('Vera Italia on its own site (veraitalia.net)', () => {
     ]);
     // Nothing of La Soul's own is touched.
     expect(forward.some(([from]) => /lasoul|^\/\*$|^\/$/.test(from))).toBe(false);
+  });
+});
+
+describe('an address that is no page', () => {
+  const root = path.join(__dirname, '..', '..', '..');
+  const rules = (text: string) => text.split(/\r?\n/).filter((l) => l.trim() && !l.startsWith('#')).map((l) => l.trim().split(/\s+/));
+  const app = appRedirects().map((l) => l.split(/\s+/));
+
+  it('is "not found" on La Soul’s site too, after the same rules as on Vera Italia’s', () => {
+    const laSoul = rules(readFileSync(path.join(root, 'public', '_redirects'), 'utf8'));
+    expect(laSoul.slice(-app.length)).toEqual(app);
+    // The app's addresses are the only ones answered "200"; the old catch-all is gone.
+    expect(laSoul.filter(([, , status]) => status === '200')).toEqual(app.filter(([, , status]) => status === '200'));
+  });
+
+  it('is never one the app has a page for', () => {
+    // Every route in src/App.tsx is served the app; "/" is the build's own page.
+    const routes = [...readFileSync(path.join(root, 'src', 'App.tsx'), 'utf8').matchAll(/<Route path="(\/[^"]*)"/g)]
+      .map((m) => m[1]).filter((p) => p !== '/');
+    expect(routes.length).toBeGreaterThan(15);
+    const served = (route: string) => APP_ROUTES.some((r) => (r.endsWith('/*') ? route.startsWith(r.slice(0, -1)) : route === r));
+    expect(routes.filter((r) => !served(r))).toEqual([]);
   });
 });
