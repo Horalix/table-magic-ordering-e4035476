@@ -715,24 +715,36 @@
       "with": "Bistecca",
       "suggest": "feta-dip",
       "type": "pair_with",
-      "priority": 75,
-      "why": "The platter already has fries, a walnut salad and baguette: a starter to share."
+      "priority": 45,
+      "why": "Baked feta comes with its own garlic baguette, and the platter already has fries, a walnut salad and baguette: the last of its three starters.",
+      "seeded": {
+        "priority": 75,
+        "why": "The platter already has fries, a walnut salad and baguette: a starter to share."
+      }
     },
     {
       "id": "b7a1e000-0000-4000-8000-000000000014",
       "with": "Bistecca",
       "suggest": "bruschetta",
       "type": "pair_with",
-      "priority": 70,
-      "why": "A starter to share before the steak."
+      "priority": 55,
+      "why": "A starter to share, after the caprese: it is bread, and the platter brings its own baguette.",
+      "seeded": {
+        "priority": 70,
+        "why": "A starter to share before the steak."
+      }
     },
     {
       "id": "b7a1e000-0000-4000-8000-000000000015",
       "with": "Bistecca",
       "suggest": "caprese",
       "type": "pair_with",
-      "priority": 55,
-      "why": "A lighter starter before the steak."
+      "priority": 75,
+      "why": "The platter already has fries, a walnut salad and toasted baguette: tomato and mozzarella beside it, fresh rather than more bread.",
+      "seeded": {
+        "priority": 55,
+        "why": "A lighter starter before the steak."
+      }
     }
   ]
 }

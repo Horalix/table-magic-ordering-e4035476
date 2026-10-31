@@ -139,8 +139,17 @@ const ls = (name: string) => {
   return id;
 };
 
+/**
+ * What this file is about is 20261031090000 itself, so its database stops
+ * before the next migration that restates the ranker and Vera Italia's
+ * rib-eye pairings (20261031120000_reco_quality.sql, tested in
+ * reco-quality.test.ts) — the same way the database "without" it, below,
+ * stops before it.
+ */
+const NEXT_RANKER = '20261031120000';
+
 /** A database as production has it: La Soul's menu, its house pairings and a month of its orders. */
-async function build(until?: string): Promise<Db> {
+async function build(until: string = NEXT_RANKER): Promise<Db> {
   const d = (await createTestDatabase({ quiet: true, until })) as unknown as Db;
   await d.exec(`
     GRANT USAGE ON SCHEMA public TO anon, authenticated;

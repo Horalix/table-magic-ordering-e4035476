@@ -97,8 +97,10 @@ suggested nothing — not even after weeks of orders. Now:
   grilled chicken, then a salad; a classic pizza → grilled vegetables, a
   bruschetta or the feta dip; a white-cream pizza → a caprese, grilled
   vegetables or a bruschetta; the rib-eye platter (fries, salad and bread
-  already on it) → a starter to share. Ordinary rules: the owner can switch
-  them off or change them in Admin → Service & suggestions;
+  already on it) → the caprese, then a starter to share
+  (`20261031120000_reco_quality.sql` moved the caprese first). Ordinary
+  rules: the owner can switch them off or change them in Admin → Service &
+  suggestions;
 - **Italian section names are understood**: Insalate are salads, Antipasti
   starters, Extras an extra — so "a salad with pasta" covers every pizza,
   pasta, risotto and the steak too, and what Vera Italia's tables teach the
@@ -118,6 +120,9 @@ suggests, cannot mix the two, and staff read — admins change — only the rule
 of the restaurant they are looking at and work at. Guests are unaffected: the
 ranker reads the rules as their owner. `supabase/tests/vera-suggestions.test.ts`
 checks all of it, and that La Soul's suggestions are exactly what they were.
+A "goes with" row (`reco_fit`, `reco_clash`) may also belong to one
+restaurant (`venue_id`; empty, as every row so far, means both), so one
+added for Vera Italia never changes La Soul (`supabase/tests/reco-quality.test.ts`).
 
 ## What is per restaurant
 
