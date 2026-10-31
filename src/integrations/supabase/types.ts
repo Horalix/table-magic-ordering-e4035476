@@ -573,6 +573,7 @@ export type Database = {
           source_item_id: string | null
           source_subcategory_id: string | null
           start_time: string | null
+          venue_id: string
         }
         Insert: {
           created_at?: string
@@ -586,6 +587,7 @@ export type Database = {
           source_item_id?: string | null
           source_subcategory_id?: string | null
           start_time?: string | null
+          venue_id?: string
         }
         Update: {
           created_at?: string
@@ -599,6 +601,7 @@ export type Database = {
           source_item_id?: string | null
           source_subcategory_id?: string | null
           start_time?: string | null
+          venue_id?: string
         }
         Relationships: [
           {
@@ -620,6 +623,13 @@ export type Database = {
             columns: ["source_subcategory_id"]
             isOneToOne: false
             referencedRelation: "subcategories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "menu_item_recommendations_venue_id_fkey"
+            columns: ["venue_id"]
+            isOneToOne: false
+            referencedRelation: "venues"
             referencedColumns: ["id"]
           },
         ]
@@ -3058,6 +3068,7 @@ export type Database = {
         }[]
       }
       can_admin: { Args: { _venue: string }; Returns: boolean }
+      can_manage_menu_image: { Args: { _name: string }; Returns: boolean }
       can_staff: { Args: { _venue: string }; Returns: boolean }
       cancel_order: {
         Args: { _order_id: string; _reason: string }
@@ -3304,7 +3315,10 @@ export type Database = {
         }
         Returns: undefined
       }
-      guest_order_eta: { Args: { _order_id: string }; Returns: Json }
+      guest_order_eta: {
+        Args: { _order_id: string; _session_token: string }
+        Returns: Json
+      }
       guest_place_order: {
         Args: {
           _client_order_id?: string
@@ -3417,6 +3431,7 @@ export type Database = {
         Args: { _at: string; _close: string; _open: string }
         Returns: boolean
       }
+      is_owner_or_scheduler: { Args: never; Returns: boolean }
       is_staff_member: { Args: never; Returns: boolean }
       is_super_admin: { Args: never; Returns: boolean }
       is_trusted_caller: { Args: never; Returns: boolean }
@@ -3600,6 +3615,7 @@ export type Database = {
           unit_cost: number
         }[]
       }
+      menu_venue: { Args: never; Returns: string }
       monri_apply_callback: {
         Args: {
           _amount_minor: number
@@ -3672,6 +3688,7 @@ export type Database = {
           total: number
         }[]
       }
+      owner_overview: { Args: { _day?: string }; Returns: Json }
       pair_strength: { Args: { _eb05: number }; Returns: number }
       payment_status_rank: { Args: { _status: string }; Returns: number }
       popular_items_for_daypart: {
@@ -4127,6 +4144,7 @@ export type Database = {
         Returns: Json
       }
       use_venue: { Args: { _venue: string }; Returns: string }
+      venue_menu_item_ids: { Args: { _venue: string }; Returns: string[] }
       verify_waiter_pin: {
         Args: { _pin: string; _waiter_id: string }
         Returns: boolean
