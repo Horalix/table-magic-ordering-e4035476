@@ -18,6 +18,7 @@ import {
 import { toast } from 'sonner';
 import { DIET_TAGS, getItemTags } from '@/lib/dietary';
 import { useT } from '@/lib/i18n';
+import { venueByDbId } from '@/lib/venues';
 import type { Database } from '@/integrations/supabase/types';
 
 type MenuItemInsert = Database['public']['Tables']['menu_items']['Insert'];
@@ -156,10 +157,24 @@ async function shrinkImage(file: File): Promise<{ blob: Blob; ext: string; type:
   return { blob: file, ext: (file.name.split('.').pop() || 'jpg').toLowerCase(), type: file.type };
 }
 
+/**
+ * The restaurant folder a new photo goes in: '<slug>/', the restaurant this
+ * admin is editing (the one the database answers for, current_venue(), which
+ * is also where a new dish lands). The storage rules let a restaurant's admin
+ * change only their own folder (20261031100000_admin_separation.sql). On a
+ * database from before that, the root, as before.
+ */
+async function menuImageFolder(): Promise<string> {
+  const { data, error } = await supabase.rpc('current_venue' as never);
+  if (error) return '';
+  const venue = venueByDbId(typeof data === 'string' ? data : null);
+  return venue ? `${venue.slug}/` : '';
+}
+
 /** Upload an image to the menu-images bucket and return its public URL. */
 async function uploadMenuImage(file: File): Promise<string> {
   const { blob, ext, type } = await shrinkImage(file);
-  const path = `${crypto.randomUUID()}.${ext}`;
+  const path = `${await menuImageFolder()}${crypto.randomUUID()}.${ext}`;
   const { error } = await supabase.storage
     .from('menu-images')
     .upload(path, blob, { upsert: true, cacheControl: '31536000', contentType: type });

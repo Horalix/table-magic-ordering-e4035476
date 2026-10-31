@@ -89,6 +89,13 @@ interface QueuedEvent {
   event: AnalyticsEvent;
   props: EventProps;
   at: string;
+  /**
+   * The restaurant being browsed when it happened (src/lib/current-venue.ts),
+   * kept with the event: a buffer can outlive the page it was filled on — a
+   * guest who leaves La Soul's menu for Vera Italia's within the flush
+   * interval — and each event is counted for its own restaurant.
+   */
+  venue: string | null;
 }
 
 interface Endpoint {
@@ -143,10 +150,12 @@ function endpoint(): Endpoint | null {
   // supabase-js sends for an anonymous caller. The newer publishable keys are
   // not JWTs and must not be presented as one.
   if (key.startsWith('eyJ')) headers.Authorization = `Bearer ${key}`;
-  // Counted for the restaurant being browsed (src/lib/current-venue.ts).
-  const venue = currentVenueSlug();
-  if (venue) headers['x-venue'] = venue;
   return { url: `${base.replace(/\/+$/, '')}/rest/v1/rpc/record_analytics_events`, headers };
+}
+
+/** The endpoint as one restaurant's batch goes to it: counted for that restaurant. */
+function forVenue(target: Endpoint, venue: string | null): Endpoint {
+  return venue ? { url: target.url, headers: { ...target.headers, 'x-venue': venue } } : target;
 }
 
 /**
@@ -178,7 +187,7 @@ async function send(batch: QueuedEvent[], target: Endpoint): Promise<boolean> {
     const response = await fetch(target.url, {
       method: 'POST',
       headers: target.headers,
-      body: JSON.stringify({ _visit_id: visitId(), _events: batch }),
+      body: JSON.stringify({ _visit_id: visitId(), _events: batch.map(({ event, props, at }) => ({ event, props, at })) }),
       keepalive: true,
     });
     if (response.ok) return true;
@@ -209,11 +218,19 @@ async function flush(): Promise<void> {
   const pending = buffer;
   buffer = [];
 
-  const failed: QueuedEvent[] = [];
-  for (let i = 0; i < pending.length && enabled; i += MAX_BATCH) {
-    const batch = pending.slice(i, i + MAX_BATCH);
-    if (!(await send(batch, target))) failed.push(...batch);
+  // Each restaurant's events in batches of their own, under that restaurant's
+  // header — never the header of whatever page is open when the timer fires.
+  const byVenue = new Map<string | null, QueuedEvent[]>();
+  for (const e of pending) byVenue.set(e.venue, [...(byVenue.get(e.venue) ?? []), e]);
+
+  const unsent = new Set<QueuedEvent>();
+  for (const [venue, events] of byVenue) {
+    for (let i = 0; i < events.length && enabled; i += MAX_BATCH) {
+      const batch = events.slice(i, i + MAX_BATCH);
+      if (!(await send(batch, forVenue(target, venue)))) batch.forEach((e) => unsent.add(e));
+    }
   }
+  const failed = pending.filter((e) => unsent.has(e));
 
   if (failed.length > 0 && enabled) {
     // Failed events go back in front of anything tracked meanwhile, so the
@@ -227,7 +244,7 @@ async function flush(): Promise<void> {
 export function track(event: AnalyticsEvent, props: EventProps = {}): void {
   if (!enabled || typeof window === 'undefined') return;
 
-  buffer = cap([...buffer, { event, props: sanitize(props), at: new Date().toISOString() }]);
+  buffer = cap([...buffer, { event, props: sanitize(props), at: new Date().toISOString(), venue: currentVenueSlug() }]);
 
   if (buffer.length >= MAX_BUFFER) {
     void flush();

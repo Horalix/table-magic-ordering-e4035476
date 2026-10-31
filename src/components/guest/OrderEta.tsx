@@ -3,6 +3,7 @@ import { useT } from '@/lib/i18n';
 import { useQuery } from '@tanstack/react-query';
 import { Clock } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import { useCartStore } from '@/lib/cart-store';
 
 /**
  * When the food is likely to arrive.
@@ -32,15 +33,18 @@ interface Props {
 
 const OrderEta = ({ orderId, active = true }: Props) => {
   const t = useT();
+  // The table's token: the database answers only the phone that holds it.
+  const sessionToken = useCartStore((s) => s.sessionToken);
   const { data } = useQuery({
-    queryKey: ['order-eta', orderId],
+    queryKey: ['order-eta', orderId, sessionToken],
     queryFn: async (): Promise<Eta | null> => {
-      if (!orderId) return null;
-      const { data: result, error } = await supabase.rpc('guest_order_eta' as never, { _order_id: orderId } as never);
+      if (!orderId || !sessionToken) return null;
+      const { data: result, error } = await supabase.rpc('guest_order_eta' as never,
+        { _order_id: orderId, _session_token: sessionToken } as never);
       if (error) return null;
       return (result ?? null) as Eta | null;
     },
-    enabled: !!orderId && active,
+    enabled: !!orderId && !!sessionToken && active,
     // The backlog moves as the kitchen works through it, so this is worth
     // refreshing — but not often enough to make the number twitch.
     refetchInterval: active ? 60_000 : false,

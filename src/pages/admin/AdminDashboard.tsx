@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { formatClock } from '@/lib/timing';
-import { Link } from 'react-router-dom';
+import { Link, useOutletContext } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -15,8 +15,35 @@ import { orderStatusLabel } from '@/components/staff/order-status';
 import { getSuggestionImpact, type SuggestionImpact } from '@/lib/menu-intelligence';
 import InsightCards from '@/components/admin/InsightCards';
 import ServiceHealthCard from '@/components/admin/ServiceHealthCard';
+import type { AdminOutletContext } from '@/components/admin/AdminLayout';
+import { useCoalesced, useStaffTables } from '@/lib/realtime';
 
+/*
+ * The setup guide is dismissed for one restaurant at a time: the owner who
+ * put it away for La Soul still needs it for Vera Italia, which starts with
+ * no tables. The key from before there were two meant La Soul.
+ */
 const SETUP_DISMISS_KEY = 'admin:setupDismissed';
+/** What the numbers on this page are made of. */
+const DASHBOARD_TABLES = ['orders', 'bill_requests', 'waiter_calls'] as const;
+const setupDismissKey = (venue: string) => `${SETUP_DISMISS_KEY}:${venue}`;
+
+function setupDismissed(venue: string): boolean {
+  try {
+    return localStorage.getItem(setupDismissKey(venue)) === '1'
+      || (venue === 'lasoul' && localStorage.getItem(SETUP_DISMISS_KEY) === '1');
+  } catch {
+    return false;
+  }
+}
+
+function dismissSetup(venue: string): void {
+  try {
+    localStorage.setItem(setupDismissKey(venue), '1');
+  } catch {
+    // Storage off: it stays put away for this visit only.
+  }
+}
 
 interface SetupCounts { tables: number; sections: number; assignments: number; menuItems: number; waiters: number }
 
@@ -173,6 +200,8 @@ const SuggestionsCard = () => {
 };
 
 const AdminDashboard = () => {
+  // The restaurant being looked at; null while the account's roles load.
+  const venue = useOutletContext<AdminOutletContext | null>()?.venueSlug ?? null;
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({
     todayRevenue: 0,
@@ -185,97 +214,93 @@ const AdminDashboard = () => {
   });
   const [recentOrders, setRecentOrders] = useState<RecentOrder[]>([]);
   const [setup, setSetup] = useState<SetupCounts | null>(null);
-  const [dismissed, setDismissed] = useState(() => localStorage.getItem(SETUP_DISMISS_KEY) === '1');
+  const [dismissedNow, setDismissedNow] = useState<string[]>([]);
+  // Until the restaurant is known, no guide: it might be the one put away.
+  const dismissed = !venue || dismissedNow.includes(venue) || setupDismissed(venue);
   const empty = { median: null, p90: null, counted: 0, total: 0 };
   const [timings, setTimings] = useState<ServiceTimings>({
     accept: empty, ready: empty, serve: empty, oldestOpen: null,
   });
 
-  useEffect(() => {
-    const fetchStats = async () => {
-      // The restaurant's TRADING day, not UTC's and not the calendar's. For a
-      // UTC+2 venue the old `toISOString()` boundary ran 02:00 to 02:00 local;
-      // the calendar day then split a late service at midnight. This is the
-      // same 05:00-to-05:00 day `day_reconciliation()` and the Daily Report use.
-      const { start, end } = businessDayRange();
+  const fetchStats = useCallback(async () => {
+    // The restaurant's TRADING day, not UTC's and not the calendar's. For a
+    // UTC+2 venue the old `toISOString()` boundary ran 02:00 to 02:00 local;
+    // the calendar day then split a late service at midnight. This is the
+    // same 05:00-to-05:00 day `day_reconciliation()` and the Daily Report use.
+    const { start, end } = businessDayRange();
 
-      const { data: orders } = await supabase
-        .from('orders')
-        .select('total, created_at, status, updated_at, guest_name, released_to_kitchen_at, confirmed_at, ready_at, served_at')
-        .gte('created_at', start)
-        .lt('created_at', end);
+    const { data: orders } = await supabase
+      .from('orders')
+      .select('total, created_at, status, updated_at, guest_name, released_to_kitchen_at, confirmed_at, ready_at, served_at')
+      .gte('created_at', start)
+      .lt('created_at', end);
 
-      // One shared definition of a sale. Excluding only `cancelled` counted
-      // abandoned card checkouts that never reached the kitchen as takings,
-      // which is why this page and the Daily Report disagreed.
-      const todayOrders = onlySales((orders ?? []) as DashboardOrder[]);
-      const revenue = todayOrders.reduce((sum, order) => sum + Number(order.total), 0);
-      const count = todayOrders.length;
+    // One shared definition of a sale. Excluding only `cancelled` counted
+    // abandoned card checkouts that never reached the kitchen as takings,
+    // which is why this page and the Daily Report disagreed.
+    const todayOrders = onlySales((orders ?? []) as DashboardOrder[]);
+    const revenue = todayOrders.reduce((sum, order) => sum + Number(order.total), 0);
+    const count = todayOrders.length;
 
-      const { count: activeSessions } = await supabase
-        .from('table_sessions')
-        .select('*', { count: 'exact', head: true })
-        .eq('is_active', true);
+    const { count: activeSessions } = await supabase
+      .from('table_sessions')
+      .select('*', { count: 'exact', head: true })
+      .eq('is_active', true);
 
-      const { count: billReqCount } = await supabase
-        .from('bill_requests')
-        .select('*', { count: 'exact', head: true })
-        .eq('status', 'pending');
+    const { count: billReqCount } = await supabase
+      .from('bill_requests')
+      .select('*', { count: 'exact', head: true })
+      .eq('status', 'pending');
 
-      const { count: waiterCallCount } = await supabase
-        .from('waiter_calls')
-        .select('*', { count: 'exact', head: true })
-        .eq('status', 'pending');
+    const { count: waiterCallCount } = await supabase
+      .from('waiter_calls')
+      .select('*', { count: 'exact', head: true })
+      .eq('status', 'pending');
 
-      const { count: guestCount } = await supabase
-        .from('table_sessions')
-        .select('*', { count: 'exact', head: true })
-        .gte('opened_at', start)
-        .lt('opened_at', end);
+    const { count: guestCount } = await supabase
+      .from('table_sessions')
+      .select('*', { count: 'exact', head: true })
+      .gte('opened_at', start)
+      .lt('opened_at', end);
 
-      setStats({
-        todayRevenue: revenue,
-        totalOrders: count,
-        activeTables: activeSessions || 0,
-        avgOrderValue: count > 0 ? revenue / count : 0,
-        billRequests: billReqCount || 0,
-        waiterCalls: waiterCallCount || 0,
-        guestCount: guestCount || 0,
-      });
+    setStats({
+      todayRevenue: revenue,
+      totalOrders: count,
+      activeTables: activeSessions || 0,
+      avgOrderValue: count > 0 ? revenue / count : 0,
+      billRequests: billReqCount || 0,
+      waiterCalls: waiterCallCount || 0,
+      guestCount: guestCount || 0,
+    });
 
-      const openAges = todayOrders
-        .map((o) => openAgeMinutes(o as never))
-        .filter((v): v is number => v !== null);
+    const openAges = todayOrders
+      .map((o) => openAgeMinutes(o as never))
+      .filter((v): v is number => v !== null);
 
-      setTimings({
-        accept: summarise(todayOrders.map((o) => timeToAccept(o as never)), todayOrders.length),
-        ready: summarise(todayOrders.map((o) => timeToReady(o as never)), todayOrders.length),
-        serve: summarise(todayOrders.map((o) => timeToServe(o as never)), todayOrders.length),
-        oldestOpen: openAges.length > 0 ? Math.max(...openAges) : null,
-      });
+    setTimings({
+      accept: summarise(todayOrders.map((o) => timeToAccept(o as never)), todayOrders.length),
+      ready: summarise(todayOrders.map((o) => timeToReady(o as never)), todayOrders.length),
+      serve: summarise(todayOrders.map((o) => timeToServe(o as never)), todayOrders.length),
+      oldestOpen: openAges.length > 0 ? Math.max(...openAges) : null,
+    });
 
-      const { data: recent } = await supabase
-        .from('orders')
-        .select('id, created_at, guest_name, status, total, table_sessions!inner(tables!inner(table_number))')
-        .gte('created_at', start)
-        .order('created_at', { ascending: false })
-        .limit(10);
+    const { data: recent } = await supabase
+      .from('orders')
+      .select('id, created_at, guest_name, status, total, table_sessions!inner(tables!inner(table_number))')
+      .gte('created_at', start)
+      .order('created_at', { ascending: false })
+      .limit(10);
 
-      setRecentOrders((recent ?? []) as RecentOrder[]);
-      setLoading(false);
-    };
-
-    fetchStats();
-
-    const channel = supabase
-      .channel('admin-dashboard')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, fetchStats)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'bill_requests' }, fetchStats)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'waiter_calls' }, fetchStats)
-      .subscribe();
-
-    return () => { supabase.removeChannel(channel); };
+    setRecentOrders((recent ?? []) as RecentOrder[]);
+    setLoading(false);
   }, []);
+
+  useEffect(() => { void fetchStats(); }, [fetchStats]);
+
+  // The tab's shared channel: only the restaurant shown, and polled where the
+  // socket cannot see it (the owner looking at Vera Italia). A six-item order
+  // is seven events; the numbers are fetched once, after the burst.
+  useStaffTables(DASHBOARD_TABLES, useCoalesced(() => { void fetchStats(); }, 300));
 
   // First-run setup detection (counts only — cheap head requests).
   useEffect(() => {
@@ -335,7 +360,7 @@ const AdminDashboard = () => {
       {setup && !dismissed && !setupComplete && (
         <SetupChecklist
           counts={setup}
-          onDismiss={() => { localStorage.setItem(SETUP_DISMISS_KEY, '1'); setDismissed(true); }}
+          onDismiss={() => { if (!venue) return; dismissSetup(venue); setDismissedNow((list) => [...list, venue]); }}
         />
       )}
 

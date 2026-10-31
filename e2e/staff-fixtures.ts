@@ -153,6 +153,13 @@ export interface StaffState {
   /** `has_role(_, 'admin')`. Staff who are not managers must not see admin links. */
   isAdmin: boolean;
   /**
+   * The account's rows in user_roles ({ role, venue_id }), which say whose
+   * screens these are (src/hooks/useStaffVenue.ts): an admin with no
+   * restaurant is the owner, with one that restaurant's admin. Empty, as
+   * before: staff of the site's own restaurant.
+   */
+  roles: Record<string, unknown>[];
+  /**
    * What `staff_close_session` says the table still owes. Zero frees the table;
    * anything else is the server refusing, which the UI must show.
    */
@@ -268,6 +275,7 @@ export const defaultStaffState = (): StaffState => ({
   itemWrites: [],
   printClaims: [],
   isAdmin: true,
+  roles: [],
   closeOutstanding: 0,
   rpcCalls: [],
   analytics: adminAnalyticsFixtures(),
@@ -477,6 +485,7 @@ export async function installStaffStubs(page: Page, state: StaffState) {
   await page.route('**/rest/v1/table_sessions**', (route) => json(route, []));
   await page.route('**/rest/v1/order_ticket_events**', (route) => json(route, []));
   await page.route('**/rest/v1/waiters**', (route) => json(route, []));
+  await page.route('**/rest/v1/user_roles**', (route) => json(route, state.roles));
   await page.route('**/rest/v1/menu_items**', (route) => {
     const ids = new URL(route.request().url()).searchParams.get('id') ?? '';
     if (!ids.startsWith('in.(')) return json(route, []);

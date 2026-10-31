@@ -19,12 +19,15 @@ import FreeTableDialog from '@/components/staff/FreeTableDialog';
 import type { Database } from '@/integrations/supabase/types';
 import { HOME_VENUE } from '@/lib/home-venue';
 import { qrOrigin, venueByDbId } from '@/lib/venues';
+import { useStaffTables } from '@/lib/realtime';
 
 type Section = Pick<Database['public']['Tables']['sections']['Row'], 'id' | 'name' | 'color'>;
 type TableRow = Database['public']['Tables']['tables']['Row'] & {
   sections?: Pick<Database['public']['Tables']['sections']['Row'], 'name' | 'color'> | null;
   table_sessions?: Pick<Database['public']['Tables']['table_sessions']['Row'], 'id' | 'is_active' | 'opened_at' | 'guest_name'>[] | null;
 };
+
+const TABLE_TABLES = ['table_sessions', 'tables'] as const;
 
 const AdminTables = () => {
   const [tables, setTables] = useState<TableRow[]>([]);
@@ -62,13 +65,10 @@ const AdminTables = () => {
 
   useEffect(() => {
     void fetchTables();
-    const channel = supabase
-      .channel('admin-tables')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'table_sessions' }, () => { void fetchTables(); })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'tables' }, () => { void fetchTables(); })
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
   }, [fetchTables]);
+  // The tab's shared channel: only the restaurant shown, and polled where the
+  // socket cannot see it (the owner looking at Vera Italia).
+  useStaffTables(TABLE_TABLES, useCallback(() => { void fetchTables(); }, [fetchTables]));
 
   const generateTables = async () => {
     const n = parseInt(count);

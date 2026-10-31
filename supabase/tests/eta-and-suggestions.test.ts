@@ -83,9 +83,10 @@ async function placeOrder(items: string[]) {
   return rows[0].result.order_id as string;
 }
 
+// The table's token as well (20261031100500): the order id alone answers nobody.
 const eta = async (orderId: string) => {
   const { rows } = await db.query<{ result: Record<string, unknown> | null }>(
-    `SELECT public.guest_order_eta($1) AS result`, [orderId]);
+    `SELECT public.guest_order_eta($1, $2) AS result`, [orderId, TOKEN]);
   return rows[0].result;
 };
 

@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import type { RealtimeChannel } from '@supabase/supabase-js';
+import { answeredVenueId, currentVenueSlug, type StaffRoleRow } from '@/lib/current-venue';
+import { DEFAULT_VENUE, VENUES } from '@/lib/venues';
 
 /**
  * One realtime channel per tab, translated into React Query invalidations.
@@ -29,6 +31,19 @@ import type { RealtimeChannel } from '@supabase/supabase-js';
  * patching `payload.new` into the cache as a general rule (the kitchen row is a
  * four-table join, so the payload lacks the table number — reconstructing it
  * client-side is exactly the drift that makes a kitchen screen quietly wrong).
+ *
+ * Two restaurants (docs/two-restaurants.md). Realtime checks each change
+ * against the access rules as the signed-in user, but without the x-venue
+ * header the screens' own requests carry — so for it the restaurant is the
+ * one the account works at, and for the owner, who works at none, La Soul.
+ * The owner looking at Vera Italia would hear only La Soul's changes: Vera's
+ * screens never moving, and La Soul's orders chiming on them. So:
+ *
+ *  - a change that names another restaurant than the one shown is dropped
+ *    before any listener or refetch hears it;
+ *  - when the socket cannot see the restaurant shown at all, its events are
+ *    dropped and the screens refetch every 5 seconds instead (the 'poll'
+ *    refresh, which every screen already handles).
  */
 
 export type ConnectionState = 'connecting' | 'live' | 'reconnecting';
@@ -99,6 +114,51 @@ const POLL_MS = 15_000;
  * Query keys already refetch on events.
  */
 const SAFETY_MS = 60_000;
+/** How often screens refetch while the socket cannot see the restaurant they show. */
+const FOREIGN_POLL_MS = 5_000;
+
+/**
+ * The restaurant the screens show (what the database answers their requests
+ * for) and the one realtime reports changes of. The same for every waiter and
+ * restaurant admin; different for the owner looking at any restaurant but
+ * La Soul, and for an account working at both that is shown the one it does
+ * not manage.
+ */
+export interface VenueLens {
+  shown: string;
+  socket: string;
+}
+
+/** Both sides of the lens, from the account's roles and the restaurant this page names. */
+export function venueLens(rows: readonly StaffRoleRow[], askedSlug: string | null): VenueLens {
+  const fallback = VENUES[DEFAULT_VENUE].dbId;
+  const asked = askedSlug ? VENUES[askedSlug]?.dbId ?? null : null;
+  return { shown: answeredVenueId(rows, asked, fallback), socket: answeredVenueId(rows, null, fallback) };
+}
+
+/** The restaurant a change belongs to, when its payload says (a DELETE may carry only the key). */
+function venueOfChange(payload: { new?: unknown; old?: unknown }): string | null {
+  for (const row of [payload.new, payload.old]) {
+    const venue = (row as { venue_id?: unknown } | null | undefined)?.venue_id;
+    if (typeof venue === 'string' && venue) return venue;
+  }
+  return null;
+}
+
+/** The signed-in account's roles; null when they cannot be read (signed out, an old database). */
+async function loadOwnRoles(): Promise<StaffRoleRow[] | null> {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    const userId = session?.user?.id;
+    if (!userId) return null;
+    // '*': venue_id is absent on a database from before the second restaurant.
+    const { data, error } = await supabase.from('user_roles').select('*').eq('user_id', userId);
+    if (error || !data) return null;
+    return data as unknown as StaffRoleRow[];
+  } catch {
+    return null;
+  }
+}
 
 class StaffRealtime {
   private channel: RealtimeChannel | null = null;
@@ -109,6 +169,11 @@ class StaffRealtime {
   private safety: ReturnType<typeof setInterval> | undefined;
   private refreshListeners = new Set<RefreshListener>();
   private detachWindow: (() => void) | null = null;
+  /** Unknown until the roles load; until then every change counts, as before. */
+  private lens: VenueLens | null = null;
+  private foreignPoll: ReturnType<typeof setInterval> | undefined;
+  /** Bumped on teardown, so roles that arrive after it are ignored. */
+  private generation = 0;
 
   private state: ConnectionState = 'connecting';
   private stateListeners = new Set<(s: ConnectionState) => void>();
@@ -169,6 +234,36 @@ class StaffRealtime {
     });
   }
 
+  /** May this change reach the screens? Only one of the restaurant they show. */
+  private accepts(payload: { new?: unknown; old?: unknown }): boolean {
+    const lens = this.lens;
+    if (!lens) return true;
+    // The socket hears another restaurant only: the screens poll instead.
+    if (lens.shown !== lens.socket) return false;
+    const venue = venueOfChange(payload);
+    return venue === null || venue === lens.shown;
+  }
+
+  /**
+   * Which restaurant the screens show and which the socket hears. When they
+   * differ the screens refetch every few seconds, since no event of theirs
+   * will ever arrive.
+   */
+  setLens(lens: VenueLens | null) {
+    this.lens = lens;
+    clearInterval(this.foreignPoll);
+    this.foreignPoll = undefined;
+    if (lens && lens.shown !== lens.socket && this.channel) {
+      this.foreignPoll = setInterval(() => {
+        this.invalidateAll();
+        this.refresh('poll');
+      }, FOREIGN_POLL_MS);
+    }
+  }
+
+  /** True while the screens follow their restaurant by polling rather than by the socket. */
+  followsByPolling = () => this.foreignPoll !== undefined;
+
   acquire(client: QueryClient) {
     this.client = client;
     this.refCount += 1;
@@ -178,6 +273,8 @@ class StaffRealtime {
 
     for (const table of WATCHED_TABLES) {
       channel.on('postgres_changes', { event: '*', schema: 'public', table }, (payload) => {
+        // The other restaurant's change: no chime, no refetch.
+        if (!this.accepts(payload)) return;
         // Notified first, and synchronously: an alert chime must not wait on a
         // debounce or a refetch. Latency to the human is what matters.
         this.eventListeners.forEach((l) => l(table, payload.eventType));
@@ -199,6 +296,13 @@ class StaffRealtime {
     });
 
     this.channel = channel;
+
+    // Which restaurant this tab shows, against the one the socket hears.
+    const generation = ++this.generation;
+    void loadOwnRoles().then((rows) => {
+      if (!rows || generation !== this.generation || !this.channel) return;
+      this.setLens(venueLens(rows, currentVenueSlug()));
+    });
 
     // The fallback that makes a dropped socket "slightly stale" instead of
     // "silently frozen". Only runs while not live.
@@ -235,6 +339,8 @@ class StaffRealtime {
     this.refCount = Math.max(0, this.refCount - 1);
     if (this.refCount > 0) return;
 
+    this.generation += 1;
+    this.setLens(null);
     this.timers.forEach((t) => clearTimeout(t));
     this.timers.clear();
     clearInterval(this.poll);
@@ -286,6 +392,26 @@ export function useStaffRealtimeEvent(listener: EventListener) {
  */
 export function useStaffRefresh(listener: RefreshListener) {
   useEffect(() => realtime.onRefresh(listener), [listener]);
+}
+
+/**
+ * For a screen that keeps its own data (the admin's dashboard, orders, tables,
+ * tonight's floor): reload when one of `tables` changes at the restaurant it
+ * shows, and on every poll tick, reconnect, safety heartbeat, return to the
+ * foreground and network recovery. On the tab's one shared channel, so the
+ * owner looking at Vera Italia gets Vera's changes every few seconds and
+ * never a La Soul one. `tables` must be among the watched tables above.
+ */
+export function useStaffTables(tables: readonly string[], onChange: () => void): ConnectionState {
+  const state = useStaffRealtime();
+  const latest = useRef(onChange);
+  useEffect(() => { latest.current = onChange; }, [onChange]);
+  const watched = tables.join('|');
+  useStaffRealtimeEvent(useCallback((table: string) => {
+    if (watched.split('|').includes(table)) latest.current();
+  }, [watched]));
+  useStaffRefresh(useCallback(() => { latest.current(); }, []));
+  return state;
 }
 
 /**

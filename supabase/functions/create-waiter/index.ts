@@ -1,8 +1,9 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import { namedVenue, resolveAdminVenue, type RoleRow, type VenueRow } from "../_shared/venue-access.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-venue',
 };
 
 interface Body {
@@ -13,14 +14,6 @@ interface Body {
   /** The restaurant (slug) the owner is adding them to; a restaurant admin always adds to their own. */
   venue?: string;
 }
-
-interface RoleRow {
-  role: string;
-  venue_id: string | null;
-}
-
-/** La Soul — docs/two-restaurants.md. */
-const DEFAULT_VENUE_ID = 'a5000000-0000-4000-8000-000000000001';
 
 const synthEmail = (u: string) => `${u}@waiter.lasoul.local`;
 const errorMessage = (error: unknown) => error instanceof Error ? error.message : 'Server error';
@@ -45,24 +38,22 @@ Deno.serve(async (req) => {
     }
     const admin = createClient(SUPABASE_URL, SERVICE_ROLE);
     const { data: roles } = await admin.from('user_roles').select('role, venue_id').eq('user_id', userData.user.id);
-    const adminRoles = ((roles as RoleRow[] | null) ?? []).filter((r) => r.role === 'admin');
-    if (!adminRoles.length) {
+    const callerRoles = (roles as RoleRow[] | null) ?? [];
+    if (!callerRoles.some((r) => r.role === 'admin')) {
       return new Response(JSON.stringify({ error: 'Admin only' }), { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
     const body: Body = await req.json();
 
     // Which restaurant the waiter works at: the owner (an admin of no one
-    // restaurant) names it; a restaurant admin can only add to their own.
-    let venueId: string;
-    if (adminRoles.some((r) => r.venue_id === null)) {
-      const { data: named } = body.venue
-        ? await admin.from('venues').select('id').eq('slug', body.venue).maybeSingle()
-        : { data: null };
-      venueId = (named as { id: string } | null)?.id ?? DEFAULT_VENUE_ID;
-    } else {
-      venueId = adminRoles[0].venue_id as string;
+    // restaurant) names it, and naming none is refused rather than read as
+    // La Soul; a restaurant admin can only add to their own.
+    const { data: venueRows } = await admin.from('venues').select('id, slug');
+    const target = resolveAdminVenue(callerRoles, namedVenue(body, req), (venueRows as VenueRow[] | null) ?? []);
+    if (!target.ok) {
+      return new Response(JSON.stringify({ error: target.error }), { status: target.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
+    const venueId = target.venueId;
     const username = (body.username || '').trim().toLowerCase().replace(/[^a-z0-9_.-]/g, '');
     const password = body.password || '';
     const display_name = (body.display_name || '').trim();

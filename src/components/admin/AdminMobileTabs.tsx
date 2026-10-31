@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { ClipboardList, LayoutDashboard, Menu as MenuIcon, Printer, UtensilsCrossed } from 'lucide-react';
+import { ClipboardList, LayoutDashboard, LayoutGrid, Menu as MenuIcon, Printer, UtensilsCrossed } from 'lucide-react';
 
 /**
  * The four admin jobs that happen on a phone, mid-service, one tap away.
@@ -16,15 +16,19 @@ const TABS = [
   { label: 'Printing', path: '/admin/printing', icon: Printer },
 ] as const;
 
-const AdminMobileTabs = ({ onMore }: { onMore: () => void }) => {
+/** The owner's first look, wherever they are: both restaurants at once. */
+const OWNER_TAB = { label: 'Overview', path: '/admin/overview', icon: LayoutGrid } as const;
+
+const AdminMobileTabs = ({ owner = false, onMore }: { owner?: boolean; onMore: () => void }) => {
   const { pathname } = useLocation();
+  const tabs = owner ? [OWNER_TAB, ...TABS] : TABS;
   return (
     <nav
       aria-label="Admin quick navigation"
       className="lg:hidden fixed bottom-0 inset-x-0 z-40 border-t border-border bg-background/95 backdrop-blur pb-[env(safe-area-inset-bottom)]"
     >
-      <ul className="grid grid-cols-5">
-        {TABS.map(({ label, path, icon: Icon }) => {
+      <ul className={`grid ${owner ? 'grid-cols-6' : 'grid-cols-5'}`}>
+        {tabs.map(({ label, path, icon: Icon }) => {
           const active = path === '/admin' ? pathname === '/admin' : pathname.startsWith(path);
           return (
             <li key={path}>

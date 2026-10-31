@@ -1,15 +1,20 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { namedVenue, resolveAdminVenue, type RoleRow, type VenueRow } from "../_shared/venue-access.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-venue, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
 /**
  * translate-menu — fills in Bosnian and Arabic for the menu.
  *
- * Body (all optional):
+ * One restaurant's menu per call: a restaurant's admin translates their own;
+ * the owner names the restaurant (venue: slug or id, or the x-venue header).
+ *
+ * Body (all optional, but the owner must name a venue):
+ *   venue: "lasoul"  the restaurant whose menu to translate.
  *   force: false     only fields that are empty are translated (Auto-Translate).
  *   force: true      also refreshes fields that still hold exactly what this
  *                    function wrote last time (Re-translate All). A field a
@@ -17,7 +22,8 @@ const corsHeaders = {
  *                    is kept in public.menu_machine_translations; if that table
  *                    is not there yet, force behaves like a plain run.
  *   overwrite: true  with force, replaces every translation, hand edits
- *                    included. Not offered in the admin UI on purpose.
+ *                    included. The owner's only. Not offered in the admin UI
+ *                    on purpose.
  *
  * Response: { message, count } as before, plus { fields, skipped }.
  */
@@ -49,7 +55,32 @@ interface Target {
 
 type TranslationResult = { id: string } & Partial<Record<Field, string>>;
 
-const SYSTEM_PROMPT = `You translate the menu of La Soul, a café, restaurant and bar in Sarajevo, from English into Bosnian and Arabic. English is the source of truth for meaning.
+/**
+ * Whose menu it is, and the names on it that stay names: Vera Italia's Italian
+ * dish names are kept like La Soul's coffee and brand names.
+ */
+const RESTAURANT: Record<string, { about: string; name: string; names: string }> = {
+  lasoul: {
+    about: "La Soul, a café, restaurant and bar in Sarajevo",
+    name: "La Soul",
+    names: "La Soul, Espresso, Cappuccino, Americano, Cortado, Piccolo, Flat White, Caffe Latte, Mojito, Matcha Latte, Frappe, Cold Brew, V60, Chemex, Coca-Cola, Fanta, Sprite, Red Bull, Nutella, Oreo",
+  },
+  veraitalia: {
+    about: "Vera Italia, a fine-dining Italian restaurant in Sarajevo",
+    name: "Vera Italia",
+    names: "Vera Italia, Margherita, Pepperoni, Quattro Formaggi, Burrata, Bruschetta, Caprese, Arrabbiata, Fettuccine, Penne, Risotto, Alfredo, Pesto, Pizza Napoletana, Antipasti, Insalate, Carne",
+  },
+};
+
+const systemPrompt = (slug: string) => {
+  const r = RESTAURANT[slug] ?? RESTAURANT.lasoul;
+  return SYSTEM_PROMPT
+    .replace("{about}", r.about)
+    .replace("{names}", r.names)
+    .replace("{name}", r.name);
+};
+
+const SYSTEM_PROMPT = `You translate the menu of {about}, from English into Bosnian and Arabic. English is the source of truth for meaning.
 
 BOSNIAN
 - Standard Bosnian as used in Sarajevo cafés: ijekavica (mlijeko, svježe, bijelo, hljeb, pecivo, cvjetni), Latin script.
@@ -65,7 +96,7 @@ ARABIC
 - poached egg = بيضة بوشيه (boiled egg is بيض مسلوق — different thing); iceberg lettuce = خس آيسبرغ; pita bread = خبز عربي; mocktail = موكتيل خالٍ من الكحول.
 
 BOTH LANGUAGES
-- Real product and brand names are names, not text to translate: La Soul, Espresso, Cappuccino, Americano, Cortado, Piccolo, Flat White, Caffe Latte, Mojito, Matcha Latte, Frappe, Cold Brew, V60, Chemex, Coca-Cola, Fanta, Sprite, Red Bull, Nutella, Oreo. In Bosnian keep them exactly as written. In Arabic transliterate them (إسبريسو، كابتشينو), except "La Soul" and "V60", which stay in Latin letters.
+- Real product and brand names are names, not text to translate: {names}. In Bosnian keep them exactly as written. In Arabic transliterate them (إسبريسو، كابتشينو), except "{name}" and "V60", which stay in Latin letters.
 - Descriptive names ARE translated: "Fresh Orange Juice" → "Svježi sok od narandže" / "عصير برتقال طازج"; "Chicken Salad" → "Pileća salata" / "سلطة دجاج"; "Chemex Hot" → "Chemex topli" / "كيمكس ساخن". Translating a product name is as wrong as leaving a descriptive name in English.
 - Allergy and diet facts keep their exact meaning: never drop nuts, peanuts, sesame, eggs, dairy, gluten, margarine, alcohol-free or vegetarian; never turn "dairy" into "lactose"; never add a fact the English does not state.
 - The same ingredient gets the same word everywhere.
@@ -111,28 +142,40 @@ serve(async (req) => {
 
     // Admin only — translations are costly AI calls; any waiter must not trigger them.
     const userId = (claimsData.claims as { sub?: string }).sub;
-    const { data: adminRole } = await supabase
+    const { data: roleRows } = await supabase
       .from("user_roles")
-      .select("role")
-      .eq("user_id", userId ?? "")
-      .eq("role", "admin")
-      .maybeSingle();
-    if (!adminRole) {
+      .select("role, venue_id")
+      .eq("user_id", userId ?? "");
+    const roles = (roleRows as RoleRow[] | null) ?? [];
+    if (!roles.some((r) => r.role === "admin")) {
       return new Response(JSON.stringify({ error: "Admin access required" }), { status: 403, headers: corsHeaders });
     }
 
-    let force = false;
-    let overwrite = false;
+    let body: { force?: unknown; overwrite?: unknown; venue?: unknown } = {};
     try {
-      const body = await req.json();
-      force = body?.force === true;
-      overwrite = force && body?.overwrite === true;
+      body = (await req.json()) ?? {};
     } catch { /* no body is fine */ }
 
+    // One restaurant's menu: the service role reads and writes both, so the
+    // restaurant is decided here (supabase/functions/_shared/venue-access.ts).
+    const { data: venueRows } = await supabase.from("venues").select("id, slug");
+    const restaurant = resolveAdminVenue(roles, namedVenue(body, req), (venueRows as VenueRow[] | null) ?? []);
+    if (!restaurant.ok) {
+      return new Response(JSON.stringify({ error: restaurant.error }), {
+        status: restaurant.status, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    const venueId = restaurant.venueId;
+    const instructions = systemPrompt(restaurant.slug);
+
+    const force = body.force === true;
+    // Replacing hand-edited translations is the owner's call.
+    const overwrite = force && body.overwrite === true && restaurant.owner;
+
     const [catRes, subRes, itemRes] = await Promise.all([
-      supabase.from("categories").select("id, name, name_bs, name_ar"),
-      supabase.from("subcategories").select("id, name, name_bs, name_ar"),
-      supabase.from("menu_items").select("id, name, description, name_bs, name_ar, description_bs, description_ar"),
+      supabase.from("categories").select("id, name, name_bs, name_ar").eq("venue_id", venueId),
+      supabase.from("subcategories").select("id, name, name_bs, name_ar").eq("venue_id", venueId),
+      supabase.from("menu_items").select("id, name, description, name_bs, name_ar, description_bs, description_ar").eq("venue_id", venueId),
     ]);
     for (const r of [catRes, subRes, itemRes]) if (r.error) throw r.error;
 
@@ -220,7 +263,7 @@ No markdown, no explanation.`;
         body: JSON.stringify({
           model: "google/gemini-2.5-flash",
           messages: [
-            { role: "system", content: SYSTEM_PROMPT },
+            { role: "system", content: instructions },
             { role: "user", content: prompt },
           ],
         }),
@@ -262,7 +305,7 @@ No markdown, no explanation.`;
 
         // Only write while each field still holds what we read, so an edit made
         // in Admin -> Menu during the AI call is not overwritten.
-        let query = supabase.from(table).update(updates).eq("id", target.row.id);
+        let query = supabase.from(table).update(updates).eq("id", target.row.id).eq("venue_id", venueId);
         for (const f of written) {
           const seen = target.row[f];
           query = seen === null || seen === undefined ? query.is(f, null) : query.eq(f, seen);

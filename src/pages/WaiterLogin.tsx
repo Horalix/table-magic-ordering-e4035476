@@ -7,6 +7,7 @@ import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 import { User, Lock, Loader2, Eye, EyeOff } from 'lucide-react';
 import { useStaffDocument } from '@/components/staff/useStaffDocument';
+import { HOME, STAFF_BRAND } from '@/components/staff/staff-brand';
 
 const synthEmail = (u: string) => `${u}@waiter.lasoul.local`;
 const normalizeUsername = (value: string) =>
@@ -38,7 +39,7 @@ const WaiterLogin = () => {
   const [showPassword, setShowPassword] = useState(false);
   const navigate = useNavigate();
   // A guest's Arabic choice must not mirror the staff sign-in on a shared device.
-  useStaffDocument('Waiter sign in');
+  useStaffDocument(`${HOME.name} waiter sign in`);
 
   const setWaiterSessionFromFunction = async (u: string) => {
     const { data, error } = await supabase.functions.invoke<WaiterLoginResponse>('waiter-login', {
@@ -140,10 +141,10 @@ const WaiterLogin = () => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-6" style={{ backgroundColor: 'hsl(140, 12%, 53%)' }}>
+    <div className="min-h-screen flex items-center justify-center px-6" style={{ backgroundColor: STAFF_BRAND.background }}>
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
-          <img src="/brand/emblem-white.webp" alt="La Soul" width={480} height={480} className="w-24 h-24 mx-auto mb-4" />
+          <img src={STAFF_BRAND.mark} alt={HOME.name} width={STAFF_BRAND.width} height={STAFF_BRAND.height} className="w-auto h-24 mx-auto mb-4 object-contain" />
           <h1 className="font-serif text-2xl font-bold text-white">Waiter Sign In</h1>
           <p className="text-sm text-white/70 font-sans mt-1">Use your username and password</p>
         </div>

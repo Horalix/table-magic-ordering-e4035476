@@ -7,9 +7,21 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { ChevronDown, ChevronRight, ScrollText, Search } from 'lucide-react';
 import { formatStamp } from '@/lib/timing';
 import { localDayISO } from '@/lib/reporting';
+import { DEFAULT_VENUE, VENUES, venueByDbId } from '@/lib/venues';
 import type { Database } from '@/integrations/supabase/types';
 
-type AuditRow = Database['public']['Tables']['audit_log']['Row'];
+/** venue_id: absent from the generated types, and on a database from before the second restaurant. */
+type AuditRow = Database['public']['Tables']['audit_log']['Row'] & { venue_id?: string | null };
+
+/**
+ * The restaurant an entry belongs to. The database shows each admin, and the
+ * owner, the log of the restaurant being looked at (20261031100000); saying
+ * so on every entry means a screenshot or a copied line can never be taken
+ * for the other restaurant's. Entries from before there were two restaurants
+ * carry none and are La Soul's.
+ */
+const venueNameOf = (row: AuditRow) =>
+  row.venue_id ? venueByDbId(row.venue_id)?.name ?? 'Unknown restaurant' : VENUES[DEFAULT_VENUE].name;
 
 /**
  * The audit log, finally readable.
@@ -90,7 +102,7 @@ const AdminAudit = () => {
       if (filter && filter.match.length > 0
         && !filter.match.some((m) => row.action.includes(m))) return false;
       if (!q) return true;
-      const hay = `${row.action} ${row.actor_label ?? ''} ${row.entity_type} ${row.entity_id ?? ''} ${row.reason ?? ''}`.toLowerCase();
+      const hay = `${row.action} ${row.actor_label ?? ''} ${row.entity_type} ${row.entity_id ?? ''} ${row.reason ?? ''} ${venueNameOf(row)}`.toLowerCase();
       return hay.includes(q);
     });
   }, [rows, quick, search]);
@@ -101,7 +113,7 @@ const AdminAudit = () => {
         <div>
           <h1 className="font-serif text-3xl font-bold text-foreground">Audit log</h1>
           <p className="text-sm text-muted-foreground font-sans">
-            Every action that touched money or order state. Append-only — nothing here can be edited.
+            Every action that touched money or order state at this restaurant. Append-only — nothing here can be edited.
           </p>
         </div>
         <Button variant="outline" size="sm" onClick={() => void load()}>Refresh</Button>
@@ -191,6 +203,9 @@ const AdminAudit = () => {
                       <span className="text-xs text-muted-foreground font-sans">
                         {row.entity_type}
                         {row.entity_id ? ` · ${row.entity_id.slice(0, 8)}` : ''}
+                      </span>
+                      <span className="text-[11px] font-sans px-2 py-0.5 rounded-full border border-border text-muted-foreground">
+                        {venueNameOf(row)}
                       </span>
                     </div>
                     <p className="text-xs text-muted-foreground font-sans mt-0.5">

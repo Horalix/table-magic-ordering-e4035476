@@ -67,6 +67,87 @@ export function currentVenueSlug(): string | null {
   return typeof location === 'undefined' ? null : venueForPath(location.pathname);
 }
 
+/** What the database answers when a request names no restaurant: default_venue(), La Soul. */
+const DATABASE_DEFAULT_SLUG = 'lasoul';
+
+/**
+ * The restaurant the database answers this page's requests for, for someone
+ * it lets look at any restaurant (the owner, a guest): the one the page
+ * names, else La Soul. On an admin page that is the restaurant the owner is
+ * looking at — what the layout shows — even before they have picked one.
+ */
+export function shownVenueSlug(): string {
+  return currentVenueSlug() ?? DATABASE_DEFAULT_SLUG;
+}
+
+/** One of the signed-in account's rows in user_roles. */
+export interface StaffRoleRow {
+  role: string;
+  /** Absent on a database from before the second restaurant; null for the owner. */
+  venue_id?: string | null;
+}
+
+const ROLE_ORDER = ['admin', 'staff'];
+const roleRank = (role: string) => {
+  const at = ROLE_ORDER.indexOf(role);
+  return at === -1 ? ROLE_ORDER.length : at;
+};
+
+/**
+ * Where the database places a signed-in account when a request names no
+ * restaurant it works at — current_venue()'s last step
+ * (20261028100000_two_restaurants_context.sql): the restaurant of its first
+ * role, admin before staff (the app_role order), then by restaurant id. Null
+ * for the owner, who works at none (the database then answers for La Soul).
+ */
+export function workplaceVenueId(rows: readonly StaffRoleRow[]): string | null {
+  const placed = rows
+    .filter((r): r is StaffRoleRow & { venue_id: string } => typeof r.venue_id === 'string' && r.venue_id !== '')
+    .sort((a, b) => roleRank(a.role) - roleRank(b.role) || (a.venue_id < b.venue_id ? -1 : a.venue_id > b.venue_id ? 1 : 0));
+  return placed[0]?.venue_id ?? null;
+}
+
+/**
+ * The restaurant the database answers a signed-in account's request for
+ * (current_venue()): the one asked for (`askedId`, from the x-venue header)
+ * if the account may work there — the owner anywhere — else its workplace,
+ * else `defaultId`. With no header at all, which is how realtime asks, it is
+ * the workplace.
+ */
+export function answeredVenueId(rows: readonly StaffRoleRow[], askedId: string | null, defaultId: string): string {
+  const owner = rows.some((r) => r.role === 'admin' && r.venue_id === null);
+  if (askedId && (owner || rows.some((r) => r.venue_id === askedId))) return askedId;
+  return workplaceVenueId(rows) ?? defaultId;
+}
+
+/**
+ * The service worker's cache key for the menu tables (vite.config.ts, the
+ * "menu-data" rule): the address, plus the restaurant the request named
+ * (x-venue) and whose session asked (the token's subject; "anon" for a
+ * guest). The database answers the same address with La Soul's menu or Vera
+ * Italia's by that header, and a signed-in account's header only counts at a
+ * restaurant it works at — so a key of the address alone could hand a guest
+ * at Vera Italia La Soul's cached menu whenever the network was slow.
+ *
+ * The worker receives this function's source, not this module: it may use
+ * nothing but its argument and the browser's globals.
+ */
+export async function menuDataCacheKey({ request }: { request: Request }): Promise<string> {
+  const url = new URL(request.url);
+  let who = 'anon';
+  try {
+    const token = (request.headers.get('authorization') || '').replace(/^Bearer\s+/i, '');
+    const part = (token.split('.')[1] || '').replace(/-/g, '+').replace(/_/g, '/');
+    const claims = JSON.parse(atob(part.padEnd(Math.ceil(part.length / 4) * 4, '=')));
+    if (claims && typeof claims.sub === 'string' && claims.sub) who = claims.sub;
+  } catch {
+    who = 'anon';
+  }
+  url.searchParams.set('sw-venue', request.headers.get('x-venue') || '-');
+  url.searchParams.set('sw-as', who);
+  return url.href;
+}
+
 /** The restaurant of the table this guest sat down at; null if none yet. */
 export function guestVenue(): string | null {
   return read(GUEST_KEY);

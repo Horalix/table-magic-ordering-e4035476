@@ -22,6 +22,7 @@ import InlinePrice from '@/components/admin/InlinePrice';
 import { DIET_BY_KEY, getItemTags } from '@/lib/dietary';
 import { Link } from 'react-router-dom';
 import { isNew, saleScheduled } from '@/lib/promotions';
+import { shownVenueSlug } from '@/lib/current-venue';
 import type { Database } from '@/integrations/supabase/types';
 
 type CategoryInsert = Database['public']['Tables']['categories']['Insert'];
@@ -353,7 +354,8 @@ const AdminMenu = () => {
   const translateMenu = async (force = false) => {
     setIsTranslating(true);
     try {
-      const { data, error } = await supabase.functions.invoke<TranslateMenuResponse>('translate-menu', { body: { force } });
+      // The restaurant shown: the owner must name one; a restaurant admin's own is used regardless.
+      const { data, error } = await supabase.functions.invoke<TranslateMenuResponse>('translate-menu', { body: { force, venue: shownVenueSlug() } });
       if (error) throw error;
       toast.success(`Translation complete: ${data?.message ?? 'menu updated'}`);
       await fetchMenu();
@@ -365,7 +367,7 @@ const AdminMenu = () => {
   const migrateImages = async () => {
     setIsMigrating(true); setMigrateResult(null);
     try {
-      const { data, error } = await supabase.functions.invoke<MigrateImagesResponse>('migrate-images');
+      const { data, error } = await supabase.functions.invoke<MigrateImagesResponse>('migrate-images', { body: { venue: shownVenueSlug() } });
       if (error) throw error;
       if (!data) throw new Error('Image migration returned no result');
       const msg = `Migrated ${data.migrated} · Skipped ${data.skipped} · Failed ${data.failed}`;

@@ -53,6 +53,9 @@ const AdminPerformance = lazy(() => import("./pages/admin/AdminPerformance"));
 const AdminAudit = lazy(() => import("./pages/admin/AdminAudit"));
 const AdminImpact = lazy(() => import("./pages/admin/AdminImpact"));
 const AdminPromotions = lazy(() => import("./pages/admin/AdminPromotions"));
+// The owner's: both restaurants at once, and who runs them (AdminLayout keeps everyone else out).
+const AdminOverview = lazy(() => import("./pages/admin/AdminOverview"));
+const AdminTeam = lazy(() => import("./pages/admin/AdminTeam"));
 const KitchenDisplay = lazy(() => import("./pages/KitchenDisplay"));
 const WaiterDashboard = lazy(() => import("./pages/WaiterDashboard"));
 const WaiterLogin = lazy(() => import("./pages/WaiterLogin"));
@@ -191,6 +194,8 @@ const App = () => (
               <Route path="performance" element={<AdminPerformance />} />
               <Route path="audit" element={<AdminAudit />} />
               <Route path="impact" element={<AdminImpact />} />
+              <Route path="overview" element={<AdminOverview />} />
+              <Route path="team" element={<AdminTeam />} />
             </Route>
 
             {/* Kitchen & Waiter. Wrapped in ClockProvider so every elapsed-time
