@@ -76,6 +76,9 @@ export async function laSoulDatabase(): Promise<Db> {
   await db.exec(migration('20261031090000_vera_suggestions.sql'));
   // ...and the learner and the refresh as each restaurant's admin may run them.
   await db.exec(migration('20261031100000_admin_separation.sql'));
+  // ...and the live ranker, learner and guest wrapper (the older files above
+  // restated each of them).
+  await db.exec(migration('20261031120000_reco_quality.sql'));
   await db.exec(`
     UPDATE public.restaurant_settings
        SET recommendations_enabled = true, reco_holdout_pct = 0, reco_exploration = 0

@@ -141,6 +141,32 @@ no drink gets a drink suggested.
 The affinity table structurally cannot do this — it only knows which items
 appear *together*, so it can never notice something absent.
 
+### What a head waiter would do
+
+Since `20261031120000_reco_quality.sql` (tested in
+`supabase/tests/reco-quality.test.ts`):
+
+- **One of each before two of anything.** The best card stays first; then the
+  best of each other group (cold drink, hot drink, sweet, starter, fries…)
+  before a second of any. A burger gets a drink, then fries. "No thanks" to
+  one moves its whole group back for the visit.
+- **A drink each, not two.** Cold drinks are offered with food only while the
+  table has fewer than one per person, this round or an earlier one. A kids'
+  dish counts toward the kids' drinks, not the grown-ups'.
+- **The dish page is about the dish.** Something that only goes with another
+  dish in the cart ranks below what goes with this one.
+- **Learned means specific, not popular.** A pair learned from tables counts
+  only when those tables take the drink clearly more often (×1.5, on a
+  cautious reading) than comparable tables of another kind. Coca-Cola, which
+  goes with everything, no longer becomes every pasta's first drink.
+- **What guests take decides.** Once a pair has its own record, that record
+  replaces the owner's priority on the same scale: a pair taken often rises,
+  one ignored falls. The cart and the dish page share their record until
+  each has its own.
+- **Fit rows may belong to one restaurant** (`reco_fit.venue_id`,
+  `reco_clash.venue_id`; empty means both), so a rule for Vera Italia never
+  changes La Soul.
+
 ## 6. Substitution
 
 `guest_get_substitutes(item_id)` — for when something has run out.
