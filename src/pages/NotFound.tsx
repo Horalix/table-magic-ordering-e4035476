@@ -1,4 +1,6 @@
+import { useEffect } from 'react';
 import { Link, Navigate, useLocation } from 'react-router-dom';
+import { lookForMissingPage } from '@/lib/app-update';
 import { useT } from '@/lib/i18n';
 import { legacyRedirect } from '@/lib/legacy-redirects';
 import { menuPath } from '@/lib/venues';
@@ -16,6 +18,8 @@ const NotFound = () => {
   const t = useT();
   const { pathname } = useLocation();
   useNoIndex();
+  // A phone on an older version: the newer one may have this page.
+  useEffect(() => lookForMissingPage(), []);
   // An address that moved (an old printed QR code, an old lasoul.net page).
   const moved = legacyRedirect(pathname);
   if (moved) return <Navigate to={moved} replace />;

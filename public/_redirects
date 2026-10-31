@@ -40,6 +40,9 @@
 # not "200 OK" — at any other. Pages the build wrote and every file are
 # served as they are. The same rules end Vera Italia's site's _redirects
 # (appRedirects in src/lib/seo/static-pages.ts; seo.test.ts keeps them equal).
+# First, the photos' folder: no page, but Google lists it, so it goes home.
+/site                          /                                           301
+/site/                         /                                           301
 /bs                            /index.html                                 200
 /ar                            /index.html                                 200
 /veraitalia                    /index.html                                 200

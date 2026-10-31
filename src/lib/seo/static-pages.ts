@@ -356,8 +356,16 @@ export const APP_ROUTES = [
   '/admin', '/admin/*', '/kitchen', '/waiter', '/waiter/*',
 ];
 
-/** The rules every site's _redirects ends with: the app at its own addresses, "not found" at any other. */
+/**
+ * The folder the websites' photos are in is no page. Google found it while
+ * every address still answered "200" and lists it with the home page's
+ * title, so it goes to the home page.
+ */
+const PHOTO_FOLDER = ['/site', '/site/'];
+
+/** The rules every site's _redirects ends with: the photo folder home, the app at its own addresses, "not found" at any other. */
 export const appRedirects = (): string[] => [
+  ...PHOTO_FOLDER.map((p) => rule(p, '/', '301')),
   ...APP_ROUTES.map((p) => rule(p, '/index.html', '200')),
   rule('/*', '/index.html', '404'),
 ];
