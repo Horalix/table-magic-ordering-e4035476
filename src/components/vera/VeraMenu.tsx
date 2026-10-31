@@ -154,7 +154,7 @@ export const VeraMenuFooter = () => {
           )}
         </div>
       )}
-      <Link to="/privacy" className="block pt-5 text-[11px] text-muted-foreground/80 font-sans hover:text-primary transition-colors">
+      <Link to="/privacy/" className="block pt-5 text-[11px] text-muted-foreground/80 font-sans hover:text-primary transition-colors">
         {t('privacy_security')}
       </Link>
     </motion.footer>

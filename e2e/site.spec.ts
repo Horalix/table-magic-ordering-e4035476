@@ -160,4 +160,85 @@ test.describe('website', () => {
     await expect(page.getByRole('dialog')).toBeVisible();
     await expect(page.getByRole('dialog').getByRole('heading', { name: 'La Soul Burger' })).toBeVisible();
   });
+
+  test('a dish opened from its own address keeps that address as its canonical while it is open', async ({ page }) => {
+    // The rows DishLink reads its slugs from (the fixture's menu has no categories joined in).
+    await page.route((url) => url.pathname.endsWith('/rest/v1/menu_items') && (url.searchParams.get('select') ?? '').includes('subcategories('), (route) =>
+      route.fulfill({
+        status: 200, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' },
+        body: JSON.stringify([{ id: 'item-burger', name: 'La Soul Burger', subcategories: { name: 'Burgers', categories: { name: 'Food' } } }]),
+      }));
+    await setLocale(page, 'en');
+    await page.goto('/menu/lasoul/dish/la-soul-burger/');
+    await expect(page).toHaveURL(/\/menu\/lasoul\/food\/\?section=burgers&dish=item-burger$/);
+    await expect(page.getByRole('dialog').getByRole('heading', { name: 'La Soul Burger' })).toBeVisible();
+    // What the dish's prerendered page says (scripts/seo-prerender.ts), not the category's.
+    await expect(page.locator('link[rel="canonical"]')).toHaveAttribute('href', /\/menu\/lasoul\/dish\/la-soul-burger\/$/);
+    await expect(page.locator('meta[property="og:url"]')).toHaveAttribute('content', /\/menu\/lasoul\/dish\/la-soul-burger\/$/);
+    await expect(page).toHaveTitle('La Soul Burger — 18.00 KM · La Soul, Sarajevo');
+
+    // Closed, the page is the category again.
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await expect(page.locator('link[rel="canonical"]')).toHaveAttribute('href', /\/menu\/lasoul\/food\/$/);
+    await expect(page).toHaveTitle('Food — La Soul menu, Sarajevo');
+  });
+
+  test('a dish tapped on the menu leaves the category its canonical', async ({ page }) => {
+    await setLocale(page, 'en');
+    await page.goto('/menu/lasoul/food/?dish=item-burger');
+    await expect(page.getByRole('dialog')).toBeVisible();
+    await expect(page.locator('link[rel="canonical"]')).toHaveAttribute('href', /\/menu\/lasoul\/food\/$/);
+  });
+
+  test('the privacy notice is a page of its own, before and after the app runs', async ({ page }) => {
+    // What a crawler that runs no JavaScript reads at /privacy/.
+    const html = await (await page.request.get('/privacy/')).text();
+    expect(html).toContain('<title>Trust, Privacy &amp; Terms — La Soul</title>');
+    expect(html).toMatch(/<link rel="canonical" href="https:\/\/[^"]+\/privacy\/" \/>/);
+    expect(html).toContain('<h1>Trust, Privacy &amp; Terms</h1>');
+    expect(html).toContain('Card payments are PCI-safe');
+    expect(html).not.toContain('<h1>Burgers and cakes, made with soul.</h1>');
+
+    await setLocale(page, 'en');
+    await page.goto('/');
+    await page.getByRole('link', { name: 'Privacy', exact: true }).click();
+    await expect(page).toHaveURL(/\/privacy\/$/);
+    await expect(page.getByRole('heading', { level: 1, name: 'Trust, Privacy & Terms' })).toBeVisible();
+    await expect(page.locator('link[rel="canonical"]')).toHaveAttribute('href', /\/privacy\/$/);
+  });
+
+  test('the menu names no other languages: one address serves all three', async ({ page }) => {
+    const menu = await (await page.request.get('/menu/lasoul/')).text();
+    expect(menu).toMatch(/<link rel="canonical" href="https:\/\/[^"]+\/menu\/lasoul\/" \/>/);
+    expect(menu).not.toContain('hreflang=');
+    await setLocale(page, 'bs');
+    await page.goto('/menu/lasoul/');
+    await expect(page.getByRole('button', { name: /Hrana|Food/ }).first()).toBeVisible();
+    await expect(page.locator('link[rel="alternate"][hreflang]')).toHaveCount(0);
+  });
+
+  test('an address that is no page says so to search engines', async ({ page }) => {
+    await setLocale(page, 'en');
+    await page.goto('/this-page-does-not-exist');
+    await expect(page.getByRole('heading', { name: 'Page not found' })).toBeVisible();
+    await expect(page.locator('meta[name="robots"]')).toHaveAttribute('content', 'noindex, nofollow');
+    // Not the home page's canonical, nor its language alternates.
+    await expect(page.locator('link[rel="canonical"]')).toHaveCount(0);
+    await expect(page.locator('link[rel="alternate"][hreflang]')).toHaveCount(0);
+
+    // A page found again says what it is.
+    await page.getByRole('link', { name: 'Back to Menu' }).click();
+    await expect(page).toHaveURL(/\/menu\/lasoul\/$/);
+    await expect(page.locator('meta[name="robots"]')).toHaveAttribute('content', /^index/);
+    await expect(page.locator('link[rel="canonical"]')).toHaveAttribute('href', /\/menu\/lasoul\/$/);
+  });
+
+  test('a staff sign-in screen is nobody’s search result', async ({ page }) => {
+    for (const path of ['/admin/login', '/waiter/login']) {
+      await page.goto(path);
+      await expect(page.locator('meta[name="robots"]')).toHaveAttribute('content', 'noindex, nofollow');
+      await expect(page.locator('link[rel="canonical"]')).toHaveCount(0);
+    }
+  });
 });

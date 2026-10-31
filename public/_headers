@@ -4,3 +4,47 @@
 # application/octet-stream; browsers tolerate that, install checks do not.
 /manifest.webmanifest
   Content-Type: application/manifest+json
+
+# How long a browser keeps a file. Netlify's default is "max-age=0,
+# must-revalidate": ask again every time. That stays for everything that
+# names other files or must change the moment a deploy does — index.html and
+# every prerendered page, sw.js, the manifests, robots.txt, the sitemap — so
+# none of them is listed here.
+
+# The app's code and styles. Vite names each file under /assets/ by a hash of
+# its contents, so a change is a new address: a browser can keep these for
+# a year without asking.
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# Menu photographs, /menu/<id>/<size>.webp (pages under /menu/ end in "/"
+# and never match). The app asks for each with ?v=<hash of its files>
+# (scripts/image-versions.mjs), so a replaced photo is a new address; kept a
+# month, as long as the service worker keeps them (vite.config.ts). Not
+# immutable: an address without ?v= (a crawler's, a link preview's) can
+# change.
+/menu/*/*.webp
+  Cache-Control: public, max-age=2592000
+
+# The self-hosted faces (scripts/build-fonts.py). Same names whatever is in
+# them, so a week, not a year: a regenerated face reaches every browser
+# within one. The service worker precaches them by revision, so an installed
+# app takes a new face with the next version anyway.
+/fonts/*
+  Cache-Control: public, max-age=604800
+
+# Staff screens are nobody's search result. robots.txt keeps crawlers out;
+# this answers the ones that come anyway, before any code runs (the screens
+# also say so once it does: useStaffDocument).
+/admin
+  X-Robots-Tag: noindex, nofollow
+/admin/*
+  X-Robots-Tag: noindex, nofollow
+/kitchen
+  X-Robots-Tag: noindex, nofollow
+/kitchen/*
+  X-Robots-Tag: noindex, nofollow
+/waiter
+  X-Robots-Tag: noindex, nofollow
+/waiter/*
+  X-Robots-Tag: noindex, nofollow

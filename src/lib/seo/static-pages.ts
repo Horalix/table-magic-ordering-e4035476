@@ -20,7 +20,7 @@ import type { Venue } from '../venues';
 import { CURATED_SIGNATURES } from '../../components/site/signature-list';
 import { absoluteUrl, SITE_URL } from './site-url';
 import type { SeoMenu, SeoMenuCategory, SeoMenuItem, SeoMenuSection } from './menu-data';
-import { categoryPath, dishPath, faqEntries, hoursDays, LOCALES, menuPath, OG_IMAGE_PATH, sitePath } from './structured-data';
+import { categoryPath, dishPath, faqEntries, hoursDays, LOCALES, menuPath, OG_IMAGE_PATH, PRIVACY_PATH, sitePath } from './structured-data';
 
 const OG_LOCALE: Record<Locale, string> = { en: 'en_GB', bs: 'bs_BA', ar: 'ar_AR' };
 const LANGUAGE_NAME: Record<Locale, string> = { en: 'English', bs: 'Bosanski', ar: 'العربية' };
@@ -140,11 +140,26 @@ export function homeBody(venue: Venue, locale: Locale): string {
     `<section id="faq"><h2>${st('faq_title', locale)}</h2><dl>${faq}</dl></section>`,
     visitBlock(venue, locale),
     `</main>`,
-    `<footer><p>${st('footer_rights', locale, { year: new Date().getFullYear() })} · <a href="/privacy">${st('footer_privacy', locale)}</a></p></footer>`,
+    `<footer><p>${st('footer_rights', locale, { year: new Date().getFullYear() })} · <a href="${PRIVACY_PATH}">${st('footer_privacy', locale)}</a></p></footer>`,
   ].join('\n');
 }
 
 const price = (n: number) => `${n.toFixed(2)} KM`;
+
+/**
+ * A dish's title and description: its own page's (/menu/lasoul/dish/<slug>/,
+ * in English), and the app's in the guest's language while that dish is open
+ * from that address (src/pages/CategoryPage.tsx).
+ */
+export function dishMeta(name: string, amount: number, description: string | null | undefined, locale: Locale) {
+  const vars = { dish: name, price: price(amount) };
+  // The description as a sentence, then the template's own.
+  const sentence = description ? `${description.replace(/\s+$/, '').replace(/([^.!?])$/, '$1.')} ` : '';
+  return {
+    title: siteT('seo_dish_title', locale, vars),
+    description: siteT('seo_dish_description', locale, { ...vars, description: sentence }),
+  };
+}
 
 /** A menu page — the whole menu, or one category — with every dish in all three languages. */
 export function menuBody(venue: Venue, menu: SeoMenu | null, locale: Locale, only?: SeoMenuCategory): string {
@@ -325,10 +340,33 @@ export function llmsFullTxt(venue: Venue, menu: SeoMenu | null): string {
 const rule = (from: string, to: string, status: string) => `${from.padEnd(22)} ${to.padEnd(52)} ${status}`;
 
 /**
+ * The app's own addresses (src/App.tsx). Netlify serves each the app, or the
+ * page the build wrote there: a rule applies only where no file matches
+ * ("shadowing"), so every prerendered page and every file is served as it
+ * is. Any other address is the app's "not found" page with the status that
+ * says so. Answered "200 OK", every mistyped or dead link — the old
+ * lasoul.net's pages among them — was a page to search engines (a "soft
+ * 404"), with the home page's HTML and canonical.
+ *
+ * La Soul's public/_redirects ends with the same rules; seo.test.ts holds it
+ * to them, and them to App.tsx's routes.
+ */
+export const APP_ROUTES = [
+  '/bs', '/ar', '/veraitalia', '/menu', '/menu/*', '/cart', '/tab', '/table/*', '/start', '/privacy',
+  '/admin', '/admin/*', '/kitchen', '/waiter', '/waiter/*',
+];
+
+/** The rules every site's _redirects ends with: the app at its own addresses, "not found" at any other. */
+export const appRedirects = (): string[] => [
+  ...APP_ROUTES.map((p) => rule(p, '/index.html', '200')),
+  rule('/*', '/index.html', '404'),
+];
+
+/**
  * Netlify's rules for a restaurant's own site (src/lib/home-venue.ts), in
  * place of La Soul's public/_redirects. Its old address on La Soul's site,
- * /<slug>/, is its root here; La Soul's menu is on La Soul's site; anything
- * else is the app.
+ * /<slug>/, is its root here; La Soul's menu is on La Soul's site; then the
+ * app's own addresses.
  */
 export function ownSiteRedirects(slug: string, laSoulUrl: string): string {
   return [
@@ -337,7 +375,7 @@ export function ownSiteRedirects(slug: string, laSoulUrl: string): string {
     rule(`/${slug}/*`, '/', '301!'),
     rule('/menu/lasoul', `${laSoulUrl}/menu/lasoul/`, '301!'),
     rule('/menu/lasoul/*', `${laSoulUrl}/menu/lasoul/:splat`, '301!'),
-    rule('/*', '/index.html', '200'),
+    ...appRedirects(),
     '',
   ].join('\n');
 }

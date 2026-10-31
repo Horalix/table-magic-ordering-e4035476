@@ -125,6 +125,19 @@ test.describe('drinks for the table', () => {
     await expect.poll(() => calls.recommendations.length).toBeGreaterThan(0);
     await expect(page.getByRole('button', { name: /No thanks|Ne, hvala/ })).toHaveCount(0);
   });
+
+  test('shows the whole name of what it suggests, on two lines if a phone needs them', async ({ page }) => {
+    // Beside the photo and the two buttons the name has a dozen letters a
+    // line on a phone; on one line this was "Regula…".
+    await seedCart(page, 1);
+    await stubSuggestions(page, { cart: [{ ...LEMONADE, name: 'Regular Lemonade', suggested_quantity: 1 }] });
+
+    await page.goto('/cart');
+    const name = page.getByRole('region', { name: /Complete your order/ }).getByText('Regular Lemonade', { exact: true });
+    await expect(name).toBeVisible();
+    const cut = await name.evaluate((el) => el.scrollWidth > el.clientWidth + 1 || el.scrollHeight > el.clientHeight + 1);
+    expect(cut).toBe(false);
+  });
 });
 
 test.describe('the running tab while the food is coming', () => {

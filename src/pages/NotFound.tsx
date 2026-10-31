@@ -2,12 +2,20 @@ import { Link, Navigate, useLocation } from 'react-router-dom';
 import { useT } from '@/lib/i18n';
 import { legacyRedirect } from '@/lib/legacy-redirects';
 import { menuPath } from '@/lib/venues';
+import { useNoIndex } from '@/lib/seo/noindex';
 import BrandEmblem from '@/components/BrandEmblem';
 
-/** Any mistyped or stale link. Guests land here too, so it speaks their language. */
+/**
+ * Any mistyped or stale link. Guests land here too, so it speaks their
+ * language. Not a page to search engines: Netlify answers these addresses
+ * "404" (public/_redirects), and the page says "noindex" with no canonical
+ * for one that runs the app on an address answered "200" (a dish, a category
+ * or a restaurant that no longer exists).
+ */
 const NotFound = () => {
   const t = useT();
   const { pathname } = useLocation();
+  useNoIndex();
   // An address that moved (an old printed QR code, an old lasoul.net page).
   const moved = legacyRedirect(pathname);
   if (moved) return <Navigate to={moved} replace />;

@@ -184,7 +184,7 @@ const CheckoutSheet = ({ open, total, submitting, onlineCardEnabled, payAtTableE
 
             <p className="text-[11px] text-muted-foreground/80 font-sans mt-3 text-center leading-relaxed">
               {t('terms_accept')}{' '}
-              <Link to="/privacy" className="underline hover:text-primary">{t('terms_link')}</Link>.
+              <Link to="/privacy/" className="underline hover:text-primary">{t('terms_link')}</Link>.
             </p>
           </motion.div>
         </motion.div>

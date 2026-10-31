@@ -36,4 +36,23 @@
 /bs/home                       /bs/                                        301
 /ar/home                       /ar/                                        301
 
-/* /index.html 200
+# The app's own addresses (src/App.tsx), and "not found" — with that status,
+# not "200 OK" — at any other. Pages the build wrote and every file are
+# served as they are. The same rules end Vera Italia's site's _redirects
+# (appRedirects in src/lib/seo/static-pages.ts; seo.test.ts keeps them equal).
+/bs                            /index.html                                 200
+/ar                            /index.html                                 200
+/veraitalia                    /index.html                                 200
+/menu                          /index.html                                 200
+/menu/*                        /index.html                                 200
+/cart                          /index.html                                 200
+/tab                           /index.html                                 200
+/table/*                       /index.html                                 200
+/start                         /index.html                                 200
+/privacy                       /index.html                                 200
+/admin                         /index.html                                 200
+/admin/*                       /index.html                                 200
+/kitchen                       /index.html                                 200
+/waiter                        /index.html                                 200
+/waiter/*                      /index.html                                 200
+/*                             /index.html                                 404

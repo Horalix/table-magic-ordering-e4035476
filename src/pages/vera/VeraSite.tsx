@@ -337,7 +337,7 @@ const VeraSite = ({ locale: pathLocale }: { locale?: Locale }) => {
         <img src="/brand/vera/lockup-cream.webp" alt="Vera Italia" width={1158} height={806} className="mx-auto w-40 h-auto opacity-90" />
         <div className="mt-8 flex justify-center gap-6 font-sans text-[13px]">
           {venue.live && <Link to={menuPath('veraitalia')} className="hover:text-white">{c(SITE.menuTitle)}</Link>}
-          <Link to="/privacy" className="hover:text-white">{t('privacy_security')}</Link>
+          <Link to="/privacy/" className="hover:text-white">{t('privacy_security')}</Link>
         </div>
         <p className="mt-6 vi-caps text-[hsl(var(--vi-glow))]/50">© {new Date().getFullYear()} Vera Italia{venue.city ? ` · ${c(PLACE.city)}, ${c(PLACE.country)}` : ''}</p>
       </footer>

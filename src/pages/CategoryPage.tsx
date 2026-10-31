@@ -26,6 +26,7 @@ import { PriceTag, SaleBadge, NewBadge, ComboBadge } from '@/components/guest/Pr
 import { useComboMap } from '@/lib/promotions-api';
 import { menuCategoryPath, menuHome } from '@/lib/venues';
 import { usePageMeta } from '@/lib/seo/page-meta';
+import { dishMeta } from '@/lib/seo/static-pages';
 import { siteT } from '@/lib/site-copy';
 import {
   comboRegularPrice, comboUnitPrice, fixedChoices, isNew, missingSlots, nextPriceChange, rememberPrices, saleView, type ComboDef,
@@ -33,7 +34,7 @@ import {
 import type { Database } from '@/integrations/supabase/types';
 import { useVenue } from '@/hooks/useVenue';
 // Vera Italia's courses have long Italian names; the tabs use their short ones.
-import { COURSES, VERA, courseTitle, pick } from '@/components/vera/copy';
+import { COURSES, VERA, courseTitle, dishMeta as veraDishMeta, pick } from '@/components/vera/copy';
 
 type CategoryRow = Database['public']['Tables']['categories']['Row'];
 type MenuItemRow = import('@/lib/promotions-api').MenuItemRow;
@@ -547,13 +548,27 @@ const CategoryPage = () => {
 
   // What this page says about itself to search engines, in the guest's language;
   // the prerendered page for the same address says the same (scripts/seo-prerender.ts).
+  //
+  // Except while a dish opened from its own address is on screen. DishLink
+  // brings it here and says which address that was; until it is closed this
+  // is that dish's page, as the HTML served there says — its canonical, its
+  // title — or a search engine that runs the app reads the dish's page as a
+  // copy of the category's.
   const categoryLabel = category ? getLocalizedName(category, locale) : (categoryName ?? '');
-  usePageMeta({
+  const dishPage = (location.state as { dishPage?: string } | null)?.dishPage;
+  const linked = dishPage && selectedItem?.id === dishParam ? selectedItem : null;
+  const dish = linked && {
+    name: getLocalizedName(linked, locale), price: Number(linked.price), description: getLocalizedDescription(linked, locale),
+  };
+  const dishHead = dish && (vera
+    ? veraDishMeta(categoryLabel, dish.name, dish.price, dish.description, locale)
+    : dishMeta(dish.name, dish.price, dish.description, locale));
+  usePageMeta(dishPage && dishHead ? { ...dishHead, path: dishPage, locale } : {
     title: vera ? courseTitle(categoryLabel, locale) : siteT('seo_category_title', locale, { category: categoryLabel }),
     description: vera ? pick(VERA.menuDescription, locale) : siteT('seo_category_description', locale, { category: categoryLabel }),
     path: menuCategoryPath(type ?? ''),
     locale,
-  });
+  }, category !== null);
 
   const closeItem = () => {
     setSelectedItem(null);

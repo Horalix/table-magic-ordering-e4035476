@@ -87,6 +87,38 @@ test.describe('Vera Italia’s own site', () => {
     expect(await (await page.request.get('/llms-full.txt')).text()).toContain('[Truffle Pizza](https://veraitalia.net/menu/veraitalia/dish/truffle-pizza/) / ');
   });
 
+  test('its privacy notice is its own, and a page of its own', async ({ page }) => {
+    const html = await (await page.request.get('/privacy/')).text();
+    expect(html).toContain('<title>Trust, Privacy &amp; Terms — Vera Italia</title>');
+    expect(html).toContain('<link rel="canonical" href="https://veraitalia.net/privacy/" />');
+    expect(html).toContain('Vera Italia respects your privacy');
+    expect(html).toContain('href="/manifest-veraitalia.webmanifest"');
+    expect(html).not.toMatch(/La Soul|Butmirska/);
+    expect(await (await page.request.get('/sitemap.xml')).text()).toContain('<loc>https://veraitalia.net/privacy/</loc>');
+
+    await installVeraStubs(page);
+    await page.goto('/privacy/');
+    await expect(page.getByRole('heading', { level: 1, name: 'Trust, Privacy & Terms' })).toBeVisible();
+    await expect(page.getByText(/Vera Italia respects your privacy/)).toBeVisible();
+    await expect(page.getByText(/La Soul/)).toHaveCount(0);
+  });
+
+  test('names other languages on its website, which has an address for each, and not on its menu, which has one for all', async ({ page }) => {
+    expect(await (await page.request.get('/')).text()).toContain('<link rel="alternate" hreflang="bs" href="https://veraitalia.net/bs/" />');
+    for (const path of ['/menu/veraitalia/', '/menu/veraitalia/pizza-napoletana/', '/menu/veraitalia/dish/truffle-pizza/']) {
+      expect(await (await page.request.get(path)).text()).not.toContain('hreflang=');
+    }
+  });
+
+  test('an address that is no page, and its staff sign-in, are nobody’s search result', async ({ page }) => {
+    await installVeraStubs(page);
+    for (const path of ['/this-page-does-not-exist', '/admin/login']) {
+      await page.goto(path);
+      await expect(page.locator('meta[name="robots"]')).toHaveAttribute('content', 'noindex, nofollow');
+      await expect(page.locator('link[rel="canonical"]')).toHaveCount(0);
+    }
+  });
+
   test('a bare /menu is Vera Italia’s menu, and the website leads to it', async ({ page }) => {
     await installVeraStubs(page);
     await page.goto('/menu');

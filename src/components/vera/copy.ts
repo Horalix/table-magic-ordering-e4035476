@@ -26,6 +26,35 @@ export const PLACE = {
 /** A course's title — "Pizza Napoletana in Sarajevo — Vera Italia" — the same in the app and on the prerendered page. */
 export const courseTitle = (course: string, locale: Locale) => `${course} ${pick(PLACE.inCity, locale)} — Vera Italia`;
 
+/** "12 KM", "10.50 KM" (10,50 in Bosnian). */
+export function km(n: number, locale: Locale = 'en'): string {
+  const s = Number.isInteger(n) ? String(n) : n.toFixed(2);
+  return `${locale === 'bs' ? s.replace('.', ',') : s} KM`;
+}
+
+/** A description cut at a word to what a search result shows. */
+export const clip = (s: string, n = 158) => (s.length <= n ? s : `${s.slice(0, n - 1).replace(/\s+\S*$/, '')}…`);
+
+const AT_VERA: Copy = {
+  en: 'at Vera Italia, an Italian restaurant in Sarajevo,',
+  bs: '— Vera Italia, italijanski restoran u Sarajevu,',
+  ar: '— Vera Italia، مطعم إيطالي في سراييفو،',
+};
+
+/**
+ * A dish's title and description — "Truffle Pizza — 25 KM · Vera Italia,
+ * Sarajevo"; where and how much first, as a long description is clipped from
+ * the end. Its own page's (/menu/veraitalia/dish/<slug>/, in English), and
+ * the app's in the guest's language while that dish is open from that address.
+ */
+export function dishMeta(course: string, name: string, price: number, description: string | null | undefined, locale: Locale) {
+  const sentence = description ? `${description.replace(/\s+$/, '').replace(/([^.!?])$/, '$1.')} ` : '';
+  return {
+    title: `${name} — ${km(price, locale)} · Vera Italia${locale === 'ar' ? '، ' : ', '}${pick(PLACE.city, locale)}`,
+    description: clip(`${course} ${pick(AT_VERA, locale)} ${km(price, locale)}. ${sentence}`.trim()),
+  };
+}
+
 export const VERA = {
   tagline: { en: 'Cucina Italiana', bs: 'Cucina Italiana', ar: 'مطبخ إيطالي' },
   menu: { en: 'Il Menù', bs: 'Il Menù', ar: 'القائمة' },

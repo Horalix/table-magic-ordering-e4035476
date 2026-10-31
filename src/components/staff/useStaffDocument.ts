@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { useNoIndex } from '@/lib/seo/noindex';
 
 /**
  * Staff screens are English and left-to-right, whatever a guest last chose.
@@ -17,8 +18,15 @@ import { useEffect } from 'react';
  * `title` names the tab ("Kitchen · Vera Italia"). Staff screens used to keep
  * La Soul's website title, so a phone's tab list could not tell the board,
  * the floor and the admin apart, or say which restaurant they were.
+ *
+ * And none of them is a search result: they kept the home page's "index,
+ * follow" and canonical too, sign-in screens included. Every staff screen
+ * calls this, so every one says "noindex" (public/_headers says so before
+ * any code runs).
  */
 export function useStaffDocument(title?: string) {
+  useNoIndex();
+
   useEffect(() => {
     const root = document.documentElement;
     const previous = { dir: root.getAttribute('dir'), lang: root.getAttribute('lang') };

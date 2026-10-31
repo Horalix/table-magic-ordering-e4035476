@@ -394,7 +394,7 @@ const GuestMenu = () => {
               <span className="block">{t('address')}</span>
             </span>
           </a>
-          <Link to="/privacy" className="block text-center text-[11px] text-muted-foreground/70 font-sans hover:text-primary transition-colors pt-3">
+          <Link to="/privacy/" className="block text-center text-[11px] text-muted-foreground/70 font-sans hover:text-primary transition-colors pt-3">
             {t('privacy_security')}
           </Link>
         </motion.footer>
