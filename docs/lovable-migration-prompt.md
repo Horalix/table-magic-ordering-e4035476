@@ -2,13 +2,51 @@
 
 Copy everything between the rules into Lovable. Nothing else needs to be said.
 
-## Next: two restaurants — La Soul and Vera Italia (docs/two-restaurants-rollout.md)
+## Next: Vera Italia's suggestions, and its tickets headed with its own name
 
-Send this once `main` has the runner for all four migrations (the two
-restaurants, Vera Italia's menu, and suggestions per restaurant — merged from
-`feature/suggestions-per-restaurant`). La Soul keeps working exactly as today
-through every step; Vera Italia stays switched off (its menu answers "not
-found") until it opens.
+Send this once `main` has the runner for these two migrations (merged from
+`feature/phone-polish`). Nothing of La Soul's changes: its dishes, suggestions
+and tickets stay exactly as they are.
+
+---
+
+> **Task: apply two migrations with `docs/migration-runner.sql`. Do not
+> retype the migration files and do not write any other SQL.**
+>
+> Make sure your checkout is the latest `main`.
+>
+> 1. Run `docs/migration-runner.sql` step by step, each step as its own query:
+>    Step 0 (pg_net installed), Step 1 (queue the downloads, expect 2 rows),
+>    Step 2 (expect 2 rows, all `arrived_exactly = true`), then Step 3 — its
+>    two blocks one at a time, in order (1 of 2, 2 of 2). If anything fails,
+>    stop and report the exact error; a failed block changes nothing.
+> 2. Check, and paste the raw output of each:
+>    ```sql
+>    SELECT count(*) AS rules, count(DISTINCT source_subcategory_id) AS sections
+>      FROM public.menu_item_recommendations WHERE venue_id = 'a5000000-0000-4000-8000-000000000002';
+>    SELECT venue_id, count(*) FROM public.menu_item_recommendations GROUP BY 1;
+>    SELECT count(*) FROM public.menu_item_recommendations r
+>      JOIN public.menu_items mi ON mi.id = r.recommended_item_id WHERE r.venue_id IS DISTINCT FROM mi.venue_id;
+>    SELECT count(*) FROM public.menu_items mi JOIN public.subcategories s ON s.id = mi.subcategory_id
+>     WHERE mi.venue_id = 'a5000000-0000-4000-8000-000000000001' AND s.name ~* '(antipast|insalat|^extras$|^dodaci$)';
+>    SELECT policyname FROM pg_policies WHERE tablename = 'menu_item_recommendations' ORDER BY 1;
+>    SELECT venue_id, print_header FROM public.restaurant_settings ORDER BY venue_id;
+>    ```
+>    Expected: 15 rules over 5 sections for Vera Italia (`…0002`); La Soul's
+>    (`…0001`) rule count the same as before; `0`; `0`; the rules' policies;
+>    La Soul's header unchanged and Vera Italia's `Vera Italia`.
+>
+> Do not create or change any user account, password or credential, and do
+> not enable online card payments.
+
+---
+
+## Done: two restaurants — La Soul and Vera Italia (30 October 2026)
+
+Four migrations (the two restaurants, Vera Italia's menu, suggestions per
+restaurant) and three Edge Functions, applied and redeployed by Lovable on
+30 October 2026; Vera Italia's menu was checked against the live database
+the same evening. The prompt as sent:
 
 ---
 
