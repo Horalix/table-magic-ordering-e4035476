@@ -23,6 +23,15 @@ import { registerSW } from 'virtual:pwa-register';
  *    while someone is typing or has a dialog open.
  *
  * The cart and the table session are persisted, so a reload loses nothing.
+ *
+ * A page still running an older version of this file may never take a new
+ * version (before 1 November 2026 it could miss one), and nothing here can
+ * change that page. So a new version's service worker sees to it
+ * (public/sw-rescue.js): it asks every open page
+ * whether it applies new versions itself, and takes over and reloads any page
+ * that does not answer. This one answers. If such a takeover catches this page
+ * too, the version it was loaded from is gone, so it reloads at the same safe
+ * moments as for a waiting version.
  */
 
 const CHECK_EVERY_MS = 5 * 60_000;
@@ -34,6 +43,10 @@ const FRESH_START_MS = 15_000;
 let updateSW: ((reloadPage?: boolean) => Promise<void>) | null = null;
 let checkForUpdate: () => void = () => {};
 let waiting = false;
+/** A newer version took over this page without being asked: it reloads at the next safe moment. */
+let takenOver = false;
+/** This page asked the waiting version to take over (and reloads when it has). */
+let applying = false;
 let started = false;
 let touchedSinceLoad = false;
 /** A "not found" page is on screen. */
@@ -46,6 +59,26 @@ export function startAppUpdates(): void {
   const touched = () => { touchedSinceLoad = true; };
   window.addEventListener('pointerdown', touched, { once: true, passive: true });
   window.addEventListener('keydown', touched, { once: true });
+  // "Do you take new versions yourself?" (public/sw-rescue.js) — yes.
+  navigator.serviceWorker.addEventListener('message', (event: MessageEvent) => {
+    if ((event.data as { type?: unknown } | null)?.type === 'APP_UPDATES?') event.ports[0]?.postMessage({ type: 'APP_UPDATES' });
+  });
+  navigator.serviceWorker.startMessages?.();
+  let controller = navigator.serviceWorker.controller;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (controller && !applying) {
+      takenOver = true;
+      newVersionReady();
+    }
+    controller = navigator.serviceWorker.controller;
+  });
+  // A part of the app not opened yet belongs to the version that was replaced
+  // and is gone: open the new version instead, once.
+  window.addEventListener('vite:preloadError', (event) => {
+    if (reloadedForMissingPart()) return;
+    event.preventDefault();
+    window.location.reload();
+  });
   updateSW = registerSW({
     immediate: true,
     onNeedRefresh: newVersionReady,
@@ -67,9 +100,23 @@ export function startAppUpdates(): void {
   });
 }
 
-/** A new version is downloaded and waiting. */
+const MISSING_PART_KEY = 'app-update:missing-part';
+
+/** Reloaded for a missing part in the last 30 seconds: reloading again would only loop. */
+function reloadedForMissingPart(): boolean {
+  try {
+    const last = Number(sessionStorage.getItem(MISSING_PART_KEY) ?? 0);
+    if (Date.now() - last < 30_000) return true;
+    sessionStorage.setItem(MISSING_PART_KEY, String(Date.now()));
+  } catch {
+    // Storage off: reload anyway; a loop needs the part to be missing twice.
+  }
+  return false;
+}
+
+/** A new version is downloaded and waiting, or has taken over already. */
 function newVersionReady(): void {
-  waiting = true;
+  if (!takenOver) waiting = true;
   // On "not found", or still opening and untouched: nothing to lose, so take it now.
   const opening = performance.now() < FRESH_START_MS && !touchedSinceLoad;
   if ((missingPage || opening) && !window.location.pathname.startsWith('/cart') && !busy()) {
@@ -92,8 +139,14 @@ export function lookForMissingPage(): () => void {
 
 /** Take the waiting version now: the new worker takes over and the page reloads. */
 export function applyWaitingUpdate(): boolean {
+  if (takenOver) {
+    takenOver = false;
+    window.location.reload();
+    return true;
+  }
   if (!waiting || !updateSW) return false;
   waiting = false;
+  applying = true;
   // workbox-window reloads only for a version it announced itself.
   navigator.serviceWorker.addEventListener('controllerchange', () => window.location.reload(), { once: true });
   void updateSW(true);

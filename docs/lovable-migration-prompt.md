@@ -32,7 +32,7 @@ resets (`manage-admins` with `reset_password`, merged from
 ---
 
 > **Task: apply one migration with `docs/migration-runner.sql`, then deploy
-> one Edge Function. Do not retype the migration file and do not write any
+> two Edge Functions. Do not retype the migration file and do not write any
 > other SQL.**
 >
 > Make sure your checkout is the latest `main`.

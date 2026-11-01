@@ -136,6 +136,16 @@ places, and each is won differently:
   those lists, Bing, Google Maps and the reviews say, and quote the website
   for facts: what it serves, where, the prices.
 
+**Where it stood on 1 November 2026.** Google listed veraitalia.net first
+for "vera italia sarajevo", but its AI Overview above the results said
+*there is no business named Vera Italia located in Sarajevo*. With no Maps
+listing, no address and no reviews, nothing told it otherwise. Below came
+others with the name: VERA-ITALY.hr (leather handbags, one called "Bosna"),
+veraitalia.it (travel), Italian food shops, and a Vera Italia in Riyadh.
+Google had read only six pages, still with their titles from before
+"Sarajevo" was added. Steps 1, 3 and 4 below fix all of that; the website
+alone cannot.
+
 **What the website already does** (`src/lib/seo/vera-seo.ts`,
 `src/components/vera/copy.ts`): every title, description and the page itself
 say *Italian restaurant in Sarajevo* — in English, Bosnian ("italijanski
@@ -148,7 +158,12 @@ Sarajevo" in its title; a FAQ in three languages that answers "Where can I
 eat Neapolitan pizza in Sarajevo?" and "What sets Vera Italia apart from other
 Italian restaurants in Sarajevo?" from the menu; `llms.txt` and
 `llms-full.txt` for AI engines; Sarajevo's geo tags; a sitemap with
-photographs; a 1200×630 link preview. It never calls itself "the best": a
+photographs; a 1200×630 link preview. To tell it apart from the others of
+that name: its other names carry the city ("Vera Italia Sarajevo",
+"Ristorante Vera Italia"), the `Restaurant` says which one it is
+(`disambiguatingDescription`: the Italian restaurant in Sarajevo, Bosnia
+and Herzegovina), the `WebSite` gives Google the site's name for its
+results, and llms.txt tells AI engines the others are not it. It never calls itself "the best": a
 claim like that is worth nothing to Google, and the reviews say it far better.
 
 **What only the owner can do, most important first:**

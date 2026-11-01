@@ -32,6 +32,15 @@ beforeEach(() => {
 
 afterEach(() => { vi.restoreAllMocks(); });
 
+/** The listeners the app puts on navigator.serviceWorker, by event. */
+const listen = () => {
+  const listeners: Record<string, (event: Event) => void> = {};
+  vi.mocked(navigator.serviceWorker.addEventListener).mockImplementation(((type: string, fn: (event: Event) => void) => {
+    listeners[type] = fn;
+  }) as typeof navigator.serviceWorker.addEventListener);
+  return listeners;
+};
+
 const start = async () => {
   const mod = await import('./app-update');
   mod.startAppUpdates();
@@ -98,6 +107,38 @@ describe('a new version of the app', () => {
     next.state = 'installed';
     next.dispatchEvent(new Event('statechange'));
     expect(sw.update).toHaveBeenCalledWith(true);
+  });
+
+  it('tells a newer version’s service worker that this page takes new versions itself', async () => {
+    const listeners = listen();
+    await start();
+    const port = { postMessage: vi.fn() };
+    listeners.message!({ data: { type: 'APP_UPDATES?' }, ports: [port] } as unknown as Event);
+    expect(port.postMessage).toHaveBeenCalledWith({ type: 'APP_UPDATES' });
+    listeners.message!({ data: { type: 'SOMETHING_ELSE' }, ports: [port] } as unknown as Event);
+    expect(port.postMessage).toHaveBeenCalledTimes(1);
+  });
+
+  it('taken over unasked (another page was rescued), reloads at the next safe moment, not at once', async () => {
+    vi.spyOn(performance, 'now').mockReturnValue(60_000);
+    const reload = vi.fn();
+    vi.spyOn(window, 'location', 'get').mockReturnValue({ ...window.location, pathname: '/menu/lasoul/', reload } as Location);
+    const listeners = listen();
+    const mod = await start();
+    window.dispatchEvent(new Event('pointerdown'));
+    listeners.controllerchange!(new Event('controllerchange'));
+    expect(reload).not.toHaveBeenCalled();
+    expect(mod.applyWaitingUpdate()).toBe(true);
+    expect(reload).toHaveBeenCalledTimes(1);
+    expect(sw.update).not.toHaveBeenCalled();
+  });
+
+  it('the first service worker taking control is not a takeover', async () => {
+    Object.defineProperty(navigator, 'serviceWorker', { value: { controller: null, addEventListener: vi.fn() }, configurable: true });
+    const listeners = listen();
+    const mod = await start();
+    listeners.controllerchange!(new Event('controllerchange'));
+    expect(mod.applyWaitingUpdate()).toBe(false);
   });
 
   it('never reloads the cart, where a card payment may be in flight', async () => {

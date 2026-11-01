@@ -252,7 +252,7 @@ const CategoryPage = () => {
     retry: 1,
   });
 
-  const { data: subcategories = [], isError: subsFailed } = useQuery({
+  const { data: subcategories = [], isPending: subsPending, isError: subsFailed } = useQuery({
     queryKey: ['subcategories', category?.id],
     queryFn: () => fetchSubcategories(category!.id),
     enabled: !!category?.id,
@@ -261,12 +261,19 @@ const CategoryPage = () => {
   const subIds = subcategories.map((s) => s.id);
 
   // Every item in this category, once, sliced per section in memory.
-  const { data: allItems = [], isLoading: allLoading, isError: itemsFailed, refetch: refetchItems } = useQuery({
+  const { data: allItems = [], isLoading: allLoading, isPending: itemsPending, isError: itemsFailed, refetch: refetchItems } = useQuery({
     queryKey: ['menu_items_all', category?.id],
     queryFn: () => fetchCategoryItems(subIds),
     enabled: subIds.length > 0,
     staleTime: 5 * 60 * 1000,
   });
+  /*
+   * The sections, then their dishes: until both are in, the course is
+   * loading, not empty. It used to say "No items available in this category
+   * yet" while the sections loaded — seconds on a slow phone opening a dish
+   * from Google — because the dishes' query had not started.
+   */
+  const dishesLoading = subsPending || (subIds.length > 0 && itemsPending);
 
   /*
    * "Popular": this restaurant's best sellers of the last 30 days. Twelve on
@@ -1114,7 +1121,7 @@ const CategoryPage = () => {
         <div className={vera ? 'h-px bg-border' : 'h-px bg-gradient-to-r from-transparent via-primary/20 to-transparent'} />
       </div>
 
-      {allLoading ? (
+      {dishesLoading ? (
         <div className="px-4 pt-4 space-y-3">
           {[1, 2, 3, 4].map((i) => (
             <div key={i} className="flex gap-4 p-3 rounded-xl border border-border bg-card">

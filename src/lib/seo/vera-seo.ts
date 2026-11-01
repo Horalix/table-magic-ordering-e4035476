@@ -226,6 +226,17 @@ export function veraFaq(m: SeoMenu, locale: Locale): Faq[] {
 
 // ---- structured data ----------------------------------------------------------
 
+/**
+ * Which Vera Italia this is. Others share the name — a handbag shop selling a
+ * bag called "Bosna", a travel agency, Italian food shops, restaurants in
+ * other countries — and a search for "Vera Italia Sarajevo" mixed them in.
+ */
+const WHICH_ONE: Record<Locale, string> = {
+  en: `The Italian restaurant and Neapolitan pizzeria ${PLACE.inCity.en}, ${PLACE.country.en}.`,
+  bs: `Italijanski restoran i napolitanska picerija ${PLACE.inCity.bs}, ${PLACE.country.bs}.`,
+  ar: `المطعم الإيطالي ومطعم البيتزا النابوليتانية ${PLACE.inCity.ar}، ${PLACE.country.ar}.`,
+};
+
 /** The restaurant, with everything known for certain; what is not known yet is not said. */
 export function veraRestaurantNode(m: SeoMenu, locale: Locale) {
   const v = vera();
@@ -236,6 +247,7 @@ export function veraRestaurantNode(m: SeoMenu, locale: Locale) {
     '@id': restaurantId(),
     name: v.name,
     ...(v.alternateNames.length ? { alternateName: v.alternateNames } : {}),
+    ...(v.city ? { disambiguatingDescription: WHICH_ONE[locale] } : {}),
     description: SITE.seoDescription[locale],
     slogan: SITE.heroLine[locale],
     url: absoluteUrl(veraSitePath(locale)),
@@ -318,7 +330,11 @@ export function veraSiteGraph(m: SeoMenu, locale: Locale) {
     '@context': 'https://schema.org',
     '@graph': [
       veraRestaurantNode(m, locale),
-      { '@type': 'WebSite', '@id': websiteId(), url: absoluteUrl(veraSitePath('en')), name: 'Vera Italia', inLanguage: locale, publisher: { '@id': restaurantId() } },
+      // The site's name in Google's results ("Vera Italia", not "veraitalia.net"), and the other one it may use.
+      {
+        '@type': 'WebSite', '@id': websiteId(), url: absoluteUrl(veraSitePath('en')), name: 'Vera Italia',
+        alternateName: vera().alternateNames.slice(0, 1), inLanguage: locale, publisher: { '@id': restaurantId() },
+      },
       {
         '@type': 'FAQPage',
         '@id': absoluteUrl(`${veraSitePath(locale)}#faq`),
@@ -522,6 +538,8 @@ export function veraLlms(m: SeoMenu): { short: string; full: string } {
   const where = `${PLACE.city.en}, ${PLACE.country.en}`;
   const known = [
     `- What: an Italian restaurant${v.city ? ` in ${where}` : ''} — ${SITE.heroLine.en}`,
+    v.alternateNames.length ? `- Also called: ${v.alternateNames.join(', ')}` : '',
+    v.city ? `- Not to be confused with: other businesses named Vera Italia or Vera Italy (shops, a travel agency, restaurants in other countries); this is the restaurant in ${where}, at ${absoluteUrl(veraSitePath('en'))}` : '',
     v.city ? `- Known for: ${SITE.apart.en}` : '',
     `- Menu: ${all.length} dishes in ${m.categories.length} courses (${m.categories.map((c) => c.names.en).join(', ')}), in English, Bosnian and Arabic`,
     `- Prices: ${veraPriceRange(m)} (convertible marks, KM / BAM)`,

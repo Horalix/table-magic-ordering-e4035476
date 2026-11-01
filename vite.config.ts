@@ -58,6 +58,8 @@ export default defineConfig(({ mode }) => ({
         globIgnores: ["**/menu/**"], // huge optimized image set — runtime-cache instead
         maximumFileSizeToCacheInBytes: 3 * 1024 * 1024,
         cleanupOutdatedCaches: true,
+        // Takes over from a version too old to take this one (public/sw-rescue.js).
+        importScripts: ["sw-rescue.js"],
         navigateFallback: "index.html",
         navigateFallbackDenylist: [/^\/admin/, /^\/kitchen/, /^\/waiter/],
         runtimeCaching: [
