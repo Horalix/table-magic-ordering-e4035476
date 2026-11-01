@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
+import { Eye, EyeOff } from 'lucide-react';
 import { useStaffDocument } from '@/components/staff/useStaffDocument';
 import { HOME, STAFF_BRAND as BRAND } from '@/components/staff/staff-brand';
 
@@ -12,6 +13,7 @@ const AdminLogin = () => {
   useStaffDocument(`${HOME.name} admin sign in`);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
@@ -75,13 +77,18 @@ const AdminLogin = () => {
       // An unconfirmed address is the other common fresh-install failure, and
       // the provider's raw wording does not say what to do about it.
       const isUnconfirmed = /email not confirmed/i.test(raw);
+      // "Invalid login credentials" — and a waiter who typed a username here
+      // gets told where waiters sign in.
+      const isWrong = /invalid login credentials|invalid_grant/i.test(raw);
       toast.error(
         isNetwork
           ? 'Cannot reach the server. Check your internet connection (or disable VPN/ad blocker) and try again.'
           : isUnconfirmed
             ? 'This address has never been confirmed. Confirm it in Supabase → Authentication, or create the account with auto-confirm on.'
-            : raw,
-        { duration: isNetwork || isUnconfirmed ? 8000 : 5000 },
+            : isWrong
+              ? 'Wrong email or password. Waiters and kitchen tablets sign in with a username at Staff sign-in, below.'
+              : raw,
+        { duration: isNetwork || isUnconfirmed || isWrong ? 8000 : 5000 },
       );
     } finally {
       setLoading(false);
@@ -113,27 +120,43 @@ const AdminLogin = () => {
 
         <form onSubmit={handleLogin} className="space-y-4 bg-card rounded-2xl p-6 shadow-xl">
           <div>
-            <Label className="font-sans text-sm text-foreground">Email</Label>
+            <Label htmlFor="admin-login-email" className="font-sans text-sm text-foreground">Email</Label>
             <Input
+              id="admin-login-email"
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder={BRAND.adminEmail}
               required
               autoFocus
+              autoComplete="username"
+              autoCapitalize="none"
+              spellCheck={false}
               className="mt-1.5"
             />
           </div>
           <div>
-            <Label className="font-sans text-sm text-foreground">Password</Label>
-            <Input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••"
-              required
-              className="mt-1.5"
-            />
+            <Label htmlFor="admin-login-password" className="font-sans text-sm text-foreground">Password</Label>
+            <div className="relative mt-1.5">
+              <Input
+                id="admin-login-password"
+                type={showPassword ? 'text' : 'password'}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="••••••••"
+                required
+                autoComplete="current-password"
+                className="pr-12"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((v) => !v)}
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
+                className="absolute right-0 top-1/2 -translate-y-1/2 w-11 h-11 flex items-center justify-center text-muted-foreground hover:text-foreground"
+              >
+                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
           </div>
           <Button
             type="submit"
@@ -142,6 +165,9 @@ const AdminLogin = () => {
           >
             {loading ? 'Signing in...' : 'Sign In'}
           </Button>
+          <p className="text-xs text-center text-muted-foreground font-sans">
+            Waiter or kitchen tablet? <button type="button" onClick={() => navigate('/waiter/login')} className="underline">Staff sign-in</button>
+          </p>
         </form>
       </div>
     </div>

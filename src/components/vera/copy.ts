@@ -43,15 +43,17 @@ const AT_VERA: Copy = {
 
 /**
  * A dish's title and description — "Truffle Pizza — 25 KM · Vera Italia,
- * Sarajevo"; where and how much first, as a long description is clipped from
- * the end. Its own page's (/menu/veraitalia/dish/<slug>/, in English), and
- * the app's in the guest's language while that dish is open from that address.
+ * Sarajevo"; what, where and how much first, as a long description is clipped
+ * from the end. The dish's name opens the description too: a search result
+ * whose title Google rewrites still says which dish it is. Its own page's
+ * (/menu/veraitalia/dish/<slug>/, in English), and the app's in the guest's
+ * language while that dish is open from that address.
  */
 export function dishMeta(course: string, name: string, price: number, description: string | null | undefined, locale: Locale) {
   const sentence = description ? `${description.replace(/\s+$/, '').replace(/([^.!?])$/, '$1.')} ` : '';
   return {
     title: `${name} — ${km(price, locale)} · Vera Italia${locale === 'ar' ? '، ' : ', '}${pick(PLACE.city, locale)}`,
-    description: clip(`${course} ${pick(AT_VERA, locale)} ${km(price, locale)}. ${sentence}`.trim()),
+    description: clip(`${name} (${course}) ${pick(AT_VERA, locale)} ${km(price, locale)}. ${sentence}`.trim()),
   };
 }
 

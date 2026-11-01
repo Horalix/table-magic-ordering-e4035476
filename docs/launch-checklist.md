@@ -24,17 +24,17 @@ here is in the admin menu on the left (on a phone: **More**).
 
 - [ ] **Manager password.** Reset it in Lovable (Cloud → Users) if nobody
       knows it, then sign in at `/admin/login`.
-- [ ] **Waiters** → **Add Waiter**, once per waiter: *Display name*,
-      *Username*, *Password (6+ chars)*, *Floor PIN (4 digits, auto if
-      blank)* → **Create**.
-      Waiters sign in at `/waiter/login` with the username and password; the
-      PIN is only for the shared floor monitor. Give each waiter their login
-      in person. If you leave the PIN blank, the generated one shows for 8
-      seconds — write it down.
-- [ ] **One more account for the kitchen tablet(s)**, the same way: e.g.
-      display name *Kitchen*, username `kitchen`. The tablet signs in with it
-      at `/waiter/login`, then opens `/kitchen`. Do not leave the manager's
-      account signed in on a shared tablet: it can change prices and settings.
+- [ ] **Waiters** → **Add Waiter**, once per waiter: *Name*, *Username*
+      (filled in from the name), *Password* (10+ characters; **Generate**
+      makes one), *Floor PIN* (optional) → **Create**. A login card shows the
+      address, username, password and PIN once: **Share** or **Copy** it to
+      them. Its link fills in the username at `/waiter/login`; the PIN is
+      only for the shared floor monitor.
+- [ ] **One more account for the kitchen tablet(s)**: **Kitchen tablet** →
+      **Generate** → **Create**. Its card's link signs in at `/waiter/login`
+      and goes straight to `/kitchen`. Do not leave the manager's account
+      signed in on a shared tablet: it can change prices and settings.
+      (`docs/demo-guide.md` has every account, in order.)
 
 ### Tables, sections and tonight's floor
 

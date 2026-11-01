@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -8,10 +8,9 @@ import { toast } from 'sonner';
 import { User, Lock, Loader2, Eye, EyeOff } from 'lucide-react';
 import { useStaffDocument } from '@/components/staff/useStaffDocument';
 import { HOME, STAFF_BRAND } from '@/components/staff/staff-brand';
+import { afterWaiterSignIn, normalizeUsername } from '@/lib/staff-accounts';
 
 const synthEmail = (u: string) => `${u}@waiter.lasoul.local`;
-const normalizeUsername = (value: string) =>
-  value.trim().toLowerCase().replace(/[^a-z0-9_.-]/g, '');
 
 interface WaiterLoginSession {
   access_token: string;
@@ -33,24 +32,42 @@ interface WaiterLoginResponse {
 class InfrastructureError extends Error {}
 
 const WaiterLogin = () => {
-  const [username, setUsername] = useState('');
+  /*
+   * The link on a login card (Admin → Waiters) fills in the username — ?u=
+   * — so the person only types the password, and a kitchen tablet's link
+   * (?to=kitchen) goes on to the kitchen screen.
+   */
+  const [params] = useSearchParams();
+  const linkedUsername = normalizeUsername(params.get('u') ?? '');
+  const destination = afterWaiterSignIn(params.get('to'));
+  const [username, setUsername] = useState(linkedUsername);
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const navigate = useNavigate();
+  const forKitchen = destination === '/kitchen';
   // A guest's Arabic choice must not mirror the staff sign-in on a shared device.
-  useStaffDocument(`${HOME.name} waiter sign in`);
+  useStaffDocument(`${HOME.name} ${forKitchen ? 'kitchen' : 'waiter'} sign in`);
 
   const setWaiterSessionFromFunction = async (u: string) => {
     const { data, error } = await supabase.functions.invoke<WaiterLoginResponse>('waiter-login', {
       body: { username: u, password },
     });
 
-    // A transport failure is not a rejected password. Falling through to the
-    // synthetic-email path is correct here (it is the deployment without the
-    // edge function), but the DISTINCTION has to survive so the final message
-    // can be honest about which happened.
-    if (error) throw new InfrastructureError('Could not reach the login service');
+    // A transport failure is not a rejected password, and the DISTINCTION has
+    // to survive so the final message can be honest about which happened.
+    // The function answers a wrong password — and an account that is not an
+    // active waiter's: a kitchen tablet's, a switched-off waiter's — with
+    // 401, which supabase-js reports as an error like any other. That, and a
+    // 404 (a project without the function), fall through to signing in
+    // directly, which tells them apart. It used to be read as an outage:
+    // "your password is probably fine" to someone who had mistyped it.
+    if (error) {
+      const context = (error as { context?: unknown }).context;
+      const status = context instanceof Response ? context.status : null;
+      if (status === 401 || status === 404) return false;
+      throw new InfrastructureError('Could not reach the login service');
+    }
     if (data?.error || !data?.session) {
       return false;
     }
@@ -85,7 +102,8 @@ const WaiterLogin = () => {
     return user.id;
   };
 
-  const ensureActiveWaiterProfile = async (userId: string) => {
+  /** Where this account goes now, or null if it may not sign in here. */
+  const placeFor = async (userId: string): Promise<string | null> => {
     const { data: waiter, error } = await supabase
       .from('waiters')
       .select('id, is_active')
@@ -95,18 +113,22 @@ const WaiterLogin = () => {
     if (error) throw error;
 
     if (!waiter) {
+      // Staff with no waiter's row is a kitchen screen's account
+      // (manage-admins); it belongs on the kitchen screen, not signed out.
+      const { data: isStaff } = await supabase.rpc('has_role', { _user_id: userId, _role: 'staff' });
+      if (isStaff) return '/kitchen';
       await supabase.auth.signOut();
       toast.error('No waiter profile linked to this account');
-      return false;
+      return null;
     }
 
     if (!waiter.is_active) {
       await supabase.auth.signOut();
       toast.error('Your account is inactive. Contact your manager.');
-      return false;
+      return null;
     }
 
-    return true;
+    return destination;
   };
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -121,13 +143,13 @@ const WaiterLogin = () => {
 
       const didUseServerLogin = await setWaiterSessionFromFunction(u);
       const userId = didUseServerLogin ? await getSignedInUserId() : await signInWithSyntheticEmail(u);
-      const hasProfile = await ensureActiveWaiterProfile(userId);
+      const place = await placeFor(userId);
 
-      if (!hasProfile) {
+      if (!place) {
         return;
       }
 
-      navigate('/waiter', { replace: true });
+      navigate(place, { replace: true });
     } catch (err) {
       console.error('Waiter login failed:', err);
       if (err instanceof InfrastructureError) {
@@ -145,22 +167,25 @@ const WaiterLogin = () => {
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
           <img src={STAFF_BRAND.mark} alt={HOME.name} width={STAFF_BRAND.width} height={STAFF_BRAND.height} className="w-auto h-24 mx-auto mb-4 object-contain" />
-          <h1 className="font-serif text-2xl font-bold text-white">Waiter Sign In</h1>
-          <p className="text-sm text-white/70 font-sans mt-1">Use your username and password</p>
+          <h1 className="font-serif text-2xl font-bold text-white">{forKitchen ? 'Kitchen Sign In' : 'Waiter Sign In'}</h1>
+          <p className="text-sm text-white/70 font-sans mt-1">
+            {linkedUsername ? 'Your username is filled in: type your password' : 'Use your username and password'}
+          </p>
         </div>
 
         <form onSubmit={handleLogin} className="space-y-4 bg-card rounded-2xl p-6 shadow-xl">
           <div>
-            <Label className="font-sans text-sm text-foreground">Username</Label>
+            <Label htmlFor="waiter-login-username" className="font-sans text-sm text-foreground">Username</Label>
             <div className="relative mt-1.5">
               <User className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
               <Input
+                id="waiter-login-username"
                 type="text"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 placeholder="e.g. john"
                 required
-                autoFocus
+                autoFocus={!linkedUsername}
                 autoComplete="username"
                 autoCapitalize="none"
                 spellCheck={false}
@@ -176,15 +201,17 @@ const WaiterLogin = () => {
             )}
           </div>
           <div>
-            <Label className="font-sans text-sm text-foreground">Password</Label>
+            <Label htmlFor="waiter-login-password" className="font-sans text-sm text-foreground">Password</Label>
             <div className="relative mt-1.5">
               <Lock className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
               <Input
+                id="waiter-login-password"
                 type={showPassword ? 'text' : 'password'}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
                 required
+                autoFocus={!!linkedUsername}
                 autoComplete="current-password"
                 className="pl-9 pr-12 h-12"
               />

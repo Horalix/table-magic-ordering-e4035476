@@ -2,19 +2,34 @@
 
 Copy everything between the rules into Lovable. Nothing else needs to be said.
 
-## Next: suggestions a head waiter would sign
+## Next: suggestions a head waiter would sign, and resetting a waiter's password
 
-Send this once `main` has the runner for this one migration (merged from
-`feature/reco-quality`). There is no Edge Function and no app change, so
-nothing needs republishing. Guests at both restaurants get better
-suggestions. No menu, order, ticket, staff or analytics data changes. The one
-exception is three of Vera Italia's rib-eye pairing priorities, and only
-where the owner has not already edited them.
+Send this once `main` has both the runner for this one migration (merged from
+`feature/reco-quality`) and the staff-accounts change (`create-waiter` with
+`reset_password`, merged from `feature/staff-seo-waiter`).
+
+- **The migration:** guests at both restaurants get better suggestions. No
+  menu, order, ticket, staff or analytics data changes. The one exception is
+  three of Vera Italia's rib-eye pairing priorities, and only where the owner
+  has not already edited them. It is safe to run again if it has already run:
+  every function is `CREATE OR REPLACE`, every column `IF NOT EXISTS`, and the
+  three priorities move only from their first value.
+- **One Edge Function, `create-waiter`:**
+  - it checks the 10-character password minimum;
+  - it gives clear error codes;
+  - it cleans up a half-created sign-in;
+  - it adds the **Password** button's `reset_password`.
+
+  Until it is redeployed, the new Waiters page works, except that resetting a
+  password says the function needs redeploying.
+- Netlify publishes the app itself from `main`, so nothing needs republishing
+  in Lovable.
 
 ---
 
-> **Task: apply one migration with `docs/migration-runner.sql`. Do not retype
-> the migration file and do not write any other SQL.**
+> **Task: apply one migration with `docs/migration-runner.sql`, then deploy
+> one Edge Function. Do not retype the migration file and do not write any
+> other SQL.**
 >
 > Make sure your checkout is the latest `main`.
 >
@@ -41,9 +56,14 @@ where the owner has not already edited them.
 >    Expected: `true`, `true`; `reco_clash` and `reco_fit`; priorities 45,
 >    55, 75 in that order; and the same rule counts per restaurant as before
 >    (Vera Italia's `…0002` has 15).
+> 3. Deploy the Edge Function `create-waiter` from `supabase/functions/`
+>    exactly as it is in `main`, with the settings in
+>    `supabase/config.toml`. It imports `supabase/functions/_shared/venue-access.ts`,
+>    which changed too. Deploy no other function. Paste the deploy result.
 >
-> Do not create or change any user account, password or credential, and do
-> not enable online card payments.
+> Do not create or change any user account, password or credential, do not
+> change any Auth setting (the minimum password length stays 10), and do not
+> enable online card payments.
 
 ---
 

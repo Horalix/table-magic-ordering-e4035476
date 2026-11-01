@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useLayoutEffect } from 'react';
 import { useNoIndex } from '@/lib/seo/noindex';
 
 /**
@@ -44,4 +44,29 @@ export function useStaffDocument(title?: string) {
     document.title = title;
     return () => { document.title = previous; };
   }, [title]);
+}
+
+/**
+ * The floor screens wear the restaurant the account works at, not the site's.
+ *
+ * <VenueTheme> gives staff paths the look of whichever site the device opened
+ * (src/hooks/useVenue.ts), so a Vera Italia waiter on lasoul.net worked the
+ * evening on a sage-green phone headed "Vera Italia", and La Soul's on
+ * veraitalia.net the reverse. The waiter phone and the floor monitor are
+ * one restaurant's room; they say so in its colours once the account's
+ * restaurant is known (`slug`, from useStaffVenue).
+ *
+ * A layout effect, so leaving restores the site's look before <VenueTheme>
+ * sets the next page's.
+ */
+export function useStaffVenueLook(slug: string | null | undefined) {
+  useLayoutEffect(() => {
+    if (!slug) return;
+    const root = document.documentElement;
+    const previous = root.dataset.venue;
+    root.dataset.venue = slug;
+    return () => {
+      if (previous === undefined) delete root.dataset.venue; else root.dataset.venue = previous;
+    };
+  }, [slug]);
 }

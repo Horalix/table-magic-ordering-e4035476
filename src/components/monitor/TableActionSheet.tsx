@@ -292,7 +292,8 @@ const TableActionSheet = ({ table, meId, onClose, onChanged }: Props) => {
                     <span className="font-sans text-sm font-medium">
                       {order.order_code ? `#${order.order_code}` : order.id.slice(0, 6)} · {held ? 'Needs confirming' : orderStatusLabel(order.status)}
                     </span>
-                    {inKitchen && (
+                    {/* Not on a served order: its age is no longer anyone's wait. */}
+                    {inKitchen && order.status !== 'served' && (
                       <span className={`text-sm font-sans tabular-nums ${urgencyText(urgency)}`}>
                         {urgencyMark(urgency)} {formatMinutes(ageMs)}
                       </span>
@@ -369,7 +370,8 @@ const TableActionSheet = ({ table, meId, onClose, onChanged }: Props) => {
         {table.sessionId && (
           <Button
             variant="outline"
-            className="min-h-[44px] w-full text-sm text-muted-foreground hover:text-destructive"
+            // Not the outline's gold hover: red on gold, and it stuck after a tap.
+            className="min-h-[44px] w-full text-sm text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
             disabled={busy !== null}
             onClick={() => setFreeOpen(true)}
           >

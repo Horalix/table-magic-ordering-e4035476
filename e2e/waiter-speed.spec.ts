@@ -1,4 +1,4 @@
-import { test, expect, anOrder } from './staff-fixtures';
+import { test, expect, anOrder, aHeldOrder } from './staff-fixtures';
 import type { Page } from '@playwright/test';
 
 /**
@@ -127,5 +127,183 @@ test.describe('the bill', () => {
     await page.getByRole('button', { name: 'Terminal' }).first().click();
     await page.getByRole('button', { name: 'Yes, 38.00 KM received' }).click();
     await expect.poll(() => staff.rpcCalls.map((c) => c.fn)).toEqual(['record_table_payment']);
+  });
+});
+
+test.describe('saying who is going', () => {
+  // A call from a table nobody has reaches every phone; without a claim two
+  // waiters walked to it, or none did, while every device kept chiming.
+  test('"I\'m going" claims a call from the phone, and the card says it is me', async ({ staff, page }) => {
+    const claims: unknown[] = [];
+    await page.route('**/rest/v1/rpc/staff_ack_waiter_call**', (route) => {
+      const body = route.request().postDataJSON();
+      claims.push(body);
+      // As the server would: the call is now this user's.
+      staff.waiterCalls = staff.waiterCalls.map((c) => (c.id === body._call_id
+        ? { ...c, status: 'acknowledged', acknowledged_by: 'staff-user-1', acknowledged_at: new Date().toISOString() }
+        : c));
+      return route.fulfill(json({ status: 'acknowledged', claimed_by: 'staff-user-1', mine: true }));
+    });
+    staff.waiterCalls = [{
+      id: 'c1', status: 'pending', created_at: iso(2), acknowledged_by: null, acknowledged_at: null,
+      table_session_id: 'session-1', table_sessions: t7,
+    }];
+    await asMarko(page);
+    await page.goto('/waiter');
+
+    const list = page.locator('section').filter({ hasText: 'Attention needed' });
+    await expect(list.getByText('Nobody going yet')).toBeVisible();
+    const going = list.getByRole('button', { name: /I.m going/ });
+    expect((await going.boundingBox())?.height ?? 0).toBeGreaterThanOrEqual(44);
+    await going.click();
+
+    await expect.poll(() => claims).toEqual([{ _call_id: 'c1' }]);
+    // "You", not the waiter's own name read back to them.
+    await expect(list.getByText(/^You are going/)).toBeVisible();
+    await expect(list.getByRole('button', { name: /I.m going/ })).toHaveCount(0);
+    // Done is still one tap away.
+    await expect(list.getByRole('button', { name: 'Done' })).toBeVisible();
+  });
+
+  test('a call someone else has taken says who, with no second claim offered', async ({ staff, page }) => {
+    staff.waiterCalls = [{
+      id: 'c2', status: 'acknowledged', created_at: iso(4), acknowledged_by: 'staff-user-2', acknowledged_at: iso(1),
+      table_session_id: 'session-1', table_sessions: t7,
+    }];
+    await asMarko(page);
+    await page.route('**/rest/v1/waiters**', (route) => route.fulfill(json(
+      route.request().url().includes('user_id=eq')
+        ? { id: 'waiter-1', user_id: 'staff-user-1', display_name: 'Marko' }
+        : [{ id: 'waiter-1', user_id: 'staff-user-1', display_name: 'Marko' }, { id: 'waiter-2', user_id: 'staff-user-2', display_name: 'Selma' }],
+    )));
+    await page.goto('/waiter');
+    const list = page.locator('section').filter({ hasText: 'Attention needed' });
+    await expect(list.getByText(/^Selma is going/)).toBeVisible();
+    await expect(list.getByRole('button', { name: /I.m going/ })).toHaveCount(0);
+  });
+});
+
+test.describe('the phone tells the truth about itself', () => {
+  // A phone that came up on dead wifi said "All caught up" and "Nothing
+  // cooking" under the red banner — the calm words are the ones believed.
+  test('a first load that fails says so instead of "All caught up", and Try again recovers', async ({ page }) => {
+    let failing = true;
+    await asMarko(page);
+    // A 500, not a 503: the client retries a 503 with back-off on its own.
+    await page.route('**/rest/v1/orders**', (route) => (
+      failing && !route.request().url().includes('held_reason')
+        ? route.fulfill({ ...json({ message: 'unreachable' }), status: 500 })
+        : route.fallback()));
+    await page.goto('/waiter');
+
+    await expect(page.getByText('Your tables could not be loaded')).toBeVisible();
+    await expect(page.getByText('All caught up')).toHaveCount(0);
+    await expect(page.getByText('Nothing cooking for your tables.')).toHaveCount(0);
+    await expect(page.getByText('0 tables')).toHaveCount(0);
+
+    failing = false;
+    await page.getByRole('button', { name: 'Try again' }).click();
+    await expect(page.getByText('All caught up')).toBeVisible();
+    await expect(page.getByText('Your tables could not be loaded')).toHaveCount(0);
+    await expect(page.getByRole('alert').filter({ hasText: 'Could not' })).toHaveCount(0);
+  });
+
+  test('"In the kitchen" is only what the kitchen has; a card order still paying is listed apart', async ({ staff, page }) => {
+    staff.orders = [
+      anOrder({ id: 'k1', status: 'preparing', table_session_id: 'session-1', table_sessions: t7 }),
+      anOrder({
+        id: 'k2', status: 'awaiting_payment', payment_method: 'card_online', payment_status: 'pending',
+        table_session_id: 'session-6', table_sessions: t6,
+        order_items: [{ quantity: 1, status: 'pending', notes: null, menu_items: { name: 'Tufahija' } }],
+      }),
+      aHeldOrder({ table_session_id: 'session-1', table_sessions: t7 }),
+    ];
+    await asMarko(page);
+    await page.goto('/waiter');
+
+    const kitchen = page.locator('section').filter({ has: page.getByRole('heading', { name: 'In the kitchen', exact: true }) });
+    await expect(kitchen).toContainText('La Soul Burger');
+    await expect(kitchen).not.toContainText('Tufahija');
+    await expect(kitchen.getByText('1', { exact: true })).toBeVisible();
+    // The header's count is the list's count.
+    await expect(page.getByText('In kitchen', { exact: true }).locator('..')).toContainText('1');
+
+    await expect(page.getByRole('region', { name: 'Not in the kitchen yet' })).toContainText('Tufahija');
+    // The held order is on the Needs confirming card, once — not again below.
+    await expect(page.getByText('Cevapi Platter')).toHaveCount(1);
+    await expect(page.getByRole('region', { name: 'Needs confirming' })).toContainText('Cevapi Platter');
+  });
+});
+
+test.describe('each restaurant in its own look', () => {
+  const VERA = 'a5000000-0000-4000-8000-000000000002';
+
+  // A Vera Italia waiter on La Soul's site worked a sage-green phone headed
+  // "Vera Italia".
+  test('a Vera Italia waiter\'s phone and floor monitor wear Vera Italia', async ({ staff, page }) => {
+    staff.roles = [{ role: 'staff', venue_id: VERA }];
+    await asMarko(page);
+    await page.goto('/waiter');
+    await expect(page.getByText('· Vera Italia')).toBeVisible();
+    await expect(page.locator('html')).toHaveAttribute('data-venue', 'veraitalia');
+
+    await page.getByRole('link', { name: 'Floor monitor' }).click();
+    await expect(page.getByRole('heading', { name: 'Vera Italia · Floor' })).toBeVisible();
+    await expect(page.locator('html')).toHaveAttribute('data-venue', 'veraitalia');
+  });
+
+  test('La Soul\'s waiter keeps La Soul\'s', async ({ page }) => {
+    await asMarko(page);
+    await page.goto('/waiter');
+    await expect(page.getByText('· La Soul')).toBeVisible();
+    await expect(page.locator('html')).toHaveAttribute('data-venue', 'lasoul');
+  });
+});
+
+test.describe('the floor monitor', () => {
+  const terrace = { id: 'sec-1', name: 'Terrace', color: '#B0641F' };
+
+  async function floor(page: Page, sessions: Record<string, unknown>[]) {
+    await page.route('**/rest/v1/tables**', (route) => route.fulfill(json([
+      { id: 't7', table_number: 7, section_id: 'sec-1', sections: terrace },
+      { id: 't8', table_number: 8, section_id: 'sec-1', sections: terrace },
+    ])));
+    await page.route('**/rest/v1/table_sessions**', (route) => route.fulfill(json(sessions)));
+    await page.route('**/rest/v1/waiters**', (route) => route.fulfill(json([
+      { id: 'waiter-1', user_id: 'staff-user-1', display_name: 'Marko', is_active: true, has_pin: true },
+    ])));
+    await page.route('**/rest/v1/rpc/verify_waiter_pin**', (route) => route.fulfill(json(true)));
+  }
+
+  // `animate-pulse` faded the whole card, so the tables that most needed a
+  // waiter looked disabled for half of every second.
+  test('a calling table is at full strength, and the rail counts in words', async ({ staff, page }) => {
+    staff.waiterCalls = [
+      { id: 'c1', status: 'pending', created_at: iso(2), table_session_id: 'session-7', acknowledged_by: null, acknowledged_at: null },
+      { id: 'c2', status: 'pending', created_at: iso(1), table_session_id: 'session-8', acknowledged_by: null, acknowledged_at: null },
+    ];
+    await floor(page, [
+      { id: 'session-7', table_id: 't7', is_active: true, opened_at: iso(30), guest_name: 'Amina', assigned_waiter_id: 'waiter-1', covers: null },
+      { id: 'session-8', table_id: 't8', is_active: true, opened_at: iso(10), guest_name: null, assigned_waiter_id: 'waiter-1', covers: null },
+    ]);
+    await page.goto('/waiter/monitor');
+    await expect(page.getByRole('button', { name: /Marko/ })).toContainText('2 calls');
+
+    await page.getByRole('button', { name: /All Tables/ }).click();
+    const card = page.getByRole('button', { name: 'Table 7 — Calling' });
+    await expect(card).toBeVisible();
+    await expect(card).not.toHaveClass(/animate-pulse/);
+    await expect(card).toHaveCSS('opacity', '1');
+  });
+
+  test('a waiter with no tables gets one empty message that says why', async ({ page }) => {
+    await floor(page, []);
+    // Nobody's section is assigned today, and no table is given to Marko.
+    await page.goto('/waiter/monitor');
+    await page.getByRole('button', { name: /Marko/ }).click();
+    for (const digit of ['1', '2', '3', '4']) await page.getByRole('button', { name: digit, exact: true }).click();
+    await expect(page.getByText(/No tables for you today yet/)).toBeVisible();
+    await expect(page.getByText('No tables.', { exact: true })).toHaveCount(0);
+    await expect(page.getByText('No tables assigned right now.')).toHaveCount(0);
   });
 });

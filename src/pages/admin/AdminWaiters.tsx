@@ -1,14 +1,24 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Link, useOutletContext } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { businessDayISO } from '@/lib/reporting';
 import { shownVenueSlug } from '@/lib/current-venue';
+import { VENUES } from '@/lib/venues';
+import {
+  isKitchenUsername, kitchenUsername, MIN_PASSWORD, normalizeUsername, plainRefusal, readRefusal, refusalField,
+  staffSiteUrl, suggestUsername, type LoginDetails,
+} from '@/lib/staff-accounts';
+import { switchStaffVenue } from '@/hooks/useStaffVenue';
+import type { AdminOutletContext } from '@/components/admin/AdminLayout';
+import LoginCard from '@/components/admin/LoginCard';
+import NewPasswordField from '@/components/admin/NewPasswordField';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { toast } from 'sonner';
-import { CalendarCheck, CheckCircle2, Copy, KeyRound, Loader2, Trash2, UserPlus } from 'lucide-react';
+import { CalendarCheck, CheckCircle2, ChefHat, Copy, KeyRound, LockKeyhole, Loader2, Trash2, UserPlus, Users } from 'lucide-react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -29,7 +39,10 @@ type Waiter = Omit<Database['public']['Tables']['waiters']['Row'], 'pin_hash'> &
 
 interface CreateWaiterResponse {
   error?: string;
-  pin?: string;
+  code?: string;
+  pin?: string | null;
+  warning?: string;
+  reset?: boolean;
 }
 
 interface DeleteWaiterResponse {
@@ -38,18 +51,54 @@ interface DeleteWaiterResponse {
 
 interface SectionLite { id: string; name: string; color: string }
 
+/*
+ * Who the account is for. A kitchen tablet signs in like a waiter (a
+ * username, at /waiter/login) and its link goes on to the kitchen screen;
+ * it is listed here with the waiters, so it can be switched off, given a
+ * new password or removed the same way.
+ */
+type AccountKind = 'waiter' | 'kitchen';
+type Field = 'name' | 'username' | 'password' | 'pin';
+
+/** A kitchen tablet's account, as this page made it. */
+const isKitchen = (w: Waiter) => isKitchenUsername(w.username);
+
 const AdminWaiters = () => {
+  const context = useOutletContext<AdminOutletContext | null>();
+  // The restaurant this page shows, which is the one a new account works at
+  // (create-waiter is sent the same, below).
+  const venueSlug = context?.venueSlug ?? shownVenueSlug();
+  const venueName = context?.venueName ?? VENUES[venueSlug]?.name ?? venueSlug;
+  const others = context?.owner ? Object.values(VENUES).filter((v) => v.slug !== venueSlug) : [];
+
   const [waiters, setWaiters] = useState<Waiter[]>([]);
   const [sections, setSections] = useState<SectionLite[]>([]);
   const [assignments, setAssignments] = useState<{ section_id: string; waiter_id: string }[]>([]);
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
+  const [kind, setKind] = useState<AccountKind>('waiter');
   const [name, setName] = useState('');
+  const [typedUsername, setTypedUsername] = useState<string | null>(null);
+  const [password, setPassword] = useState('');
   const [pin, setPin] = useState('');
+  const [problems, setProblems] = useState<Partial<Record<Field, string>>>({});
   const [creating, setCreating] = useState(false);
+  const [card, setCard] = useState<LoginDetails | null>(null);
   const [pinTarget, setPinTarget] = useState<Waiter | null>(null);
   const [pinValue, setPinValue] = useState('');
   const [savingPin, setSavingPin] = useState(false);
+  const [resetTarget, setResetTarget] = useState<Waiter | null>(null);
+  const [resetPassword, setResetPassword] = useState('');
+  const [resetProblem, setResetProblem] = useState<string | null>(null);
+  const [resetting, setResetting] = useState(false);
+  const fields = {
+    name: useRef<HTMLInputElement>(null),
+    username: useRef<HTMLInputElement>(null),
+    password: useRef<HTMLInputElement>(null),
+    pin: useRef<HTMLInputElement>(null),
+  };
+
+  // Filled in from the name (or the restaurant, for the kitchen) until the admin types their own.
+  const username = typedUsername ?? (kind === 'kitchen' ? kitchenUsername(venueSlug) : suggestUsername(name));
+  const displayName = name.trim() || (kind === 'kitchen' ? 'Kitchen' : '');
 
   const fetchAll = useCallback(async () => {
     const [w, s, a] = await Promise.all([
@@ -81,14 +130,22 @@ const AdminWaiters = () => {
     void fetchAll();
   }, [fetchAll]);
 
-  const createWaiter = async () => {
-    const normalizedUsername = username.trim().toLowerCase().replace(/[^a-z0-9_.-]/g, '');
-    if (normalizedUsername.length < 3 || password.length < 6 || !name.trim()) {
-      toast.error('Username (3+), password (6+), and display name are required');
-      return;
+  const fix = (field: Field) => setProblems((p) => ({ ...p, [field]: undefined }));
+
+  const createWaiter = async (e?: React.FormEvent) => {
+    e?.preventDefault();
+    const normalizedUsername = normalizeUsername(username);
+    const found: Partial<Record<Field, string>> = {};
+    if (!displayName) found.name = 'Type their name, as the team calls them.';
+    if (normalizedUsername.length < 3) found.username = 'At least 3 letters or digits.';
+    if (password.length < MIN_PASSWORD) {
+      found.password = password ? `Too short: at least ${MIN_PASSWORD} characters (${password.length} now).` : `Type one of at least ${MIN_PASSWORD} characters, or Generate.`;
     }
-    if (pin && !/^\d{4}$/.test(pin)) {
-      toast.error('PIN must be exactly 4 digits');
+    if (pin && !/^\d{4}$/.test(pin)) found.pin = 'Exactly 4 digits, or leave it blank.';
+    setProblems(found);
+    const first = (['name', 'username', 'password', 'pin'] as Field[]).find((f) => found[f]);
+    if (first) {
+      fields[first].current?.focus();
       return;
     }
 
@@ -98,8 +155,8 @@ const AdminWaiters = () => {
         body: {
           username: normalizedUsername,
           password,
-          display_name: name.trim(),
-          pin: pin || undefined,
+          display_name: displayName,
+          pin: kind === 'waiter' && pin ? pin : undefined,
           // The owner adds to the restaurant this page shows — the one the
           // switch picked, or this site's own before any pick (the function
           // refuses the owner a request that names none). A restaurant admin
@@ -108,19 +165,64 @@ const AdminWaiters = () => {
         },
       });
 
-      if (error || data?.error) {
-        toast.error(data?.error ?? error?.message ?? 'Failed');
+      const refusal = await readRefusal(error, data, 'create-waiter');
+      if (refusal) {
+        const field = refusalField(refusal);
+        if (field) {
+          setProblems({ [field]: plainRefusal(refusal) });
+          fields[field].current?.focus();
+        } else {
+          toast.error(plainRefusal(refusal), { duration: 8000 });
+        }
         return;
       }
 
-      toast.success(`Waiter "${name}" created${data?.pin ? ` - Floor PIN: ${data.pin}` : ''}`, { duration: 8000 });
-      setUsername('');
-      setPassword('');
+      // The password goes on the card, once, and nowhere else.
+      setCard({
+        kind, venueSlug, venueName, name: displayName, username: normalizedUsername, password,
+        pin: data?.pin ?? null, event: 'created',
+      });
+      if (data?.warning) toast.warning(data.warning, { duration: 8000 });
       setName('');
+      setTypedUsername(null);
+      setPassword('');
       setPin('');
+      setKind('waiter');
       await fetchAll();
     } finally {
       setCreating(false);
+    }
+  };
+
+  const giveNewPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!resetTarget) return;
+    if (resetPassword.length < MIN_PASSWORD) {
+      setResetProblem(`At least ${MIN_PASSWORD} characters (${resetPassword.length} now).`);
+      return;
+    }
+    setResetting(true);
+    try {
+      const { data, error } = await supabase.functions.invoke<CreateWaiterResponse>('create-waiter', {
+        body: { action: 'reset_password', waiter_id: resetTarget.id, password: resetPassword },
+      });
+      const refusal = await readRefusal(error, data, 'create-waiter');
+      if (refusal || !data?.reset) {
+        // A create-waiter from before reset_password reads this as a new waiter with no name.
+        const outdated = !refusal || /username|display name/i.test(refusal.message);
+        setResetProblem(outdated
+          ? 'The server cannot reset passwords yet: the create-waiter function needs redeploying.'
+          : plainRefusal(refusal));
+        return;
+      }
+      setCard({
+        kind: isKitchen(resetTarget) ? 'kitchen' : 'waiter', venueSlug, venueName, name: resetTarget.display_name,
+        username: resetTarget.username ?? '', password: resetPassword, event: 'reset',
+      });
+      setResetTarget(null);
+      setResetPassword('');
+    } finally {
+      setResetting(false);
     }
   };
 
@@ -151,8 +253,9 @@ const AdminWaiters = () => {
       body: { waiter_id: waiter.id },
     });
 
-    if (error || data?.error) {
-      toast.error(data?.error ?? error?.message ?? 'Failed to delete');
+    const refusal = await readRefusal(error, data, 'delete-waiter');
+    if (refusal) {
+      toast.error(refusal.message);
       return;
     }
 
@@ -170,7 +273,7 @@ const AdminWaiters = () => {
   };
 
   const copyLoginLink = async () => {
-    const url = `${window.location.origin}/waiter/login`;
+    const url = `${staffSiteUrl(venueSlug)}/waiter/login`;
     try {
       await navigator.clipboard.writeText(url);
       toast.success('Login link copied');
@@ -179,6 +282,10 @@ const AdminWaiters = () => {
       toast.error('Could not copy login link');
     }
   };
+
+  const problem = (field: Field) => problems[field]
+    ? <p id={`waiter-${field}-help`} role="alert" className="text-xs font-sans text-destructive mt-1">{problems[field]}</p>
+    : null;
 
   return (
     <div>
@@ -195,28 +302,120 @@ const AdminWaiters = () => {
       </div>
 
       <Card className="mb-6">
-        <CardHeader>
+        <CardHeader className="pb-3">
           <CardTitle className="font-serif text-lg flex items-center gap-2"><UserPlus className="w-5 h-5" /> Add Waiter</CardTitle>
+          {/* Which restaurant, said before anything is typed: the owner adds
+              to the one this page shows, and switches here, not after. */}
+          <p className="text-sm font-sans text-muted-foreground">
+            For <span className="font-semibold text-foreground">{venueName}</span>. They sign in at{' '}
+            <span className="font-medium text-foreground break-all">{staffSiteUrl(venueSlug).replace(/^https?:\/\//, '')}/waiter/login</span>.
+            {others.map((v) => (
+              <Button key={v.slug} type="button" variant="link" onClick={() => switchStaffVenue(v.slug)} className="h-auto p-0 ml-1.5 align-baseline">
+                Add to {v.name} instead
+              </Button>
+            ))}
+          </p>
         </CardHeader>
         <CardContent>
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-2">
-            <Input placeholder="Display name (e.g. John)" value={name} onChange={(e) => setName(e.target.value)} />
-            <Input placeholder="Username (e.g. john)" value={username} onChange={(e) => setUsername(e.target.value)} autoCapitalize="none" autoComplete="username" />
-            <Input type="password" placeholder="Password (6+ chars)" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="new-password" />
-            <Input
-              inputMode="numeric"
-              maxLength={4}
-              placeholder="Floor PIN (4 digits, auto if blank)"
-              value={pin}
-              onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 4))}
-            />
-          </div>
-          <Button onClick={createWaiter} disabled={creating} className="mt-3">
-            {creating ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <UserPlus className="w-4 h-4 mr-2" />}
-            Create
-          </Button>
-          <p className="text-xs font-sans text-muted-foreground mt-2">
-            Login at <span className="font-medium">/waiter/login</span> with username + password. The <span className="font-medium">Floor PIN</span> is used on the shared monitor to quickly see only their tables.
+          <form onSubmit={(e) => void createWaiter(e)} noValidate className="space-y-4">
+            <div role="group" aria-label="Who it is for" className="grid grid-cols-2 gap-1 rounded-lg bg-muted/60 p-1 max-w-sm">
+              {([['waiter', 'Waiter', Users], ['kitchen', 'Kitchen tablet', ChefHat]] as const).map(([value, label, Icon]) => (
+                <button
+                  key={value}
+                  type="button"
+                  aria-pressed={kind === value}
+                  onClick={() => { setKind(value); setProblems({}); }}
+                  className={`min-h-10 rounded-md px-2 text-sm font-sans inline-flex items-center justify-center gap-1.5 transition-colors ${
+                    kind === value ? 'bg-background text-foreground font-semibold shadow-sm' : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  <Icon className="w-4 h-4" aria-hidden /> {label}
+                </button>
+              ))}
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <div>
+                <Label htmlFor="waiter-name" className="font-sans text-sm">Name</Label>
+                <Input
+                  id="waiter-name"
+                  ref={fields.name}
+                  value={name}
+                  onChange={(e) => { setName(e.target.value); fix('name'); if (typedUsername === null) fix('username'); }}
+                  placeholder={kind === 'kitchen' ? 'Kitchen' : 'e.g. Marko'}
+                  autoComplete="off"
+                  aria-invalid={!!problems.name}
+                  aria-describedby={problems.name ? 'waiter-name-help' : undefined}
+                  className="mt-1.5 h-11"
+                />
+                {problem('name')}
+              </div>
+              <div>
+                <Label htmlFor="waiter-username" className="font-sans text-sm">Username</Label>
+                <Input
+                  id="waiter-username"
+                  ref={fields.username}
+                  value={username}
+                  onChange={(e) => { setTypedUsername(e.target.value); fix('username'); }}
+                  placeholder="e.g. marko"
+                  autoCapitalize="none"
+                  autoComplete="off"
+                  spellCheck={false}
+                  aria-invalid={!!problems.username}
+                  aria-describedby="waiter-username-help"
+                  className="mt-1.5 h-11 font-mono"
+                />
+                {problems.username ? problem('username') : (
+                  <p id="waiter-username-help" className="text-xs font-sans text-muted-foreground mt-1">
+                    {username && normalizeUsername(username) !== username
+                      ? <>Signs in as <span className="font-medium text-foreground">{normalizeUsername(username)}</span></>
+                      : 'Shared by both restaurants, so it must be unique.'}
+                  </p>
+                )}
+              </div>
+              <div className="sm:col-span-2 lg:col-span-1">
+                <Label htmlFor="waiter-password" className="font-sans text-sm">Password</Label>
+                <NewPasswordField
+                  id="waiter-password"
+                  ref={fields.password}
+                  value={password}
+                  onChange={(v) => { setPassword(v); fix('password'); }}
+                  problem={problems.password}
+                  className="mt-1.5"
+                />
+              </div>
+              {kind === 'waiter' && (
+                <div>
+                  <Label htmlFor="waiter-pin" className="font-sans text-sm">Floor PIN <span className="text-muted-foreground font-normal">(optional)</span></Label>
+                  <Input
+                    id="waiter-pin"
+                    ref={fields.pin}
+                    inputMode="numeric"
+                    maxLength={4}
+                    placeholder="4 digits"
+                    value={pin}
+                    onChange={(e) => { setPin(e.target.value.replace(/\D/g, '').slice(0, 4)); fix('pin'); }}
+                    aria-invalid={!!problems.pin}
+                    aria-describedby="waiter-pin-help"
+                    className="mt-1.5 h-11"
+                  />
+                  {problems.pin ? problem('pin') : (
+                    <p id="waiter-pin-help" className="text-xs font-sans text-muted-foreground mt-1">Blank: one is made for them.</p>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <Button type="submit" disabled={creating} className="gap-2 min-h-[44px] rounded-xl">
+              {creating ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserPlus className="w-4 h-4" />}
+              Create
+            </Button>
+          </form>
+          <p className="text-xs font-sans text-muted-foreground mt-3">
+            {kind === 'kitchen'
+              ? 'The kitchen tablet signs in with this username and password; its link opens the kitchen screen.'
+              : <>Waiters sign in with their username and password. The <span className="font-medium">Floor PIN</span> is for the shared floor screen, to see only their tables.</>}
+            {' '}You get a card to copy or share as soon as it is created.
           </p>
         </CardContent>
       </Card>
@@ -231,7 +430,7 @@ const AdminWaiters = () => {
           ) : (
             <div className="divide-y divide-border">
               {waiters.map((waiter) => (
-                <div key={waiter.id} className="flex items-center justify-between py-3 gap-3">
+                <div key={waiter.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between py-3 gap-2 sm:gap-3">
                   <div className="min-w-0">
                     <p className="font-sans font-medium truncate">{waiter.display_name}</p>
                     <p className="text-xs font-sans text-muted-foreground flex items-center gap-2 flex-wrap">
@@ -257,7 +456,18 @@ const AdminWaiters = () => {
                       )}
                     </div>
                   </div>
-                  <div className="flex items-center gap-2 shrink-0">
+                  <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                    {waiter.username && waiter.user_id && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => { setResetTarget(waiter); setResetPassword(''); setResetProblem(null); }}
+                        className="gap-1.5"
+                        aria-label={`New password for ${waiter.display_name}`}
+                      >
+                        <LockKeyhole className="w-3.5 h-3.5" /> Password
+                      </Button>
+                    )}
                     <Button variant="outline" size="sm" onClick={() => { setPinTarget(waiter); setPinValue(''); }} className="gap-1.5">
                       <KeyRound className="w-3.5 h-3.5" /> PIN
                     </Button>
@@ -323,6 +533,39 @@ const AdminWaiters = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* A forgotten password: a new one, shown once on the card. The old
+          one stops working at once; nothing else about them changes. */}
+      <Dialog open={!!resetTarget} onOpenChange={(open) => { if (!open) { setResetTarget(null); setResetPassword(''); } }}>
+        <DialogContent className="max-w-[calc(100vw-2rem)] sm:max-w-md rounded-2xl">
+          <form onSubmit={(e) => void giveNewPassword(e)} noValidate className="space-y-4">
+            <DialogHeader>
+              <DialogTitle className="font-serif">New password for {resetTarget?.display_name}</DialogTitle>
+              <DialogDescription>
+                For <span className="font-mono">@{resetTarget?.username}</span>. Their old password stops working.
+              </DialogDescription>
+            </DialogHeader>
+            <div>
+              <Label htmlFor="reset-password" className="font-sans text-sm">New password</Label>
+              <NewPasswordField
+                id="reset-password"
+                value={resetPassword}
+                onChange={(v) => { setResetPassword(v); setResetProblem(null); }}
+                problem={resetProblem}
+                className="mt-1.5"
+              />
+            </div>
+            <DialogFooter className="gap-2 sm:gap-0">
+              <Button type="button" variant="outline" onClick={() => setResetTarget(null)}>Cancel</Button>
+              <Button type="submit" disabled={resetting} className="gap-2">
+                {resetting && <Loader2 className="w-4 h-4 animate-spin" />} Set new password
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <LoginCard details={card} onDone={() => setCard(null)} />
     </div>
   );
 };

@@ -131,9 +131,9 @@ describe('Vera Italia’s pages', () => {
   it('price every dish in BAM, and list the menu in search once it opens', () => {
     const dish = pages.find((p) => p.path === '/menu/veraitalia/dish/truffle-pizza/')!;
     expect(dish.head.title).toBe(`Truffle Pizza — ${km(25)} · Vera Italia, Sarajevo`);
-    expect(dish.head.description).toMatch(/^Pizza Napoletana at Vera Italia, an Italian restaurant in Sarajevo, 25 KM\. White cream/);
+    expect(dish.head.description).toMatch(/^Truffle Pizza \(Pizza Napoletana\) at Vera Italia, an Italian restaurant in Sarajevo, 25 KM\. White cream/);
     const item = graphNodes(dish.head.jsonLd).find((n) => n['@type'] === 'MenuItem') as { offers: { price: string; priceCurrency: string } };
-    expect(item.offers).toEqual({ '@type': 'Offer', price: '25.00', priceCurrency: 'BAM' });
+    expect(item.offers).toMatchObject({ '@type': 'Offer', price: '25.00', priceCurrency: 'BAM', availability: 'https://schema.org/InStock' });
     const notLive = !VENUES.veraitalia.live;
     for (const p of pages.filter((x) => x.path.startsWith('/menu/'))) {
       expect(p.head.noindex).toBe(notLive);
@@ -152,9 +152,31 @@ describe('Vera Italia’s pages', () => {
     // In the guest's language in the app: Bosnian prices with a decimal comma.
     expect(dishMeta('Antipasti', 'Burrata', 10.5, 'Kremasta', 'bs')).toEqual({
       title: 'Burrata — 10,50 KM · Vera Italia, Sarajevo',
-      description: 'Antipasti — Vera Italia, italijanski restoran u Sarajevu, 10,50 KM. Kremasta.',
+      description: 'Burrata (Antipasti) — Vera Italia, italijanski restoran u Sarajevu, 10,50 KM. Kremasta.',
     });
     expect(dishMeta('Antipasti', 'Burrata', 12, null, 'ar').title).toBe('Burrata — 12 KM · Vera Italia، سراييفو');
+  });
+
+  it('give each dish the restaurant serving it and a way on to the dishes beside it', () => {
+    const dish = pages.find((p) => p.path === '/menu/veraitalia/dish/truffle-pizza/')!;
+    const restaurant = typed(dish.head.jsonLd, 'Restaurant');
+    expect(restaurant.name).toBe('Vera Italia');
+    expect(restaurant.address).toMatchObject({ addressLocality: 'Sarajevo' });
+    const item = typed(dish.head.jsonLd, 'MenuItem') as { offers: { offeredBy: { '@id': string }; url: string }; url: string };
+    expect(item.offers.offeredBy['@id']).toBe(restaurant['@id']);
+    expect(item.offers.url).toBe(item.url);
+    // Other pizzas by their own pages, the dish opened on the real menu, and where to find the restaurant.
+    expect(dish.body).toContain('More Pizza Napoletana at Vera Italia');
+    expect(dish.body).toContain('href="/menu/veraitalia/dish/margherita/"');
+    expect(dish.body).not.toContain('href="/menu/veraitalia/dish/truffle-pizza/"');
+    expect(dish.body).toMatch(/href="\/menu\/veraitalia\/pizza-napoletana\/\?section=[a-z-]+&amp;dish=[0-9a-f-]+"/);
+    expect(dish.body).toContain('alt="Truffle Pizza at Vera Italia, Sarajevo"');
+    expect(dish.body).toContain('id="visit"');
+    // Every dish page links somewhere further, none to itself.
+    for (const p of pages.filter((x) => x.path.includes('/dish/'))) {
+      expect(p.body).toMatch(/<section><h2>[^<]+<\/h2><ul><li><a href="\/menu\/veraitalia\/dish\//);
+      expect(p.body).not.toContain(`<li><a href="${p.path}">`);
+    }
   });
 
   it('name other languages only on its website, where each has an address of its own', () => {

@@ -2,8 +2,8 @@
  * Which restaurant an admin's request to an Edge Function acts on
  * (docs/two-restaurants.md).
  *
- * The admin functions (create-waiter, delete-waiter, translate-menu,
- * migrate-images) act with the service role, which passes every access rule
+ * The admin functions (create-waiter and its reset_password, delete-waiter,
+ * translate-menu, migrate-images) act with the service role, which passes every access rule
  * in the database — so the restaurant they act on is decided here, not there.
  * Pure: each function reads the caller's roles and the restaurants and hands
  * them in; supabase/tests/admin-separation.test.ts pins the decisions.
@@ -65,6 +65,21 @@ export function mayRemoveLogin(left: {
   callerId: string;
 }): boolean {
   return left.roles === 0 && left.waiters === 0 && left.userId !== left.callerId;
+}
+
+/**
+ * create-waiter's reset_password: may this admin give this waiter's sign-in a
+ * new password? Only when every place the account works is one they manage —
+ * a password opens all of them — and never an account that manages a
+ * restaurant (admins change their own, in the admin menu), nor their own.
+ */
+export function mayResetLogin(callerRoles: readonly RoleRow[], targetRoles: readonly RoleRow[] | null, ids: {
+  userId: string;
+  callerId: string;
+}): boolean {
+  if (!targetRoles || ids.userId === ids.callerId) return false;
+  if (targetRoles.some((r) => r.role === "admin")) return false;
+  return targetRoles.every((r) => managesVenue(callerRoles, r.venue_id));
 }
 
 export function resolveAdminVenue(
