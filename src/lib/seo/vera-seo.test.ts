@@ -116,6 +116,27 @@ describe('Vera Italia’s structured data', () => {
   });
 });
 
+describe('telling Vera Italia apart from others of that name', () => {
+  // A Google search for "vera italia sarajevo" (1 November 2026) mixed in a
+  // handbag shop, a travel agency and food shops of the same name.
+  it('names it with its city, says which one it is, and gives the site its name', () => {
+    for (const locale of LOCALES) {
+      const graph = veraSiteGraph(menu, locale);
+      const restaurant = typed(graph, 'Restaurant');
+      expect(restaurant.alternateName).toEqual(['Vera Italia Sarajevo', 'Ristorante Vera Italia', 'Vera Italia Cucina Italiana']);
+      expect(restaurant.disambiguatingDescription).toMatch(locale === 'en' ? /^The Italian restaurant .* in Sarajevo, Bosnia and Herzegovina\.$/
+        : locale === 'bs' ? /u Sarajevu, Bosna i Hercegovina\.$/ : /سراييفو، البوسنة والهرسك\.$/);
+      expect(typed(graph, 'WebSite')).toMatchObject({ name: 'Vera Italia', alternateName: ['Vera Italia Sarajevo'] });
+    }
+  });
+
+  it('tells answer engines its other names, and that the others are not it', () => {
+    const { short } = veraLlms(menu);
+    expect(short).toContain('- Also called: Vera Italia Sarajevo, Ristorante Vera Italia, Vera Italia Cucina Italiana');
+    expect(short).toMatch(/- Not to be confused with: other businesses named Vera Italia or Vera Italy .* this is the restaurant in Sarajevo, Bosnia and Herzegovina/);
+  });
+});
+
 describe('Vera Italia’s pages', () => {
   const pages = veraPages(menu);
 

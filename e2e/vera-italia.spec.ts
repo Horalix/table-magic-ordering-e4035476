@@ -61,6 +61,21 @@ test.describe('Vera Italia’s menu', () => {
     await expect(page.getByText('Truffle Pasta').first()).toBeVisible();
   });
 
+  test('a course opened on a slow phone loads, and never says it has no dishes', async ({ page }) => {
+    await installVeraStubs(page);
+    // The sections take a while, as on a slow phone opening a dish from Google.
+    let release: () => void = () => {};
+    const held = new Promise<void>((r) => { release = r; });
+    await page.route('**/rest/v1/subcategories**', async (route) => { await held; await route.fallback(); });
+    await page.goto('/menu/veraitalia/antipasti-insalate/');
+    await expect(page.getByRole('heading', { level: 1, name: 'Antipasti & Insalate' }).or(page.getByText('Antipasti & Insalate').first())).toBeVisible();
+    await page.waitForTimeout(800);
+    await expect(page.getByText('No items available in this category yet.')).toHaveCount(0);
+    release();
+    await expect(page.getByText('Insalata Caprese').first()).toBeVisible();
+    await expect(page.getByText('No items available in this category yet.')).toHaveCount(0);
+  });
+
   test('a seated guest sees their table and can call the waiter', async ({ page }) => {
     await installVeraStubs(page);
     await seatAtVera(page);

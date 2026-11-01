@@ -97,12 +97,16 @@ export const VENUES: Record<string, Venue> = {
    * menu and search engines list it. It is in Sarajevo (the owner, 30 October
    * 2026); its street address, phone, hours and listings have not arrived, so
    * they are empty and the website shows none of them.
+   *
+   * Other businesses share the name (a handbag shop, a travel agency, Italian
+   * food shops, restaurants abroad), so its other names carry the city: what
+   * people type to find this one.
    */
   veraitalia: {
     slug: 'veraitalia',
     dbId: 'a5000000-0000-4000-8000-000000000002',
     name: 'Vera Italia',
-    alternateNames: [],
+    alternateNames: ['Vera Italia Sarajevo', 'Ristorante Vera Italia', 'Vera Italia Cucina Italiana'],
     tagline: 'Cucina Italiana',
     phone: '',
     phoneHref: '',
