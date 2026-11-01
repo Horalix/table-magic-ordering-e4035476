@@ -57,6 +57,13 @@
       "when": 1792942782988,
       "tag": "0007_stale_orders",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1793540523751,
+      "tag": "0008_apply_verified_reco_quality_runner",
+      "breakpoints": true
     }
   ]
 }

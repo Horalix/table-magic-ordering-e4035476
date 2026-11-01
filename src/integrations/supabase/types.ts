@@ -1494,36 +1494,58 @@ export type Database = {
           candidate_kind: string
           context_kind: string
           note: string | null
+          venue_id: string | null
         }
         Insert: {
           candidate_kind: string
           context_kind: string
           note?: string | null
+          venue_id?: string | null
         }
         Update: {
           candidate_kind?: string
           context_kind?: string
           note?: string | null
+          venue_id?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "reco_clash_venue_id_fkey"
+            columns: ["venue_id"]
+            isOneToOne: false
+            referencedRelation: "venues"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       reco_fit: {
         Row: {
           candidate_kind: string
           context_kind: string
           note: string | null
+          venue_id: string | null
         }
         Insert: {
           candidate_kind: string
           context_kind: string
           note?: string | null
+          venue_id?: string | null
         }
         Update: {
           candidate_kind?: string
           context_kind?: string
           note?: string | null
+          venue_id?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "reco_fit_venue_id_fkey"
+            columns: ["venue_id"]
+            isOneToOne: false
+            referencedRelation: "venues"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       reco_learned_visits: {
         Row: {
@@ -3789,6 +3811,8 @@ export type Database = {
         }
         Returns: string
       }
+      reco_kind_family: { Args: { _kind: string }; Returns: string }
+      reco_kind_group: { Args: { _kind: string }; Returns: string }
       reco_learn_visit: { Args: { _visit: string }; Returns: number }
       reco_learned_pairs: {
         Args: { _at?: string; _context: string[] }
@@ -3812,6 +3836,41 @@ export type Database = {
       }
       reco_now: { Args: never; Returns: string }
       reco_policy_version: { Args: never; Returns: string }
+      reco_rank_scored: {
+        Args: {
+          _cart_item_ids?: string[]
+          _cart_quantities?: number[]
+          _exclude_allergens?: string[]
+          _language?: string
+          _limit?: number
+          _placement?: string
+          _session_id?: string
+        }
+        Returns: {
+          curated_score: number
+          dietary_tags: string[]
+          evidence: number
+          explore: number
+          explore_room: number
+          grp: string
+          id: string
+          image_url: string
+          kind: string
+          learned_score: number
+          name: string
+          name_ar: string
+          name_bs: string
+          observed_score: number
+          ord: number
+          p_accept: number
+          price: number
+          reason: string
+          recommendation_type: string
+          score: number
+          source_item_id: string
+          suggested_quantity: number
+        }[]
+      }
       reco_role_fits: {
         Args: {
           _at?: string
