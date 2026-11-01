@@ -69,7 +69,7 @@ describe('generatePassword', () => {
   });
 
   it('uses the random source it is given, and only it', () => {
-    const counting = () => { let n = 0; return (bytes: Uint32Array) => { bytes[0] = n++; return bytes; }; };
+    const counting = () => { let n = 0; return (bytes: Uint32Array<ArrayBuffer>) => { bytes[0] = n++; return bytes; }; };
     expect(generatePassword(counting())).toBe(generatePassword(counting()));
   });
 });

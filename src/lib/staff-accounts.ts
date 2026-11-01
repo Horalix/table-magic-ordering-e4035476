@@ -29,7 +29,7 @@ const UPPER = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
 const DIGITS = '23456789';
 const ALL = LOWER + UPPER + DIGITS;
 
-type Random = (bytes: Uint32Array) => Uint32Array;
+type Random = (bytes: Uint32Array<ArrayBuffer>) => Uint32Array<ArrayBuffer>;
 const cryptoRandom: Random = (bytes) => crypto.getRandomValues(bytes);
 
 /** A uniform index below n (rejection sampling: no modulo bias). */
