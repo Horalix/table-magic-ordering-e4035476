@@ -82,6 +82,8 @@ export interface AdminOutletContext {
   venueSlug: string | null;
   /** The owner, who has every restaurant; null while the roles load. */
   owner: boolean | null;
+  /** Opens Change password for the signed-in account (Team's "you" row). */
+  changePassword?: () => void;
 }
 
 /*
@@ -340,6 +342,7 @@ const AdminLayout = () => {
           venueName,
           venueSlug: staffVenue?.venue.slug ?? null,
           owner,
+          changePassword: () => setPasswordOpen(true),
         } satisfies AdminOutletContext}
       />
     );

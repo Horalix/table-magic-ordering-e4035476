@@ -82,6 +82,22 @@ export function mayResetLogin(callerRoles: readonly RoleRow[], targetRoles: read
   return targetRoles.every((r) => managesVenue(callerRoles, r.venue_id));
 }
 
+/**
+ * manage-admins' reset_password: the owner (the caller is checked to be one
+ * first) gives a new password to anyone on the team — a restaurant's admin, a
+ * waiter, a kitchen tablet. Never to an owner's account, theirs included: an
+ * owner changes their own (admin menu → Change password), which asks for the
+ * current one. Not when the account has no role, or its roles could not be
+ * read: that is no one on the team.
+ */
+export function ownerMayResetLogin(targetRoles: readonly RoleRow[] | null, ids: {
+  userId: string;
+  callerId: string;
+}): boolean {
+  if (!targetRoles?.length || ids.userId === ids.callerId) return false;
+  return !isOwner(targetRoles);
+}
+
 export function resolveAdminVenue(
   roles: readonly RoleRow[],
   named: string | null | undefined,

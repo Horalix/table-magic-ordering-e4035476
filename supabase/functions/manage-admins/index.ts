@@ -1,4 +1,5 @@
 import { createClient, type SupabaseClient, type User } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import { ownerMayResetLogin } from "../_shared/venue-access.ts";
 
 /**
  * manage-admins — the owner's Team page (src/pages/admin/AdminTeam.tsx).
@@ -24,6 +25,13 @@ import { createClient, type SupabaseClient, type User } from "https://esm.sh/@su
  *                               restaurant's admin (one admin role per account,
  *                               user_roles), so no owner — the caller or the
  *                               last one — can be removed through here.
+ *   reset_password { user_id,   a new password for anyone on the team who
+ *                    password } forgot theirs: a restaurant's admin, a
+ *                               waiter, a kitchen tablet. Never an owner's
+ *                               (ownerMayResetLogin): they change their own
+ *                               in the admin menu. 10+ characters; the
+ *                               password goes to Supabase Auth and nowhere
+ *                               else, as in appoint.
  */
 
 const corsHeaders = {
@@ -31,7 +39,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-type Action = 'list' | 'appoint' | 'revoke';
+type Action = 'list' | 'appoint' | 'revoke' | 'reset_password';
 
 interface Body {
   action?: Action;
@@ -216,6 +224,30 @@ Deno.serve(async (req) => {
       if (delErr) return reply({ error: delErr.message }, 400);
       if (!removed?.length) return reply({ error: `Not an admin of ${venue.name}` }, 404);
       return reply({ ok: true });
+    }
+
+    if (body.action === 'reset_password') {
+      const password = typeof body.password === 'string' ? body.password : '';
+      if (!body.user_id) return reply({ error: 'Whose password?' }, 400);
+      if (body.user_id === me.id) {
+        return reply({ error: 'Change your own password in the admin menu → Change password' }, 403);
+      }
+      if (password.length < MIN_PASSWORD) {
+        return reply({ error: `The new password needs at least ${MIN_PASSWORD} characters`, code: 'weak_password' }, 400);
+      }
+      const { data: theirs, error: tErr } = await admin.from('user_roles').select('role, venue_id').eq('user_id', body.user_id);
+      if (tErr) return reply({ error: tErr.message }, 500);
+      if (!ownerMayResetLogin((theirs as Omit<RoleRow, 'user_id'>[] | null) ?? null, { userId: body.user_id, callerId: me.id })) {
+        return reply({ error: 'Only a restaurant admin, waiter or kitchen tablet gets a new password here' }, 403);
+      }
+      const { error: updErr } = await admin.auth.admin.updateUserById(body.user_id, { password });
+      if (updErr) {
+        // Auth's refusal in Auth's words, said next to the password field.
+        return /password/i.test(updErr.message) || (updErr as { code?: string }).code === 'weak_password'
+          ? reply({ error: `Supabase Auth refused the password: ${updErr.message}`, code: 'weak_password' }, 400)
+          : reply({ error: updErr.message }, 400);
+      }
+      return reply({ ok: true, reset: true });
     }
 
     return reply({ error: 'Unknown action' }, 400);

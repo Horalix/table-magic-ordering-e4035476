@@ -41,7 +41,11 @@ llms.txt all follow on the next deploy.
    keep working. At the domain registrar, add the DNS records Netlify shows
    (or move the nameservers to Netlify DNS). Netlify issues the HTTPS
    certificate by itself. The old site (another developer's) is replaced;
-   nothing from it needs to be kept.
+   nothing from it needs to be kept, and its FTP access is not needed.
+   **lasoul.net has email** (for example website@ and kerim@): change only the
+   records for the website (`lasoul.net`, `www`, `menu`) and leave every MX,
+   `mail` and TXT record alone. Moving the nameservers to Netlify DNS without
+   copying the email records over first would stop the email.
 2. **One line.** `src/lib/seo/site-url.ts`: change `SITE_URL` to
    `'https://lasoul.net'` and push to `main`; Netlify redeploys. Canonical
    links, the sitemap, structured data and llms.txt then all name lasoul.net.

@@ -1,7 +1,7 @@
 import React, { useRef, useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { ChefHat, Crown, Loader2, ShieldCheck, UserMinus, UserPlus, Users } from 'lucide-react';
+import { ChefHat, Crown, Loader2, LockKeyhole, ShieldCheck, UserMinus, UserPlus, Users } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import LoginCard from '@/components/admin/LoginCard';
@@ -25,6 +25,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { VENUES } from '@/lib/venues';
 import type { AdminOutletContext } from '@/components/admin/AdminLayout';
 
@@ -39,6 +40,11 @@ import type { AdminOutletContext } from '@/components/admin/AdminLayout';
  * (their restaurant's own site) and shows that password once. Revoking takes
  * away that one restaurant's admin role and nothing else. Waiters and kitchen
  * tablets are added and removed under Waiters, as before.
+ *
+ * Every row has a Password button: anyone on the team who forgot theirs gets
+ * a new one here, shown once on the login card (manage-admins
+ * reset_password). The owner's own row opens Change password instead, which
+ * asks for the current one.
  */
 
 interface Account {
@@ -87,6 +93,24 @@ const who = (a: Account) => a.email ?? (a.username ? `@${a.username}` : 'Unknown
  */
 const kitchenTablet = (a: Account) => a.kind === 'kitchen' || (a.kind === 'waiter' && isKitchenUsername(a.username));
 
+/**
+ * Who gets a Password button: a restaurant's admin (signs in with their
+ * email), a waiter or a kitchen tablet (with their username). A kitchen
+ * account made by hand has no username, so no sign-in the card could point
+ * to; an owner changes their own.
+ */
+const resettable = (a: Account) => (a.kind === 'admin' && !!a.email) || (a.kind !== 'owner' && !!a.username);
+
+/** The login card after a new password. */
+function resetCard(a: Account, venueName: string, password: string): LoginDetails {
+  const kind = a.kind === 'admin' ? 'admin' : kitchenTablet(a) ? 'kitchen' : 'waiter';
+  const username = (kind === 'admin' ? a.email : a.username) ?? '';
+  return {
+    kind, venueSlug: a.venue ?? '', venueName, name: kind === 'admin' ? username : a.display_name ?? username,
+    username, password, event: 'reset',
+  };
+}
+
 const People = ({ title, icon: Icon, people, empty, action }: {
   title: string;
   icon: React.ElementType;
@@ -128,6 +152,10 @@ const AdminTeam = () => {
   const [saving, setSaving] = useState(false);
   const [card, setCard] = useState<LoginDetails | null>(null);
   const passwordRef = useRef<HTMLInputElement>(null);
+  const [resetTarget, setResetTarget] = useState<Account | null>(null);
+  const [resetPassword, setResetPassword] = useState('');
+  const [resetProblem, setResetProblem] = useState<string | null>(null);
+  const [resetting, setResetting] = useState(false);
 
   const { data, error, isLoading, refetch } = useQuery({
     queryKey: ['owner-team'],
@@ -213,6 +241,60 @@ const AdminTeam = () => {
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
+  );
+
+  const closeReset = () => { setResetTarget(null); setResetPassword(''); setResetProblem(null); };
+
+  const giveNewPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!resetTarget) return;
+    if (resetPassword.length < MIN_PASSWORD) {
+      setResetProblem(`At least ${MIN_PASSWORD} characters (${resetPassword.length} now).`);
+      return;
+    }
+    setResetting(true);
+    try {
+      await callTeam({ action: 'reset_password', user_id: resetTarget.user_id, password: resetPassword });
+      setCard(resetCard(resetTarget, nameOf(resetTarget.venue), resetPassword));
+      closeReset();
+    } catch (err) {
+      const problem = err instanceof TeamError ? err : new TeamError('Could not set the new password');
+      // A manage-admins from before reset_password does not know the action.
+      setResetProblem(/unknown action/i.test(problem.message)
+        ? 'The server cannot do this yet: the manage-admins function needs redeploying.'
+        : problem.message);
+    } finally {
+      setResetting(false);
+    }
+  };
+
+  const passwordButton = (a: Account) => {
+    if (a.you) {
+      return context?.changePassword ? (
+        <Button variant="outline" size="sm" onClick={context.changePassword} className="gap-1.5 min-h-[40px] shrink-0">
+          <LockKeyhole className="w-4 h-4" /> Change password
+        </Button>
+      ) : null;
+    }
+    if (!resettable(a)) return null;
+    return (
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={() => { setResetTarget(a); setResetPassword(''); setResetProblem(null); }}
+        className="gap-1.5 min-h-[40px] shrink-0"
+        aria-label={`New password for ${a.display_name ?? who(a)}`}
+      >
+        <LockKeyhole className="w-4 h-4" /> Password
+      </Button>
+    );
+  };
+
+  const adminActions = (a: Account) => (
+    <div className="flex items-center gap-2 shrink-0">
+      {passwordButton(a)}
+      {revokeButton(a)}
+    </div>
   );
 
   const owners = accounts.filter((a) => a.kind === 'owner');
@@ -322,14 +404,21 @@ const AdminTeam = () => {
                         icon={ShieldCheck}
                         people={here.filter((a) => a.kind === 'admin')}
                         empty="No admin of its own yet: you run it."
-                        action={revokeButton}
+                        action={adminActions}
                       />
-                      <People title="Waiters" icon={Users} people={here.filter((a) => a.kind === 'waiter' && !kitchenTablet(a))} empty="No waiters yet. Add them under Waiters." />
+                      <People
+                        title="Waiters"
+                        icon={Users}
+                        people={here.filter((a) => a.kind === 'waiter' && !kitchenTablet(a))}
+                        empty="No waiters yet. Add them under Waiters."
+                        action={passwordButton}
+                      />
                       <People
                         title="Kitchen screens"
                         icon={ChefHat}
                         people={here.filter(kitchenTablet)}
                         empty="No kitchen tablet yet. Add one under Waiters → Kitchen tablet."
+                        action={passwordButton}
                       />
                     </CardContent>
                   </Card>
@@ -343,11 +432,43 @@ const AdminTeam = () => {
               <CardTitle className="font-serif text-lg flex items-center gap-2"><Crown className="w-5 h-5" /> Owner</CardTitle>
             </CardHeader>
             <CardContent>
-              <People title="Every restaurant" icon={Crown} people={owners} empty="No owner account." />
+              <People title="Every restaurant" icon={Crown} people={owners} empty="No owner account." action={passwordButton} />
             </CardContent>
           </Card>
         </>
       ) : null}
+
+      {/* A forgotten password: a new one, shown once on the card. The old
+          one stops working at once; nothing else about them changes. */}
+      <Dialog open={!!resetTarget} onOpenChange={(open) => { if (!open) closeReset(); }}>
+        <DialogContent className="max-w-[calc(100vw-2rem)] sm:max-w-md rounded-2xl">
+          <form onSubmit={(e) => void giveNewPassword(e)} noValidate className="space-y-4">
+            <DialogHeader>
+              <DialogTitle className="font-serif">New password for {resetTarget ? resetTarget.display_name ?? who(resetTarget) : ''}</DialogTitle>
+              <DialogDescription>
+                {resetTarget && <>{nameOf(resetTarget.venue)} · {resetTarget.kind === 'admin' ? 'admin' : kitchenTablet(resetTarget) ? 'kitchen tablet' : 'waiter'}. </>}
+                Their old password stops working.
+              </DialogDescription>
+            </DialogHeader>
+            <div>
+              <Label htmlFor="team-reset-password" className="font-sans text-sm">New password</Label>
+              <NewPasswordField
+                id="team-reset-password"
+                value={resetPassword}
+                onChange={(v) => { setResetPassword(v); setResetProblem(null); }}
+                problem={resetProblem}
+                className="mt-1.5"
+              />
+            </div>
+            <DialogFooter className="gap-2 sm:gap-0">
+              <Button type="button" variant="outline" onClick={closeReset}>Cancel</Button>
+              <Button type="submit" disabled={resetting} className="gap-2">
+                {resetting && <Loader2 className="w-4 h-4 animate-spin" />} Set new password
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
