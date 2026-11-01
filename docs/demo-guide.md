@@ -52,8 +52,10 @@ left (or **More** in the bottom bar).
 ### 1. The owner signs in (once)
 
 1. Open https://lasoulapp.netlify.app/admin/login and sign in with the owner's
-   email. If nobody knows the owner's password, reset it in Lovable
-   (Cloud → Users), never in a chat.
+   email. To pick the demo password, open the menu → **Change password**
+   (or **Owner** → **Team** → **Change password** on your own row). If nobody
+   knows the owner's password, reset it in Lovable (Cloud → Users), never in
+   a chat.
 2. The first screen is **Overview**, with both restaurants. That is the
    owner's account working.
 
@@ -70,9 +72,9 @@ left (or **More** in the bottom bar).
 
 If the email already has an account, leave the password empty: they get the
 role and keep their own password, and the card says so. If they forget their
-password later, they cannot reset it from the app; reset it in Lovable
-(Cloud → Users), and they change it at once from the admin menu →
-**Change password**.
+password later, the owner gives them a new one: **Team** → their row →
+**Password** → type one or **Generate** → **Set new password**. They change it
+at once from the admin menu → **Change password**.
 
 ### 3. Each restaurant's staff (owner or that restaurant's admin)
 
@@ -97,7 +99,16 @@ add a letter or the restaurant (for example a dot and the restaurant's name).
 
 **A waiter forgot their password:** Waiters → their row → **Password** →
 **Generate** → **Set new password**. A new card opens; the old password stops
-working. (Needs the latest `create-waiter` function deployed.)
+working. The owner can do the same for anyone, at either restaurant, from
+**Team**. (Needs the latest `create-waiter` and `manage-admins` deployed.)
+
+**Every password at a glance:**
+
+| Whose | Who changes it | Where |
+|---|---|---|
+| Owner | The owner | Menu → **Change password** (asks for the current one) |
+| Restaurant admin | Themselves, or the owner if forgotten | Menu → **Change password**; the owner: **Team** → **Password** |
+| Waiter, kitchen tablet | Their admin or the owner | **Waiters** → **Password**; the owner also **Team** → **Password** |
 
 ### 4. The floor (per restaurant, ~5 min)
 

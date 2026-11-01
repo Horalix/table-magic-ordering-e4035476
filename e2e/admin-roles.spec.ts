@@ -118,6 +118,10 @@ async function stubOwnerParts(page: Page) {
       team.accounts = team.accounts.filter((a) => !(a.user_id === body.user_id && a.kind === 'admin' && a.venue === body.venue));
       return json(route, { ok: true });
     }
+    if (body.action === 'reset_password') {
+      if (String(body.password ?? '').length < 10) return json(route, { error: 'The new password needs at least 10 characters', code: 'weak_password' }, 400);
+      return json(route, { ok: true, reset: true });
+    }
     return json(route, { error: 'Unknown action' }, 400);
   });
   return { overviewCalls, team };
@@ -755,6 +759,48 @@ test.describe('making accounts', () => {
     const card = page.getByRole('dialog', { name: 'lejla@lasoul.test now runs La Soul' });
     await expect(card.getByRole('link')).toHaveAttribute('href', 'https://lasoulapp.netlify.app/admin/login');
     await shot(page, 'team-login-card');
+  });
+
+  test('the owner gives anyone on the team a new password from Team, and changes their own there', async ({ page, staff }) => {
+    staff.roles = OWNER_ROLES;
+    const { team } = await stubOwnerParts(page);
+    await page.goto('/admin/team');
+    const laSoul = page.getByRole('region', { name: 'La Soul team' });
+    await laSoul.scrollIntoViewIfNeeded();
+    await shot(page, 'team-password-buttons');
+
+    // A restaurant admin who forgot theirs.
+    await laSoul.getByRole('button', { name: 'New password for ana@lasoul.test' }).click();
+    const dialog = page.getByRole('dialog', { name: 'New password for ana@lasoul.test' });
+    await expect(dialog.getByText(/La Soul · admin/)).toBeVisible();
+    await dialog.locator('#team-reset-password').fill('short');
+    await dialog.getByRole('button', { name: 'Set new password' }).click();
+    await expect(dialog.getByText('At least 10 characters (5 now).')).toBeVisible();
+    await dialog.getByRole('button', { name: 'Generate' }).click();
+    const secret = await dialog.locator('#team-reset-password').inputValue();
+    await dialog.getByRole('button', { name: 'Set new password' }).click();
+    const card = page.getByRole('dialog', { name: 'New password for ana@lasoul.test' }).filter({ has: page.getByTestId('login-card-password') });
+    await expect(card.getByTestId('login-card-password')).toHaveText(secret);
+    await expect(card.getByRole('link')).toHaveAttribute('href', 'https://lasoulapp.netlify.app/admin/login');
+    expect(team.calls.at(-1)).toEqual({ action: 'reset_password', user_id: 'u-ana', password: secret });
+    await card.getByRole('button', { name: 'Done' }).click();
+
+    // A waiter, at the other restaurant: their own site, their username.
+    const vera = page.getByRole('region', { name: 'Vera Italia team' });
+    await vera.getByRole('button', { name: 'New password for Giulia' }).click();
+    await page.locator('#team-reset-password').fill('e2e-waiter-pass-7');
+    await page.getByRole('button', { name: 'Set new password' }).click();
+    const waiterCard = page.getByRole('dialog', { name: 'New password for Giulia' }).filter({ has: page.getByTestId('login-card-password') });
+    await expect(waiterCard.getByRole('link')).toHaveAttribute('href', 'https://veraitalia.net/waiter/login?u=giulia');
+    expect(team.calls.at(-1)).toEqual({ action: 'reset_password', user_id: 'u-giulia', password: 'e2e-waiter-pass-7' });
+    await waiterCard.getByRole('button', { name: 'Done' }).click();
+
+    // A kitchen account made by hand has no username to sign in with: no button.
+    await expect(laSoul.getByRole('button', { name: 'New password for kitchen-screen@lasoul.test' })).toHaveCount(0);
+
+    // The owner's own row (not the menu's) changes theirs, asking for the current one.
+    await page.locator('main').getByRole('button', { name: 'Change password', exact: true }).click();
+    await expect(page.getByRole('dialog', { name: 'Change password' }).getByLabel('Current password')).toBeVisible();
   });
 
   test('the Team form says Auth’s refusal of an initial password next to it', async ({ page, staff }) => {

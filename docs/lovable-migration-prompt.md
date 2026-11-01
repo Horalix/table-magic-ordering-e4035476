@@ -2,11 +2,13 @@
 
 Copy everything between the rules into Lovable. Nothing else needs to be said.
 
-## Next: suggestions a head waiter would sign, and resetting a waiter's password
+## Next: suggestions a head waiter would sign, and resetting passwords
 
-Send this once `main` has both the runner for this one migration (merged from
-`feature/reco-quality`) and the staff-accounts change (`create-waiter` with
-`reset_password`, merged from `feature/staff-seo-waiter`).
+Send this once `main` has the runner for this one migration (merged from
+`feature/reco-quality`), the staff-accounts change (`create-waiter` with
+`reset_password`, merged from `feature/staff-seo-waiter`) and the owner's
+resets (`manage-admins` with `reset_password`, merged from
+`feature/team-passwords`).
 
 - **The migration:** guests at both restaurants get better suggestions. No
   menu, order, ticket, staff or analytics data changes. The one exception is
@@ -14,14 +16,16 @@ Send this once `main` has both the runner for this one migration (merged from
   has not already edited them. It is safe to run again if it has already run:
   every function is `CREATE OR REPLACE`, every column `IF NOT EXISTS`, and the
   three priorities move only from their first value.
-- **One Edge Function, `create-waiter`:**
-  - it checks the 10-character password minimum;
-  - it gives clear error codes;
-  - it cleans up a half-created sign-in;
-  - it adds the **Password** button's `reset_password`.
+- **Two Edge Functions:**
+  - `create-waiter` checks the 10-character password minimum, gives clear
+    error codes, cleans up a half-created sign-in, and adds the Waiters
+    page's **Password** button (`reset_password`);
+  - `manage-admins` adds the Team page's **Password** button: the owner gives
+    any restaurant admin, waiter or kitchen tablet a new password (never an
+    owner's).
 
-  Until it is redeployed, the new Waiters page works, except that resetting a
-  password says the function needs redeploying.
+  Until they are redeployed, both pages work, except that a **Password**
+  button says the function needs redeploying.
 - Netlify publishes the app itself from `main`, so nothing needs republishing
   in Lovable.
 
@@ -56,9 +60,9 @@ Send this once `main` has both the runner for this one migration (merged from
 >    Expected: `true`, `true`; `reco_clash` and `reco_fit`; priorities 45,
 >    55, 75 in that order; and the same rule counts per restaurant as before
 >    (Vera Italia's `…0002` has 15).
-> 3. Deploy the Edge Function `create-waiter` from `supabase/functions/`
->    exactly as it is in `main`, with the settings in
->    `supabase/config.toml`. It imports `supabase/functions/_shared/venue-access.ts`,
+> 3. Deploy the Edge Functions `create-waiter` and `manage-admins` from
+>    `supabase/functions/` exactly as they are in `main`, with the settings in
+>    `supabase/config.toml`. Both import `supabase/functions/_shared/venue-access.ts`,
 >    which changed too. Deploy no other function. Paste the deploy result.
 >
 > Do not create or change any user account, password or credential, do not

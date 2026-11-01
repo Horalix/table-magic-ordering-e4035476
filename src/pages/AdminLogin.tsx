@@ -166,6 +166,9 @@ const AdminLogin = () => {
             {loading ? 'Signing in...' : 'Sign In'}
           </Button>
           <p className="text-xs text-center text-muted-foreground font-sans">
+            Forgot your password? The owner gives you a new one in Admin → Team.
+          </p>
+          <p className="text-xs text-center text-muted-foreground font-sans">
             Waiter or kitchen tablet? <button type="button" onClick={() => navigate('/waiter/login')} className="underline">Staff sign-in</button>
           </p>
         </form>

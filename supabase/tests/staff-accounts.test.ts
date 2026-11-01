@@ -9,7 +9,7 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { mayResetLogin, type RoleRow } from '../functions/_shared/venue-access.ts';
+import { mayResetLogin, ownerMayResetLogin, type RoleRow } from '../functions/_shared/venue-access.ts';
 
 const ROOT = path.join(__dirname, '..', '..');
 const source = (file: string) => readFileSync(path.join(ROOT, file), 'utf8');
@@ -55,6 +55,36 @@ describe('a new password for a waiter (reset_password)', () => {
     expect(fn).toContain('admin.auth.admin.updateUserById(waiter.user_id, { password })');
     // The length check comes before Auth is asked, in the reset as in the create.
     expect(fn.match(/password\.length < MIN_PASSWORD/g)).toHaveLength(2);
+  });
+});
+
+describe('the owner gives anyone on the team a new password (manage-admins reset_password)', () => {
+  const ids = { userId: 'someone', callerId: 'owner-1' };
+
+  it('a restaurant’s admin, a waiter or a kitchen tablet, at either restaurant', () => {
+    expect(ownerMayResetLogin([{ role: 'admin', venue_id: L }], ids)).toBe(true);
+    expect(ownerMayResetLogin([{ role: 'staff', venue_id: V }], ids)).toBe(true);
+    expect(ownerMayResetLogin([{ role: 'staff', venue_id: L }, { role: 'admin', venue_id: V }], ids)).toBe(true);
+  });
+
+  it('never an owner’s account, their own included, and not an account with no role', () => {
+    expect(ownerMayResetLogin([{ role: 'admin', venue_id: null }], ids)).toBe(false);
+    expect(ownerMayResetLogin([{ role: 'staff', venue_id: L }, { role: 'admin', venue_id: null }], ids)).toBe(false);
+    expect(ownerMayResetLogin([{ role: 'admin', venue_id: L }], { userId: 'owner-1', callerId: 'owner-1' })).toBe(false);
+    expect(ownerMayResetLogin([], ids)).toBe(false);
+    expect(ownerMayResetLogin(null, ids)).toBe(false);
+  });
+
+  it('the function lets only the owner in, decides through it, and checks the length first', () => {
+    const fn = source('supabase/functions/manage-admins/index.ts');
+    expect(fn).toContain("if (!owner) return reply({ error: 'Only the owner manages restaurant admins' }, 403);");
+    expect(fn).toContain("body.action === 'reset_password'");
+    expect(fn).toContain('ownerMayResetLogin(');
+    expect(fn).toContain('admin.auth.admin.updateUserById(body.user_id, { password })');
+    expect(fn.indexOf('password.length < MIN_PASSWORD', fn.indexOf("body.action === 'reset_password'")))
+      .toBeLessThan(fn.indexOf('updateUserById'));
+    expect(fn).not.toMatch(/console\.\w+\([^)]*password/);
+    expect(fn).not.toMatch(/reply\([^)]*[{,]\s*password\s*[,}:]/);
   });
 });
 

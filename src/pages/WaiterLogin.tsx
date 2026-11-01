@@ -235,6 +235,9 @@ const WaiterLogin = () => {
             {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Sign In'}
           </Button>
           <p className="text-xs text-center text-muted-foreground font-sans">
+            Forgot your password? Your manager gives you a new one in Admin → Waiters.
+          </p>
+          <p className="text-xs text-center text-muted-foreground font-sans">
             Manager? <button type="button" onClick={() => navigate('/admin/login')} className="underline">Admin login</button>
           </p>
         </form>
