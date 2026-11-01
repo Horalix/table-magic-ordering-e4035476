@@ -17,12 +17,14 @@ import { toast } from 'sonner';
 import {
   playOrderAlert, playWaiterCallAlert, playBillRequestAlert, useAudioUnlock, useReminderChime,
 } from '@/lib/kitchen-sounds';
-import { useStaffDocument } from '@/components/staff/useStaffDocument';
+import { useStaffDocument, useStaffVenueLook } from '@/components/staff/useStaffDocument';
+import { plural } from '@/components/staff/floor-words';
 import { useStaffVenue } from '@/hooks/useStaffVenue';
 import { useWakeLock } from '@/lib/wake-lock';
 import { isHeld, isInKitchen, kitchenStart } from '@/components/staff/order-status';
 import HeldOrdersCard from '@/components/staff/HeldOrdersCard';
 import type { Database } from '@/integrations/supabase/types';
+import { isKitchenUsername } from '@/lib/staff-accounts';
 
 type Section = Pick<Database['public']['Tables']['sections']['Row'], 'id' | 'name' | 'color'>;
 type Waiter = Pick<Database['public']['Tables']['waiters']['Row'], 'id' | 'display_name' | 'is_active'> & {
@@ -90,8 +92,10 @@ const WaiterMonitor = () => {
   const [openTableId, setOpenTableId] = useState<string | null>(null);
   const [meId, setMeId] = useState<string | null>(null);
   /** Which restaurant's floor this is — the heading said La Soul at both. */
-  const venueName = useStaffVenue(meId)?.venue.name ?? null;
+  const staffVenue = useStaffVenue(meId);
+  const venueName = staffVenue?.venue.name ?? null;
   useStaffDocument(venueName ? `Floor · ${venueName}` : 'Floor');
+  useStaffVenueLook(staffVenue?.venue.slug);
   const [activeWaiterId, setActiveWaiterId] = useState<string | null>(null);
 
   const [pinTarget, setPinTarget] = useState<Waiter | null>(null);
@@ -138,7 +142,7 @@ const WaiterMonitor = () => {
         .neq('status', 'resolved').order('created_at', { ascending: true }),
       supabase.from('bill_requests').select('id, table_session_id, status, created_at, acknowledged_by, acknowledged_at')
         .neq('status', 'resolved').order('created_at', { ascending: true }),
-      supabase.from('waiters').select('id, user_id, display_name, is_active, has_pin').eq('is_active', true).order('display_name'),
+      supabase.from('waiters').select('id, user_id, display_name, username, is_active, has_pin').eq('is_active', true).order('display_name'),
       supabase.from('section_assignments').select('section_id, waiter_id, shift_date').eq('shift_date', today),
     ]);
 
@@ -171,7 +175,8 @@ const WaiterMonitor = () => {
     setOrders((o.data ?? []) as Order[]);
     setCalls((c.data ?? []) as Call[]);
     setBills((b.data ?? []) as BillReq[]);
-    setWaiters((w.data ?? []) as Waiter[]);
+    // A kitchen tablet signs in as a waiter (Admin → Waiters) but serves no tables.
+    setWaiters(((w.data ?? []) as (Waiter & { username: string | null })[]).filter((x) => !isKitchenUsername(x.username)));
     setAssignments((a.data ?? []) as Assignment[]);
   }, [beginFetch]);
 
@@ -490,6 +495,7 @@ const WaiterMonitor = () => {
 
         {mode === 'all' && (
           <TablesGrid
+            emptyText="No tables are set up yet. A manager adds them under Admin › Tables."
             tables={allTables}
             sessions={sessions}
             orders={orders}
@@ -503,26 +509,22 @@ const WaiterMonitor = () => {
           />
         )}
 
+        {/* One empty message, not two: the grid said "No tables." and this
+            page said "No tables assigned right now." underneath it. */}
         {mode === 'mine' && activeWaiter && (
-          <>
-            <TablesGrid
-              tables={myTables}
-              sessions={sessions}
-              orders={orders}
-              calls={calls}
-              bills={bills}
-              waiterById={waiterById}
-              tableWaiter={tableWaiter}
-              now={sortNow}
-              large
-              onOpen={setOpenTableId}
-            />
-            {myTables.length === 0 && (
-              <p className="text-center text-muted-foreground font-sans py-20">
-                No tables assigned right now.
-              </p>
-            )}
-          </>
+          <TablesGrid
+            emptyText="No tables for you today yet. They appear once a manager assigns your section, or a table is given to you."
+            tables={myTables}
+            sessions={sessions}
+            orders={orders}
+            calls={calls}
+            bills={bills}
+            waiterById={waiterById}
+            tableWaiter={tableWaiter}
+            now={sortNow}
+            large
+            onOpen={setOpenTableId}
+          />
         )}
       </main>
 
@@ -575,7 +577,7 @@ const RailView = ({
           <Grid3x3 className="w-6 h-6 text-muted-foreground" />
           <span className="font-serif text-xl font-bold">All Tables</span>
         </div>
-        <p className="text-xs font-sans text-muted-foreground">Manager / host view | {totalTables} tables</p>
+        <p className="text-sm font-sans text-muted-foreground">For the host or manager · {plural(totalTables, 'table')}</p>
       </button>
 
       {waiters.map((waiter) => {
@@ -594,28 +596,29 @@ const RailView = ({
                   : 'border-border bg-card hover:bg-accent/10'
             }`}
           >
-            <div className="flex items-start justify-between mb-2">
+            <div className="flex items-start justify-between gap-2 mb-2">
               <div className="min-w-0">
-                <p className="font-serif text-2xl font-bold truncate">{waiter.display_name}</p>
-                <p className="text-xs font-sans text-muted-foreground">
-                  {stats.total} tables | {stats.occupied} seated
+                {/* Two lines before an ellipsis: a long surname is still who it is. */}
+                <p className="font-serif text-2xl font-bold leading-tight line-clamp-2 break-words">{waiter.display_name}</p>
+                <p className="text-sm font-sans text-muted-foreground mt-0.5">
+                  {plural(stats.total, 'table')} · {stats.occupied} seated
                 </p>
               </div>
               {!waiter.has_pin ? (
-                <span className="text-[10px] font-sans px-2 py-1 rounded-full bg-muted text-muted-foreground">no PIN</span>
+                <span className="shrink-0 text-xs font-sans px-2 py-1 rounded-full bg-muted text-muted-foreground">No PIN yet</span>
               ) : (
-                <Lock className="w-4 h-4 text-muted-foreground shrink-0" />
+                <Lock className="w-4 h-4 text-muted-foreground shrink-0 mt-1.5" aria-label="PIN required" />
               )}
             </div>
             <div className="flex flex-wrap gap-1.5 mt-2">
               {stats.bills > 0 && (
-                <Chip tone="urgent" icon={<Receipt className="w-3 h-3" />}>{stats.bills} bill</Chip>
+                <Chip tone="urgent" icon={<Receipt className="w-3.5 h-3.5" />}>{plural(stats.bills, 'bill')}</Chip>
               )}
               {stats.calls > 0 && (
-                <Chip tone="urgent" icon={<Bell className="w-3 h-3" />}>{stats.calls} call</Chip>
+                <Chip tone="urgent" icon={<Bell className="w-3.5 h-3.5" />}>{plural(stats.calls, 'call')}</Chip>
               )}
               {stats.ready > 0 && (
-                <Chip tone="warn" icon={<CheckCircle2 className="w-3 h-3" />}>{stats.ready} ready</Chip>
+                <Chip tone="warn" icon={<CheckCircle2 className="w-3.5 h-3.5" />}>{stats.ready} food up</Chip>
               )}
               {urgent === 0 && stats.ready === 0 && (
                 <Chip tone="idle">All quiet</Chip>
@@ -635,13 +638,15 @@ const Chip = ({ tone, icon, children }: { tone: 'idle' | 'warn' | 'urgent'; icon
     urgent: 'bg-destructive text-destructive-foreground',
   } as const;
   return (
-    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-sans font-semibold ${tones[tone]}`}>
+    // Read from a step back, across a counter: 13px, not 11.
+    <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[13px] leading-none font-sans font-semibold ${tones[tone]}`}>
       {icon}{children}
     </span>
   );
 };
 
 const TablesGrid = ({
+  emptyText,
   tables,
   sessions,
   orders,
@@ -653,6 +658,8 @@ const TablesGrid = ({
   large,
   onOpen,
 }: {
+  /** Says why there is nothing here, which depends on whose view this is. */
+  emptyText: string;
   tables: TableRow[];
   sessions: Session[];
   orders: Order[];
@@ -665,7 +672,12 @@ const TablesGrid = ({
   onOpen: (tableId: string) => void;
 }) => {
   if (tables.length === 0) {
-    return <p className="text-center text-muted-foreground font-sans py-20">No tables.</p>;
+    return (
+      <div className="max-w-md mx-auto my-12 rounded-xl border border-dashed border-border bg-muted/30 px-6 py-10 text-center text-muted-foreground font-sans flex flex-col items-center gap-2">
+        <Grid3x3 className="w-6 h-6 opacity-60" aria-hidden />
+        {emptyText}
+      </div>
+    );
   }
 
   const cols = large
@@ -769,12 +781,18 @@ const TableCard = ({
   else if (readyCount > 0) state = 'ready';
   else if (occupied) state = 'occupied';
 
+  /*
+   * A calling table breathes like a bill does, in the accent. It used to
+   * `animate-pulse`, which fades the WHOLE card, text and all, to half
+   * opacity and back — so the tables that most needed a waiter looked
+   * greyed-out and disabled for half of every second.
+   */
   const palette: Record<TableState, { ring: string; bg: string; chip: string; label: string }> = {
     free: { ring: 'border-border', bg: 'bg-card', chip: 'bg-muted text-muted-foreground', label: 'Free' },
     occupied: { ring: 'border-primary/30', bg: 'bg-primary/5', chip: 'bg-primary/15 text-primary', label: 'Seated' },
-    ready: { ring: 'border-accent/40', bg: 'bg-accent/5', chip: 'bg-accent/20 text-accent', label: 'Ready' },
-    call: { ring: 'border-accent/60 animate-pulse', bg: 'bg-accent/10', chip: 'bg-accent text-accent-foreground', label: 'Calling' },
-    bill: { ring: 'border-destructive/60 breathe breathe-urgent', bg: 'bg-destructive/10', chip: 'bg-destructive text-destructive-foreground', label: 'Bill' },
+    ready: { ring: 'border-accent/40', bg: 'bg-accent/5', chip: 'bg-accent/20 text-accent', label: 'Food up' },
+    call: { ring: 'border-accent/70 breathe', bg: 'bg-accent/10', chip: 'bg-accent text-accent-foreground', label: 'Calling' },
+    bill: { ring: 'border-destructive/60 breathe breathe-urgent', bg: 'bg-destructive/10', chip: 'bg-destructive text-destructive-foreground', label: 'Wants bill' },
   };
   const selectedPalette = palette[state];
 
@@ -785,71 +803,78 @@ const TableCard = ({
       onClick={onOpen}
       onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(); } }}
       aria-label={`Table ${table.table_number} — ${selectedPalette.label}`}
+      data-state={state}
+      style={state === 'call' ? ({ '--breathe-color': 'var(--accent)' } as React.CSSProperties) : undefined}
       className={`border-2 cursor-pointer text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring active:scale-[0.99] ${selectedPalette.ring} ${selectedPalette.bg} transition-all`}
     >
       <CardContent className="p-3">
-        <div className="flex items-start justify-between gap-2 mb-2">
-          <div className="min-w-0">
-            {table.sections && (
-              <div className="flex items-center gap-1 mb-0.5">
-                <span className="w-2 h-2 rounded-full" style={{ background: table.sections.color }} />
-                <span className="text-[10px] uppercase tracking-wide text-muted-foreground truncate">{table.sections.name}</span>
-              </div>
-            )}
+        <div className="mb-2">
+          <div className="flex items-start justify-between gap-2">
             <p className="font-serif text-2xl font-bold leading-none">T{table.table_number}</p>
+            <span className={`shrink-0 text-xs px-2 py-0.5 rounded-full font-sans font-semibold uppercase tracking-wide ${selectedPalette.chip}`}>
+              {selectedPalette.label}
+            </span>
           </div>
-          <span className={`text-[10px] px-2 py-0.5 rounded-full font-sans font-semibold uppercase tracking-wide ${selectedPalette.chip}`}>
-            {selectedPalette.label}
-          </span>
+          {/* Under the number, the card's full width: beside the state it was
+              cut to "GARDEN R…" as soon as it was big enough to read. */}
+          {table.sections && (
+            <div className="flex items-center gap-1 mt-1">
+              <span className="w-2 h-2 shrink-0 rounded-full" style={{ background: table.sections.color }} />
+              <span className="text-xs uppercase tracking-wide text-muted-foreground truncate">{table.sections.name}</span>
+            </div>
+          )}
         </div>
 
+        {/* Readable from a step back: 12–14px. The details were 10–11px, which
+            is a tablet held in the hand, not one standing on a counter. */}
         {occupied && session ? (
           <>
             {session.guest_name && (
               <p className="text-sm font-sans text-foreground truncate">{session.guest_name}</p>
             )}
             <p className="text-sm text-muted-foreground font-sans flex items-center gap-1 mt-0.5">
-              <Clock className="w-3 h-3" /> {formatDuration(elapsed)}
+              <Clock className="w-3.5 h-3.5" aria-hidden /> {formatDuration(elapsed)}
             </p>
-            <div className="flex items-center gap-2 mt-2 text-[11px] font-sans flex-wrap">
-              {ordersCount > 0 && (
-                <span className="inline-flex items-center gap-1 text-primary">
-                  <ChefHat className="w-3 h-3" /> {ordersCount}
-                </span>
-              )}
-              {readyCount > 0 && (
-                <span className="inline-flex items-center gap-1 text-accent">
-                  <CheckCircle2 className="w-3 h-3" /> {readyCount} ready
+            <div className="flex items-center gap-x-2.5 gap-y-1 mt-2 text-sm font-sans flex-wrap">
+              {hasBill && (
+                <span className="inline-flex items-center gap-1 text-destructive font-semibold">
+                  <Receipt className="w-3.5 h-3.5" aria-hidden /> Bill
                 </span>
               )}
               {hasCall && (
                 <span className="inline-flex items-center gap-1 text-accent font-semibold">
-                  <Bell className="w-3 h-3" /> call
+                  <Bell className="w-3.5 h-3.5" aria-hidden /> Calling
                 </span>
               )}
-              {hasBill && (
-                <span className="inline-flex items-center gap-1 text-destructive font-semibold">
-                  <Receipt className="w-3 h-3" /> bill
+              {readyCount > 0 && (
+                <span className="inline-flex items-center gap-1 text-accent font-semibold">
+                  <CheckCircle2 className="w-3.5 h-3.5" aria-hidden /> {readyCount} up
+                </span>
+              )}
+              {/* Not counting what is already up: "1 up · 1 order" was one plate. */}
+              {ordersCount - readyCount > 0 && (
+                <span className="inline-flex items-center gap-1 text-primary">
+                  <ChefHat className="w-3.5 h-3.5" aria-hidden /> {ordersCount - readyCount} in kitchen
                 </span>
               )}
             </div>
             {awaitingPayment > 0 && (
-              <p className="text-[11px] text-accent font-sans mt-1">
+              <p className="text-xs text-accent font-sans mt-1">
                 {awaitingPayment} not in kitchen — payment pending
               </p>
             )}
             {oldestMs > 0 && (
-              <p className="text-[11px] text-muted-foreground font-sans mt-1">
-                oldest order: {formatMinutes(oldestMs)}
+              <p className="text-xs text-muted-foreground font-sans mt-1">
+                Oldest order {formatMinutes(oldestMs)}
               </p>
             )}
           </>
         ) : (
-          <p className="text-xs text-muted-foreground font-sans">Available</p>
+          <p className="text-sm text-muted-foreground font-sans">Available</p>
         )}
 
         {waiterName && (
-          <p className="text-[10px] text-muted-foreground font-sans mt-2 pt-2 border-t border-border/60 truncate">
+          <p className="text-xs text-muted-foreground font-sans mt-2 pt-2 border-t border-border/60 truncate">
             Waiter: {waiterName}
           </p>
         )}

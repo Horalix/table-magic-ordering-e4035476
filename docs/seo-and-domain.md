@@ -24,6 +24,7 @@ published by hand.
 | **robots.txt** | generated | Welcomes Google, Bing and the AI crawlers (GPTBot, OAI-SearchBot, ClaudeBot, PerplexityBot, Google-Extended, Applebot…); keeps admin, kitchen, waiter, cart and table pages out |
 | **sitemap.xml** | generated | Every public page, language alternates, and **dish photos** for Google Images |
 | **llms.txt, llms-full.txt** | generated | The emerging standard summary for AI engines: the facts, the FAQ and the whole menu with prices, as text |
+| **IndexNow** | `npm run indexnow -- https://veraitalia.net` (or the La Soul address), key in `public/<key>.txt` | Tells Bing — whose index ChatGPT search and Copilot read — and Yandex, Seznam and Naver that pages changed, the same day, instead of waiting for a crawl. Run it after a deploy that changes what the pages say. Google takes no part: it reads the sitemap |
 | **Old addresses** | `public/_redirects` (Netlify reads it) | The old lasoul.net pages (`/en/home`, `/bs/home`, `/ar/home`) and the old menu.lasoul.net pages redirect permanently to their new homes in one hop |
 
 The facts all come from one place: `src/lib/venues.ts` (address, phone, hours

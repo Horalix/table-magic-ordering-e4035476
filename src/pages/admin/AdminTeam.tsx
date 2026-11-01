@@ -1,9 +1,14 @@
 import React, { useRef, useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { ChefHat, Crown, KeyRound, Loader2, ShieldCheck, UserMinus, UserPlus, Users } from 'lucide-react';
+import { ChefHat, Crown, Loader2, ShieldCheck, UserMinus, UserPlus, Users } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
+import LoginCard from '@/components/admin/LoginCard';
+import NewPasswordField from '@/components/admin/NewPasswordField';
+import {
+  isKitchenUsername, MIN_PASSWORD, plainRefusal, readRefusal, refusalField, staffSiteUrl, type LoginDetails,
+} from '@/lib/staff-accounts';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
@@ -30,12 +35,11 @@ import type { AdminOutletContext } from '@/components/admin/AdminLayout';
  * a restaurant's admin by email — an account that exists gets the role; a
  * new one is created with the initial password typed here, which goes to
  * Supabase Auth and nowhere else, and which the new admin changes after
- * signing in (Admin menu → Change password). Revoking takes away that one
- * restaurant's admin role and nothing else. Waiters are added and removed
- * under Waiters, as before.
+ * signing in (Admin menu → Change password). The login card says where
+ * (their restaurant's own site) and shows that password once. Revoking takes
+ * away that one restaurant's admin role and nothing else. Waiters and kitchen
+ * tablets are added and removed under Waiters, as before.
  */
-
-const MIN_PASSWORD = 10;
 
 interface Account {
   user_id: string;
@@ -65,20 +69,23 @@ class TeamError extends Error {
 
 async function callTeam<T>(body: Record<string, unknown>): Promise<T> {
   const { data, error } = await supabase.functions.invoke<T & { error?: string; code?: string }>('manage-admins', { body });
-  if (error) {
-    // A refusal (400, 403, 409) says why in its body, not in the client's generic message.
-    const context = (error as { context?: unknown }).context;
-    if (context instanceof Response) {
-      const reason = await context.json().catch(() => null) as { error?: string; code?: string } | null;
-      if (reason?.error) throw new TeamError(reason.error, reason.code);
-    }
-    throw new TeamError(error.message);
+  // A refusal (400, 403, 409) says why in its body, not in the client's generic message.
+  const refusal = await readRefusal(error, data, 'manage-admins');
+  if (refusal) {
+    // Supabase Auth refusing the initial password is about the password field too.
+    throw new TeamError(plainRefusal(refusal), refusalField(refusal) === 'password' ? 'needs_password' : refusal.code);
   }
-  if (data?.error) throw new TeamError(data.error, data.code);
   return data as T;
 }
 
 const who = (a: Account) => a.email ?? (a.username ? `@${a.username}` : 'Unknown account');
+
+/**
+ * A kitchen screen: an account with no waiter's row (made by hand), or one
+ * made under Waiters → Kitchen tablet, which signs in like a waiter
+ * (kitchenUsername in src/lib/staff-accounts.ts).
+ */
+const kitchenTablet = (a: Account) => a.kind === 'kitchen' || (a.kind === 'waiter' && isKitchenUsername(a.username));
 
 const People = ({ title, icon: Icon, people, empty, action }: {
   title: string;
@@ -119,7 +126,7 @@ const AdminTeam = () => {
   const [password, setPassword] = useState('');
   const [needsPassword, setNeedsPassword] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const [created, setCreated] = useState<{ email: string; venue: string } | null>(null);
+  const [card, setCard] = useState<LoginDetails | null>(null);
   const passwordRef = useRef<HTMLInputElement>(null);
 
   const { data, error, isLoading, refetch } = useQuery({
@@ -144,18 +151,20 @@ const AdminTeam = () => {
     }
     setSaving(true);
     setNeedsPassword(null);
-    setCreated(null);
+    const initial = password;
     try {
       const result = await callTeam<Appointed>({ action: 'appoint', email: address, venue, password: password || undefined });
-      // The password has gone to Supabase Auth; it is not kept here either.
+      // The password has gone to Supabase Auth; the card shows it once, and
+      // it is not kept anywhere here either.
       setPassword('');
       setEmail('');
-      if (result.created) {
-        setCreated({ email: address, venue });
+      if (result.already) {
+        toast.success(`${address} is already the admin of ${nameOf(venue)}`);
       } else {
-        toast.success(result.already
-          ? `${address} is already the admin of ${nameOf(venue)}`
-          : `${address} is now the admin of ${nameOf(venue)}. They sign in with their own password.`);
+        setCard({
+          kind: 'admin', venueSlug: venue, venueName: nameOf(venue), name: address, username: address,
+          password: result.created ? initial : null, event: result.created ? 'created' : 'appointed',
+        });
       }
       await refetch();
     } catch (err) {
@@ -257,40 +266,30 @@ const AdminTeam = () => {
               </div>
               <div>
                 <Label htmlFor="team-password" className="font-sans text-sm">Initial password <span className="text-muted-foreground font-normal">(new accounts only)</span></Label>
-                <Input
+                <NewPasswordField
                   id="team-password"
                   ref={passwordRef}
-                  type="password"
-                  autoComplete="new-password"
                   value={password}
-                  onChange={(e) => { setPassword(e.target.value); setNeedsPassword(null); }}
-                  minLength={MIN_PASSWORD}
-                  aria-invalid={!!needsPassword}
-                  aria-describedby="team-password-help"
-                  className="mt-1.5 h-11"
+                  onChange={(v) => { setPassword(v); setNeedsPassword(null); }}
+                  problem={needsPassword}
+                  hint={`Only if they have no account yet. At least ${MIN_PASSWORD} characters.`}
+                  className="mt-1.5"
                 />
-                <p id="team-password-help" className={`text-xs font-sans mt-1 ${needsPassword ? 'text-destructive' : 'text-muted-foreground'}`}>
-                  {needsPassword ?? `Only if they have no account yet. At least ${MIN_PASSWORD} characters; tell them in person.`}
-                </p>
               </div>
             </div>
             <Button type="submit" disabled={saving || !email.trim()} className="gap-2 min-h-[44px] rounded-xl">
               {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <ShieldCheck className="w-4 h-4" />}
               Appoint {nameOf(venue)} admin
             </Button>
+            <p className="text-xs font-sans text-muted-foreground">
+              They sign in at <span className="font-medium text-foreground break-all">{staffSiteUrl(venue).replace(/^https?:\/\//, '')}/admin/login</span> with
+              this email. You get a card to copy or share as soon as they are appointed.
+            </p>
           </form>
-
-          {created && (
-            <div role="status" className="mt-4 flex items-start gap-2 rounded-xl border border-primary/25 bg-primary/5 px-3 py-2.5">
-              <KeyRound className="w-4 h-4 text-primary shrink-0 mt-0.5" aria-hidden />
-              <p className="text-sm font-sans text-foreground">
-                Account created: <span className="font-medium">{created.email}</span> now runs {nameOf(created.venue)}.
-                Give them the password in person, and ask them to change it after signing in (admin menu → Change password).
-              </p>
-            </div>
-          )}
         </CardContent>
       </Card>
+
+      <LoginCard details={card} onDone={() => setCard(null)} />
 
       {error && (
         <Card className="border-destructive/25 bg-destructive/5 mb-6">
@@ -325,8 +324,13 @@ const AdminTeam = () => {
                         empty="No admin of its own yet: you run it."
                         action={revokeButton}
                       />
-                      <People title="Waiters" icon={Users} people={here.filter((a) => a.kind === 'waiter')} empty="No waiters yet. Add them under Waiters." />
-                      <People title="Kitchen screens" icon={ChefHat} people={here.filter((a) => a.kind === 'kitchen')} empty="No kitchen account." />
+                      <People title="Waiters" icon={Users} people={here.filter((a) => a.kind === 'waiter' && !kitchenTablet(a))} empty="No waiters yet. Add them under Waiters." />
+                      <People
+                        title="Kitchen screens"
+                        icon={ChefHat}
+                        people={here.filter(kitchenTablet)}
+                        empty="No kitchen tablet yet. Add one under Waiters → Kitchen tablet."
+                      />
                     </CardContent>
                   </Card>
                 </section>

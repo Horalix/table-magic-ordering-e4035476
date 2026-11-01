@@ -177,7 +177,8 @@ claim like that is worth nothing to Google, and the reviews say it far better.
    DNS TXT record), submit `https://veraitalia.net/sitemap.xml`, and request
    indexing of `/`, `/bs/` and `/ar/`. **Bing Webmaster Tools** — *Import from
    Google Search Console*; Bing's index is what ChatGPT search and Copilot
-   read.
+   read. After each deploy that changes the pages, `npm run indexnow --
+   https://veraitalia.net` tells Bing the same day (docs/seo-and-domain.md).
 5. **The lists** — a listing on **TripAdvisor** (claim it; tourists and AI
    answers lean on it), **tourismbih.com** and **sarajevo.travel** (both
    take restaurant submissions), **Foursquare** (it feeds Apple Maps and

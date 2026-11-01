@@ -9,6 +9,7 @@ import { CalendarDays, UserPlus, Check, Users2, MapPin, Plus, AlertTriangle } fr
 import { toast } from 'sonner';
 import { addSectionWaiter, removeSectionAssignment, todayISO, type SectionAssignment } from '@/lib/assignments';
 import { useStaffTables } from '@/lib/realtime';
+import { isKitchenUsername } from '@/lib/staff-accounts';
 
 interface Section { id: string; name: string; color: string; sort_order: number; }
 interface Waiter { id: string; display_name: string; }
@@ -33,7 +34,7 @@ const AdminFloorTonight = () => {
   const fetchAll = useCallback(async () => {
     const [s, w, a, t] = await Promise.all([
       supabase.from('sections').select('*').order('sort_order'),
-      supabase.from('waiters').select('id, display_name').eq('is_active', true).order('display_name'),
+      supabase.from('waiters').select('id, display_name, username').eq('is_active', true).order('display_name'),
       supabase.from('section_assignments').select('*').eq('shift_date', date),
       supabase.from('tables').select('id, section_id'),
     ]);
@@ -47,7 +48,8 @@ const AdminFloorTonight = () => {
     }
     setLoadError(false);
     setSections(s.data || []);
-    setWaiters((w.data as Waiter[]) || []);
+    // A kitchen tablet's sign-in is a waiter's row, but it takes no section.
+    setWaiters(((w.data as (Waiter & { username: string | null })[]) || []).filter((x) => !isKitchenUsername(x.username)));
     setAssignments((a.data as SectionAssignment[]) || []);
     setTables(t.data || []);
     setLoading(false);

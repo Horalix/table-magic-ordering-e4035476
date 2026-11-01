@@ -21,6 +21,8 @@ const adminOf = (v: Venue) => [{ user_id: 'staff-user-1', role: 'admin', venue_i
 
 /** A test value for the Team form; it exists only in this file and the stub. */
 const INITIAL_PASSWORD = 'e2e-initial-pass-1';
+/** A test value for Change password, likewise. */
+const CHANGED_PASSWORD = 'a-new-e2e-pass-2';
 
 const json = (route: Route, body: unknown, status = 200) => route.fulfill({
   status,
@@ -233,8 +235,11 @@ const PAGES: AdminPage[] = [
   {
     label: 'Waiters', path: '/admin/waiters', heading: 'Waiters',
     act: async (page) => {
+      // Nothing typed: said next to each field, nothing sent.
       await page.getByRole('button', { name: 'Create', exact: true }).click();
-      await toastSeen(page, 'Username (3+), password (6+), and display name are required');
+      await expect(page.getByText('Type their name, as the team calls them.')).toBeVisible();
+      await expect(page.getByText('Type one of at least 10 characters, or Generate.')).toBeVisible();
+      await expect(page.getByLabel('Name', { exact: true })).toBeFocused();
     },
   },
   {
@@ -448,17 +453,27 @@ test.describe('the owner', () => {
 
     await page.locator('#team-password').fill(INITIAL_PASSWORD);
     await page.getByRole('button', { name: 'Appoint Vera Italia admin' }).click();
-    await expect(page.getByRole('status').filter({ hasText: 'ask them to change it after signing in' })).toBeVisible();
+    // The login card: Vera Italia's own admin sign-in, their email, the password once.
+    const card = page.getByRole('dialog', { name: 'marco@vera.test now runs Vera Italia' });
+    await expect(card).toBeVisible();
+    await expect(card.getByRole('link', { name: /veraitalia\.net\/admin\/login/ })).toHaveAttribute('href', 'https://veraitalia.net/admin/login');
+    await expect(card.getByTestId('login-card-password')).toHaveText(INITIAL_PASSWORD);
+    await expect(card.getByText(/ask them to change the password after signing in/i)).toBeVisible();
+    await card.getByRole('button', { name: 'Done' }).click();
+    await expect(card).toHaveCount(0);
     await expect(vera.getByText('marco@vera.test')).toBeVisible();
     await expect(page.locator('#team-password')).toHaveValue('');
     expect(team.calls.filter((c) => c.action === 'appoint').at(-1)).toMatchObject({ email: 'marco@vera.test', venue: 'veraitalia', password: INITIAL_PASSWORD });
-    // The password went to the function, and nowhere on this device.
+    // The password went to the function, and nowhere on this device; once the card is closed it is not on the page either.
     expect(await page.evaluate(() => JSON.stringify({ ...localStorage }) + JSON.stringify({ ...sessionStorage }))).not.toContain(INITIAL_PASSWORD);
+    expect(await page.content()).not.toContain(INITIAL_PASSWORD);
 
-    // An account that exists only gets the role; no password is sent.
+    // An account that exists only gets the role; no password is sent, and the card shows none.
     await page.getByLabel('Their email').fill('existing@vera.test');
     await page.getByRole('button', { name: 'Appoint Vera Italia admin' }).click();
-    await expect(page.getByText('existing@vera.test is now the admin of Vera Italia')).toBeVisible();
+    const existing = page.getByRole('dialog', { name: 'existing@vera.test now runs Vera Italia' });
+    await expect(existing.getByText('Their own, unchanged')).toBeVisible();
+    await existing.getByRole('button', { name: 'Done' }).click();
     expect(team.calls.filter((c) => c.action === 'appoint').at(-1)).not.toHaveProperty('password');
 
     // Revoke La Soul's admin: that role only.
@@ -492,12 +507,12 @@ test.describe('the owner', () => {
     await dialog.getByLabel('New password', { exact: true }).fill('short');
     await expect(dialog.getByText('At least 10 characters.', { exact: true })).toBeVisible();
     await expect(dialog.getByRole('button', { name: 'Change password' })).toBeDisabled();
-    await dialog.getByLabel('New password', { exact: true }).fill('a-new-e2e-pass-2');
-    await dialog.getByLabel('New password again').fill('a-new-e2e-pass-2');
+    await dialog.getByLabel('New password', { exact: true }).fill(CHANGED_PASSWORD);
+    await dialog.getByLabel('New password again').fill(CHANGED_PASSWORD);
     await dialog.getByRole('button', { name: 'Change password' }).click();
     await expect(page.getByText('Password changed.', { exact: false })).toBeVisible();
     await expect(dialog).toHaveCount(0);
-    expect(passwordWrites).toEqual([expect.objectContaining({ password: 'a-new-e2e-pass-2' })]);
+    expect(passwordWrites).toEqual([expect.objectContaining({ password: CHANGED_PASSWORD })]);
     expect(errors).toEqual([]);
   });
 });
@@ -556,6 +571,265 @@ for (const [venue, other] of [[VERA, LA_SOUL], [LA_SOUL, VERA]] as const) {
     });
   });
 }
+
+/*
+ * Making every account a demo or a service needs, and the card that says how
+ * each signs in (src/lib/staff-accounts.ts). create-waiter is a stub that
+ * answers as the function does — and, for a password with no digit, as the
+ * live project's Supabase Auth could, in Auth's raw words with no code, the
+ * way today's deployed function passes them on.
+ */
+interface WaiterStub {
+  rows: Record<string, unknown>[];
+  calls: Record<string, unknown>[];
+}
+
+/** A test value: the Floor PIN the stub makes. */
+const STUB_PIN = String(4800 + 21);
+
+async function stubWaiters(page: Page): Promise<WaiterStub> {
+  const stub: WaiterStub = {
+    calls: [],
+    rows: [{ id: 'w-amar', display_name: 'Amar', username: 'amar', is_active: true, has_pin: true, user_id: 'u-amar', venue_id: LA_SOUL.id }],
+  };
+  await page.route('**/rest/v1/waiters**', (route) => json(route, stub.rows));
+  await page.route('**/functions/v1/create-waiter', (route) => {
+    if (route.request().method() === 'OPTIONS') return json(route, {}, 204);
+    const body = route.request().postDataJSON() ?? {};
+    stub.calls.push(body);
+    const secret = String(body.password ?? '');
+    if (secret.length < 10) return json(route, { error: 'The password needs at least 10 characters.', code: 'weak_password' }, 400);
+    if (!/\d/.test(secret)) {
+      return json(route, { error: 'Password should contain at least one character of each: abcdefghijklmnopqrstuvwxyz, ABCDEFGHIJKLMNOPQRSTUVWXYZ, 0123456789.' }, 400);
+    }
+    if (body.action === 'reset_password') return json(route, { ok: true, reset: true, username: 'amar' });
+    if (stub.rows.some((w) => w.username === body.username)) {
+      return json(route, { error: 'That username is taken (both restaurants share usernames). Pick another one.', code: 'username_taken' }, 400);
+    }
+    const row = { id: `w-${body.username}`, display_name: body.display_name, username: body.username, is_active: true, has_pin: true, user_id: `u-${body.username}`, venue_id: null };
+    stub.rows.push(row);
+    return json(route, { ok: true, waiter: row, pin: STUB_PIN });
+  });
+  return stub;
+}
+
+/**
+ * Phone-size pictures for the person reviewing the forms, when asked for:
+ * E2E_SHOTS=<folder>. Only from the Pixel project, so there is one of each.
+ */
+async function shot(page: Page, name: string) {
+  const dir = process.env.E2E_SHOTS;
+  if (!dir || test.info().project.name !== 'mobile-chrome') return;
+  // A dialog's fade-in, finished rather than caught halfway.
+  await page.screenshot({ path: `${dir}/${name}.png`, animations: 'disabled' });
+}
+
+test.describe('making accounts', () => {
+  // A generated password is shown, so it is read off the page rather than made up here.
+  const generated = (page: Page) => page.locator('#waiter-password').inputValue();
+
+  test('the owner adds a Vera Italia waiter: 10 characters, Auth’s own words, and a login card', async ({ page, staff }) => {
+    staff.roles = OWNER_ROLES;
+    const errors = watchErrors(page);
+    await stubOwnerParts(page);
+    const waiters = await stubWaiters(page);
+    await page.addInitScript(() => localStorage.setItem('lasoul.staff-venue', 'veraitalia'));
+    await page.goto('/admin/waiters');
+    await expect(page.getByRole('heading', { level: 1, name: 'Waiters' })).toBeVisible();
+
+    // Which restaurant, before anything is typed, and the way to the other.
+    const form = page.locator('form').filter({ has: page.getByRole('button', { name: 'Create', exact: true }) });
+    await expect(page.getByText(/^For Vera Italia\. They sign in at veraitalia\.net\/waiter\/login\./)).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Add to La Soul instead' })).toBeVisible();
+
+    await page.getByLabel('Name', { exact: true }).fill('Giulia Rossi');
+    await expect(page.getByLabel('Username')).toHaveValue('giulia');
+
+    // Seven characters: Auth would refuse them, so the form does, and sends nothing.
+    await page.locator('#waiter-password').fill('Seven77');
+    await expect(page.getByText('7 of at least 10 characters.')).toBeVisible();
+    await page.getByRole('button', { name: 'Create', exact: true }).click();
+    await expect(page.getByText('Too short: at least 10 characters (7 now).')).toBeVisible();
+    await expect(page.locator('#waiter-password')).toBeFocused();
+    expect(waiters.calls).toEqual([]);
+
+    // Long enough, but refused by Auth itself: its own words, next to the field.
+    await page.locator('#waiter-password').fill('only-letters-here');
+    await page.getByRole('button', { name: 'Create', exact: true }).click();
+    await expect(page.getByRole('alert').filter({ hasText: 'Supabase Auth refused the password: Password should contain at least one character of each' })).toBeVisible();
+    expect(waiters.calls).toHaveLength(1);
+
+    // Generate: shown, so it can be read; then the card.
+    await page.getByRole('button', { name: 'Generate' }).click();
+    await expect(page.locator('#waiter-password')).toHaveAttribute('type', 'text');
+    const secret = await generated(page);
+    expect(secret).toMatch(/^[A-Za-z2-9]{4}-[A-Za-z2-9]{4}-[A-Za-z2-9]{4}$/);
+    await expect(form).toBeVisible();
+    // From the card's heading down, under the phone's top bar.
+    await page.getByText('Add Waiter', { exact: true }).evaluate((el) => window.scrollTo(0, el.getBoundingClientRect().top + window.scrollY - 72));
+    await shot(page, 'waiters-form');
+    await page.getByRole('button', { name: 'Create', exact: true }).click();
+
+    const card = page.getByRole('dialog', { name: 'Giulia Rossi can sign in' });
+    await expect(card).toBeVisible();
+    await expect(card.getByRole('link')).toHaveAttribute('href', 'https://veraitalia.net/waiter/login?u=giulia');
+    await expect(card.getByTestId('login-card-password')).toHaveText(secret);
+    await expect(card.getByText(STUB_PIN)).toBeVisible();
+    await shot(page, 'waiters-login-card');
+    expect(waiters.calls.at(-1)).toMatchObject({ username: 'giulia', display_name: 'Giulia Rossi', venue: 'veraitalia', password: secret });
+
+    // A tap beside it does not lose it; Done does, and the password is gone.
+    await page.mouse.click(5, 5);
+    await expect(card).toBeVisible();
+    await card.getByRole('button', { name: 'Done' }).click();
+    await expect(card).toHaveCount(0);
+    await expect(page.locator('#waiter-password')).toHaveValue('');
+    expect(await page.content()).not.toContain(secret);
+    expect(await page.evaluate(() => JSON.stringify({ ...localStorage }) + JSON.stringify({ ...sessionStorage }))).not.toContain(secret);
+    await expect(page.getByText('@giulia')).toBeVisible();
+    expect(errors).toEqual([]);
+  });
+
+  test('a restaurant’s admin adds the kitchen tablet; its link goes to the kitchen screen', async ({ page, staff }) => {
+    staff.roles = adminOf(LA_SOUL);
+    await stubOwnerParts(page);
+    const waiters = await stubWaiters(page);
+    await page.goto('/admin/waiters');
+    await expect(page.getByText(/^For La Soul\. They sign in at lasoulapp\.netlify\.app\/waiter\/login\./)).toBeVisible();
+    // Their own restaurant only: no way to the other.
+    await expect(page.getByRole('button', { name: /instead/ })).toHaveCount(0);
+
+    await page.getByRole('group', { name: 'Who it is for' }).getByRole('button', { name: 'Kitchen tablet' }).click();
+    await expect(page.getByLabel('Username')).toHaveValue('lasoul-kitchen');
+    await expect(page.getByLabel(/Floor PIN/)).toHaveCount(0);
+    await page.getByRole('button', { name: 'Generate' }).click();
+    await page.getByRole('button', { name: 'Create', exact: true }).click();
+
+    const card = page.getByRole('dialog', { name: 'La Soul kitchen tablet ready' });
+    await expect(card.getByRole('link')).toHaveAttribute('href', 'https://lasoulapp.netlify.app/waiter/login?u=lasoul-kitchen&to=kitchen');
+    await expect(card.getByText(/goes straight to the kitchen screen/)).toBeVisible();
+    await expect(card.getByText('Floor PIN')).toHaveCount(0);
+    await shot(page, 'kitchen-login-card');
+    expect(waiters.calls.at(-1)).toMatchObject({ username: 'lasoul-kitchen', display_name: 'Kitchen' });
+    expect(waiters.calls.at(-1)).not.toHaveProperty('pin');
+  });
+
+  test('a taken username is said next to it; a forgotten password is replaced and shown once', async ({ page, staff }) => {
+    staff.roles = adminOf(LA_SOUL);
+    await stubOwnerParts(page);
+    const waiters = await stubWaiters(page);
+    await page.goto('/admin/waiters');
+
+    await page.getByLabel('Name', { exact: true }).fill('Amar');
+    await page.getByRole('button', { name: 'Generate' }).click();
+    await page.getByRole('button', { name: 'Create', exact: true }).click();
+    await expect(page.getByText('That username is taken (both restaurants share usernames). Pick another one.')).toBeVisible();
+    await expect(page.getByLabel('Username')).toBeFocused();
+
+    // Amar forgot his password.
+    await page.getByRole('button', { name: 'New password for Amar' }).click();
+    const dialog = page.getByRole('dialog', { name: 'New password for Amar' });
+    await dialog.getByRole('button', { name: 'Set new password' }).click();
+    await expect(dialog.getByText('At least 10 characters (0 now).')).toBeVisible();
+    await dialog.getByRole('button', { name: 'Generate' }).click();
+    const secret = await dialog.locator('#reset-password').inputValue();
+    await dialog.getByRole('button', { name: 'Set new password' }).click();
+    const card = page.getByRole('dialog', { name: 'New password for Amar' }).filter({ has: page.getByTestId('login-card-password') });
+    await expect(card.getByTestId('login-card-password')).toHaveText(secret);
+    await expect(card.getByRole('link')).toHaveAttribute('href', 'https://lasoulapp.netlify.app/waiter/login?u=amar');
+    expect(waiters.calls.at(-1)).toEqual({ action: 'reset_password', waiter_id: 'w-amar', password: secret });
+  });
+
+  test('the owner’s Team form: Generate, and the card at phone size', async ({ page, staff }) => {
+    staff.roles = OWNER_ROLES;
+    await stubOwnerParts(page);
+    await page.goto('/admin/team');
+    await page.getByLabel('Their email').fill('lejla@lasoul.test');
+    await page.getByRole('group', { name: 'Restaurant they will run' }).getByRole('button', { name: 'La Soul' }).click();
+    await expect(page.getByText(/They sign in at lasoulapp\.netlify\.app\/admin\/login/)).toBeVisible();
+    await page.getByRole('button', { name: 'Generate' }).click();
+    await expect(page.locator('#team-password')).toHaveAttribute('type', 'text');
+    await page.getByRole('button', { name: 'Appoint La Soul admin' }).scrollIntoViewIfNeeded();
+    await shot(page, 'team-form');
+    await page.getByRole('button', { name: 'Appoint La Soul admin' }).click();
+    const card = page.getByRole('dialog', { name: 'lejla@lasoul.test now runs La Soul' });
+    await expect(card.getByRole('link')).toHaveAttribute('href', 'https://lasoulapp.netlify.app/admin/login');
+    await shot(page, 'team-login-card');
+  });
+
+  test('the Team form says Auth’s refusal of an initial password next to it', async ({ page, staff }) => {
+    staff.roles = OWNER_ROLES;
+    await stubOwnerParts(page);
+    await page.route('**/functions/v1/manage-admins', async (route) => {
+      const body = route.request().postDataJSON() ?? {};
+      if (body.action !== 'appoint') return route.fallback();
+      return json(route, { error: 'Password should contain at least one character of each: 0123456789.' }, 400);
+    });
+    await page.goto('/admin/team');
+    await page.getByLabel('Their email').fill('new@vera.test');
+    await page.locator('#team-password').fill('no-digits-in-here');
+    await page.getByRole('button', { name: /^Appoint .* admin$/ }).click();
+    await expect(page.getByRole('alert').filter({ hasText: 'Supabase Auth refused the password: Password should contain' })).toBeVisible();
+    await expect(page.locator('#team-password')).toBeFocused();
+  });
+});
+
+test.describe('signing in from the card', () => {
+  /** The test value typed at the sign-in; the stubs accept it and refuse anything else. */
+  const RIGHT = 'e2e-right-pass-9';
+
+  async function stubSignIn(page: Page, waiterRows: Record<string, unknown>[]) {
+    const tried: string[] = [];
+    // The function says 401 to everything, as for a wrong password, a
+    // kitchen tablet's account or one switched off; the direct sign-in decides.
+    await page.route('**/functions/v1/waiter-login', (route) => json(route, { error: 'Invalid username or password' }, 401));
+    await page.route('**/auth/v1/token**', (route) => {
+      const body = route.request().postDataJSON() ?? {};
+      tried.push(String(body.email ?? ''));
+      if (body.password !== RIGHT) return json(route, { error: 'invalid_grant', error_description: 'Invalid login credentials' }, 400);
+      return route.fallback();
+    });
+    await page.route('**/rest/v1/waiters**', (route) => json(route, waiterRows));
+    return tried;
+  }
+
+  test('the kitchen tablet’s link: username filled in, a wrong password said as one, then the kitchen screen', async ({ page }) => {
+    const tried = await stubSignIn(page, [{ id: 'w-kitchen', is_active: true }]);
+    await page.goto('/waiter/login?u=LaSoul-Kitchen&to=kitchen');
+    await expect(page.getByRole('heading', { level: 1, name: 'Kitchen Sign In' })).toBeVisible();
+    await expect(page.getByLabel('Username')).toHaveValue('lasoul-kitchen');
+    await expect(page.getByLabel('Password', { exact: true })).toBeFocused();
+    await shot(page, 'kitchen-sign-in');
+
+    // A mistyped password is a wrong password, not "the service is down".
+    await page.getByLabel('Password', { exact: true }).fill('mistyped-pass');
+    await page.getByRole('button', { name: 'Sign In' }).click();
+    await expect(page.getByText('Wrong username or password')).toBeVisible();
+    await expect(page.getByText(/Could not reach the login service/)).toHaveCount(0);
+
+    await page.getByLabel('Password', { exact: true }).fill(RIGHT);
+    await page.getByRole('button', { name: 'Sign In' }).click();
+    await expect(page).toHaveURL(/\/kitchen$/);
+    expect(tried.at(-1)).toBe('lasoul-kitchen@waiter.lasoul.local');
+  });
+
+  test('an account with no waiter row (a kitchen screen made by hand) lands on the kitchen, not signed out', async ({ page }) => {
+    await stubSignIn(page, []);
+    await page.goto('/waiter/login?u=kitchen');
+    await page.getByLabel('Password', { exact: true }).fill(RIGHT);
+    await page.getByRole('button', { name: 'Sign In' }).click();
+    await expect(page).toHaveURL(/\/kitchen$/);
+  });
+
+  test('a waiter’s link goes to the waiter phone, and only known places are followed', async ({ page }) => {
+    await stubSignIn(page, [{ id: 'w-giulia', is_active: true }]);
+    await page.goto('/waiter/login?u=giulia&to=https%3A%2F%2Fevil.test');
+    await expect(page.getByRole('heading', { level: 1, name: 'Waiter Sign In' })).toBeVisible();
+    await page.getByLabel('Password', { exact: true }).fill(RIGHT);
+    await page.getByRole('button', { name: 'Sign In' }).click();
+    await expect(page).toHaveURL(/\/waiter$/);
+  });
+});
 
 /*
  * Vera Italia's own site (veraitalia.net, src/lib/home-venue.ts). Runs

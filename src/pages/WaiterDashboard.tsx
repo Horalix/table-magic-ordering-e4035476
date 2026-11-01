@@ -16,11 +16,14 @@ import {
   ChefHat,
   ChevronDown,
   Clock,
+  CloudOff,
   CreditCard,
+  Footprints,
   Hand,
   LogOut,
   Monitor,
   PowerOff,
+  RefreshCw,
   Sparkles,
   UserX,
   Users,
@@ -31,7 +34,7 @@ import {
 import { toast } from 'sonner';
 import { formatDuration, formatMinutes, useElapsed, useElapsedMinutes, waitBg, seatedBg } from '@/lib/timing';
 import {
-  canTakePayment, closeTableSession, describePaymentResult, km, recordTablePayment,
+  ackBillRequest, ackWaiterCall, canTakePayment, closeTableSession, describePaymentResult, km, recordTablePayment,
   resolveBillRequest as rpcResolveBillRequest, resolveWaiterCall as rpcResolveWaiterCall,
   takeTable, updateOrderStatus as rpcUpdateOrderStatus, type TablePaymentMethod, type TablePaymentResult,
 } from '@/lib/staff-api';
@@ -44,8 +47,9 @@ import {
 import ConnectionPill from '@/components/staff/ConnectionPill';
 import PaymentConfirm from '@/components/staff/PaymentConfirm';
 import FreeTableDialog from '@/components/staff/FreeTableDialog';
-import { useStaffDocument } from '@/components/staff/useStaffDocument';
+import { useStaffDocument, useStaffVenueLook } from '@/components/staff/useStaffDocument';
 import { isHeld, isInKitchen, kitchenStart, orderStatusLabel } from '@/components/staff/order-status';
+import { attentionSummary as summarize, plural } from '@/components/staff/floor-words';
 import HeldOrdersCard from '@/components/staff/HeldOrdersCard';
 import { useStaffVenue } from '@/hooks/useStaffVenue';
 import type { Database } from '@/integrations/supabase/types';
@@ -83,6 +87,9 @@ type FloorAlert = {
   table_sessions: { tables: { table_number: number } | null } | null;
 };
 
+/** Who is on their way to an alert. */
+type Claimer = { name: string; mine: boolean };
+
 const SOUND_KEY = 'waiter-sound-on';
 
 /** A per-table settle-up that is waiting for its second tap. */
@@ -101,8 +108,10 @@ const tableOf = (row: { table_sessions: { tables: { table_number: number } | nul
 const WaiterDashboard = () => {
   /** The signed-in account, for which restaurant this phone works at. */
   const [userId, setUserId] = useState<string | null>(null);
-  const venueName = useStaffVenue(userId)?.venue.name ?? null;
+  const staffVenue = useStaffVenue(userId);
+  const venueName = staffVenue?.venue.name ?? null;
   useStaffDocument(venueName ? `Waiter · ${venueName}` : 'Waiter');
+  useStaffVenueLook(staffVenue?.venue.slug);
   const navigate = useNavigate();
   const [waiter, setWaiter] = useState<WaiterInfo | null>(null);
   const [tables, setTables] = useState<WaiterSession[]>([]);
@@ -118,6 +127,13 @@ const WaiterDashboard = () => {
    * waiter has to be able to see that at a glance, any time they look.
    */
   const [stale, setStale] = useState(false);
+  /**
+   * At least one refresh has answered. Until then, empty lists mean "not
+   * known", not "nothing waiting": a phone that came up on a dead wifi said
+   * "All caught up" and "Nothing cooking" over a red banner, and the calm
+   * words are the ones a busy waiter believes.
+   */
+  const [loaded, setLoaded] = useState(false);
   const [soundOn, setSoundOn] = useState<boolean>(() => localStorage.getItem(SOUND_KEY) !== 'false');
   const { unlocked: audioUnlocked, unlock: unlockSound } = useAudioUnlock();
   /** null until the first load: alerts that were already open then are not "new". */
@@ -206,6 +222,7 @@ const WaiterDashboard = () => {
     }
 
     setStale(false);
+    setLoaded(true);
     setTables(activeSessions);
     setUnassigned(freeSessions);
     setOrders((ord.data ?? []) as WaiterOrder[]);
@@ -318,6 +335,33 @@ const WaiterDashboard = () => {
   });
 
   /**
+   * "I'm going": the claim the floor monitor has always had, from the phone.
+   *
+   * A call from a table nobody has reaches every phone, and without a claim
+   * two waiters walked to it — or none, each assuming the other had — while
+   * every device kept re-chiming. The claim puts "Marko is going" on the other
+   * screens and quiets the reminder for the takeover window (useReminderChime).
+   */
+  const claim = (kind: 'call' | 'bill', alert: FloorAlert) => once(`claim:${alert.id}`, async () => {
+    const set = kind === 'call' ? setWaiterCalls : setBillRequests;
+    const now = new Date().toISOString();
+    set((prev) => prev.map((a) => (a.id === alert.id
+      ? { ...a, status: 'acknowledged', acknowledged_by: userId, acknowledged_at: now }
+      : a)));
+    try {
+      const result = kind === 'call' ? await ackWaiterCall(alert.id) : await ackBillRequest(alert.id);
+      if (!result.mine) {
+        const who = (result.claimed_by && staffNames[result.claimed_by]) || 'Someone else';
+        toast.info(result.status === 'resolved'
+          ? `${who} already dealt with table ${tableOf(alert)}`
+          : `${who} is already going to table ${tableOf(alert)}`);
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Could not say you are going');
+    }
+  });
+
+  /**
    * Settle a whole table, cash or terminal.
    *
    * Records each order captured at the first tap. Any the server reports as
@@ -404,6 +448,11 @@ const WaiterDashboard = () => {
     ) : null
   );
 
+  /** Who said they are going — "you" when it was this phone, not this waiter's own name. */
+  const claimer = (alert: FloorAlert): Claimer | null => (alert.acknowledged_by
+    ? { name: staffNames[alert.acknowledged_by] ?? 'Someone', mine: alert.acknowledged_by === userId }
+    : null);
+
   const owedFor = useCallback((sessionId: string) => {
     const due = (bySession[sessionId] ?? []).filter(canTakePayment);
     return { due, amount: due.reduce((sum, o) => sum + Number(o.total ?? 0), 0) };
@@ -414,13 +463,15 @@ const WaiterDashboard = () => {
   /** In the kitchen, not yet up. */
   const cooking = orders.filter((o) => isInKitchen(o.status) && !isHeld(o) && !['ready', 'served'].includes(o.status));
   /**
-   * Card orders whose payment has not cleared, and orders held for staff to
-   * confirm — said in words, never counted as cooking.
+   * Card orders whose payment has not cleared — said in words, never counted
+   * as cooking, and in a list of their own: under "In the kitchen" they made
+   * its count disagree with the header's. Held orders are not here either;
+   * they are on the "Needs confirming" card above, with its Confirm button,
+   * and listing them twice only pushed the kitchen off the screen.
    */
-  const notInKitchen = orders.filter((o) => !isInKitchen(o.status) || isHeld(o));
+  const notInKitchen = orders.filter((o) => !isInKitchen(o.status) && !isHeld(o));
 
   const attentionCount = waiterCalls.length + billRequests.length + readyToRun.length;
-  const ordersWaiting = cooking.length + readyToRun.length;
   const oldestOrderMs = [...cooking, ...readyToRun].reduce((max, order) => {
     const ms = Date.now() - new Date(kitchenStart(order)).getTime();
     return ms > max ? ms : max;
@@ -458,11 +509,11 @@ const WaiterDashboard = () => {
     window.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
   };
   /** Same order as the list: food going cold, a guest waiting, the bill. */
-  const attentionSummary = [
-    ...readyToRun.map((o) => `T${tableOf(o)} food is up`),
-    ...waiterCalls.map((c) => `T${tableOf(c)} needs you`),
-    ...billRequests.map((b) => `T${tableOf(b)} wants the bill`),
-  ].join(' · ');
+  const attentionSummary = summarize({
+    ready: readyToRun.map(tableOf),
+    calls: waiterCalls.map(tableOf),
+    bills: billRequests.map(tableOf),
+  });
 
   const initials = (waiter?.display_name || '?')
     .split(' ')
@@ -623,8 +674,9 @@ const WaiterDashboard = () => {
                   retrying" next to "3 tables" is wider than a 360px phone
                   leaves here. */}
               <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-sm text-muted-foreground mt-0.5">
-                <span className="whitespace-nowrap">{tables.length} table{tables.length !== 1 ? 's' : ''}</span>
-                {venueName && <span className="whitespace-nowrap">· {venueName}</span>}
+                {/* Not "0 tables" before anything has loaded. */}
+                {loaded && <span className="whitespace-nowrap">{plural(tables.length, 'table')}</span>}
+                {venueName && <span className="whitespace-nowrap">{loaded ? '· ' : ''}{venueName}</span>}
                 <ConnectionPill state={connection} />
               </div>
             </div>
@@ -662,8 +714,22 @@ const WaiterDashboard = () => {
         )}
 
         {stale && (
-          <div role="alert" className="bg-destructive text-destructive-foreground text-sm font-sans font-semibold px-4 sm:px-6 py-2 text-center">
-            Could not refresh — this screen may be out of date. Retrying automatically.
+          <div role="alert" className="bg-destructive text-destructive-foreground text-sm font-sans font-semibold">
+            <div className="max-w-6xl mx-auto px-4 sm:px-6 py-1.5 flex items-center gap-3">
+              <CloudOff className="w-4 h-4 shrink-0" aria-hidden />
+              <span className="flex-1 min-w-0">
+                {loaded ? 'Could not refresh — this screen may be out of date.' : 'Could not load your tables.'}
+                <span className="font-normal"> Retrying automatically.</span>
+              </span>
+              {/* Back in wifi range, a waiter should not have to wait for the next tick. */}
+              <button
+                type="button"
+                onClick={() => { void fetchAll(); }}
+                className="shrink-0 min-h-[44px] px-3 rounded-lg bg-destructive-foreground/15 hover:bg-destructive-foreground/25 inline-flex items-center gap-1.5"
+              >
+                <RefreshCw className="w-4 h-4" aria-hidden /> Retry now
+              </button>
+            </div>
           </div>
         )}
 
@@ -674,7 +740,9 @@ const WaiterDashboard = () => {
             value={totalOwed > 0 ? <>{totalOwed.toFixed(2)}<span className="text-xs font-medium"> KM</span></> : '—'}
             tone={totalOwed > 0 ? 'warn' : 'idle'}
           />
-          <StatChip label="In kitchen" value={ordersWaiting} tone={ordersWaiting > 0 ? 'active' : 'idle'} />
+          {/* The same count as the "In the kitchen" list below. Plates already
+              up are not in it: they are on top of the screen, to be run. */}
+          <StatChip label="In kitchen" value={loaded ? cooking.length : '—'} tone={cooking.length > 0 ? 'active' : 'idle'} />
           <StatChip
             label="Oldest wait"
             value={oldestOrderMs > 0 ? formatDuration(oldestOrderMs) : '—'}
@@ -694,7 +762,8 @@ const WaiterDashboard = () => {
                 className="pointer-events-auto w-full min-h-[48px] rounded-xl bg-amber-400 text-amber-950 shadow-lux-lg px-3 py-2 flex items-center gap-2 text-left text-sm font-sans font-semibold kds-flash"
               >
                 <Bell className="w-5 h-5 shrink-0" aria-hidden />
-                <span className="min-w-0 flex-1 truncate">{attentionSummary}</span>
+                {/* Two lines before an ellipsis: the bill is last, and it is money. */}
+                <span className="min-w-0 flex-1 line-clamp-2">{attentionSummary}</span>
                 <span className="shrink-0 rounded-lg bg-amber-950/10 px-2.5 py-1">Show</span>
               </button>
             </div>
@@ -706,11 +775,33 @@ const WaiterDashboard = () => {
         {/* Every held order in the venue, not just this waiter's tables: whoever
             is nearest the table is the one who can tell if anyone is there. */}
         <HeldOrdersCard soundEnabled={soundOn} onChanged={refetch} />
+        {!loaded ? (
+          // Nothing is known yet, so nothing is said to be quiet.
+          <div className="rounded-xl border-2 border-destructive/40 bg-destructive/5 px-4 py-8 text-center font-sans flex flex-col items-center gap-3">
+            <CloudOff className="w-6 h-6 text-destructive" aria-hidden />
+            <p className="text-base font-semibold text-foreground">
+              {stale ? 'Your tables could not be loaded' : 'Loading your tables…'}
+            </p>
+            {stale && (
+              <>
+                <p className="text-sm text-muted-foreground max-w-sm">
+                  Calls, bills and plates for your tables will show here as soon as the connection is back. Check the wifi if this stays.
+                </p>
+                <Button className="min-h-[48px] gap-1.5" onClick={() => { void fetchAll(); }}>
+                  <RefreshCw className="w-4 h-4" aria-hidden /> Try again
+                </Button>
+              </>
+            )}
+          </div>
+        ) : (
+        <>
         <section ref={attentionRef}>
           <SectionTitle icon={<Bell className="w-4 h-4" />} title="Attention needed" count={attentionCount} />
           {attentionCount === 0 ? (
             <div className="rounded-xl border border-dashed border-border/60 bg-muted/30 px-4 py-6 text-center text-sm text-muted-foreground flex items-center justify-center gap-2">
-              <Sparkles className="w-4 h-4" /> All caught up
+              {stale
+                ? <><CloudOff className="w-4 h-4" aria-hidden /> Nothing at the last refresh — not up to date</>
+                : <><Sparkles className="w-4 h-4" aria-hidden /> All caught up</>}
             </div>
           ) : (
             <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -735,10 +826,12 @@ const WaiterDashboard = () => {
                     title={`Table ${tableOf(call)}`}
                     label="Needs you"
                     alert={call}
-                    claimedBy={call.acknowledged_by ? staffNames[call.acknowledged_by] ?? 'Someone' : null}
+                    claimedBy={claimer(call)}
                     doneLabel="Done"
                     busy={busy.has(`call:${call.id}`)}
                     onDone={() => { void resolveCall(call.id); }}
+                    claimBusy={busy.has(`claim:${call.id}`)}
+                    onClaim={() => { void claim('call', call); }}
                   >
                     {takeStrip(call.table_session_id, tableOf(call))}
                   </AlertCard>
@@ -751,10 +844,12 @@ const WaiterDashboard = () => {
                     title={`Table ${tableOf(bill)}`}
                     label="Wants the bill"
                     alert={bill}
-                    claimedBy={bill.acknowledged_by ? staffNames[bill.acknowledged_by] ?? 'Someone' : null}
+                    claimedBy={claimer(bill)}
                     doneLabel="Bill given"
                     busy={busy.has(`bill:${bill.id}`)}
                     onDone={() => { void resolveBill(bill.id); }}
+                    claimBusy={busy.has(`claim:${bill.id}`)}
+                    onClaim={() => { void claim('bill', bill); }}
                   >
                     {takeStrip(bill.table_session_id, tableOf(bill))}
                     {settleRow(bill.table_session_id, tableOf(bill), true)}
@@ -766,13 +861,13 @@ const WaiterDashboard = () => {
         </section>
 
         <section>
-          <SectionTitle icon={<ChefHat className="w-4 h-4" />} title="In the kitchen" count={cooking.length + notInKitchen.length} />
-          {cooking.length + notInKitchen.length === 0 ? (
+          <SectionTitle icon={<ChefHat className="w-4 h-4" />} title="In the kitchen" count={cooking.length} />
+          {cooking.length === 0 ? (
             <EmptyState icon={<Utensils className="w-5 h-5" />} text="Nothing cooking for your tables." />
           ) : (
             <div className="grid sm:grid-cols-2 gap-3">
               <AnimatePresence mode="popLayout">
-                {[...cooking, ...notInKitchen].map((order) => (
+                {cooking.map((order) => (
                   <motion.div
                     key={order.id}
                     layout
@@ -788,6 +883,20 @@ const WaiterDashboard = () => {
             </div>
           )}
         </section>
+
+        {notInKitchen.length > 0 && (
+          <section aria-label="Not in the kitchen yet">
+            <SectionTitle icon={<Clock className="w-4 h-4" />} title="Not in the kitchen yet" count={notInKitchen.length} />
+            <p className="text-sm text-muted-foreground font-sans mb-2 -mt-1">
+              Paid by card online: the kitchen gets it once the payment clears. Nobody is cooking these yet.
+            </p>
+            <div className="grid sm:grid-cols-2 gap-3">
+              {notInKitchen.map((order) => (
+                <OrderCard key={order.id} order={order} busy={busy.has(`order:${order.id}`)} onUpdate={updateOrderStatus} />
+              ))}
+            </div>
+          </section>
+        )}
 
         {unassigned.length > 0 && (
           <section>
@@ -809,7 +918,15 @@ const WaiterDashboard = () => {
         )}
 
         {/* Collapsed by default: during service the table list is reference,
-            not a to-do list, and it used to push the alerts off the screen. */}
+            not a to-do list, and it used to push the alerts off the screen.
+            With no tables there is nothing to push away, and the reason there
+            are none belonged in view, not behind a chevron. */}
+        {tables.length === 0 ? (
+          <section>
+            <SectionTitle icon={<Users className="w-4 h-4" />} title="My tables" count={0} />
+            <EmptyState icon={<Users className="w-5 h-5" />} text="No tables yet. Tables appear here once your manager assigns your section for today and a guest sits down." />
+          </section>
+        ) : (
         <Collapsible>
           <CollapsibleTrigger asChild>
             <button className="group w-full flex items-center gap-2 min-h-[44px] text-left">
@@ -825,24 +942,23 @@ const WaiterDashboard = () => {
             </button>
           </CollapsibleTrigger>
           <CollapsibleContent className="mt-3">
-            {tables.length === 0 ? (
-              <EmptyState icon={<Users className="w-5 h-5" />} text="No tables yet. Tables appear here once your manager assigns your section for today and a guest sits down." />
-            ) : (
-              <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                {tables.map((session) => (
-                  <TableCard
-                    key={session.id}
-                    session={session}
-                    activeOrders={(bySession[session.id] ?? []).filter((o) => isInKitchen(o.status) && !isHeld(o) && o.status !== 'served').length}
-                    onClose={() => setFreeing(session)}
-                  >
-                    {settleRow(session.id, session.tables?.table_number ?? '?')}
-                  </TableCard>
-                ))}
-              </div>
-            )}
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {tables.map((session) => (
+                <TableCard
+                  key={session.id}
+                  session={session}
+                  activeOrders={(bySession[session.id] ?? []).filter((o) => isInKitchen(o.status) && !isHeld(o) && o.status !== 'served').length}
+                  onClose={() => setFreeing(session)}
+                >
+                  {settleRow(session.id, session.tables?.table_number ?? '?')}
+                </TableCard>
+              ))}
+            </div>
           </CollapsibleContent>
         </Collapsible>
+        )}
+        </>
+        )}
       </main>
 
       <FreeTableDialog
@@ -900,10 +1016,10 @@ const Elapsed = ({ since }: { since: string }) => {
   return <>{formatDuration(ms)}</>;
 };
 
-/** "Marko is going (3m)". */
-const Going = ({ name, since }: { name: string; since: string | null }) => {
+/** "Marko is going (3m)", or "You are going (3m)". */
+const Going = ({ who, since }: { who: Claimer; since: string | null }) => {
   const ms = useElapsedMinutes(since);
-  return <>{name} is going{since ? ` (${formatMinutes(ms)})` : ''}</>;
+  return <>{who.mine ? 'You are' : `${who.name} is`} going{since ? ` (${formatMinutes(ms)})` : ''}</>;
 };
 
 /** What a table owes, with the two ways to settle it in the room. */
@@ -942,6 +1058,8 @@ const AlertCard = ({
   doneLabel,
   busy,
   onDone,
+  claimBusy = false,
+  onClaim,
   children,
 }: {
   color: 'amber' | 'primary';
@@ -950,14 +1068,18 @@ const AlertCard = ({
   label: string;
   alert: FloorAlert;
   /** Who said they are going — the call stays here until it is actually done. */
-  claimedBy: string | null;
+  claimedBy: Claimer | null;
   doneLabel: string;
   busy: boolean;
   onDone: () => void;
+  claimBusy?: boolean;
+  /** "I'm going" — offered while nobody has said so. */
+  onClaim?: () => void;
   children?: React.ReactNode;
 }) => {
   const accent = color === 'amber' ? 'bg-amber-500' : 'bg-primary';
   const tint = color === 'amber' ? 'bg-amber-500/5 border-amber-500/30' : 'bg-primary/5 border-primary/30';
+  const claimed = alert.status === 'acknowledged' && claimedBy !== null;
   return (
     <motion.div
       layout
@@ -977,13 +1099,22 @@ const AlertCard = ({
             <p className="text-sm font-medium text-foreground/80 truncate">
               {label} · <Elapsed since={alert.created_at} />
             </p>
-            {alert.status === 'acknowledged' && claimedBy && (
-              <p className="text-sm font-medium text-foreground truncate"><Going name={claimedBy} since={alert.acknowledged_at} /></p>
-            )}
+            <p className={`text-sm truncate ${claimed ? 'font-semibold text-foreground' : 'text-muted-foreground'}`}>
+              {claimed && claimedBy ? <Going who={claimedBy} since={alert.acknowledged_at} /> : 'Nobody going yet'}
+            </p>
           </div>
-          <Button variant="outline" className="tap-sm shrink-0 min-h-[48px] text-sm font-semibold" disabled={busy} onClick={onDone}>
-            <CheckCircle2 className="w-4 h-4 mr-1" /> {doneLabel}
-          </Button>
+          {/* One column, so Done is in the same place whether or not anyone
+              has said they are going. */}
+          <div className="flex flex-col gap-2 shrink-0 w-[8.5rem]">
+            {!claimed && onClaim && (
+              <Button className="tap-sm min-h-[48px] w-full text-sm font-semibold gap-1.5" disabled={busy || claimBusy} onClick={onClaim}>
+                <Footprints className="w-4 h-4" aria-hidden /> I&rsquo;m going
+              </Button>
+            )}
+            <Button variant="outline" className="tap-sm min-h-[48px] w-full text-sm font-semibold gap-1.5" disabled={busy} onClick={onDone}>
+              <CheckCircle2 className="w-4 h-4" aria-hidden /> {doneLabel}
+            </Button>
+          </div>
         </div>
         {children}
       </div>
@@ -1018,11 +1149,13 @@ const TableCard = ({
           </span>
         </div>
         <p className="text-sm text-muted-foreground">
-          {activeOrders > 0 ? `${activeOrders} order${activeOrders !== 1 ? 's' : ''} in the kitchen` : 'Nothing in the kitchen'}
+          {activeOrders > 0 ? `${plural(activeOrders, 'order')} in the kitchen` : 'Nothing in the kitchen'}
         </p>
         {children}
         <div className="border-t border-border/60 pt-2">
-          <Button variant="ghost" className="w-full tap-sm min-h-[44px] text-sm text-muted-foreground hover:text-destructive" onClick={onClose}>
+          {/* Its own hover: the ghost one is the accent fill, and red on gold
+              stayed on a phone after the tap, behind the dialog and after it. */}
+          <Button variant="ghost" className="w-full tap-sm min-h-[44px] text-sm text-muted-foreground hover:bg-destructive/10 hover:text-destructive" onClick={onClose}>
             <PowerOff className="w-4 h-4 mr-1.5" /> Free table
           </Button>
         </div>
@@ -1103,7 +1236,9 @@ const OrderCard = ({ order, busy, onUpdate, highlight = false }: {
               <span className={`w-1.5 h-1.5 rounded-full ${meta?.dot ?? ''}`} />
               {highlight ? 'Ready to run' : held ? 'Needs confirming' : orderStatusLabel(order.status)}
             </Badge>
-            <PaymentBadge method={order.payment_method} status={order.payment_status} />
+            {/* Not in the kitchen, the status already says what the money is
+                doing; a second pill saying it again only wrapped the row. */}
+            {inKitchen && <PaymentBadge method={order.payment_method} status={order.payment_status} />}
           </div>
           {inKitchen && (
             <span className={`text-xs px-2 py-0.5 rounded-full border tabular-nums ${waitBg(ms)}`}>{formatDuration(ms)}</span>
@@ -1113,8 +1248,12 @@ const OrderCard = ({ order, busy, onUpdate, highlight = false }: {
             new "Pending" one, and the waiter chased the kitchen for food it had
             never been sent. */}
         {!inKitchen && (
-          <p className="text-sm font-sans font-semibold text-accent mb-2">
-            {held ? 'Not in kitchen — confirm it above' : 'Not in kitchen — payment pending'}
+          <p className={`text-sm font-sans font-semibold mb-2 ${order.status === 'payment_failed' ? 'text-destructive' : 'text-accent'}`}>
+            {held
+              ? 'Not in kitchen — confirm it above'
+              : order.status === 'payment_failed'
+                ? 'Not in kitchen — the card payment failed. See the table.'
+                : 'Not in kitchen — payment pending'}
           </p>
         )}
         <ul className="text-sm font-sans space-y-0.5 mb-3 text-foreground/90">
