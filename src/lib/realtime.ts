@@ -66,7 +66,18 @@ export const staffKeys = {
 
 type Key = readonly unknown[];
 
-/** Which queries a change to each table can possibly affect. */
+/**
+ * Which queries a change to each table can possibly affect.
+ *
+ * Only tables the database puts on the live feed (`ALTER PUBLICATION
+ * supabase_realtime ADD TABLE` in supabase/migrations). Ask for one that is
+ * not, and the server refuses every change on the channel, orders included,
+ * while the channel still says SUBSCRIBED. From August to November 2026
+ * sections, waiters and section_assignments were asked for here: every staff
+ * screen showed "Live" and heard nothing, and a new order reached the waiter's
+ * phone at the next one-minute check. Those three change between shifts, not
+ * during one; their screens reload on the refresh ticks below.
+ */
 const TABLE_TO_KEYS: Record<string, Key[]> = {
   orders: [staffKeys.orders, staffKeys.printable, staffKeys.allDay],
   order_items: [staffKeys.orders, staffKeys.allDay],
@@ -75,9 +86,6 @@ const TABLE_TO_KEYS: Record<string, Key[]> = {
   bill_requests: [staffKeys.billRequests],
   table_sessions: [staffKeys.sessions, staffKeys.tables],
   tables: [staffKeys.tables],
-  sections: [staffKeys.sections],
-  waiters: [staffKeys.waiters],
-  section_assignments: [staffKeys.assignments],
   restaurant_settings: [staffKeys.settings],
 };
 
@@ -282,6 +290,22 @@ class StaffRealtime {
       });
     }
 
+    // SUBSCRIBED only means the channel joined. Whether the database will send
+    // its changes comes a moment later, in a system message, and a refusal
+    // leaves the channel joined and silent. So a refusal counts as a dropped
+    // socket — the pill says so and the screens refetch every 15 seconds —
+    // until the server's own retry gets through.
+    channel.on('system', {}, (message: { extension?: string; status?: string }) => {
+      if (message?.extension !== 'postgres_changes') return;
+      if (message.status !== 'ok') {
+        this.setState('reconnecting');
+      } else if (this.state !== 'live') {
+        this.setState('live');
+        this.invalidateAll();
+        this.refresh('subscribed');
+      }
+    });
+
     channel.subscribe((status) => {
       this.setState(
         status === 'SUBSCRIBED' ? 'live'
@@ -400,7 +424,8 @@ export function useStaffRefresh(listener: RefreshListener) {
  * shows, and on every poll tick, reconnect, safety heartbeat, return to the
  * foreground and network recovery. On the tab's one shared channel, so the
  * owner looking at Vera Italia gets Vera's changes every few seconds and
- * never a La Soul one. `tables` must be among the watched tables above.
+ * never a La Soul one. `tables` must be among the watched tables above (any
+ * other is never heard, and the screen reloads on the ticks alone).
  */
 export function useStaffTables(tables: readonly string[], onChange: () => void): ConnectionState {
   const state = useStaffRealtime();

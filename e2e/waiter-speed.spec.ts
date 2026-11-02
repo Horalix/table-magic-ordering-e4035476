@@ -90,6 +90,80 @@ test.describe('what needs me now', () => {
   });
 });
 
+/**
+ * The live feed (Supabase Realtime, protocol 2.0.0), faked: it lets the staff
+ * channel join, says whether the database will send its changes, and
+ * announces a change the test hands it, as the server does after an INSERT.
+ */
+async function fakeLiveFeed(page: Page, { refuse = false } = {}) {
+  let announce: ((table: string, record: Record<string, unknown>) => void) | null = null;
+  await page.routeWebSocket(/\/realtime\/v1\/websocket/, (ws) => {
+    ws.onMessage((raw) => {
+      const [joinRef, ref, topic, event, payload] = JSON.parse(String(raw));
+      const reply = (response = {}) => ws.send(JSON.stringify([joinRef, ref, topic, 'phx_reply', { status: 'ok', response }]));
+      if (event !== 'phx_join') { if (ref) reply(); return; }
+      const bindings = ((payload.config?.postgres_changes ?? []) as Record<string, unknown>[]).map((b, i) => ({ ...b, id: 100 + i }));
+      reply({ postgres_changes: bindings });
+      ws.send(JSON.stringify([null, null, topic, 'system', refuse
+        ? { extension: 'postgres_changes', status: 'error', message: 'Unable to subscribe to changes with given parameters.' }
+        : { extension: 'postgres_changes', status: 'ok', message: 'Subscribed to PostgreSQL' }]));
+      announce = (table, record) => {
+        const id = bindings.find((b) => b.table === table)?.id;
+        ws.send(JSON.stringify([null, null, topic, 'postgres_changes', {
+          ids: [id],
+          data: {
+            schema: 'public', table, type: 'INSERT', commit_timestamp: new Date().toISOString(), errors: null,
+            columns: Object.keys(record).map((name) => ({ name, type: 'text' })), record,
+          },
+        }]));
+      };
+    });
+  });
+  return {
+    joined: () => announce !== null,
+    insert: (table: string, record: Record<string, unknown>) => announce!(table, record),
+  };
+}
+
+test.describe('a new order reaches the phone the moment it is placed', () => {
+  // Every staff channel asked for three tables the database does not put on
+  // the live feed, so it refused them all: the phone said "Live" and a new
+  // order turned up at the next one-minute check.
+  test('shown and buzzed within a second, with no refresh', async ({ staff, page }) => {
+    await page.addInitScript(() => {
+      const w = window as unknown as { __buzz: unknown[] };
+      w.__buzz = [];
+      Object.defineProperty(navigator, 'vibrate', { value: (p: unknown) => { w.__buzz.push(p); return true; }, configurable: true });
+    });
+    const feed = await fakeLiveFeed(page);
+    staff.orders = [anOrder({ id: 'o-old', table_session_id: 'session-1', table_sessions: t7 })];
+    await asMarko(page);
+    await page.goto('/waiter');
+    await expect(page.getByText('In the kitchen')).toBeVisible();
+    await expect(page.getByRole('status').filter({ hasText: 'Live' })).toBeVisible();
+    await expect.poll(feed.joined).toBe(true);
+
+    // The guest at table 6 orders.
+    const placed = anOrder({
+      id: 'o-new', order_code: '048', table_session_id: 'session-6', table_sessions: t6,
+      order_items: [{ id: 'oi-new', order_id: 'o-new', menu_item_id: 'item-tiramisu', quantity: 1, unit_price: 9, notes: null, status: 'pending', station: 'kitchen', menu_items: { name: 'Tiramisu' } }],
+    });
+    staff.orders = [...staff.orders, placed];
+    feed.insert('orders', { id: 'o-new', table_session_id: 'session-6', status: 'pending' });
+
+    await expect(page.getByText('Tiramisu')).toBeVisible({ timeout: 1_500 });
+    await expect.poll(() => page.evaluate(() => (window as unknown as { __buzz: unknown[] }).__buzz), { timeout: 1_500 }).toEqual([150]);
+  });
+
+  test('a feed the database refuses is not called "Live"', async ({ page }) => {
+    await fakeLiveFeed(page, { refuse: true });
+    await asMarko(page);
+    await page.goto('/waiter');
+    await expect(page.getByText('In the kitchen')).toBeVisible();
+    await expect(page.getByRole('status').filter({ hasText: 'Offline · retrying' })).toBeVisible();
+  });
+});
+
 test.describe('the bill', () => {
   test('take the money and free the table in two taps', async ({ staff, page }) => {
     staff.orders = [anOrder({ id: 'w6', status: 'served', table_session_id: 'session-6', table_sessions: t6, total: 38, payment_status: 'unpaid' })];

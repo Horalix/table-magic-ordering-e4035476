@@ -17,8 +17,6 @@ interface Table { id: string; section_id: string | null; }
 
 const initials = (name: string) => name.split(' ').map((s) => s[0]).join('').slice(0, 2).toUpperCase();
 
-const TONIGHT_TABLES = ['section_assignments'] as const;
-
 const AdminFloorTonight = () => {
   const [sections, setSections] = useState<Section[]>([]);
   const [waiters, setWaiters] = useState<Waiter[]>([]);
@@ -59,8 +57,10 @@ const AdminFloorTonight = () => {
     void fetchAll();
   }, [fetchAll]);
   // The tab's shared channel: only the restaurant shown, and polled where the
-  // socket cannot see it (the owner looking at Vera Italia).
-  useStaffTables(TONIGHT_TABLES, useCallback(() => { void fetchAll(); }, [fetchAll]));
+  // socket cannot see it (the owner looking at Vera Italia). The rota is not
+  // on the live feed (lib/realtime.ts), so no table to hear: the page reloads
+  // on the channel's ticks — every minute, and on coming back to the tab.
+  useStaffTables([], useCallback(() => { void fetchAll(); }, [fetchAll]));
 
   const tableCount = useMemo(() => {
     const m = new Map<string, number>();
