@@ -133,6 +133,25 @@ describe('a new version of the app', () => {
     expect(sw.update).not.toHaveBeenCalled();
   });
 
+  it('asked to take over and held back by the browser, reloads at once to let it, not minutes later', async () => {
+    vi.useFakeTimers();
+    try {
+      vi.spyOn(performance, 'now').mockReturnValue(60_000);
+      const reload = vi.fn();
+      vi.spyOn(window, 'location', 'get').mockReturnValue({ ...window.location, pathname: '/menu/lasoul/', reload } as Location);
+      const mod = await start();
+      sw.options!.onNeedRefresh!();
+      expect(mod.applyWaitingUpdate()).toBe(true);
+      expect(sw.update).toHaveBeenCalledWith(true);
+      vi.advanceTimersByTime(1_000);
+      expect(reload).not.toHaveBeenCalled();
+      vi.advanceTimersByTime(1_000);
+      expect(reload).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('the first service worker taking control is not a takeover', async () => {
     Object.defineProperty(navigator, 'serviceWorker', { value: { controller: null, addEventListener: vi.fn() }, configurable: true });
     const listeners = listen();

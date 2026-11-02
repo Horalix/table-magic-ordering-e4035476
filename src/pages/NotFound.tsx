@@ -3,7 +3,7 @@ import { Link, Navigate, useLocation } from 'react-router-dom';
 import { lookForMissingPage } from '@/lib/app-update';
 import { useT } from '@/lib/i18n';
 import { legacyRedirect } from '@/lib/legacy-redirects';
-import { menuPath } from '@/lib/venues';
+import { VENUES, activeVenue, menuPath } from '@/lib/venues';
 import { useNoIndex } from '@/lib/seo/noindex';
 import BrandEmblem from '@/components/BrandEmblem';
 
@@ -13,11 +13,21 @@ import BrandEmblem from '@/components/BrandEmblem';
  * "404" (public/_redirects), and the page says "noindex" with no canonical
  * for one that runs the app on an address answered "200" (a dish, a category
  * or a restaurant that no longer exists).
+ *
+ * Its own title too: a course page that turns out not to exist has already
+ * named the tab after the address while it loaded ("no-such-course in
+ * Sarajevo"), and an address the build wrote no page for wears the home page's.
  */
 const NotFound = () => {
   const t = useT();
   const { pathname } = useLocation();
   useNoIndex();
+  const title = `${t('not_found_title')} — ${VENUES[activeVenue()]?.name ?? ''}`;
+  useEffect(() => {
+    const previous = document.title;
+    document.title = title;
+    return () => { document.title = previous; };
+  }, [title]);
   // A phone on an older version: the newer one may have this page.
   useEffect(() => lookForMissingPage(), []);
   // An address that moved (an old printed QR code, an old lasoul.net page).

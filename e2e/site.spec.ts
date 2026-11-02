@@ -223,6 +223,8 @@ test.describe('website', () => {
     await page.goto('/this-page-does-not-exist');
     await expect(page.getByRole('heading', { name: 'Page not found' })).toBeVisible();
     await expect(page.locator('meta[name="robots"]')).toHaveAttribute('content', 'noindex, nofollow');
+    // Nor the home page's title on the tab.
+    await expect(page).toHaveTitle('Page not found — La Soul');
     // Not the home page's canonical, nor its language alternates.
     await expect(page.locator('link[rel="canonical"]')).toHaveCount(0);
     await expect(page.locator('link[rel="alternate"][hreflang]')).toHaveCount(0);
@@ -230,6 +232,7 @@ test.describe('website', () => {
     // A page found again says what it is.
     await page.getByRole('link', { name: 'Back to Menu' }).click();
     await expect(page).toHaveURL(/\/menu\/lasoul\/$/);
+    await expect(page).not.toHaveTitle(/Page not found/);
     await expect(page.locator('meta[name="robots"]')).toHaveAttribute('content', /^index/);
     await expect(page.locator('link[rel="canonical"]')).toHaveAttribute('href', /\/menu\/lasoul\/$/);
   });
