@@ -76,6 +76,18 @@ test.describe('Vera Italia’s menu', () => {
     await expect(page.getByText('No items available in this category yet.')).toHaveCount(0);
   });
 
+  test('a course that doesn’t exist says so, on the page and on the tab', async ({ page }) => {
+    await installVeraStubs(page);
+    await page.goto('/menu/veraitalia/no-such-course/');
+    await expect(page.getByRole('heading', { level: 1, name: 'Page not found' })).toBeVisible();
+    // Not named after the address it was asked for ("no-such-course in Sarajevo").
+    await expect(page).toHaveTitle('Page not found — Vera Italia');
+    await expect(page.locator('meta[name="robots"]')).toHaveAttribute('content', 'noindex, nofollow');
+    await page.getByRole('link', { name: 'Back to Menu' }).click();
+    await expect(page.getByRole('heading', { level: 2, name: 'Carne' })).toBeVisible();
+    await expect(page).not.toHaveTitle(/Page not found/);
+  });
+
   test('a seated guest sees their table and can call the waiter', async ({ page }) => {
     await installVeraStubs(page);
     await seatAtVera(page);

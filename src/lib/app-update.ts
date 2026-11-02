@@ -39,6 +39,8 @@ const STAFF_IDLE_MS = 90_000;
 const STAFF_PATH = /^\/(admin|kitchen|waiter)(\/|$)/;
 /** How long after the page opens a new version still counts as arriving "while it opens". */
 const FRESH_START_MS = 15_000;
+/** How long a waiting version gets to take over once asked, before the page reloads to let it. */
+const TAKEOVER_MS = 2_000;
 
 let updateSW: ((reloadPage?: boolean) => Promise<void>) | null = null;
 let checkForUpdate: () => void = () => {};
@@ -149,6 +151,14 @@ export function applyWaitingUpdate(): boolean {
   applying = true;
   // workbox-window reloads only for a version it announced itself.
   navigator.serviceWorker.addEventListener('controllerchange', () => window.location.reload(), { once: true });
+  // Chrome and Edge hold the new version back while the old one is still
+  // serving this page the menu data it keeps a copy of (vite.config.ts,
+  // menu-data-by-venue) — up to five minutes, after which it takes over and
+  // the line above reloaded the page in the middle of whatever the guest was
+  // doing by then. Reloading now, at this safe moment, lets the old version
+  // go: the new one takes over a moment later, and the reloaded page moves
+  // onto it (takenOver).
+  setTimeout(() => window.location.reload(), TAKEOVER_MS);
   void updateSW(true);
   return true;
 }
