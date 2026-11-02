@@ -1,3 +1,5 @@
+import { readdirSync, readFileSync } from 'node:fs';
+import path from 'node:path';
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { QueryClient } from '@tanstack/react-query';
 
@@ -17,15 +19,18 @@ import { QueryClient } from '@tanstack/react-query';
  */
 
 type Handler = (payload: { eventType: string }) => void;
+type SystemHandler = (message: { extension?: string; status?: string; message?: string }) => void;
 
 const handlers = new Map<string, Handler>();
+let systemHandler: SystemHandler | null = null;
 let subscribeCallback: ((status: string) => void) | null = null;
 let channelCount = 0;
 let removed = 0;
 
 const fakeChannel = {
-  on(_event: string, filter: { table: string }, handler: Handler) {
-    handlers.set(filter.table, handler);
+  on(event: string, filter: { table?: string }, handler: Handler | SystemHandler) {
+    if (event === 'system') systemHandler = handler as SystemHandler;
+    else handlers.set(filter.table!, handler as Handler);
     return this;
   },
   subscribe(cb: (status: string) => void) {
@@ -49,6 +54,7 @@ let staffKeys: typeof import('@/lib/realtime').staffKeys;
 beforeEach(async () => {
   vi.resetModules();
   handlers.clear();
+  systemHandler = null;
   subscribeCallback = null;
   channelCount = 0;
   removed = 0;
@@ -189,6 +195,53 @@ describe('connection state', () => {
     invalidate.mockClear();
     vi.advanceTimersByTime(16_000);
     expect(invalidate.mock.calls.length).toBeGreaterThan(0);
+  });
+
+  it('is not live while the database refuses to send its changes, and polls until it does', () => {
+    const { invalidate } = setup();
+    // What the live server sends when one table on the channel is not on the feed.
+    systemHandler?.({ extension: 'postgres_changes', status: 'error', message: 'Unable to subscribe to changes with given parameters.' });
+    expect(realtime.getState()).toBe('reconnecting');
+
+    vi.advanceTimersByTime(16_000);
+    expect(invalidate.mock.calls.length).toBeGreaterThan(0);
+
+    // The server's retry gets through: live again, and caught up at once.
+    invalidate.mockClear();
+    systemHandler?.({ extension: 'postgres_changes', status: 'ok', message: 'Subscribed to PostgreSQL' });
+    expect(realtime.getState()).toBe('live');
+    expect(invalidate.mock.calls.length).toBeGreaterThan(1);
+  });
+
+  it('stays live when the database says it is sending', () => {
+    const { invalidate } = setup();
+    systemHandler?.({ extension: 'postgres_changes', status: 'ok', message: 'Subscribed to PostgreSQL' });
+    systemHandler?.({ extension: 'presence', status: 'error' });
+    expect(realtime.getState()).toBe('live');
+    // Already caught up on SUBSCRIBED: no second full reload.
+    expect(invalidate).not.toHaveBeenCalled();
+  });
+});
+
+describe('the tables it listens to', () => {
+  /*
+   * The server refuses every change on a channel that asks for one table not
+   * on the live feed — orders included — while the channel still says
+   * SUBSCRIBED. From August to November 2026 three such tables were on it, and
+   * a new order reached the waiter's phone at the next one-minute check.
+   */
+  it('are all ones the database puts on the live feed', () => {
+    const dir = path.join(__dirname, '..', '..', 'supabase', 'migrations');
+    const published = new Set<string>();
+    for (const file of readdirSync(dir).filter((f) => f.endsWith('.sql'))) {
+      for (const m of readFileSync(path.join(dir, file), 'utf8').matchAll(/PUBLICATION\s+supabase_realtime\s+ADD\s+TABLE\s+public\.(\w+)/gi)) {
+        published.add(m[1]);
+      }
+    }
+    setup();
+    const watched = [...handlers.keys()];
+    expect(watched).toContain('orders');
+    expect(watched.filter((table) => !published.has(table))).toEqual([]);
   });
 });
 
