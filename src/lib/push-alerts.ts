@@ -66,14 +66,18 @@ function sameKey(subscription: PushSubscription, key: string): boolean {
   return a.length === b.length && a.every((v, i) => v === b[i]);
 }
 
-/** The app's service worker, registered by app-update.ts; none in development. */
+/**
+ * The app's active service worker, registered by app-update.ts; none in
+ * development. A push subscription needs an active one, and on a phone's
+ * first visit installing it takes half a minute: wait for that, not for ever.
+ */
 async function registration(): Promise<ServiceWorkerRegistration | null> {
   try {
     const found = await navigator.serviceWorker.getRegistration();
-    if (found) return found;
+    if (found?.active) return found;
     return await Promise.race([
       navigator.serviceWorker.ready,
-      new Promise<null>((resolve) => setTimeout(() => resolve(null), 4000)),
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), found ? 90_000 : 8_000)),
     ]);
   } catch {
     return null;
