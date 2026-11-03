@@ -69,9 +69,15 @@ test.describe('a restaurant that shows its menu only', () => {
   test('the cart and the bill send the guest back to the menu', async ({ page, state }) => {
     state.serviceStatus = { ...state.serviceStatus, menu_only: true };
     await seedSession(page);
-    await page.goto('/cart');
+    // The phone remembers the switch, so the page can turn back before it has
+    // finished loading; WebKit then calls the visit interrupted. Where it
+    // ends up is what counts.
+    const visit = (path: string) => page.goto(path, { waitUntil: 'commit' }).catch((error: unknown) => {
+      if (!/interrupted by another navigation/.test(String(error))) throw error;
+    });
+    await visit('/cart');
     await expect(page).toHaveURL(/\/menu\/lasoul\/$/);
-    await page.goto('/tab');
+    await visit('/tab');
     await expect(page).toHaveURL(/\/menu\/lasoul\/$/);
   });
 
