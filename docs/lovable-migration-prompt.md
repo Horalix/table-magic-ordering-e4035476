@@ -2,32 +2,160 @@
 
 Copy everything between the rules into Lovable. Nothing else needs to be said.
 
-## Next: suggestions a head waiter would sign, and resetting passwords
+## Next: lock-screen alerts for waiters
 
-Send this once `main` has the runner for this one migration (merged from
-`feature/reco-quality`), the staff-accounts change (`create-waiter` with
-`reset_password`, merged from `feature/staff-seo-waiter`) and the owner's
-resets (`manage-admins` with `reset_password`, merged from
-`feature/team-passwords`).
+Send this once `main` has the lock-screen alerts (merged from
+`feature/lock-screen-alerts`), and **after you have set the three keys
+yourself** (just below). Lovable never sees, makes or types a key.
 
-- **The migration:** guests at both restaurants get better suggestions. No
-  menu, order, ticket, staff or analytics data changes. The one exception is
-  three of Vera Italia's rib-eye pairing priorities, and only where the owner
-  has not already edited them. It is safe to run again if it has already run:
-  every function is `CREATE OR REPLACE`, every column `IF NOT EXISTS`, and the
-  three priorities move only from their first value.
-- **Two Edge Functions:**
-  - `create-waiter` checks the 10-character password minimum, gives clear
-    error codes, cleans up a half-created sign-in, and adds the Waiters
-    page's **Password** button (`reset_password`);
-  - `manage-admins` adds the Team page's **Password** button: the owner gives
-    any restaurant admin, waiter or kitchen tablet a new password (never an
-    owner's).
-
-  Until they are redeployed, both pages work, except that a **Password**
-  button says the function needs redeploying.
+- **The migration** (`20261103090000_staff_push.sql`): where each waiter's
+  phone can be reached (`staff_push_subscriptions`; a waiter sees and manages
+  only their own phones, and only at a restaurant they wait tables at), and
+  triggers on orders, waiter calls and bill requests that tell the new
+  function about each one through pg_net. No menu, order, payment, staff or
+  analytics data changes. A trigger never stops an order: without pg_net, or
+  if queuing the call fails, the order goes in as before, without an alert.
+  Safe to run again.
+- **One new Edge Function:** `notify-staff`, with `verify_jwt = false`
+  (already in `supabase/config.toml`), because the database calls it without a
+  sign-in. It reads the row itself and sends each alert once, to the table's
+  waiter, or to the waiters on shift at that restaurant when the table has
+  nobody. Never to the other restaurant's waiters.
 - Netlify publishes the app itself from `main`, so nothing needs republishing
-  in Lovable.
+  in Lovable. Until the function and its keys are live, the waiter screen
+  says *Lock-screen alerts are not switched on … yet* and everything else
+  works as before.
+
+### First, the keys (you, not Lovable)
+
+1. On your computer, in the repository: `npm run vapid:keys`. It prints three
+   lines and writes nothing.
+2. In Lovable, add three **Edge Function secrets** (Cloud → Secrets; if you
+   cannot find it, ask Lovable for its "add secret" form and type the values
+   into that form, never into the chat):
+   - `VAPID_PUBLIC_KEY`: the key on the first line;
+   - `VAPID_PRIVATE_KEY`: the key on the second line;
+   - `VAPID_SUBJECT`: `mailto:` and an address you read, for example
+     `mailto:you@example.com` (the push services write there if something is
+     wrong).
+3. Close the terminal. The private key lives in that secret and nowhere else:
+   not in a chat, a document or the repository (`npm run scan:secrets` refuses
+   it in a commit). The two keys stay a pair: a new pair later means every
+   waiter turns alerts on again.
+
+---
+
+> **Task: apply one migration with `docs/migration-runner.sql`, then deploy
+> one new Edge Function. Do not retype the migration file and do not write
+> any other SQL.**
+>
+> Make sure your checkout is the latest `main`.
+>
+> 1. Confirm that the Edge Function secrets `VAPID_PUBLIC_KEY`,
+>    `VAPID_PRIVATE_KEY` and `VAPID_SUBJECT` exist. Report their names only:
+>    never print, log, copy or store their values anywhere. If one is missing,
+>    stop and show me the form to add it. Do not ask me to paste a key into
+>    the chat, and do not make keys yourself.
+> 2. Run `docs/migration-runner.sql` step by step, each step as its own query:
+>    Step 0 (pg_net installed), Step 1 (queue the download, expect 1 row),
+>    Step 2 (expect 1 row, `arrived_exactly = true`), then Step 3, its one
+>    block (1 of 1). If it fails, stop and report the exact error; a failed
+>    block changes nothing.
+> 3. Check, and paste the raw output of each:
+>    ```sql
+>    SELECT to_regclass('public.staff_push_subscriptions') IS NOT NULL AS phones,
+>           to_regclass('public.staff_push_sent') IS NOT NULL AS sent,
+>           to_regprocedure('public.staff_push_subscribe(text,jsonb,uuid)') IS NOT NULL AS subscribe,
+>           public.staff_push_url() AS url;
+>    SELECT tgrelid::regclass::text AS on_table, tgname FROM pg_trigger
+>     WHERE tgname LIKE 'staff_push_on_%' ORDER BY 1, 2;
+>    SELECT cmd, roles FROM pg_policies WHERE tablename = 'staff_push_subscriptions' ORDER BY cmd;
+>    SELECT count(*) AS phones FROM public.staff_push_subscriptions;
+>    ```
+>    Expected: `true`, `true`, `true` and
+>    `https://jgxnvrrphxnmzongtmzs.supabase.co/functions/v1/notify-staff`
+>    (if that is not this project's Edge Functions address, stop and say so);
+>    four triggers: `bill_requests` `staff_push_on_bill_request`, `orders`
+>    `staff_push_on_order` and `staff_push_on_order_paid`, `waiter_calls`
+>    `staff_push_on_waiter_call`; four policies, `DELETE`, `INSERT`, `SELECT`
+>    and `UPDATE`, each for `{authenticated}`; `0` phones.
+> 4. Deploy the new Edge Function `notify-staff` from `supabase/functions/`
+>    exactly as it is in `main`, with the settings in `supabase/config.toml`
+>    (`verify_jwt = false`). It imports `supabase/functions/_shared/http.ts`,
+>    `notify-staff.ts`, `staff-push.ts` and `web-push.ts`. Deploy no other
+>    function. Paste the deploy result.
+> 5. Call `GET https://jgxnvrrphxnmzongtmzs.supabase.co/functions/v1/notify-staff`
+>    (no sign-in) and paste the answer. Expected:
+>    `{"configured":true,"publicKey":"B…"}`; the public key is not a secret.
+>    `{"configured":false}` means a secret is missing or the two keys are not
+>    one pair: say which of the three names exist, nothing more.
+>
+> You may regenerate `src/integrations/supabase/types.ts`; change no other app
+> code. Do not create or change any user account, password or credential, do
+> not place an order, call a waiter or ask for a bill, and do not enable online
+> card payments.
+
+---
+
+### After it applies: test it on a real phone
+
+Wait until Netlify has published `main` (a couple of minutes after the
+merge). Use a waiter account of your own and a table you can sit at. No order
+is needed: a waiter call rings exactly the way an order does.
+
+**Android (Chrome), La Soul**
+
+1. On the phone, open `https://lasoulapp.netlify.app/waiter/login` and sign
+   in as a La Soul waiter. If there is no **Alerts on lock screen** card yet,
+   close the tab and open it again: the new version takes over within seconds.
+2. Tap the **Alerts on lock screen** switch, then **Allow**. It says **On** and
+   moves below the tables.
+3. Tap **Send a test** and lock the phone at once. Within about ten seconds:
+   **Test alert** on the lock screen, with the notification sound and a buzz.
+   Tap it: the waiter screen opens.
+   - No sound: phone off silent and Do Not Disturb; Chrome's notification
+     settings for `lasoulapp.netlify.app` allow sound.
+4. Make the test table this waiter's: in **Admin → Tonight**, give the waiter
+   its section, or scan the table's QR code on a second phone and tap **Take
+   table** for it on the waiter phone.
+5. Lock the waiter phone. On the second phone (the guest), tap **Call
+   Waiter**. Within a couple of seconds: **Calling you · Table N**. Tap it:
+   the call is on the waiter screen. Clear it, and free the table.
+6. Background, not locked: open another app on the waiter phone, call again
+   from the guest phone: a banner comes down.
+7. A table nobody has (its section is on nobody's rota today): scan its QR
+   code and call without taking the table. The call goes to every La Soul
+   waiter on today's rota and everyone who opened `/waiter` since 05:00.
+8. The other restaurant: with a Vera Italia waiter signed in on another phone,
+   alerts on, repeat step 5 at La Soul. The Vera Italia phone stays silent.
+
+**iPhone (iOS 16.4 or later)**
+
+1. In Safari open `https://lasoulapp.netlify.app/waiter/login` (Vera Italia's
+   waiters: `https://veraitalia.net/waiter/login`). The card says to add the
+   app to the Home Screen: tap **Share → Add to Home Screen → Add**. The icon
+   is called **Waiter**.
+2. Open **Waiter** from the Home Screen, sign in, tap the switch, then
+   **Allow**.
+3. Steps 3 to 8 as on Android. Sound and banners follow Settings →
+   Notifications → Waiter, and a Focus mode can silence them.
+
+A new order rings the same way: **New order · Table N**, with what was ordered
+and the total. A held order says **Order to confirm**, a bill request **Wants
+the bill**. Don't place a test order on production (it prints a kitchen
+ticket): watch the first real orders of service with the phone locked
+instead. If nothing arrives, `docs/operations-runbook.md` → *Lock-screen
+alerts don't arrive*.
+
+---
+
+## Done: suggestions a head waiter would sign, and resetting passwords (1 November 2026)
+
+One migration and two Edge Functions, sent on 1 November 2026. Lovable
+deployed `create-waiter` and `manage-admins` and applied
+`20261031120000_reco_quality.sql` through its own wrapper of the runner's
+MD5-checked block (`drizzle/migrations/0008_apply_verified_reco_quality_runner.sql`),
+then regenerated `src/integrations/supabase/types.ts`. The prompt as sent:
 
 ---
 

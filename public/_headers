@@ -5,6 +5,14 @@
 /manifest.webmanifest
   Content-Type: application/manifest+json
 
+# The waiter's Home Screen app (src/hooks/useVenue.ts): on iPhone, lock-screen
+# alerts work only from one.
+/manifest-waiter.webmanifest
+  Content-Type: application/manifest+json
+
+/manifest-waiter-veraitalia.webmanifest
+  Content-Type: application/manifest+json
+
 # How long a browser keeps a file. Netlify's default is "max-age=0,
 # must-revalidate": ask again every time. That stays for everything that
 # names other files or must change the moment a deploy does — index.html and
