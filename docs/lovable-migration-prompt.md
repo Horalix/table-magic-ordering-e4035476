@@ -2,7 +2,53 @@
 
 Copy everything between the rules into Lovable. Nothing else needs to be said.
 
-## Next: suggestions a head waiter would sign, and resetting passwords
+## Next: "Menu only" — the menu and nothing else
+
+Send this once `main` has `feature/menu-only` merged (the runner below is
+pinned to its commit 2043942).
+
+- **The migration** (`20261103120000_menu_only.sql`) adds one switch per
+  restaurant, `restaurant_settings.menu_only`, off for both. With it on, guests
+  get the menu and nothing else, and the database refuses a new table, order,
+  waiter call or bill request at that restaurant. Switch it on in **Admin →
+  Service → Menu only**. No menu, order, staff or analytics data changes. It
+  is safe to run again: the column is `IF NOT EXISTS`, and each function and
+  trigger is replaced.
+- No Edge Function changes. Netlify publishes the app itself from `main`.
+
+---
+
+> **Task: apply one migration with `docs/migration-runner.sql`. Do not retype
+> the migration file and do not write any other SQL.**
+>
+> Make sure your checkout is the latest `main`.
+>
+> 1. Run `docs/migration-runner.sql` step by step, each step as its own query:
+>    Step 0 (pg_net installed), Step 1 (queue the download, expect 1 row),
+>    Step 2 (expect 1 row, `arrived_exactly = true`), then Step 3, its one
+>    block (1 of 1). If it fails, stop and report the exact error; a failed
+>    block changes nothing.
+> 2. Check, and paste the raw output of each:
+>    ```sql
+>    SELECT venue_id, menu_only FROM public.restaurant_settings ORDER BY venue_id;
+>    SELECT tgrelid::regclass AS on_table FROM pg_trigger
+>     WHERE tgname = 'zz_menu_only' AND NOT tgisinternal ORDER BY 1;
+>    SELECT public.guest_get_service_status() ? 'menu_only' AS told;
+>    ```
+>    Expected: both restaurants with `menu_only = false`; the four tables
+>    `table_sessions`, `orders`, `waiter_calls`, `bill_requests` (in any
+>    order); and `true`.
+> 3. Regenerate `src/integrations/supabase/types.ts` so `restaurant_settings`
+>    has `menu_only`.
+>
+> Do not switch `menu_only` on (the owner does that in the admin), do not
+> create or change any user account, password or credential, do not change
+> any Auth setting (the minimum password length stays 10), and do not enable
+> online card payments.
+
+---
+
+## Done: suggestions a head waiter would sign, and resetting passwords (1 November 2026)
 
 Send this once `main` has the runner for this one migration (merged from
 `feature/reco-quality`), the staff-accounts change (`create-waiter` with

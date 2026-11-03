@@ -48,3 +48,9 @@
   X-Robots-Tag: noindex, nofollow
 /waiter/*
   X-Robots-Tag: noindex, nofollow
+
+# Nor is the menu board on the TV at the entrance (src/pages/TvMenu.tsx).
+/tv
+  X-Robots-Tag: noindex, nofollow
+/tv/*
+  X-Robots-Tag: noindex, nofollow

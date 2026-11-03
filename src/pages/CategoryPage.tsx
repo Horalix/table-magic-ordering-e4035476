@@ -33,6 +33,7 @@ import {
 } from '@/lib/promotions';
 import type { Database } from '@/integrations/supabase/types';
 import { useVenue } from '@/hooks/useVenue';
+import { useMenuOnly } from '@/hooks/useMenuOnly';
 // Vera Italia's courses have long Italian names; the tabs use their short ones.
 import { COURSES, VERA, courseTitle, dishMeta as veraDishMeta, pick } from '@/components/vera/copy';
 
@@ -236,7 +237,9 @@ const CategoryPage = () => {
   // The session lives in the store, not the URL — see the note in GuestMenu.
   const table = searchParams.get('table') ?? (storeTableNumber ? String(storeTableNumber) : null);
   const token = searchParams.get('token');
-  const hasSession = !!(storeSessionId && storeSessionToken);
+  // "Menu only" (Admin → Service): the menu and nothing else, seated or not.
+  const menuOnly = useMenuOnly();
+  const hasSession = !!(storeSessionId && storeSessionToken) && menuOnly !== true;
   const rtl = locale === 'ar';
 
   const categoryName = categoryNameMap[type || ''] || type;
