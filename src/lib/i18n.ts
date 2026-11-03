@@ -498,6 +498,9 @@ const translations: Record<string, Record<Locale, string>> = {
   'featured_title': { en: 'Our picks', bs: 'Naš izbor', ar: 'اختياراتنا' },
   'offers_title': { en: 'Special offers', bs: 'Posebne ponude', ar: 'عروض خاصة' },
   'combos_title': { en: 'Combos — more for less', bs: 'Meniji — više za manje', ar: 'الوجبات — المزيد بسعر أقل' },
+
+  // ---- The TV menu board at the entrance (/tv)
+  'tv_scan_full_menu': { en: 'Scan for the full menu', bs: 'Skenirajte za cijeli meni', ar: 'امسح الرمز لتصفّح القائمة كاملة' },
 };
 
 /** Read-only view of the table, for the completeness tests. */

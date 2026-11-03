@@ -147,6 +147,20 @@ describe('analytics delivery', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
+  it('records nothing from the TV menu board at the entrance, which nobody is browsing', async () => {
+    const fetchMock = vi.fn(async () => ok());
+    vi.stubGlobal('fetch', fetchMock);
+    window.history.pushState({}, '', '/tv/');
+    try {
+      track('menu_viewed', { entry: 'home' });
+      await __analyticsInternals.flush();
+    } finally {
+      window.history.pushState({}, '', '/');
+    }
+    expect(__analyticsInternals.pending()).toBe(0);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it('recognises the older "does not exist" wording too', () => {
     expect(__analyticsInternals.isMissingFunction({ message: 'function public.x(text) does not exist' })).toBe(true);
     expect(__analyticsInternals.isMissingFunction({ code: 'PGRST202' })).toBe(true);

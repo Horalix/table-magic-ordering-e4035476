@@ -173,6 +173,8 @@ describe('the prerendered pages', () => {
     for (const bot of ['GPTBot', 'ClaudeBot', 'PerplexityBot', 'Google-Extended']) expect(robots).toContain(`User-agent: ${bot}\nAllow: /`);
     expect(robots).toContain('Disallow: /admin');
     expect(robots).toContain('Disallow: /kitchen');
+    // The TV menu board at the entrance is the menu again, a section at a time: no search result.
+    expect(robots).toContain('Disallow: /tv');
     expect(robots).toContain(`Sitemap: ${SITE_URL}/sitemap.xml`);
 
     const sitemap = sitemapXml([{ path: '/', priority: 1, alternates: { bs: '/bs/' }, images: ['/site/a.webp'] }], '2026-10-25');
