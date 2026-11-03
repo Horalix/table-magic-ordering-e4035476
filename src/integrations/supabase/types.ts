@@ -1746,6 +1746,7 @@ export type Database = {
           kitchen_delay_minutes: number
           kitchen_undo_seconds: number
           last_order_time: string | null
+          menu_only: boolean
           online_card_enabled: boolean
           ordering_enabled: boolean
           ordering_paused_message: string | null
@@ -1792,6 +1793,7 @@ export type Database = {
           kitchen_delay_minutes?: number
           kitchen_undo_seconds?: number
           last_order_time?: string | null
+          menu_only?: boolean
           online_card_enabled?: boolean
           ordering_enabled?: boolean
           ordering_paused_message?: string | null
@@ -1838,6 +1840,7 @@ export type Database = {
           kitchen_delay_minutes?: number
           kitchen_undo_seconds?: number
           last_order_time?: string | null
+          menu_only?: boolean
           online_card_enabled?: boolean
           ordering_enabled?: boolean
           ordering_paused_message?: string | null
