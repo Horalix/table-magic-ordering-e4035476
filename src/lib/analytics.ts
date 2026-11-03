@@ -25,6 +25,7 @@
  * needs.
  */
 import { currentVenueSlug } from './current-venue';
+import { TV_PATH } from './tv-board';
 
 /** The complete event vocabulary. Adding one here is a deliberate act. */
 export type AnalyticsEvent =
@@ -240,9 +241,15 @@ async function flush(): Promise<void> {
   }
 }
 
-/** Record one product event. Non-blocking and failure-tolerant by design. */
+/**
+ * Record one product event. Non-blocking and failure-tolerant by design.
+ *
+ * Never from the TV menu board at the entrance (/tv): it shows the menu all
+ * day to nobody in particular, and anything it recorded would be counted as
+ * guests browsing the menu.
+ */
 export function track(event: AnalyticsEvent, props: EventProps = {}): void {
-  if (!enabled || typeof window === 'undefined') return;
+  if (!enabled || typeof window === 'undefined' || TV_PATH.test(window.location.pathname)) return;
 
   buffer = cap([...buffer, { event, props: sanitize(props), at: new Date().toISOString(), venue: currentVenueSlug() }]);
 

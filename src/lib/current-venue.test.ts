@@ -21,6 +21,13 @@ describe('which restaurant a request is about', () => {
     expect(venueForPath('/')).toBeNull();
   });
 
+  it('the TV board at the entrance is this site’s own restaurant’s, whatever table the device last sat at', () => {
+    rememberGuestVenue('veraitalia');
+    expect(venueForPath('/tv')).toBe('lasoul');
+    expect(venueForPath('/tv/')).toBe('lasoul');
+    expect(venueForPath('/tvs')).toBeNull();
+  });
+
   it('staff screens follow the owner’s pick, and nothing else', () => {
     rememberGuestVenue('veraitalia');
     expect(venueForPath('/kitchen')).toBeNull();

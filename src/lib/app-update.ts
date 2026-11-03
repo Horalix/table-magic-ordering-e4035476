@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 import { registerSW } from 'virtual:pwa-register';
+import { TV_PATH } from './tv-board';
 
 /**
  * New versions of the app reach every phone and tablet promptly, at a moment
@@ -19,8 +20,8 @@ import { registerSW } from 'virtual:pwa-register';
  *    release's photos until their first tap;
  *  - otherwise a waiting version is applied on the next page change, or when a guest
  *    returns to the tab (never on the cart, where a card payment may be in
- *    flight), or on a staff screen nobody has touched for a while — never
- *    while someone is typing or has a dialog open.
+ *    flight), or on a staff screen or the TV menu board nobody has touched
+ *    for a while — never while someone is typing or has a dialog open.
  *
  * The cart and the table session are persisted, so a reload loses nothing.
  *
@@ -37,6 +38,12 @@ import { registerSW } from 'virtual:pwa-register';
 const CHECK_EVERY_MS = 5 * 60_000;
 const STAFF_IDLE_MS = 90_000;
 const STAFF_PATH = /^\/(admin|kitchen|waiter)(\/|$)/;
+/**
+ * Screens left running that never change page: the kitchen tablet, the floor
+ * monitor, and the TV menu board at the entrance (src/pages/TvMenu.tsx),
+ * which would otherwise show the version it was switched on with for weeks.
+ */
+const unattended = (path: string) => STAFF_PATH.test(path) || TV_PATH.test(path);
 /** How long after the page opens a new version still counts as arriving "while it opens". */
 const FRESH_START_MS = 15_000;
 /** How long a waiting version gets to take over once asked, before the page reloads to let it. */
@@ -189,9 +196,9 @@ export function AppUpdater(): null {
       if (window.location.pathname.startsWith('/cart') || busy()) return;
       applyWaitingUpdate();
     };
-    // Kitchen tablets and floor monitors never change page: apply when idle.
+    // Kitchen tablets, floor monitors and the TV board never change page: apply when idle.
     const idle = setInterval(() => {
-      if (!STAFF_PATH.test(window.location.pathname)) return;
+      if (!unattended(window.location.pathname)) return;
       if (Date.now() - lastTouch < STAFF_IDLE_MS || busy()) return;
       applyWaitingUpdate();
     }, 15_000);

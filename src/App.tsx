@@ -31,6 +31,8 @@ const RunningTabPage = lazy(() => import("./pages/RunningTabPage"));
 const TableEntry = lazy(() => import("./pages/TableEntry"));
 const TableNumberEntry = lazy(() => import("./pages/TableNumberEntry"));
 const Trust = lazy(() => import("./pages/Trust"));
+// The TV menu board at the entrance.
+const TvMenu = lazy(() => import("./pages/TvMenu"));
 const PageTransition = lazy(() => import("./components/PageTransition"));
 const TablePresence = lazy(() => import("./components/guest/TablePresence"));
 const FlyToCart = lazy(() => import("./components/guest/FlyToCart"));
@@ -173,6 +175,8 @@ const App = () => (
             <Route path="/table/:tableNumber" element={<TableEntry />} />
             <Route path="/start" element={<TableNumberEntry />} />
             <Route path="/privacy" element={<PageTransition><Trust /></PageTransition>} />
+            {/* The menu board on the TV at the entrance: this site's restaurant, unattended. */}
+            <Route path="/tv" element={<TvMenu />} />
 
             {/* Admin Routes */}
             <Route path="/admin/login" element={<AdminLogin />} />

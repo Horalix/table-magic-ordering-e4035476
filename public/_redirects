@@ -57,6 +57,7 @@ https://menu.lasoul.net/       https://menu.lasoul.net/menu/lasoul/        301!
 /table/*                       /index.html                                 200
 /start                         /index.html                                 200
 /privacy                       /index.html                                 200
+/tv                            /index.html                                 200
 /admin                         /index.html                                 200
 /admin/*                       /index.html                                 200
 /kitchen                       /index.html                                 200

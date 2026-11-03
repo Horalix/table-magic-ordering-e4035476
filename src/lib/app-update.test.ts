@@ -1,3 +1,6 @@
+import { createElement } from 'react';
+import { cleanup, render } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /*
@@ -158,6 +161,45 @@ describe('a new version of the app', () => {
     const mod = await start();
     listeners.controllerchange!(new Event('controllerchange'));
     expect(mod.applyWaitingUpdate()).toBe(false);
+  });
+
+  /*
+   * The TV menu board at the entrance never changes page and nobody touches
+   * it, so neither a page change nor a tap would ever come: like the kitchen
+   * tablet, it takes a waiting version once it has been left alone a while.
+   */
+  describe('on a screen nobody touches', () => {
+    const leftAlone = async (path: string) => {
+      vi.useFakeTimers();
+      vi.spyOn(performance, 'now').mockReturnValue(60_000);
+      vi.spyOn(window, 'location', 'get').mockReturnValue({ ...window.location, pathname: path, reload: vi.fn() } as Location);
+      const mod = await start();
+      sw.options!.onNeedRefresh!();
+      const future = { v7_startTransition: true, v7_relativeSplatPath: true };
+      return render(createElement(MemoryRouter, { initialEntries: [path], future }, createElement(mod.AppUpdater)));
+    };
+
+    afterEach(() => { cleanup(); vi.useRealTimers(); });
+
+    it('the TV board takes it once left alone for a while', async () => {
+      await leftAlone('/tv');
+      vi.advanceTimersByTime(60_000);
+      expect(sw.update).not.toHaveBeenCalled();
+      vi.advanceTimersByTime(45_000);
+      expect(sw.update).toHaveBeenCalledWith(true);
+    });
+
+    it('so does the kitchen tablet, as before', async () => {
+      await leftAlone('/kitchen');
+      vi.advanceTimersByTime(105_000);
+      expect(sw.update).toHaveBeenCalledWith(true);
+    });
+
+    it('a guest’s menu does not: it waits for the guest’s next page', async () => {
+      await leftAlone('/menu/lasoul/');
+      vi.advanceTimersByTime(10 * 60_000);
+      expect(sw.update).not.toHaveBeenCalled();
+    });
   });
 
   it('never reloads the cart, where a card payment may be in flight', async () => {

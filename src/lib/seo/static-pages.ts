@@ -241,7 +241,8 @@ export function dishBody(venue: Venue, category: SeoMenuCategory, section: SeoMe
 
 /** Which crawlers may read what: everything public, nothing private. */
 export function robotsTxt(): string {
-  const privatePaths = ['/admin', '/kitchen', '/waiter', '/cart', '/tab', '/table/', '/start'];
+  // The TV menu board (/tv) shows the menu pages' dishes again, one section at a time: nothing for a search result.
+  const privatePaths = ['/admin', '/kitchen', '/waiter', '/cart', '/tab', '/table/', '/start', '/tv'];
   const disallow = privatePaths.map((p) => `Disallow: ${p}`).join('\n');
   // Search engines and AI answer engines are welcome to everything public:
   // being quoted correctly is the point.
@@ -349,10 +350,11 @@ const rule = (from: string, to: string, status: string) => `${from.padEnd(22)} $
  * 404"), with the home page's HTML and canonical.
  *
  * La Soul's public/_redirects ends with the same rules; seo.test.ts holds it
- * to them, and them to App.tsx's routes.
+ * to them, and them to App.tsx's routes. (Netlify matches a rule with or
+ * without the trailing slash, so /tv serves /tv/ too.)
  */
 export const APP_ROUTES = [
-  '/bs', '/ar', '/veraitalia', '/menu', '/menu/*', '/cart', '/tab', '/table/*', '/start', '/privacy',
+  '/bs', '/ar', '/veraitalia', '/menu', '/menu/*', '/cart', '/tab', '/table/*', '/start', '/privacy', '/tv',
   '/admin', '/admin/*', '/kitchen', '/waiter', '/waiter/*',
 ];
 

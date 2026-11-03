@@ -11,6 +11,8 @@
  * - Staff screens send the restaurant the owner picked in the admin. Nobody
  *   else needs one: the database knows where a waiter or a restaurant admin
  *   works, and ignores a header naming a restaurant they do not.
+ * - The TV menu board at the entrance (/tv) is the menu of the restaurant
+ *   whose site this is, and names it as a menu page does.
  * - The website and anything else send none, which the database reads as
  *   La Soul. On Vera Italia's own site (src/lib/home-venue.ts) they send
  *   Vera Italia, and so do a guest or staff page nothing else has placed.
@@ -20,6 +22,7 @@
  * ahead of it. (No import of src/lib/venues.ts here: it imports this.)
  */
 import { HOME_VENUE } from './home-venue';
+import { TV_PATH } from './tv-board';
 
 const GUEST_KEY = 'lasoul.guest-venue';
 const STAFF_KEY = 'lasoul.staff-venue';
@@ -57,6 +60,7 @@ export function venueForPath(pathname: string): string | null {
   if (menu && SLUG.test(menu[1])) return menu[1];
   const site = SITE_PATHS.exec(pathname);
   if (site) return site[1];
+  if (TV_PATH.test(pathname)) return HOME_VENUE;
   if (GUEST_PATHS.test(pathname)) return read(GUEST_KEY) ?? HOME_SLUG;
   if (STAFF_PATHS.test(pathname)) return read(STAFF_KEY) ?? HOME_SLUG;
   return HOME_SLUG;

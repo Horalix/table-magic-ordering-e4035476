@@ -367,6 +367,7 @@ Functions) · Sentry · vite-plugin-pwa · Netlify.
 | `/menu`, `/menu/:type`, `/cart`, `/tab` | Guest |
 | `/table/:tableNumber`, `/start` | Table entry |
 | `/privacy` | Trust & privacy |
+| `/tv` | Menu board for the portrait TV at the entrance (`?every=<seconds>`, `?lang=en\|bs\|ar`) |
 | `/kitchen` | Kitchen display (staff) |
 | `/waiter`, `/waiter/monitor` | Waiter (PIN) |
 | `/admin/*` | Admin — **impact**, dashboard, menu, tables, orders, QR, sections, tonight, printing, **service & suggestions**, **menu intelligence**, reports, audit, waiters, performance, analytics |
