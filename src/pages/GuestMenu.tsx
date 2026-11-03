@@ -33,6 +33,7 @@ import { rememberPrices } from '@/lib/promotions';
 import type { MenuItemRow } from '@/lib/promotions-api';
 import { track } from '@/lib/analytics';
 import { useVenue } from '@/hooks/useVenue';
+import { useMenuOnly } from '@/hooks/useMenuOnly';
 import { VeraCourses, VeraMenuFooter, VeraMenuHero } from '@/components/vera/VeraMenu';
 import { VERA, pick } from '@/components/vera/copy';
 import type { Database } from '@/integrations/supabase/types';
@@ -94,6 +95,9 @@ const GuestMenu = () => {
   const table = searchParams.get('table') ?? (storeTableNumber ? String(storeTableNumber) : null);
   const token = searchParams.get('token');
   const hasSession = guard === 'active' && !!(storeSessionId && storeSessionToken);
+  // "Menu only" (Admin → Service): the menu and nothing else, seated or not.
+  const menuOnly = useMenuOnly();
+  const seated = hasSession && menuOnly !== true;
 
   const { data: categories = [], isLoading: categoriesLoading, isError: categoriesFailed, refetch: refetchCategories } = useQuery({
     queryKey: ['categories'],
@@ -202,7 +206,7 @@ const GuestMenu = () => {
   return (
     <div className={`min-h-screen flex flex-col ${vera ? '' : 'bg-background'}`}>
       {vera ? (
-        <VeraMenuHero table={table} showTable={hasSession} onChangeTable={onChangeTable} />
+        <VeraMenuHero table={table} showTable={seated} onChangeTable={onChangeTable} />
       ) : (
       /* A short brand band, not a full-screen splash: the first thing a guest
           at a table wants is the menu, so the photos sit above the fold. */
@@ -250,7 +254,7 @@ const GuestMenu = () => {
         </p>
 
         {/* Row two is the table: where you are, and the one thing you can ask of it. */}
-        {(table && hasSession) && (
+        {(table && seated) && (
           <div className="relative z-10 mt-5 flex items-center justify-between gap-2">
             <motion.button
               initial={{ opacity: 0, y: 4 }}
@@ -277,17 +281,19 @@ const GuestMenu = () => {
         {/* Find-by-name across every category, before anything else —
             it is the first thing a guest looking for one specific thing wants. */}
         {/* Without a session the add buttons simply do not exist, and the
-            only explanation used to be hidden inside an item's sheet. */}
-        {guard !== 'checking' && !hasSession && (
+            only explanation used to be hidden inside an item's sheet. Not
+            where the restaurant shows its menu only: there is no ordering to
+            scan for, and not before this phone knows which it is. */}
+        {guard !== 'checking' && !hasSession && menuOnly === false && (
           <div className="flex items-center gap-3 p-3.5 rounded-2xl bg-primary/10 border border-primary/20" role="note">
             <QrCode className="w-5 h-5 text-primary shrink-0" aria-hidden />
             <p className="text-sm font-sans text-foreground">{t('browse_scan_banner')}</p>
           </div>
         )}
 
-        <MenuSearch canOrder={hasSession} onOpenItem={(id) => { void openById(id); }} />
+        <MenuSearch canOrder={seated} onOpenItem={(id) => { void openById(id); }} />
 
-        {hasSession && <RecentOrdersRow />}
+        {seated && <RecentOrdersRow />}
 
         {/* Vera Italia leads with its courses, as a printed menu does; its specialities follow them. */}
         {!vera && <HomePromotions onOpen={setSheetItem} />}
@@ -402,10 +408,10 @@ const GuestMenu = () => {
       </motion.main>
 
       <AnimatePresence>
-        {sheetItem && <DishSheet row={sheetItem} canOrder={hasSession} onClose={() => setSheetItem(null)} />}
+        {sheetItem && <DishSheet row={sheetItem} canOrder={seated} onClose={() => setSheetItem(null)} />}
       </AnimatePresence>
 
-      {hasSession && <CartBar />}
+      {seated && <CartBar />}
 
       <AlertDialog open={confirmLeave} onOpenChange={setConfirmLeave}>
         <AlertDialogContent className="max-w-sm rounded-2xl">

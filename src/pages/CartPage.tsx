@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import { useT, useLanguageStore, getLocalizedName, useI18n } from '@/lib/i18n';
 import { useSessionHeartbeat } from '@/hooks/useSessionHeartbeat';
+import { useMenuOnly } from '@/hooks/useMenuOnly';
 import SmartImage from '@/components/ui/SmartImage';
 import { fadeUpCapped, useCountUp } from '@/lib/motion';
 import { haptic } from '@/lib/haptics';
@@ -39,6 +40,13 @@ const CartPage = () => {
     pendingPayment, setPendingPayment,
     beginCheckout, finishCheckout, unavailableIds, setUnavailable, applyServerPrices,
   } = useCartStore();
+
+  // "Menu only" (Admin → Service): nothing to order; back to the menu. Never
+  // from under a card payment the bank is still answering.
+  const menuOnly = useMenuOnly();
+  useEffect(() => {
+    if (menuOnly === true && !pendingPayment) navigate(menuHome(), { replace: true });
+  }, [menuOnly, navigate, pendingPayment]);
 
   const [submitting, setSubmitting] = useState<PaymentMethod | null>(null);
   const [checkoutOpen, setCheckoutOpen] = useState(false);

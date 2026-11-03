@@ -1,3 +1,7 @@
+# menu.lasoul.net, once it points here (docs/seo-and-domain.md): its front
+# door is the menu, not the website. The restaurant's printed QR codes open it.
+https://menu.lasoul.net/       https://menu.lasoul.net/menu/lasoul/        301!
+
 # The old static menu that used to live at menu.lasoul.net. Printed QR codes,
 # Google results and saved home-screen icons still point at these pages.
 /menu.html                     /menu/lasoul/                               301

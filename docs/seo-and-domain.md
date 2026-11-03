@@ -32,13 +32,44 @@ The facts all come from one place: `src/lib/venues.ts` (address, phone, hours
 name). Change a fact there and the website, structured data, sitemap and
 llms.txt all follow on the next deploy.
 
+## First: the menu at menu.lasoul.net (before lasoul.net moves)
+
+The restaurant's printed QR codes open `menu.lasoul.net`, which still serves
+the old static menu from the old hosting (68.65.121.200). Pointing just that
+one name here puts the new menu behind every printed code, while lasoul.net,
+`www` and the email stay exactly where they are. `menu.lasoul.net/` opens the
+menu (the first rule in `public/_redirects`), and the old menu's pages
+(`/menu.html`, `/food/burgers.html` …) land on the same dishes here.
+
+1. **Menu only.** Once the database has `menu_only` (the "Next" prompt in
+   `docs/lovable-migration-prompt.md`), switch it on in **Admin → Service →
+   Menu only**, while the owner has not decided to take orders through the
+   app. Guests then get the menu and nothing else.
+2. **Netlify** (the `lasoulapp` project): Domain management → Add a domain →
+   `menu.lasoul.net`. It becomes the primary domain, and Netlify sends
+   `lasoulapp.netlify.app` there.
+3. **DNS**, in the same few minutes, at the company that hosts lasoul.net (its
+   control panel's DNS or "Zone Editor"): change **only** `menu`. Delete its
+   `A` record (68.65.121.200) and add `CNAME menu → lasoulapp.netlify.app`.
+   Leave `lasoul.net`, `www`, every MX, `mail` and TXT record as they are: the
+   email depends on them.
+4. **HTTPS.** Netlify issues the certificate once the name points at it,
+   usually within the hour (Domain management → HTTPS shows it).
+5. **One line.** `src/lib/seo/site-url.ts`: change La Soul's address to
+   `'https://menu.lasoul.net'` and push to `main`, so canonical links, the
+   sitemap, structured data and llms.txt name it. Then
+   `npm run indexnow -- https://menu.lasoul.net`.
+6. **Check:** `https://menu.lasoul.net/` opens the menu,
+   `https://menu.lasoul.net/food/burgers.html` lands on the burgers, and
+   `https://menu.lasoul.net/tv/` is the entrance TV's menu board.
+
 ## The day lasoul.net points here
 
 1. **Domain.** In Netlify: Site configuration → Domain management → Add a
    domain → `lasoul.net`, and set it as the **primary domain** (Netlify then
-   redirects `www.lasoul.net` and `lasoulapp.netlify.app` to it). Add
-   `menu.lasoul.net` as a domain alias too, so the old menu's printed QR codes
-   keep working. At the domain registrar, add the DNS records Netlify shows
+   redirects `www.lasoul.net` and `lasoulapp.netlify.app` to it).
+   `menu.lasoul.net` stays as a domain alias (added above), so the printed QR
+   codes keep opening the menu. At the domain registrar, add the DNS records Netlify shows
    (or move the nameservers to Netlify DNS). Netlify issues the HTTPS
    certificate by itself. The old site (another developer's) is replaced;
    nothing from it needs to be kept, and its FTP access is not needed.

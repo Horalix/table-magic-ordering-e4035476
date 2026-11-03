@@ -17,6 +17,7 @@ import { PriceTag, SaleBadge, NewBadge, ComboBadge } from '@/components/guest/Pr
 import { useComboMap } from '@/lib/promotions-api';
 import { unorderableReason } from '@/lib/availability';
 import { useVenue } from '@/hooks/useVenue';
+import { useMenuOnly } from '@/hooks/useMenuOnly';
 import {
   comboRegularPrice, comboSaving, comboUnitPrice, fixedChoices, isFixedSlot, isNew, missingSlots,
   saleEndsPhrase, saleView, type ComboChoices, type ComboDef, type ComboSlot, type NewFields, type SaleFields,
@@ -94,6 +95,7 @@ const MenuItemDetail = ({ item, onClose, onAdded, canOrder = true, unavailableLa
   const vera = useVenue().slug === 'veraitalia';
   const localizedDesc = getLocalizedDescription(item, locale);
   const orderable = canOrder && !unavailableLabel;
+  const menuOnly = useMenuOnly();
 
   // ---- Sale, new, combo ------------------------------------------------
   // Read once when the sheet opens: a sale ending under an open sheet is
@@ -431,7 +433,8 @@ const MenuItemDetail = ({ item, onClose, onAdded, canOrder = true, unavailableLa
               </>
             )}
 
-            {!canOrder && (
+            {/* Not where the restaurant shows its menu only: nobody orders there. */}
+            {!canOrder && menuOnly === false && (
               <div className="mt-6 flex items-center gap-3 px-4 py-3.5 rounded-xl bg-accent/10 border border-accent/20">
                 <QrCode className="w-5 h-5 text-accent flex-shrink-0" aria-hidden />
                 <p className="text-sm font-sans text-foreground">{t('scan_qr_to_order')}</p>

@@ -99,6 +99,11 @@ export interface ServiceStatus {
   last_order_time: string | null;
   kitchen_delay_minutes: number;
   recommendations_enabled: boolean;
+  /**
+   * The menu and nothing else: no ordering, calls, bills or tables
+   * (src/hooks/useMenuOnly.ts). Absent before 20261103120000_menu_only.sql.
+   */
+  menu_only?: boolean;
 }
 
 export interface GuestTabOrderItem {

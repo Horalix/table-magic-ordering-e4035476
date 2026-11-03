@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { ArrowLeft, Clock, CheckCircle, ChefHat, Utensils, Receipt, CreditCard, Loader2, Users } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -11,6 +11,7 @@ import { toast } from 'sonner';
 import { useT, useLanguageStore, getLocalizedName, useI18n } from '@/lib/i18n';
 import ReviewPrompt from '@/components/guest/ReviewPrompt';
 import { useSessionHeartbeat } from '@/hooks/useSessionHeartbeat';
+import { useMenuOnly } from '@/hooks/useMenuOnly';
 import { staggerContainer, fadeUp, useCountUp } from '@/lib/motion';
 import { getGuestTab, requestBill as requestGuestBill } from '@/lib/guest-api';
 import SplitBillSheet from '@/components/guest/SplitBillSheet';
@@ -24,6 +25,9 @@ import { menuHome } from '@/lib/venues';
 const RunningTabPage = () => {
   const navigate = useNavigate();
   useSessionHeartbeat();
+  // "Menu only" (Admin → Service): there is no bill to show; back to the menu.
+  const menuOnly = useMenuOnly();
+  useEffect(() => { if (menuOnly === true) navigate(menuHome(), { replace: true }); }, [menuOnly, navigate]);
   const [searchParams] = useSearchParams();
   const { sessionId, sessionToken, guestName } = useCartStore();
   const [requestingBill, setRequestingBill] = useState(false);

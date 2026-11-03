@@ -12,6 +12,7 @@ import { guestVenue, rememberGuestVenue } from '@/lib/current-venue';
 import {
   autoApproveJoinRequest,
   getJoinRequest,
+  getServiceStatus,
   inspectTable,
   requestJoin,
   startTableSession,
@@ -72,6 +73,15 @@ const TableEntry = () => {
         const previous = guestVenue();
         if (previous && previous !== venue) clearCart();
         rememberGuestVenue(venue);
+
+        // "Menu only" (Admin → Service): a table's code opens the menu and
+        // nobody checks in. The database would refuse the table anyway.
+        const service = await getServiceStatus().catch(() => null);
+        if (cancelled) return;
+        if (service?.menu_only === true) {
+          navigate(menuPath(venue), { replace: true });
+          return;
+        }
         setTable(parsedTable, token);
 
         if (entry.status === 'empty') {
@@ -100,7 +110,7 @@ const TableEntry = () => {
       }
     })();
     return () => { cancelled = true; };
-  }, [clearCart, clientId, enterMenu, setTable, t, tableNumber, token]);
+  }, [clearCart, clientId, enterMenu, navigate, setTable, t, tableNumber, token]);
 
   const createJoinRequest = useCallback(async (sid: string, name: string) => {
     if (!tableNumber || !token) { setError(t('invalid_qr')); setPhase('error'); return; }

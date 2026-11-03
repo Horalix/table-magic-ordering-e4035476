@@ -5,7 +5,8 @@ import { ArrowRight, AlertTriangle, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useT } from '@/lib/i18n';
 import { useCartStore } from '@/lib/cart-store';
-import { checkVenueToken, type VenueTokenCheck } from '@/lib/guest-api';
+import { checkVenueToken, getServiceStatus, type VenueTokenCheck } from '@/lib/guest-api';
+import { guestVenue, rememberGuestVenue } from '@/lib/current-venue';
 import { prefersReducedMotion, duration, easeEnter } from '@/lib/motion';
 import { VENUES, menuPath } from '@/lib/venues';
 import { useVenue } from '@/hooks/useVenue';
@@ -42,14 +43,27 @@ const TableNumberEntry = () => {
     if (!token) { setPhase('invalid'); return; }
     let cancelled = false;
     checkVenueToken(token)
-      .then((result) => {
+      .then(async (result) => {
         if (cancelled) return;
+        const venue = result.venue && VENUES[result.venue] ? result.venue : undefined;
+        // "Menu only" (Admin → Service): the room's code opens the menu, with
+        // no table to type. The status is that restaurant's (x-venue).
+        if (result.valid && venue) {
+          // From here the visit is that restaurant's, as at a table's own code
+          // (TableEntry): a cart filled at the other one is the other menu's.
+          const previous = guestVenue();
+          if (previous && previous !== venue) useCartStore.getState().clearCart();
+          rememberGuestVenue(venue);
+          const service = await getServiceStatus().catch(() => null);
+          if (cancelled) return;
+          if (service?.menu_only === true) { navigate(menuPath(venue), { replace: true }); return; }
+        }
         setCheck(result);
         setPhase(result.valid ? 'ready' : 'invalid');
       })
       .catch(() => { if (!cancelled) setPhase('invalid'); });
     return () => { cancelled = true; };
-  }, [token]);
+  }, [navigate, token]);
 
   const max = check?.max_table_number ?? null;
   // The room code names its restaurant: browsing goes to that menu.

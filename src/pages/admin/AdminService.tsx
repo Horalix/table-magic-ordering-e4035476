@@ -13,7 +13,7 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { AlertTriangle, Plus, Trash2, Sparkles, PauseCircle, RefreshCw, ShieldAlert, CheckCircle2, CircleDashed, Copy } from 'lucide-react';
+import { AlertTriangle, BookOpen, Plus, Trash2, Sparkles, PauseCircle, RefreshCw, ShieldAlert, CheckCircle2, CircleDashed, Copy } from 'lucide-react';
 import { toast } from 'sonner';
 import { cardPaymentStatus, type CardPaymentStatus } from '@/lib/payments';
 
@@ -43,6 +43,8 @@ interface Settings {
   hold_second_session: boolean | null;
   service_open: string | null;
   service_close: string | null;
+  /** The menu and nothing else for guests. Absent before 20261103120000_menu_only.sql. */
+  menu_only?: boolean;
 }
 
 /**
@@ -97,6 +99,8 @@ const AdminService = () => {
   const [loadError, setLoadError] = useState<string | null>(null);
   /** Turning ordering OFF stops every table ordering; it gets a confirmation. */
   const [confirmPause, setConfirmPause] = useState(false);
+  /** "Menu only", either way, is asked first: on stops every table, off starts them. */
+  const [confirmMenuOnly, setConfirmMenuOnly] = useState<boolean | null>(null);
   /** `source` is a dish id, or `section:<id>` for any dish of a section. */
   const [draft, setDraft] = useState({ source: '', target: '', type: 'pair_with', priority: 60 });
 
@@ -244,6 +248,65 @@ const AdminService = () => {
     <div className="space-y-6">
       <h1 className="font-serif text-3xl font-bold text-foreground">Service &amp; merchandising</h1>
 
+      {/*
+        A restaurant goes live on its own address with its menu before the
+        owner has decided to take orders through the app. Enforced in the
+        database too (20261103120000_menu_only.sql), so this switch is the
+        whole of it.
+      */}
+      <Card className={settings.menu_only ? 'border-primary/40 bg-primary/[0.03]' : 'border-border'}>
+        <CardHeader>
+          <CardTitle className="font-serif text-lg flex items-center gap-2">
+            <BookOpen className="w-5 h-5 text-accent" /> Menu only
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <Label htmlFor="menu-only" className="font-sans font-semibold">Show guests the menu and nothing else</Label>
+              <p className="text-xs text-muted-foreground font-sans mt-0.5">
+                No ordering, no calling the waiter, no asking for the bill; a table&rsquo;s QR code opens the menu.
+                The database refuses all of it too. The staff screens, printing and this admin stay as they are.
+              </p>
+            </div>
+            <Switch
+              id="menu-only"
+              checked={settings.menu_only === true}
+              disabled={settings.menu_only === undefined}
+              onCheckedChange={(v) => setConfirmMenuOnly(v)}
+            />
+          </div>
+          {settings.menu_only === undefined && (
+            <div className="flex items-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs font-sans text-amber-700 dark:text-amber-400">
+              <AlertTriangle className="w-4 h-4 shrink-0" />
+              Needs the database update first: send Lovable the &ldquo;Next&rdquo; prompt in docs/lovable-migration-prompt.md.
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <AlertDialog open={confirmMenuOnly !== null} onOpenChange={(open) => { if (!open) setConfirmMenuOnly(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{confirmMenuOnly ? 'Show the menu only?' : 'Turn on ordering, waiter calls and bills?'}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {confirmMenuOnly
+                ? 'Guests will see the menu and nothing else. Tables seated now can no longer order, call a waiter or ask for the bill from their phones. Orders already placed are not affected.'
+                : 'Guests at the tables can order, call a waiter and ask for the bill from their phones again. Make sure the kitchen screen and the waiters’ phones are on first.'}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="min-h-[44px]">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="min-h-[44px]"
+              onClick={() => { if (confirmMenuOnly !== null) void patch({ menu_only: confirmMenuOnly }); }}
+            >
+              {confirmMenuOnly ? 'Show the menu only' : 'Turn them on'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       <Card className="border-border">
         <CardHeader>
           <CardTitle className="font-serif text-lg flex items-center gap-2">
@@ -251,6 +314,11 @@ const AdminService = () => {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-5">
+          {settings.menu_only && (
+            <p className="rounded-xl border border-border bg-muted/50 px-3 py-2 text-xs font-sans text-muted-foreground">
+              Menu only is on, so guests cannot order. These take effect once it is off.
+            </p>
+          )}
           <div className="flex items-start justify-between gap-4">
             <div>
               <Label htmlFor="ordering" className="font-sans font-semibold">Accept orders from guests</Label>
