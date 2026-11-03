@@ -31,3 +31,11 @@ verify_jwt = true
 # (printers.poll_token, made in Admin -> Printing).
 [functions.cloudprnt]
 verify_jwt = false
+
+# notify-staff (lock-screen alerts) is called by the database through pg_net,
+# which sends no Supabase JWT. The call names a row and nothing else: the
+# function reads it itself and sends each alert once
+# (20261103090000_staff_push.sql). Its test alert checks the waiter's sign-in
+# inside.
+[functions.notify-staff]
+verify_jwt = false

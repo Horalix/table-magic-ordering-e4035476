@@ -51,7 +51,10 @@ import { useStaffDocument, useStaffVenueLook } from '@/components/staff/useStaff
 import { isHeld, isInKitchen, kitchenStart, orderStatusLabel } from '@/components/staff/order-status';
 import { attentionSummary as summarize, plural } from '@/components/staff/floor-words';
 import HeldOrdersCard from '@/components/staff/HeldOrdersCard';
+import LockScreenAlerts from '@/components/staff/LockScreenAlerts';
+import { useLockScreenAlerts } from '@/hooks/useLockScreenAlerts';
 import { useStaffVenue } from '@/hooks/useStaffVenue';
+import { forgetThisPhone, STAFF_PUSH_MESSAGE } from '@/lib/push-alerts';
 import type { Database } from '@/integrations/supabase/types';
 
 type OrderStatus = Database['public']['Enums']['order_status'];
@@ -284,6 +287,22 @@ const WaiterDashboard = () => {
   }, [refetch]));
   useStaffRefresh(useCallback(() => { refetch(); }, [refetch]));
 
+  /* "Alerts on lock screen": this phone, for this waiter's restaurant. */
+  const alerts = useLockScreenAlerts(staffVenue?.venue.dbId ?? null);
+  /*
+   * A lock-screen alert reached this phone while the screen is open
+   * (public/sw-push.js): the same news, so load it now rather than at the
+   * next tick. The usual new-order chime then plays from the refresh.
+   */
+  useEffect(() => {
+    if (!('serviceWorker' in navigator)) return;
+    const onMessage = (event: MessageEvent) => {
+      if ((event.data as { type?: unknown } | null)?.type === STAFF_PUSH_MESSAGE) refetch();
+    };
+    navigator.serviceWorker.addEventListener('message', onMessage);
+    return () => navigator.serviceWorker.removeEventListener('message', onMessage);
+  }, [refetch]);
+
   /*
    * In-flight taps. The ref is the gate — two taps inside one frame both see
    * the same render, so state alone lets the second through — and the state
@@ -423,6 +442,8 @@ const WaiterDashboard = () => {
   });
 
   const logout = async () => {
+    // Whoever signs in next on this phone does not get this waiter's alerts.
+    await forgetThisPhone();
     await supabase.auth.signOut();
     navigate('/waiter/login');
   };
@@ -772,6 +793,10 @@ const WaiterDashboard = () => {
       </header>
 
       <main className="max-w-6xl mx-auto px-4 sm:px-6 py-5 space-y-7">
+        {/* On top while there is something to do about it (turn it on, add the
+            app to the Home Screen, unblock notifications); below the tables
+            once it is on, or put off with "Not now". */}
+        {alerts.wantsAttention && <LockScreenAlerts alerts={alerts} venueName={venueName} />}
         {/* Every held order in the venue, not just this waiter's tables: whoever
             is nearest the table is the one who can tell if anyone is there. */}
         <HeldOrdersCard soundEnabled={soundOn} onChanged={refetch} />
@@ -959,6 +984,7 @@ const WaiterDashboard = () => {
         )}
         </>
         )}
+        {!alerts.wantsAttention && <LockScreenAlerts alerts={alerts} venueName={venueName} />}
       </main>
 
       <FreeTableDialog

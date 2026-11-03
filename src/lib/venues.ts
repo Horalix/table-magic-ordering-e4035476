@@ -56,10 +56,12 @@ export interface Venue {
    * What a phone shows for it: the toolbar colour, the icon and name on the
    * home screen, and the app "Add to Home Screen" installs (its web manifest,
    * which opens its own menu). Without these a Vera Italia guest installed
-   * an app called La Soul that opened La Soul's menu. `headingFont` is the
+   * an app called La Soul that opened La Soul's menu. `waiterManifest` is the
+   * app added from a waiter page, which opens the waiter screen: on iPhone,
+   * lock-screen alerts work only from a Home Screen app. `headingFont` is the
    * face its headings use, which its pages preload (scripts/seo-prerender.ts).
    */
-  brand: { themeColor: string; manifest: string; icon: string; appleTouchIcon: string; headingFont: string };
+  brand: { themeColor: string; manifest: string; waiterManifest: string; icon: string; appleTouchIcon: string; headingFont: string };
 }
 
 /*
@@ -88,7 +90,7 @@ export const VENUES: Record<string, Venue> = {
     reviewUrl: 'https://share.google/al1h37etpg3lpIXGn',
     live: true,
     // The manifest is generated from vite.config.ts (VitePWA).
-    brand: { themeColor: '#7e9b79', manifest: '/manifest.webmanifest', icon: '/icons/icon-192.png', appleTouchIcon: '/icons/apple-touch-icon.png', headingFont: '/fonts/lora.woff2' },
+    brand: { themeColor: '#7e9b79', manifest: '/manifest.webmanifest', waiterManifest: '/manifest-waiter.webmanifest', icon: '/icons/icon-192.png', appleTouchIcon: '/icons/apple-touch-icon.png', headingFont: '/fonts/lora.woff2' },
   },
   /*
    * Same owner, its own restaurant (docs/two-restaurants.md). Its menu and
@@ -121,7 +123,7 @@ export const VENUES: Record<string, Venue> = {
     reviewUrl: null,
     live: true,
     // Its headings are Cormorant Garamond in italic (src/index.css).
-    brand: { themeColor: '#f4efe6', manifest: '/manifest-veraitalia.webmanifest', icon: '/brand/vera/icon-192.png', appleTouchIcon: '/brand/vera/apple-touch-icon.png', headingFont: '/fonts/cormorant-italic.woff2' },
+    brand: { themeColor: '#f4efe6', manifest: '/manifest-veraitalia.webmanifest', waiterManifest: '/manifest-waiter-veraitalia.webmanifest', icon: '/brand/vera/icon-192.png', appleTouchIcon: '/brand/vera/apple-touch-icon.png', headingFont: '/fonts/cormorant-italic.woff2' },
   },
 };
 

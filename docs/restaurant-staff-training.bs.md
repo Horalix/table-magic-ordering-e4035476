@@ -34,11 +34,24 @@ Dodajte svoj ekran na početni ekran telefona, pa će se otvarati kao aplikacija
   Svaki dan. Ako se to ne uradi, svaki sto se pojavljuje pod *No waiter yet*.
 
 **Konobari**
-- Prijavite se, otvorite `/waiter` i **ostavite ga otvorenog**. Telefon zvoni
-  i vibrira samo dok je ovaj ekran otvoren — kad je zatvoren ili je telefon
-  zaključan, obavještenja ne stižu.
-- Podesite da ekran ostane upaljen što duže.
+- Prijavite se i otvorite `/waiter`. Jednom na svom telefonu uključite
+  **Alerts on lock screen** (dodirnite prekidač, pa **Allow** / **Dozvoli**).
+  Nove narudžbe, pozivi konobara i zahtjevi za račun sa vaših stolova tada
+  zvone i vibriraju i kad je telefon zaključan ili je aplikacija u pozadini.
+  **Send a test** to provjerava: dodirnite ga, zaključajte telefon, i
+  obavještenje stiže za najviše 10 sekundi.
+  - **iPhone:** samo iz aplikacije na početnom ekranu (iOS 16.4 ili noviji).
+    U Safariju dodirnite **Dijeli → Dodaj na početni ekran** (Share → Add to
+    Home Screen), otvorite aplikaciju odatle, prijavite se, pa uključite
+    obavještenja.
+  - Zvuk i vibracija prate postavke obavještenja telefona za aplikaciju:
+    tokom smjene telefon ne smije biti na nečujnom ni na „Ne uznemiravaj“.
+  - Ako kartica piše *not switched on yet*, telefon zvoni samo dok je
+    `/waiter` otvoren: ostavite ga otvorenog i podesite da ekran ostane
+    upaljen što duže.
 - Ako piše **Alerts are silent — tap to enable sound**, dodirnite to.
+- Na telefonu koji dijelite, na kraju smjene se odjavite (**Sign out**): ko
+  se sljedeći prijavi ne dobija vaša obavještenja.
 
 **Kuhinja i šank**
 - Tablet na punjaču, podešen da se ekran nikad ne gasi (ako piše **Screen may
