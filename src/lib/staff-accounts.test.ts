@@ -94,17 +94,17 @@ describe('usernames', () => {
 
 describe('where each restaurant’s staff sign in', () => {
   it('on the restaurant’s own site', () => {
-    expect(staffSiteUrl('lasoul')).toBe('https://lasoulapp.netlify.app');
+    expect(staffSiteUrl('lasoul')).toBe('https://lasoul.net');
     expect(staffSiteUrl('veraitalia')).toBe('https://veraitalia.net');
     // Something unknown: La Soul's site, which serves both.
-    expect(staffSiteUrl('nowhere')).toBe('https://lasoulapp.netlify.app');
+    expect(staffSiteUrl('nowhere')).toBe('https://lasoul.net');
   });
 
   it('admins with their email; waiters with the username filled in; the kitchen on to its screen', () => {
     expect(signInUrl('admin', 'veraitalia')).toBe('https://veraitalia.net/admin/login');
-    expect(signInUrl('waiter', 'lasoul', 'marko')).toBe('https://lasoulapp.netlify.app/waiter/login?u=marko');
+    expect(signInUrl('waiter', 'lasoul', 'marko')).toBe('https://lasoul.net/waiter/login?u=marko');
     expect(signInUrl('kitchen', 'veraitalia', 'veraitalia-kitchen')).toBe('https://veraitalia.net/waiter/login?u=veraitalia-kitchen&to=kitchen');
-    expect(signInUrl('waiter', 'lasoul')).toBe('https://lasoulapp.netlify.app/waiter/login');
+    expect(signInUrl('waiter', 'lasoul')).toBe('https://lasoul.net/waiter/login');
   });
 
   it('after signing in, only the kitchen or the floor screen, else the waiter phone', () => {
@@ -131,7 +131,7 @@ describe('the login card as text', () => {
     const text = loginCardText(waiter);
     expect(text.split('\n')).toEqual([
       'La Soul · waiter sign-in for Marko',
-      'https://lasoulapp.netlify.app/waiter/login?u=marko',
+      'https://lasoul.net/waiter/login?u=marko',
       'Username: marko',
       'Password: Test-only-1x',
       'Floor PIN (the shared floor screen): 4821',

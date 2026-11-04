@@ -699,7 +699,7 @@ test.describe('making accounts', () => {
     await stubOwnerParts(page);
     const waiters = await stubWaiters(page);
     await page.goto('/admin/waiters');
-    await expect(page.getByText(/^For La Soul\. They sign in at lasoulapp\.netlify\.app\/waiter\/login\./)).toBeVisible();
+    await expect(page.getByText(/^For La Soul\. They sign in at lasoul\.net\/waiter\/login\./)).toBeVisible();
     // Their own restaurant only: no way to the other.
     await expect(page.getByRole('button', { name: /instead/ })).toHaveCount(0);
 
@@ -710,7 +710,7 @@ test.describe('making accounts', () => {
     await page.getByRole('button', { name: 'Create', exact: true }).click();
 
     const card = page.getByRole('dialog', { name: 'La Soul kitchen tablet ready' });
-    await expect(card.getByRole('link')).toHaveAttribute('href', 'https://lasoulapp.netlify.app/waiter/login?u=lasoul-kitchen&to=kitchen');
+    await expect(card.getByRole('link')).toHaveAttribute('href', 'https://lasoul.net/waiter/login?u=lasoul-kitchen&to=kitchen');
     await expect(card.getByText(/goes straight to the kitchen screen/)).toBeVisible();
     await expect(card.getByText('Floor PIN')).toHaveCount(0);
     await shot(page, 'kitchen-login-card');
@@ -740,7 +740,7 @@ test.describe('making accounts', () => {
     await dialog.getByRole('button', { name: 'Set new password' }).click();
     const card = page.getByRole('dialog', { name: 'New password for Amar' }).filter({ has: page.getByTestId('login-card-password') });
     await expect(card.getByTestId('login-card-password')).toHaveText(secret);
-    await expect(card.getByRole('link')).toHaveAttribute('href', 'https://lasoulapp.netlify.app/waiter/login?u=amar');
+    await expect(card.getByRole('link')).toHaveAttribute('href', 'https://lasoul.net/waiter/login?u=amar');
     expect(waiters.calls.at(-1)).toEqual({ action: 'reset_password', waiter_id: 'w-amar', password: secret });
   });
 
@@ -750,14 +750,14 @@ test.describe('making accounts', () => {
     await page.goto('/admin/team');
     await page.getByLabel('Their email').fill('lejla@lasoul.test');
     await page.getByRole('group', { name: 'Restaurant they will run' }).getByRole('button', { name: 'La Soul' }).click();
-    await expect(page.getByText(/They sign in at lasoulapp\.netlify\.app\/admin\/login/)).toBeVisible();
+    await expect(page.getByText(/They sign in at lasoul\.net\/admin\/login/)).toBeVisible();
     await page.getByRole('button', { name: 'Generate' }).click();
     await expect(page.locator('#team-password')).toHaveAttribute('type', 'text');
     await page.getByRole('button', { name: 'Appoint La Soul admin' }).scrollIntoViewIfNeeded();
     await shot(page, 'team-form');
     await page.getByRole('button', { name: 'Appoint La Soul admin' }).click();
     const card = page.getByRole('dialog', { name: 'lejla@lasoul.test now runs La Soul' });
-    await expect(card.getByRole('link')).toHaveAttribute('href', 'https://lasoulapp.netlify.app/admin/login');
+    await expect(card.getByRole('link')).toHaveAttribute('href', 'https://lasoul.net/admin/login');
     await shot(page, 'team-login-card');
   });
 
@@ -781,7 +781,7 @@ test.describe('making accounts', () => {
     await dialog.getByRole('button', { name: 'Set new password' }).click();
     const card = page.getByRole('dialog', { name: 'New password for ana@lasoul.test' }).filter({ has: page.getByTestId('login-card-password') });
     await expect(card.getByTestId('login-card-password')).toHaveText(secret);
-    await expect(card.getByRole('link')).toHaveAttribute('href', 'https://lasoulapp.netlify.app/admin/login');
+    await expect(card.getByRole('link')).toHaveAttribute('href', 'https://lasoul.net/admin/login');
     expect(team.calls.at(-1)).toEqual({ action: 'reset_password', user_id: 'u-ana', password: secret });
     await card.getByRole('button', { name: 'Done' }).click();
 
