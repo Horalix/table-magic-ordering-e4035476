@@ -13,6 +13,7 @@ import type { Locale } from '../i18n';
 import { siteT } from '../site-copy';
 import { EVERY_DAY, menuBase, menuCategoryPath, menuPath, type OpeningHours, type Venue } from '../venues';
 import { absoluteUrl } from './site-url';
+import { orderingCopy, orderingOffered } from './ordering';
 import type { SeoMenu, SeoMenuCategory, SeoMenuItem, SeoMenuSection } from './menu-data';
 
 /* Page addresses end in "/" — see venues.ts. */
@@ -36,8 +37,12 @@ export function hoursDays(h: OpeningHours, locale: Locale): string {
   return EVERY_DAY.every((d) => h.days.includes(d)) ? siteT('hours_every_day', locale) : h.days.join(', ');
 }
 
-/** The questions on the website, answered — only those whose answer is known. */
-export function faqEntries(venue: Venue, locale: Locale): { q: string; a: string }[] {
+/**
+ * The questions on the website, answered — only those whose answer is known.
+ * `ordering`: whether the table takes orders (src/lib/seo/ordering.ts); if
+ * not, the ordering question becomes the menu-on-your-phone one.
+ */
+export function faqEntries(venue: Venue, locale: Locale, ordering: boolean = orderingOffered()): { q: string; a: string }[] {
   const hours = venue.hours?.[0];
   const allWeek = hours && EVERY_DAY.every((d) => hours.days.includes(d));
   const entries: { q: string; a: string }[] = [
@@ -49,7 +54,7 @@ export function faqEntries(venue: Venue, locale: Locale): { q: string; a: string
     entries.push({ q: siteT('faq_hours_q', locale), a: siteT('faq_hours_a', locale, { opens: hours.opens, closes: hours.closes }) });
   }
   entries.push(
-    { q: siteT('faq_order_q', locale), a: siteT('faq_order_a', locale) },
+    { q: siteT(orderingCopy('faq_order_q', ordering), locale), a: siteT(orderingCopy('faq_order_a', ordering), locale) },
     { q: siteT('faq_languages_q', locale), a: siteT('faq_languages_a', locale) },
     { q: siteT('faq_menu_q', locale), a: siteT('faq_menu_a', locale) },
   );
@@ -63,14 +68,14 @@ const restaurantId = () => absoluteUrl('/#restaurant');
 const websiteId = () => absoluteUrl('/#website');
 
 /** La Soul as a place: a restaurant and a café, with everything known for certain. */
-export function restaurantNode(venue: Venue, locale: Locale) {
+export function restaurantNode(venue: Venue, locale: Locale, ordering: boolean = orderingOffered()) {
   const sameAs = [venue.instagram, venue.facebook, venue.mapsUrl].filter((x): x is string => !!x);
   return {
     '@type': ['Restaurant', 'CafeOrCoffeeShop'],
     '@id': restaurantId(),
     name: venue.name,
     alternateName: venue.alternateNames,
-    description: siteT('seo_description', locale),
+    description: siteT(orderingCopy('seo_description', ordering), locale),
     slogan: siteT('hero_title', locale),
     url: absoluteUrl(sitePath(locale)),
     image: [absoluteUrl(OG_IMAGE_PATH), absoluteUrl('/site/hero-wide-1600.webp')],
@@ -115,12 +120,12 @@ export function websiteNode(venue: Venue, locale: Locale) {
   };
 }
 
-export function faqNode(venue: Venue, locale: Locale) {
+export function faqNode(venue: Venue, locale: Locale, ordering: boolean = orderingOffered()) {
   return {
     '@type': 'FAQPage',
     '@id': absoluteUrl(`${sitePath(locale)}#faq`),
     inLanguage: IN_LANGUAGE[locale],
-    mainEntity: faqEntries(venue, locale).map(({ q, a }) => ({
+    mainEntity: faqEntries(venue, locale, ordering).map(({ q, a }) => ({
       '@type': 'Question',
       name: q,
       acceptedAnswer: { '@type': 'Answer', text: a },
@@ -128,11 +133,14 @@ export function faqNode(venue: Venue, locale: Locale) {
   };
 }
 
-/** Everything the home page says about itself, as one @graph. */
-export function homeGraph(venue: Venue, locale: Locale) {
+/**
+ * Everything the home page says about itself, as one @graph. `ordering`: the
+ * live site passes what the database says now (src/lib/seo/ordering.ts).
+ */
+export function homeGraph(venue: Venue, locale: Locale, ordering: boolean = orderingOffered()) {
   return {
     '@context': 'https://schema.org',
-    '@graph': [restaurantNode(venue, locale), websiteNode(venue, locale), faqNode(venue, locale)],
+    '@graph': [restaurantNode(venue, locale, ordering), websiteNode(venue, locale), faqNode(venue, locale, ordering)],
   };
 }
 

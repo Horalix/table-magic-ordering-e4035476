@@ -32,9 +32,11 @@ https://menu.lasoul.net/       https://menu.lasoul.net/menu/lasoul/        301!
 /food/kidsMenu.html            /menu/lasoul/food/?section=kids-menu        301
 
 # The old lasoul.net, another developer’s site that this app replaces. Its
-# pages were /en/home, /bs/home and /ar/home; links and search results to
-# them carry over to the new pages in the same language. Exact paths only:
-# /bs and /ar are now this site’s own Bosnian and Arabic pages.
+# pages were /en/home, /bs/home and /ar/home (its / and /en went to /home,
+# which went to /en/home); links and search results to them carry over to
+# the new pages in the same language. Exact paths only: /bs and /ar are now
+# this site’s own Bosnian and Arabic pages.
+/home                          /                                           301
 /en/home                       /                                           301
 /en                            /                                           301
 /bs/home                       /bs/                                        301

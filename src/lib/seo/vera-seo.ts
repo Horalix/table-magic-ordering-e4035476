@@ -24,6 +24,7 @@ import { buildSeoMenu, type SeoMenu, type SeoMenuCategory, type SeoMenuItem, typ
 import { absoluteUrl } from './site-url';
 import { escapeHtml, type PageHead, type SitemapEntry } from './static-pages';
 import { categoryPath, dishPath, LOCALES } from './structured-data';
+import { orderingOffered } from './ordering';
 
 const SLUG = 'veraitalia';
 const vera = (): Venue => VENUES[SLUG];
@@ -209,6 +210,13 @@ export function veraFaq(m: SeoMenu, locale: Locale): Faq[] {
     },
   };
   const t = answers[locale];
+  // While the restaurant shows its menu only, the table question is the menu
+  // on your phone, not ordering from it (src/lib/seo/ordering.ts).
+  const menuOnPhone: Record<Locale, [string, string]> = {
+    en: ['Can I see the Vera Italia menu on my phone?', 'Yes. Scan the code on your table to open the whole menu, with photos and prices, in English, Bosnian or Arabic. Your waiter takes your order.'],
+    bs: ['Mogu li pogledati meni Vera Italia na telefonu?', 'Možete. Skenirajte kod na stolu i otvorite cijeli meni, sa slikama i cijenama, na bosanskom, engleskom ili arapskom. Narudžbu prima vaš konobar.'],
+    ar: ['هل يمكنني تصفّح قائمة Vera Italia على هاتفي؟', 'نعم. امسح الرمز على طاولتك لتفتح القائمة كاملة بالصور والأسعار، بالعربية أو الإنجليزية أو البوسنية. ويأخذ النادل طلبك.'],
+  };
 
   // The questions that name the city are asked once it is known (src/lib/venues.ts).
   const pairs: [string, string][] = [t.what];
@@ -217,7 +225,7 @@ export function veraFaq(m: SeoMenu, locale: Locale): Faq[] {
   if (v.city && pizzas.length) pairs.push(t.pizzaIn);
   pairs.push(t.veg, t.price);
   if (sig.length) pairs.push(t.order);
-  pairs.push(t.table);
+  pairs.push(orderingOffered() ? t.table : menuOnPhone[locale]);
   if (v.city) pairs.push(t.where);
   if (hours) pairs.push(t.when);
   if (v.phone) pairs.push(t.call);
@@ -544,7 +552,9 @@ export function veraLlms(m: SeoMenu): { short: string; full: string } {
     `- Menu: ${all.length} dishes in ${m.categories.length} courses (${m.categories.map((c) => c.names.en).join(', ')}), in English, Bosnian and Arabic`,
     `- Prices: ${veraPriceRange(m)} (convertible marks, KM / BAM)`,
     `- Vegetarian: ${all.filter(isVegetarian).length} of ${all.length} dishes`,
-    `- Ordering: from the table, by scanning the code on it; pay the waiter`,
+    orderingOffered()
+      ? `- Ordering: from the table, by scanning the code on it; pay the waiter`
+      : `- Menu: scan the code on the table to see it; the waiter takes the order and is paid at the table`,
     v.address ? `- Address: ${v.address}, ${where}` : v.city ? `- Where: ${where} (street address to be announced)` : '- Address: to be announced',
     v.hours?.length ? `- Hours: ${v.hours.map((x) => `${x.days.join(', ')} ${x.opens}–${x.closes}`).join('; ')}` : '- Hours: to be announced',
     v.phone ? `- Phone: ${v.phone}` : '',

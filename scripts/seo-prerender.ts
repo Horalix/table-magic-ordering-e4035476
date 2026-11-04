@@ -26,6 +26,7 @@ import { PRIVACY_PATH, privacyBody, privacyCopy, privacyGraph } from '../src/lib
 import { OWN_SITE_LIVE, VENUE_URLS } from '../src/lib/seo/site-url';
 import { DEFAULT_VENUE, VENUES, type Venue } from '../src/lib/venues';
 import { fetchSeoMenu, type SeoMenu } from '../src/lib/seo/menu-data';
+import { fetchOrderingOffered, offerOrdering, orderingCopy } from '../src/lib/seo/ordering';
 import { categoryPath, dishGraph, dishPath, homeGraph, LOCALES, menuGraph, menuPath, sitePath } from '../src/lib/seo/structured-data';
 import {
   dishBody, dishMeta, escapeHtml, forwardToOwnSite, headTags, homeBody, llmsFullTxt, llmsTxt, menuBody, ownSiteRedirects, robotsTxt,
@@ -80,6 +81,11 @@ export function seoPrerender(): Plugin {
 
       const env = { ...loadEnv(config.mode, config.root, 'VITE_'), ...process.env } as Record<string, string | undefined>;
       const offline = config.mode === 'e2e' || process.env.SEO_OFFLINE === '1';
+      // Whether these pages may say guests order from their table: not while
+      // this restaurant shows its menu only (src/lib/seo/ordering.ts).
+      if (!offline && env.VITE_SUPABASE_URL && env.VITE_SUPABASE_PUBLISHABLE_KEY) {
+        offerOrdering(await fetchOrderingOffered(env.VITE_SUPABASE_URL, env.VITE_SUPABASE_PUBLISHABLE_KEY, HOME_VENUE));
+      }
       const manifestPath = path.join(config.root, 'src', 'lib', 'image-manifest.json');
       const manifest: Record<string, { widths?: number[]; v?: string }> = existsSync(manifestPath) ? JSON.parse(readFileSync(manifestPath, 'utf8')) : {};
       const imageFor = (id: string) => {
@@ -146,7 +152,7 @@ export function seoPrerender(): Plugin {
       for (const locale of LOCALES) {
         const head = headTags({
           path: sitePath(locale), locale, venue, alternates,
-          title: siteT('seo_title', locale), description: siteT('seo_description', locale),
+          title: siteT('seo_title', locale), description: siteT(orderingCopy('seo_description'), locale),
           jsonLd: homeGraph(venue, locale),
         });
         write(sitePath(locale), renderPage(template, head, homeBody(venue, locale), locale));

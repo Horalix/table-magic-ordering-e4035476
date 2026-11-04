@@ -14,9 +14,10 @@ import { Container, SectionHeading } from './SiteSection';
  * <details>, so every answer is in the page for a crawler and a keyboard
  * opens them without any script.
  */
-const SiteFaq = ({ venue }: { venue: Venue }) => {
+/** `ordering`: whether the table takes orders now (src/lib/seo/ordering.ts). */
+const SiteFaq = ({ venue, ordering }: { venue: Venue; ordering: boolean }) => {
   const { st, locale } = useSiteT();
-  const entries = faqEntries(venue, locale);
+  const entries = faqEntries(venue, locale, ordering);
   return (
     <section id="faq" aria-labelledby="faq-title" className="scroll-mt-24 bg-ls-cream py-20 sm:py-28">
       <Container className="grid gap-12 lg:grid-cols-12 lg:gap-16">
