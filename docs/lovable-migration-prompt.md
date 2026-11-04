@@ -2,10 +2,53 @@
 
 Copy everything between the rules into Lovable. Nothing else needs to be said.
 
-## Next: "Menu only" — the menu and nothing else
+## Next: "Generate a new code" for the QR codes
 
-Send this once `main` has `feature/menu-only` merged (the runner below is
-pinned to its commit 2043942).
+Send this once `main` has `fix/qr-codes-without-pgcrypto` merged (the runner
+is pinned to its commit 2472909).
+
+- **The migration** (`20261103130000_qr_tokens_core_random.sql`) fixes Admin
+  → QR codes → "Generate a new code", which answered `function
+  gen_random_bytes(integer) does not exist`. Both QR rotations (the room's
+  and a table's) now make their code with Postgres's own `gen_random_uuid()`.
+  Nothing else changes: no data, no grants, no signatures. Safe to run again.
+- No Edge Function changes, no types to regenerate.
+
+---
+
+> **Task: apply one migration with `docs/migration-runner.sql`. Do not retype
+> the migration file and do not write any other SQL.**
+>
+> Make sure your checkout is the latest `main`.
+>
+> 1. Run `docs/migration-runner.sql` step by step, each step as its own query:
+>    Step 0 (pg_net installed), Step 1 (queue the download, expect 1 row),
+>    Step 2 (expect 1 row, `arrived_exactly = true`), then Step 3, its one
+>    block (1 of 1). If it fails, stop and report the exact error; a failed
+>    block changes nothing.
+> 2. Check, and paste the raw output:
+>    ```sql
+>    SELECT p.proname,
+>           p.prosrc LIKE '%gen_random_uuid%'  AS uses_core,
+>           p.prosrc LIKE '%gen_random_bytes%' AS uses_pgcrypto
+>      FROM pg_proc p
+>     WHERE p.pronamespace = 'public'::regnamespace
+>       AND p.proname IN ('rotate_venue_qr_token', 'rotate_table_qr_token')
+>     ORDER BY 1;
+>    ```
+>    Expected: two rows, each `uses_core = true` and `uses_pgcrypto = false`.
+>
+> Do not call `rotate_venue_qr_token` or `rotate_table_qr_token` to test
+> them: each replaces a printed QR code. Do not create or change any user
+> account, password or credential, do not change any Auth setting, and do
+> not enable online card payments.
+
+---
+
+## Done: "Menu only" — the menu and nothing else (3 November 2026)
+
+Lovable applied it and regenerated the types on 3 November 2026 (c330f8d).
+The runner for it was pinned to commit 2043942.
 
 - **The migration** (`20261103120000_menu_only.sql`) adds one switch per
   restaurant, `restaurant_settings.menu_only`, off for both. With it on, guests

@@ -46,8 +46,10 @@ menu (the first rule in `public/_redirects`), and the old menu's pages
    Menu only**, while the owner has not decided to take orders through the
    app. Guests then get the menu and nothing else.
 2. **Netlify** (the `lasoulapp` project): Domain management → Add a domain →
-   `menu.lasoul.net`. It becomes the primary domain, and Netlify sends
-   `lasoulapp.netlify.app` there.
+   `menu.lasoul.net`. It becomes the primary domain. `lasoulapp.netlify.app`
+   keeps working as it is (Netlify does not redirect it, only names the
+   primary domain to search engines), so the TV and the staff screens are
+   not touched. Do this after closing time (21:00).
 3. **DNS**, in the same few minutes, at the company that hosts lasoul.net (its
    control panel's DNS or "Zone Editor"): change **only** `menu`. Delete its
    `A` record (68.65.121.200) and add `CNAME menu → lasoulapp.netlify.app`.
@@ -67,7 +69,7 @@ menu (the first rule in `public/_redirects`), and the old menu's pages
 
 1. **Domain.** In Netlify: Site configuration → Domain management → Add a
    domain → `lasoul.net`, and set it as the **primary domain** (Netlify then
-   redirects `www.lasoul.net` and `lasoulapp.netlify.app` to it).
+   redirects `www.lasoul.net` to it; `lasoulapp.netlify.app` keeps answering).
    `menu.lasoul.net` stays as a domain alias (added above), so the printed QR
    codes keep opening the menu. At the domain registrar, add the DNS records Netlify shows
    (or move the nameservers to Netlify DNS). Netlify issues the HTTPS
