@@ -32,79 +32,85 @@ The facts all come from one place: `src/lib/venues.ts` (address, phone, hours
 name). Change a fact there and the website, structured data, sitemap and
 llms.txt all follow on the next deploy.
 
-## First: the menu at menu.lasoul.net (before lasoul.net moves)
+## Moving lasoul.net here — website, menu and QR codes, email untouched
 
-The restaurant's printed QR codes open `menu.lasoul.net`, which still serves
-the old static menu from the old hosting (68.65.121.200). Pointing just that
-one name here puts the new menu behind every printed code, while lasoul.net,
-`www` and the email stay exactly where they are. `menu.lasoul.net/` opens the
-menu (the first rule in `public/_redirects`), and the old menu's pages
-(`/menu.html`, `/food/burgers.html` …) land on the same dishes here.
+Where everything is today (public DNS, November 2026):
 
-1. **Menu only.** Once the database has `menu_only` (the "Next" prompt in
-   `docs/lovable-migration-prompt.md`), switch it on in **Admin → Service →
-   Menu only**, while the owner has not decided to take orders through the
-   app. Guests then get the menu and nothing else.
+- **Registrar:** Namecheap. Its DNS is served by the old hosting account
+  (`dns1/dns2.namecheaphosting.com`), so the records are edited in that
+  account's cPanel → **Zone Editor**, not at the registrar.
+- **Old website and old menu:** `lasoul.net`, `www` and `menu` all point at
+  the old hosting, 68.65.121.200. The restaurant's printed QR codes open
+  `menu.lasoul.net`.
+- **Email:** MX `mx1/mx2/mx3-hosting.jellyfish.systems`, an SPF and a DKIM
+  record, plus `mail`, `webmail`, `autodiscover` and `autoconfig`, also on the
+  old hosting. None of these change, and the hosting must stay paid for as
+  long as it holds the email.
+
+Afterwards, `lasoul.net` is the website, `menu.lasoul.net/` opens the menu
+(the first rule in `public/_redirects`), every old menu page (`/menu.html`,
+`/food/burgers.html` …) lands on the same dishes, and every old website page
+(`/`, `/home`, `/en`, `/en/home`, `/bs/home`, `/ar/home`) lands on the new
+website in its language. `lasoulapp.netlify.app` keeps answering (Netlify
+does not redirect it), so the TV, the staff screens and any QR code printed
+with it keep working.
+
+1. **Menu only first**, while the owner has not decided to take orders through
+   the app: Admin → Service → Menu only. The website then promises no
+   ordering from the table either (`src/lib/seo/ordering.ts`).
 2. **Netlify** (the `lasoulapp` project): Domain management → Add a domain →
-   `menu.lasoul.net`. It becomes the primary domain. `lasoulapp.netlify.app`
-   keeps working as it is (Netlify does not redirect it, only names the
-   primary domain to search engines), so the TV and the staff screens are
-   not touched. Do this after closing time (21:00).
-3. **DNS**, in the same few minutes, at the company that hosts lasoul.net (its
-   control panel's DNS or "Zone Editor"): change **only** `menu`. Delete its
-   `A` record (68.65.121.200) and add `CNAME menu → lasoulapp.netlify.app`.
-   Leave `lasoul.net`, `www`, every MX, `mail` and TXT record as they are: the
-   email depends on them.
-4. **HTTPS.** Netlify issues the certificate once the name points at it,
-   usually within the hour (Domain management → HTTPS shows it).
-5. **One line.** `src/lib/seo/site-url.ts`: change La Soul's address to
-   `'https://menu.lasoul.net'` and push to `main`, so canonical links, the
-   sitemap, structured data and llms.txt name it. Then
-   `npm run indexnow -- https://menu.lasoul.net`.
-6. **Check:** `https://menu.lasoul.net/` opens the menu,
-   `https://menu.lasoul.net/food/burgers.html` lands on the burgers, and
-   `https://menu.lasoul.net/tv/` is the entrance TV's menu board.
+   `lasoul.net` (Netlify adds `www.lasoul.net` with it) and make it the
+   **primary domain**; then add `menu.lasoul.net` as a domain alias. Nothing
+   changes for anyone until the DNS below does.
+3. **DNS, after closing time (21:00)**, in cPanel → Zone Editor → lasoul.net.
+   Change exactly these three, and nothing else:
 
-## The day lasoul.net points here
+   | Name | Now | Change to |
+   |---|---|---|
+   | `lasoul.net` | A `68.65.121.200` | A `75.2.60.5` (Netlify's load balancer) |
+   | `www` | CNAME `lasoul.net` | CNAME `lasoulapp.netlify.app` |
+   | `menu` | A `68.65.121.200` | delete it; add CNAME `lasoulapp.netlify.app` |
 
-1. **Domain.** In Netlify: Site configuration → Domain management → Add a
-   domain → `lasoul.net`, and set it as the **primary domain** (Netlify then
-   redirects `www.lasoul.net` to it; `lasoulapp.netlify.app` keeps answering).
-   `menu.lasoul.net` stays as a domain alias (added above), so the printed QR
-   codes keep opening the menu. At the domain registrar, add the DNS records Netlify shows
-   (or move the nameservers to Netlify DNS). Netlify issues the HTTPS
-   certificate by itself. The old site (another developer's) is replaced;
-   nothing from it needs to be kept, and its FTP access is not needed.
-   **lasoul.net has email** (for example website@ and kerim@): change only the
-   records for the website (`lasoul.net`, `www`, `menu`) and leave every MX,
-   `mail` and TXT record alone. Moving the nameservers to Netlify DNS without
-   copying the email records over first would stop the email.
-2. **One line.** `src/lib/seo/site-url.ts`: change `SITE_URL` to
-   `'https://lasoul.net'` and push to `main`; Netlify redeploys. Canonical
-   links, the sitemap, structured data and llms.txt then all name lasoul.net.
-3. **Check the redirects**: open `https://lasoul.net/en/home` — it must land
-   on `https://lasoul.net/`; `https://menu.lasoul.net/food/burgers.html` must
-   land on the burgers on the new menu.
-4. **Google Search Console** (search.google.com/search-console): add
-   `lasoul.net` as a Domain property (a DNS TXT record), submit
-   `https://lasoul.net/sitemap.xml`, and use URL Inspection on `/`, `/bs/`,
-   `/menu/lasoul/` to request indexing. If the Netlify address was added
-   earlier, its pages move over by themselves through the redirect.
-5. **Bing Webmaster Tools** (bing.com/webmasters): import from Search Console,
+   Every MX, `mail`, `webmail`, `cpanel`, `autodiscover`, `autoconfig` and TXT
+   record stays as it is. `ftp` follows `lasoul.net`, so it stops reaching the
+   old hosting; nothing needs it.
+4. **HTTPS.** Netlify issues the certificate once the names point at it,
+   usually within the hour (Domain management → HTTPS). Phones that remember
+   the old address see the old site for a few hours, never an error page.
+5. **One line.** `src/lib/seo/site-url.ts`: La Soul's address becomes
+   `'https://lasoul.net'` (prepared on a branch, merged once lasoul.net
+   answers from Netlify), so canonical links, the sitemap, structured data,
+   llms.txt and the staff sign-in links name it. Then
+   `npm run indexnow -- https://lasoul.net`.
+6. **Check:** `https://lasoul.net/` is the website, `https://www.lasoul.net/`
+   lands on it, `https://lasoul.net/en/home` lands on `/`,
+   `https://menu.lasoul.net/` opens the menu,
+   `https://menu.lasoul.net/food/burgers.html` lands on the burgers,
+   `https://lasoul.net/tv/` is the entrance TV's board, and an email to the
+   restaurant still arrives.
+7. **Google Search Console** (search.google.com/search-console): add
+   `lasoul.net` as a Domain property (a DNS TXT record, added in the same Zone
+   Editor), submit `https://lasoul.net/sitemap.xml`, and use URL Inspection on
+   `/`, `/bs/`, `/menu/lasoul/` to request indexing.
+8. **Bing Webmaster Tools** (bing.com/webmasters): import from Search Console,
    submit the sitemap. Bing also feeds ChatGPT's and Copilot's search.
-6. **Google Business Profile** for "La Soul Cafe & Burger Boutique": set the
+9. **Google Business Profile** for "La Soul Cafe & Burger Boutique": set the
    website to `https://lasoul.net/`, the menu link to
    `https://lasoul.net/menu/lasoul/`, check the hours (11:00–21:00), category
    (Café / Burger restaurant), attributes (halal, no alcohol), and add recent
    photos. This is the single strongest signal for "near me" and map
    searches, and answer engines read it.
-7. **Instagram bio**: link to `https://lasoul.net/`.
-8. **Ask happy guests for Google reviews** — rating and recency are what local
-   search and AI answers weigh most, and they cannot be faked or invented here.
+10. **Instagram bio**: link to `https://lasoul.net/`.
+11. **Ask happy guests for Google reviews** — rating and recency are what
+    local search and AI answers weigh most, and they cannot be faked or
+    invented here.
 
-Until then the Netlify address works as the real site: everything above names
-`https://lasoulapp.netlify.app`, so it can already be submitted to Search
-Console (as a URL-prefix property) if the owners want a head start.
+**Moving the domain to another registrar** (Spaceship, say) is not needed for
+any of this, and is best left for after. A transfer can switch the nameservers
+to the new registrar's with only the records set up there in advance, which
+would stop the email. Either keep the nameservers
+`dns1.namecheaphosting.com` / `dns2.namecheaphosting.com`, or copy every
+record from the Zone Editor across first.
 
 ## Keep in mind
 

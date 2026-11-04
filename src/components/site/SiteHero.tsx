@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import { ArrowRight, MapPin } from 'lucide-react';
 import { easeEnter } from '@/lib/motion';
 import { useSiteT } from '@/lib/site-i18n';
+import { orderingCopy } from '@/lib/seo/ordering';
 import { menuPath, type Venue } from '@/lib/venues';
 import { siteImage, siteSrc, siteSrcSet } from './site-image-data';
 
@@ -26,7 +27,8 @@ const enter = (delay: number) => ({
   transition: { duration: 0.9, ease: easeEnter, delay },
 });
 
-const SiteHero = ({ venue }: { venue: Venue }) => {
+/** `ordering`: whether the table takes orders now (src/lib/seo/ordering.ts). */
+const SiteHero = ({ venue, ordering }: { venue: Venue; ordering: boolean }) => {
   const { st } = useSiteT();
   const wide = siteImage('hero-wide');
   const tall = siteImage('hero-tall');
@@ -80,7 +82,7 @@ const SiteHero = ({ venue }: { venue: Venue }) => {
             {st('hero_title')}
           </motion.h1>
           <motion.p {...enter(0.2)} className="mt-5 max-w-[30rem] text-[15.5px] leading-[1.65] text-ls-grey sm:text-[17px] lg:mt-6 lg:text-[18px]">
-            {st('hero_sub')}
+            {st(orderingCopy('hero_sub', ordering))}
           </motion.p>
           <motion.div {...enter(0.28)} className="mt-7 flex flex-wrap items-center gap-2.5 sm:gap-3 lg:mt-9">
             <Link

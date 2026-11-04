@@ -41,6 +41,13 @@ const S = {
     bs: 'Potpuno halal kafe bez alkohola u Sarajevu. Burgeri, kolači i kafa, svježe pripremljeni — i naručeni direktno sa vašeg stola.',
     ar: 'مقهى حلال بالكامل وخالٍ من الكحول في سراييفو. برغر وكيك وقهوة تُحضَّر طازجة، وتطلبها مباشرةً من طاولتك.',
   },
+  // The "_menu" lines say the same while the restaurant shows its menu only
+  // (src/lib/seo/ordering.ts): nothing about ordering from the table.
+  hero_sub_menu: {
+    en: 'A fully halal, alcohol-free café in Sarajevo. Burgers, cakes and coffee, made fresh.',
+    bs: 'Potpuno halal kafe bez alkohola u Sarajevu. Burgeri, kolači i kafa, svježe pripremljeni.',
+    ar: 'مقهى حلال بالكامل وخالٍ من الكحول في سراييفو. برغر وكيك وقهوة تُحضَّر طازجة.',
+  },
   hero_cta: { en: 'View the menu', bs: 'Pogledajte meni', ar: 'تصفّح القائمة' },
   hero_find: { en: 'Find us', bs: 'Pronađite nas', ar: 'كيف تصل إلينا' },
   hero_alt: {
@@ -245,6 +252,12 @@ const S = {
     bs: 'Da. Skenirajte QR kod na stolu, izaberite s menija na bosanskom, engleskom ili arapskom, i narudžba ide pravo u kuhinju i šank. Plaćate konobaru za stolom, gotovinom ili karticom na terminalu.',
     ar: 'نعم. امسح رمز QR على طاولتك، واختر من القائمة بالعربية أو الإنجليزية أو البوسنية، فيصل طلبك مباشرةً إلى المطبخ والبار. وتدفع للنادل على الطاولة نقدًا أو بالبطاقة عبر الجهاز.',
   },
+  faq_order_q_menu: { en: 'Can I see the menu on my phone?', bs: 'Mogu li pogledati meni na telefonu?', ar: 'هل يمكنني تصفّح القائمة على هاتفي؟' },
+  faq_order_a_menu: {
+    en: 'Yes. Scan the QR code on your table to open the full menu, with photos and prices, in English, Bosnian or Arabic. Your waiter takes your order.',
+    bs: 'Da. Skenirajte QR kod na stolu i otvorite cijeli meni, sa slikama i cijenama, na bosanskom, engleskom ili arapskom. Narudžbu prima vaš konobar.',
+    ar: 'نعم. امسح رمز QR على طاولتك لتفتح القائمة كاملة بالصور والأسعار، بالعربية أو الإنجليزية أو البوسنية. ويأخذ النادل طلبك.',
+  },
   faq_languages_q: {
     en: 'Is the menu in English and Arabic?',
     bs: 'Je li meni dostupan na engleskom i arapskom?',
@@ -299,6 +312,11 @@ const S = {
     bs: '{dish} u La Soulu u Sarajevu, {price}. {description}Potpuno halal i bez alkohola. Naručite sa svog stola.',
     ar: '{dish} في La Soul في سراييفو، {price}. {description}حلال بالكامل وخالٍ من الكحول. اطلبه من طاولتك.',
   },
+  seo_dish_description_menu: {
+    en: '{dish} at La Soul in Sarajevo, {price}. {description}Fully halal and alcohol-free.',
+    bs: '{dish} u La Soulu u Sarajevu, {price}. {description}Potpuno halal i bez alkohola.',
+    ar: '{dish} في La Soul في سراييفو، {price}. {description}حلال بالكامل وخالٍ من الكحول.',
+  },
   // What people search for first: a halal café in Sarajevo, then what it serves.
   seo_title: {
     en: 'La Soul — Halal Café in Sarajevo: Burgers, Cakes & Coffee',
@@ -309,6 +327,11 @@ const S = {
     en: 'A fully halal, alcohol-free café in Sarajevo: burgers, cakes and coffee, made fresh. See the menu and order from your table.',
     bs: 'Potpuno halal kafe bez alkohola u Sarajevu: burgeri, kolači i kafa, svježe pripremljeni. Pogledajte meni i naručite sa svog stola.',
     ar: 'مقهى حلال بالكامل وخالٍ من الكحول في سراييفو: برغر وكيك وقهوة تُحضَّر طازجة. تصفّح القائمة واطلب من طاولتك.',
+  },
+  seo_description_menu: {
+    en: 'A fully halal, alcohol-free café in Sarajevo: burgers, cakes and coffee, made fresh. See the full menu with prices.',
+    bs: 'Potpuno halal kafe bez alkohola u Sarajevu: burgeri, kolači i kafa, svježe pripremljeni. Pogledajte cijeli meni s cijenama.',
+    ar: 'مقهى حلال بالكامل وخالٍ من الكحول في سراييفو: برغر وكيك وقهوة تُحضَّر طازجة. تصفّح القائمة كاملة مع الأسعار.',
   },
 } satisfies Record<string, Entry>;
 

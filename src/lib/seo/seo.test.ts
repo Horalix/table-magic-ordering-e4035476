@@ -7,7 +7,7 @@
  */
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { renderPage } from '../../../scripts/seo-prerender';
 import { PRIVACY_PATH, privacyBody, privacyGraph } from '../privacy';
 import { VENUES } from '../venues';
@@ -18,6 +18,8 @@ import {
   APP_ROUTES, appRedirects, dishMeta, forwardToOwnSite, headTags, homeBody, jsonForScript, llmsFullTxt, llmsTxt, menuBody,
   ownSiteRedirects, robotsTxt, sitemapXml,
 } from './static-pages';
+import { offerOrdering } from './ordering';
+import { veraFaq, veraLlms, veraSeoMenu } from './vera-seo';
 
 const venue = VENUES.lasoul;
 
@@ -239,5 +241,62 @@ describe('an address that is no page', () => {
     expect(routes.length).toBeGreaterThan(15);
     const served = (route: string) => APP_ROUTES.some((r) => (r.endsWith('/*') ? route.startsWith(r.slice(0, -1)) : route === r));
     expect(routes.filter((r) => !served(r))).toEqual([]);
+  });
+});
+
+describe('while a restaurant shows its menu only (src/lib/seo/ordering.ts)', () => {
+  // La Soul's own address went live before the owner decided to take orders
+  // through the app. Nothing a guest, a search engine or an answer engine
+  // reads may then promise ordering from the table.
+  const ORDERING = /order from (your|my) table|order it from your table|ordered right from your table|your order goes straight|naruči\w* (sa|direktno sa) (svog |vašeg )?stola|narudžba ide pravo|اطلب\S* من طاولتك|تطلبها مباشرةً من طاولتك|يصل طلبك/i;
+
+  afterEach(() => offerOrdering(true));
+
+  it('the FAQ asks about the menu on your phone instead, in all three languages', () => {
+    for (const l of LOCALES) {
+      const offered = faqEntries(venue, l, true);
+      const menuOnly = faqEntries(venue, l, false);
+      expect(menuOnly.length).toBe(offered.length);
+      // The pattern finds the promise in every language when it is made…
+      expect(offered.map((e) => `${e.q} ${e.a}`).join(' ')).toMatch(ORDERING);
+      expect(homeBody(venue, l)).toMatch(ORDERING);
+      // …and finds none of it here.
+      expect(menuOnly.map((e) => `${e.q} ${e.a}`).join(' ')).not.toMatch(ORDERING);
+    }
+    expect(faqEntries(venue, 'en', false).map((e) => e.q)).toContain('Can I see the menu on my phone?');
+    expect(faqEntries(venue, 'en', true).map((e) => e.q)).toContain('Can I order from my table?');
+  });
+
+  it('search engines are told the same: description and FAQ', () => {
+    const json = JSON.stringify(homeGraph(venue, 'bs', false));
+    expect(json).not.toMatch(ORDERING);
+    expect(json).toContain('Pogledajte cijeli meni s cijenama.');
+  });
+
+  it('the prerendered page, a dish and both llms files leave ordering out', () => {
+    offerOrdering(false);
+    for (const l of LOCALES) expect(homeBody(venue, l)).not.toMatch(ORDERING);
+    expect(homeBody(venue, 'en')).not.toContain('Order from your table');
+    expect(dishMeta('Espresso', 3, null, 'en').description).toBe('Espresso at La Soul in Sarajevo, 3.00 KM. Fully halal and alcohol-free.');
+    expect(llmsTxt(venue, menu)).not.toMatch(ORDERING);
+    expect(llmsTxt(venue, menu)).toContain('- Menu: scan the QR code on the table to see the full menu');
+    expect(llmsTxt(venue, menu)).not.toContain('- Ordering:');
+    expect(llmsFullTxt(venue, menu)).not.toMatch(ORDERING);
+  });
+
+  it('Vera Italia’s FAQ and llms files too', () => {
+    offerOrdering(false);
+    const m = veraSeoMenu(() => null);
+    for (const l of LOCALES) expect(veraFaq(m, l).map((e) => `${e.q} ${e.a}`).join(' ')).not.toMatch(/order from my table|naručiti sa stola|الطلب من طاولتي|order from the menu on your phone/i);
+    expect(veraFaq(m, 'en').map((e) => e.q)).toContain('Can I see the Vera Italia menu on my phone?');
+    const { short, full } = veraLlms(m);
+    expect(`${short}\n${full}`).not.toContain('- Ordering:');
+    expect(short).toContain('- Menu: scan the code on the table to see it');
+  });
+
+  it('with ordering on, everything reads as it did', () => {
+    expect(homeBody(venue, 'en')).toContain('Order from your table');
+    expect(dishMeta('Espresso', 3, null, 'en').description).toMatch(/Order it from your table\.$/);
+    expect(llmsTxt(venue, menu)).toContain('- Ordering: scan the QR code on the table');
   });
 });

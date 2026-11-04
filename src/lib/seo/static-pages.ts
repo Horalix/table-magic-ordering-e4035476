@@ -21,6 +21,7 @@ import { CURATED_SIGNATURES } from '../../components/site/signature-list';
 import { absoluteUrl, SITE_URL } from './site-url';
 import type { SeoMenu, SeoMenuCategory, SeoMenuItem, SeoMenuSection } from './menu-data';
 import { categoryPath, dishPath, faqEntries, hoursDays, LOCALES, menuPath, OG_IMAGE_PATH, PRIVACY_PATH, sitePath } from './structured-data';
+import { orderingCopy, orderingOffered } from './ordering';
 
 const OG_LOCALE: Record<Locale, string> = { en: 'en_GB', bs: 'bs_BA', ar: 'ar_AR' };
 const LANGUAGE_NAME: Record<Locale, string> = { en: 'English', bs: 'Bosanski', ar: 'العربية' };
@@ -130,12 +131,13 @@ export function homeBody(venue: Venue, locale: Locale): string {
     languageLinks(locale), `</header>`,
     `<main>`,
     `<h1>${st('hero_title', locale)}</h1>`,
-    `<p>${st('hero_sub', locale)}</p>`,
+    `<p>${st(orderingCopy('hero_sub'), locale)}</p>`,
     `<p><a href="${menuPath(venue.slug)}">${st('hero_cta', locale)}</a></p>`,
     `<section id="story"><h2>${st('story_title', locale)}</h2><p>${st('story_p1', locale)}</p><p>${st('story_p2', locale)}</p></section>`,
     `<section><h2>${st('sig_title', locale)}</h2><p>${st('sig_sub', locale)}</p><ul>${signatures}</ul></section>`,
     `<section><h2>${st('menu_title', locale)}</h2><p>${st('menu_sub', locale)}</p><ul>${categories}</ul></section>`,
-    `<section><h2>${st('order_title', locale)}</h2><p>${st('order_sub', locale)}</p><ol>${steps}</ol></section>`,
+    // Not while the restaurant shows its menu only (src/lib/seo/ordering.ts).
+    ...(orderingOffered() ? [`<section><h2>${st('order_title', locale)}</h2><p>${st('order_sub', locale)}</p><ol>${steps}</ol></section>`] : []),
     `<section><h2>${st('promise_title', locale)}</h2><ul>${promise}</ul></section>`,
     `<section id="faq"><h2>${st('faq_title', locale)}</h2><dl>${faq}</dl></section>`,
     visitBlock(venue, locale),
@@ -151,13 +153,13 @@ const price = (n: number) => `${n.toFixed(2)} KM`;
  * in English), and the app's in the guest's language while that dish is open
  * from that address (src/pages/CategoryPage.tsx).
  */
-export function dishMeta(name: string, amount: number, description: string | null | undefined, locale: Locale) {
+export function dishMeta(name: string, amount: number, description: string | null | undefined, locale: Locale, ordering: boolean = orderingOffered()) {
   const vars = { dish: name, price: price(amount) };
   // The description as a sentence, then the template's own.
   const sentence = description ? `${description.replace(/\s+$/, '').replace(/([^.!?])$/, '$1.')} ` : '';
   return {
     title: siteT('seo_dish_title', locale, vars),
-    description: siteT('seo_dish_description', locale, { ...vars, description: sentence }),
+    description: siteT(orderingCopy('seo_dish_description', ordering), locale, { ...vars, description: sentence }),
   };
 }
 
@@ -293,7 +295,9 @@ function factsMarkdown(venue: Venue): string {
     ...(hours ? [`- Opening hours: ${hours}`] : []),
     ...(venue.instagram ? [`- Instagram: ${venue.instagram}`] : []),
     `- Map: ${venue.mapsUrl}`,
-    `- Ordering: scan the QR code on the table, order from the menu in Bosnian, English or Arabic, pay the waiter at the table (cash or card terminal)`,
+    orderingOffered()
+      ? `- Ordering: scan the QR code on the table, order from the menu in Bosnian, English or Arabic, pay the waiter at the table (cash or card terminal)`
+      : `- Menu: scan the QR code on the table to see the full menu in Bosnian, English or Arabic; the waiter takes the order and is paid at the table (cash or card terminal)`,
     `- Prices: in convertible marks (KM, BAM)`,
   ].join('\n');
 }
@@ -304,7 +308,7 @@ export function llmsTxt(venue: Venue, menu: SeoMenu | null): string {
     `- [${c.names.en}](${absoluteUrl(categoryPath(venue.slug, c.slug))}): ${c.sections.map((s) => s.names.en).join(', ')}`);
   return [
     `# ${venue.name}`, '',
-    `> ${siteT('seo_description', 'en')}`, '',
+    `> ${siteT(orderingCopy('seo_description'), 'en')}`, '',
     factsMarkdown(venue), '',
     '## Pages', '',
     `- [Website (English)](${absoluteUrl('/')})`,
@@ -330,7 +334,7 @@ export function llmsFullTxt(venue: Venue, menu: SeoMenu | null): string {
   ].join('\n')).join('\n');
   return [
     `# ${venue.name} — full menu and facts`, '',
-    `> ${siteT('seo_description', 'en')}`, '',
+    `> ${siteT(orderingCopy('seo_description'), 'en')}`, '',
     factsMarkdown(venue), '',
     '## Questions', '', faq, '',
     `# Menu (prices in KM; everything halal and alcohol-free)`, '',

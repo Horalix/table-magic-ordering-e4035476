@@ -14,6 +14,8 @@ import { useLanguageStore, type Locale } from '@/lib/i18n';
 import { useSiteT } from '@/lib/site-i18n';
 import { usePageMeta } from '@/lib/seo/page-meta';
 import { homeGraph, LOCALES, sitePath } from '@/lib/seo/structured-data';
+import { orderingCopy } from '@/lib/seo/ordering';
+import { useMenuOnly } from '@/hooks/useMenuOnly';
 import { DEFAULT_VENUE, VENUES } from '@/lib/venues';
 import './site.css';
 
@@ -50,9 +52,12 @@ const SiteHome = ({ venueSlug = DEFAULT_VENUE, locale: pathLocale }: { venueSlug
   }, [locale, navigate]);
 
   const shownLocale = pathLocale && !settled.current ? pathLocale : locale;
-  const jsonLd = useMemo(() => homeGraph(venue, shownLocale), [venue, shownLocale]);
+  // While the restaurant shows its menu only, the site promises no ordering
+  // from the table (src/lib/seo/ordering.ts). Not before it knows which.
+  const ordering = useMenuOnly() === false;
+  const jsonLd = useMemo(() => homeGraph(venue, shownLocale, ordering), [venue, shownLocale, ordering]);
   usePageMeta({
-    title: st('seo_title'), description: st('seo_description'),
+    title: st('seo_title'), description: st(orderingCopy('seo_description', ordering)),
     path: sitePath(shownLocale), locale: shownLocale, alternates: ALTERNATES, jsonLd,
   });
 
@@ -68,13 +73,13 @@ const SiteHome = ({ venueSlug = DEFAULT_VENUE, locale: pathLocale }: { venueSlug
     <div className="site-root">
       <SiteHeader venue={venue} />
       <main id="main" tabIndex={-1} className="outline-none">
-        <SiteHero venue={venue} />
+        <SiteHero venue={venue} ordering={ordering} />
         <SiteStory />
         <SiteSignatures venue={venue} />
         <SiteMenuCards venue={venue} />
-        <SiteOrderSteps />
+        {ordering && <SiteOrderSteps />}
         <SitePromise />
-        <SiteFaq venue={venue} />
+        <SiteFaq venue={venue} ordering={ordering} />
         <SiteVisit venue={venue} />
       </main>
       <SiteFooter venue={venue} />

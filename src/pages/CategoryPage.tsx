@@ -572,7 +572,7 @@ const CategoryPage = () => {
   };
   const dishHead = dish && (vera
     ? veraDishMeta(categoryLabel, dish.name, dish.price, dish.description, locale)
-    : dishMeta(dish.name, dish.price, dish.description, locale));
+    : dishMeta(dish.name, dish.price, dish.description, locale, menuOnly === false));
   usePageMeta(dishPage && dishHead ? { ...dishHead, path: dishPage, locale } : {
     title: vera ? courseTitle(categoryLabel, locale) : siteT('seo_category_title', locale, { category: categoryLabel }),
     description: vera ? pick(VERA.menuDescription, locale) : siteT('seo_category_description', locale, { category: categoryLabel }),

@@ -91,6 +91,23 @@ test.describe('a restaurant that shows its menu only', () => {
     expect(calls).not.toContain('guest_request_join');
   });
 
+  test('the website promises no ordering from the table', async ({ page, state }) => {
+    state.serviceStatus = { ...state.serviceStatus, menu_only: true };
+    const answered = statusAnswered(page);
+    await page.goto('/');
+    await answered;
+    await expect(page.getByText('Can I see the menu on my phone?')).toBeAttached();
+    await page.waitForTimeout(300);
+    await expect(page.getByRole('heading', { name: 'Order from your table' })).toHaveCount(0);
+    await expect(page.getByText(/ordered right from your table|Can I order from my table/)).toHaveCount(0);
+  });
+
+  test('with it off, the website shows how to order from the table', async ({ page }) => {
+    await page.goto('/');
+    await expect(page.getByRole('heading', { name: 'Order from your table' })).toBeAttached();
+    await expect(page.getByText('Can I order from my table?')).toBeAttached();
+  });
+
   test('the room’s code opens the menu, with no table number to type', async ({ page, state }) => {
     state.serviceStatus = { ...state.serviceStatus, menu_only: true };
     state.venueToken = { ...state.venueToken, venue: 'lasoul' };
