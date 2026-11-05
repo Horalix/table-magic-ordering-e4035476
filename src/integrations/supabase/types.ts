@@ -166,6 +166,8 @@ export type Database = {
       categories: {
         Row: {
           created_at: string
+          deleted_at: string | null
+          deleted_by: string | null
           id: string
           image_url: string | null
           name: string
@@ -176,6 +178,8 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          deleted_at?: string | null
+          deleted_by?: string | null
           id?: string
           image_url?: string | null
           name: string
@@ -186,6 +190,8 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          deleted_at?: string | null
+          deleted_by?: string | null
           id?: string
           image_url?: string | null
           name?: string
@@ -637,9 +643,12 @@ export type Database = {
       menu_items: {
         Row: {
           allergens: string[]
+          available_before_delete: boolean | null
           available_from: string | null
           available_to: string | null
           created_at: string
+          deleted_at: string | null
+          deleted_by: string | null
           description: string | null
           description_ar: string | null
           description_bs: string | null
@@ -675,9 +684,12 @@ export type Database = {
         }
         Insert: {
           allergens?: string[]
+          available_before_delete?: boolean | null
           available_from?: string | null
           available_to?: string | null
           created_at?: string
+          deleted_at?: string | null
+          deleted_by?: string | null
           description?: string | null
           description_ar?: string | null
           description_bs?: string | null
@@ -713,9 +725,12 @@ export type Database = {
         }
         Update: {
           allergens?: string[]
+          available_before_delete?: boolean | null
           available_from?: string | null
           available_to?: string | null
           created_at?: string
+          deleted_at?: string | null
+          deleted_by?: string | null
           description?: string | null
           description_ar?: string | null
           description_bs?: string | null
@@ -2253,6 +2268,8 @@ export type Database = {
         Row: {
           category_id: string
           created_at: string
+          deleted_at: string | null
+          deleted_by: string | null
           id: string
           name: string
           name_ar: string | null
@@ -2263,6 +2280,8 @@ export type Database = {
         Insert: {
           category_id: string
           created_at?: string
+          deleted_at?: string | null
+          deleted_by?: string | null
           id?: string
           name: string
           name_ar?: string | null
@@ -2273,6 +2292,8 @@ export type Database = {
         Update: {
           category_id?: string
           created_at?: string
+          deleted_at?: string | null
+          deleted_by?: string | null
           id?: string
           name?: string
           name_ar?: string | null
@@ -2999,6 +3020,14 @@ export type Database = {
         }
         Returns: number
       }
+      admin_delete_menu_entry: {
+        Args: { _id: string; _kind: string }
+        Returns: Json
+      }
+      admin_restore_menu_entry: {
+        Args: { _id: string; _kind: string }
+        Returns: Json
+      }
       admin_save_combo: {
         Args: { _combo_item_id: string; _slots: Json }
         Returns: Json
@@ -3541,6 +3570,7 @@ export type Database = {
         Args: { _max_age_minutes?: number }
         Returns: Json
       }
+      menu_deleted_asked: { Args: never; Returns: boolean }
       menu_engineering: {
         Args: { _days?: number }
         Returns: {
