@@ -50,7 +50,9 @@ Where everything is today (public DNS, November 2026):
   long as it holds the email.
 
 Afterwards, `lasoul.net` is the website, `menu.lasoul.net/` opens the menu
-(the first rule in `public/_redirects`), every old menu page (`/menu.html`,
+at `lasoul.net/menu/lasoul/` (every menu.lasoul.net address forwards to
+lasoul.net for good since 2026-11-05, so search engines move what it had
+earned to lasoul.net; the first rules in `public/_redirects`), every old menu page (`/menu.html`,
 `/food/burgers.html` …) lands on the same dishes, and every old website page
 (`/`, `/home`, `/en`, `/en/home`, `/bs/home`, `/ar/home`) lands on the new
 website in its language. `lasoulapp.netlify.app` keeps answering (Netlify
