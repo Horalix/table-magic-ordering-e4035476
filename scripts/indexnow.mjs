@@ -5,7 +5,7 @@
  * the sitemap.
  *
  *   npm run indexnow -- https://veraitalia.net
- *   npm run indexnow -- https://lasoulapp.netlify.app
+ *   npm run indexnow -- https://lasoul.net
  *
  * Run it after a deploy that changed what the pages say (a new dish, new
  * prices, the address or hours filled in). It submits every address in the

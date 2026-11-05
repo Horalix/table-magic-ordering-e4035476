@@ -4,7 +4,7 @@ From where things stand (25 October 2026) to the whole floor ordering from
 their phones. **Part 2 is the rehearsal sheet: print it and take it to La
 Soul.**
 
-The app is live at **https://lasoulapp.netlify.app**: the website, the menu,
+The app is live at **https://lasoul.net** (the menu also at menu.lasoul.net): the website, the menu,
 ordering at the table, the waiter and kitchen screens, the floor monitor and
 the whole admin. It passes 1,169 automated tests and 486 browser tests, but it
 has **not yet run a real service** on real phones, a real kitchen tablet and a
@@ -93,8 +93,8 @@ here is in the admin menu on the left (on a phone: **More**).
       table number).
 - [ ] A printed code contains the address the admin was open on. Print the
       final batch once **lasoul.net** is connected and open the admin there
-      (Part 5); codes printed from lasoulapp.netlify.app keep working through
-      Netlify's redirect, but are one hop slower.
+      (Part 5); codes printed from lasoulapp.netlify.app keep working: that
+      address still answers.
 
 ### Devices
 
@@ -122,7 +122,7 @@ here is in the admin menu on the left (on a phone: **More**).
       crash on a guest's phone. Create a Sentry project (React), put its DSN
       in Netlify → Site configuration → Environment variables →
       `VITE_SENTRY_DSN`, and redeploy. **⚠** needs a Sentry account.
-- [ ] **Uptime monitor** on `https://lasoulapp.netlify.app/menu/lasoul/`,
+- [ ] **Uptime monitor** on `https://menu.lasoul.net/menu/lasoul/`,
       1–5 minute checks, alerts by email. **⚠**
 
 ---

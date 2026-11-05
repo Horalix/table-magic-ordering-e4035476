@@ -14,7 +14,7 @@ Engleska verzija: [restaurant-staff-training.md](restaurant-staff-training.md).
 
 ## Vaši ekrani
 
-Sve je na **lasoulapp.netlify.app** (kasnije lasoul.net).
+Sve je na **lasoul.net** (stara adresa, lasoulapp.netlify.app, i dalje radi).
 
 | Ko | Otvara | Prijava |
 |---|---|---|

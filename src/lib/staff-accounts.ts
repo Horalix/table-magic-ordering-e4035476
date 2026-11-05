@@ -4,7 +4,7 @@
  * The owner appoints restaurant admins (Admin → Team, manage-admins); an
  * admin or the owner adds waiters and kitchen tablets (Admin → Waiters,
  * create-waiter). Each signs in on their restaurant's own site
- * (src/lib/seo/site-url.ts): La Soul's staff at lasoulapp.netlify.app, Vera
+ * (src/lib/seo/site-url.ts): La Soul's staff at lasoul.net, Vera
  * Italia's at veraitalia.net. Either site lets anyone in — the account
  * decides what they see — but their own carries their restaurant's name and
  * look, and it is the one that goes on their home screen.

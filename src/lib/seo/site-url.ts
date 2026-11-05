@@ -1,16 +1,16 @@
 /**
  * Where each restaurant's website is served, and which one this build is.
  *
- * La Soul: the Netlify address the app is hosted at until lasoul.net is
- * pointed at it; that day, change its line to 'https://lasoul.net'
- * (public/_redirects already sends the old lasoul.net pages to their new
- * homes). Vera Italia: veraitalia.net, its own Netlify site built from this
- * repository (src/lib/home-venue.ts).
+ * La Soul: lasoul.net, since it was pointed at the Netlify site
+ * (docs/seo-and-domain.md); menu.lasoul.net and lasoulapp.netlify.app serve
+ * the same site, and public/_redirects sends the old lasoul.net and
+ * menu.lasoul.net pages to their new homes. Vera Italia: veraitalia.net, its
+ * own Netlify site built from this repository (src/lib/home-venue.ts).
  */
 import { HOME_VENUE } from '../home-venue';
 
 export const VENUE_URLS: Record<string, string> = {
-  lasoul: 'https://lasoulapp.netlify.app',
+  lasoul: 'https://lasoul.net',
   veraitalia: 'https://veraitalia.net',
 };
 

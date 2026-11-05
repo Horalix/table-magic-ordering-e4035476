@@ -11,7 +11,7 @@ Na bosanskom: [restaurant-staff-training.bs.md](restaurant-staff-training.bs.md)
 
 ## Your screens
 
-All at **lasoulapp.netlify.app** (lasoul.net later).
+All at **lasoul.net** (the old address, lasoulapp.netlify.app, still works).
 
 | Who | Opens | Signs in with |
 |---|---|---|

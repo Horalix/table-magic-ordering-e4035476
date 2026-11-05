@@ -5,7 +5,9 @@ be found by search engines (SEO), quoted by answer engines such as Google's AI
 answers, ChatGPT, Perplexity and Claude (AEO/GEO), and to replace the old
 lasoul.net without losing what it had.
 
-The app is hosted on **Netlify** at `https://lasoulapp.netlify.app`. Netlify
+The app is hosted on **Netlify** (the `lasoulapp` project) and answers at
+`https://lasoul.net` since 2026-11-05, as well as at
+`https://lasoulapp.netlify.app`. Netlify
 builds and deploys every push to `main` by itself (including the prerendered
 pages below, made with the live menu at build time); nothing has to be
 published by hand.
@@ -70,6 +72,11 @@ with it keep working.
    | `lasoul.net` | A `68.65.121.200` | A `75.2.60.5` (Netlify's load balancer) |
    | `www` | CNAME `lasoul.net` | CNAME `lasoulapp.netlify.app` |
    | `menu` | A `68.65.121.200` | delete it; add CNAME `lasoulapp.netlify.app` |
+
+   If cPanel refuses the CNAME with "CNAME and other data", the subdomain
+   still has an SPF TXT row named `menu.lasoul.net.` (cPanel made it with the
+   subdomain). Delete that row only (the `lasoul.net.` SPF row stays), then
+   add the CNAME. That is what happened on 2026-11-05.
 
    Every MX, `mail`, `webmail`, `cpanel`, `autodiscover`, `autoconfig` and TXT
    record stays as it is. `ftp` follows `lasoul.net`, so it stops reaching the

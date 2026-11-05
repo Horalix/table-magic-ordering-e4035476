@@ -52,7 +52,7 @@ describe('LoginCard', () => {
   it('an admin signs in with their email at the admin sign-in, and is asked to change the password', () => {
     render(<LoginCard details={{ kind: 'admin', venueSlug: 'lasoul', venueName: 'La Soul', name: 'ana@lasoul.test', username: 'ana@lasoul.test', password: TEST_PW, event: 'created' }} onDone={() => undefined} />);
     expect(screen.getByRole('dialog', { name: 'ana@lasoul.test now runs La Soul' })).toBeInTheDocument();
-    expect(details().getByRole('link')).toHaveAttribute('href', 'https://lasoulapp.netlify.app/admin/login');
+    expect(details().getByRole('link')).toHaveAttribute('href', 'https://lasoul.net/admin/login');
     expect(details().getByText('Email')).toBeInTheDocument();
     expect(details().getByText(/admin menu → Change password/)).toBeInTheDocument();
   });
