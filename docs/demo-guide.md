@@ -14,7 +14,7 @@ make a new one (below); nobody can look it up.
 
 | Restaurant | Site | Its staff sign in at |
 |---|---|---|
-| La Soul | https://lasoulapp.netlify.app | https://lasoulapp.netlify.app/admin/login (admins) · https://lasoulapp.netlify.app/waiter/login (waiters, kitchen) |
+| La Soul | https://lasoul.net | https://lasoul.net/admin/login (admins) · https://lasoul.net/waiter/login (waiters, kitchen) |
 | Vera Italia | https://veraitalia.net | https://veraitalia.net/admin/login (admins) · https://veraitalia.net/waiter/login (waiters, kitchen) |
 
 One database behind both. Any account can sign in on either site and always
@@ -51,7 +51,7 @@ left (or **More** in the bottom bar).
 
 ### 1. The owner signs in (once)
 
-1. Open https://lasoulapp.netlify.app/admin/login and sign in with the owner's
+1. Open https://lasoul.net/admin/login and sign in with the owner's
    email. To pick the demo password, open the menu → **Change password**
    (or **Owner** → **Team** → **Change password** on your own row). If nobody
    knows the owner's password, reset it in Lovable (Cloud → Users), never in
@@ -119,7 +119,7 @@ working. The owner can do the same for anyone, at either restaurant, from
    Without this, every table shows under *No waiter yet* on the phones.
 4. **QR Codes** → **Per table**. Print a few, or show one on a laptop screen to
    scan. Vera Italia's codes open veraitalia.net; La Soul's open
-   lasoulapp.netlify.app.
+   lasoul.net.
 5. **Ordering & service** → **Accept orders from guests** on, and **Service
    hours** wide enough to cover the demo. An order sent outside them waits for
    a waiter to confirm it.
