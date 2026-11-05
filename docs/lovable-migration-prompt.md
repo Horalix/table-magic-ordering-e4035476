@@ -2,9 +2,72 @@
 
 Copy everything between the rules into Lovable. Nothing else needs to be said.
 
-## Next: removing accounts from Team (two functions, no SQL)
+## Next: Delete on the menu can be undone, and Team's Remove (two migrations, two functions)
 
-Send this once `main` has `feature/team-remove-accounts` merged.
+Send this once `main` has `feature/menu-undo` merged. It also carries the
+Team redeploy below, in case that was not sent yet; redeploying twice is
+harmless.
+
+- **`20261105120000_menu_undo.sql`**: Delete in Admin → Menu puts a course,
+  section or dish in the restaurant's bin instead of erasing it. Guests stop
+  seeing it at once, past orders keep its name, and the toast's Undo, or
+  Restore in "Recently deleted", puts back exactly what went. A dish that has
+  been on an order can now be deleted too; the database used to refuse it.
+  Until this is applied, Admin → Menu deletes as before (final, asks first).
+- **`20261105120100_la_soul_deleted_dishes_to_bin.sql`**: the nine La Soul
+  dishes deleted on 5 November (Grilled Chicken Slider, La Soul Fries, Chicken
+  Strips, Mozzarella Sticks Combo, Mozzarella Sticks, Chicken Strips Combo,
+  Shopska Salad, Puff Truffle Egg, Arabic Coffee White) go into La Soul's bin
+  with their names, translations, prices and photos, unseen by guests. The
+  manager restores the ones that belong on the menu.
+- **Functions**: `manage-admins` and `delete-waiter`, as in the Team section
+  below.
+- The generated types may be regenerated; the app does not need them.
+
+---
+
+> **Task: apply two migrations with `docs/migration-runner.sql`, then
+> redeploy two Edge Functions. Do not retype the migration files and do not
+> write any other SQL that changes data or schema.**
+>
+> Make sure your checkout is the latest `main`.
+>
+> 1. Run `docs/migration-runner.sql` step by step, each step as its own query:
+>    Step 0 (pg_net installed), Step 1 (queue the downloads, expect 2 rows),
+>    Step 2 (expect 2 rows, all `arrived_exactly = true`), then Step 3, its
+>    two blocks in order (1 of 2, then 2 of 2). If one fails, stop and report
+>    the exact error; a failed block changes nothing.
+> 2. Check, and paste the raw output:
+>    ```sql
+>    SELECT (SELECT count(*) FROM pg_proc
+>             WHERE pronamespace = 'public'::regnamespace
+>               AND proname IN ('admin_delete_menu_entry', 'admin_restore_menu_entry', 'menu_deleted_asked')) AS functions,
+>           (SELECT count(*) FROM public.menu_items
+>             WHERE venue_id = 'a5000000-0000-4000-8000-000000000001' AND deleted_at IS NOT NULL) AS la_soul_in_bin,
+>           (SELECT count(*) FROM public.menu_items
+>             WHERE venue_id = 'a5000000-0000-4000-8000-000000000001' AND deleted_at IS NULL) AS la_soul_on_menu;
+>    ```
+>    Expected: `functions = 3`, `la_soul_in_bin = 9`, and `la_soul_on_menu`
+>    the same number as before step 1 (154 on 5 November, unless the menu was
+>    changed since).
+> 3. Redeploy the Edge Functions `manage-admins` and `delete-waiter` from
+>    `supabase/functions/`, with the settings in `supabase/config.toml`. Both
+>    import from `supabase/functions/_shared/`, which includes
+>    `remove-login.ts`. Paste the deploy result.
+> 4. You may regenerate `src/integrations/supabase/types.ts`. Change no other
+>    file.
+>
+> Do not call `admin_delete_menu_entry` or `admin_restore_menu_entry` to test
+> them: each changes the live menu. Do not call `manage-admins` or
+> `delete-waiter` either: they delete real accounts. Do not create or change
+> any user account, password or credential, do not change any Auth setting,
+> and do not enable online card payments.
+
+---
+
+## Included above: removing accounts from Team (two functions, no SQL)
+
+Part of the prompt above. On its own, it was:
 
 - **`manage-admins`** gets `remove`: the owner deletes any account's sign-in
   from Team, anyone's but their own, with its roles and waiter rows at both

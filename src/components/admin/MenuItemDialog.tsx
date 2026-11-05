@@ -492,13 +492,11 @@ const MenuItemDialog = ({ open, onOpenChange, subcategoryId, item, onSaved, star
     let error: { message: string } | null = null;
     if (isEdit && item) {
       ({ error } = await supabase.from('menu_items').update(payload).eq('id', item.id));
-    } else if (comboOn) {
-      // A new combo needs its id for its parts.
+    } else {
+      // Its id: a new combo needs it for its parts, and Undo to take it off again.
       const res = await supabase.from('menu_items').insert({ ...payload, sort_order: nextSort }).select('id').single();
       error = res.error;
       savedId = res.data?.id ?? null;
-    } else {
-      ({ error } = await supabase.from('menu_items').insert({ ...payload, sort_order: nextSort }));
     }
 
     if (error) { setSaving(false); toast.error(error.message); return; }
@@ -517,11 +515,51 @@ const MenuItemDialog = ({ open, onOpenChange, subcategoryId, item, onSaved, star
     }
     setSaving(false);
 
-    if (originalImage.current && originalImage.current !== payload.image_url) {
-      void deleteMenuImage(originalImage.current);
-    }
+    /*
+     * Undo, from the toast: an edit goes back to the fields as they were, a new
+     * dish comes off again. Not for a combo, whose parts it would not bring
+     * back. A replaced photo is only cleaned up once Undo is no longer on
+     * offer, so undoing gets it back; the new one is cleaned up instead.
+     */
+    const replacedImage = originalImage.current && originalImage.current !== payload.image_url ? originalImage.current : null;
+    const newImage = payload.image_url;
+    const editedId = isEdit && item ? item.id : null;
+    const addedId = !isEdit ? savedId : null;
+    const was = isEdit && item
+      ? Object.fromEntries(Object.keys(payload).filter((k) => k in item).map((k) => [k, (item as unknown as Record<string, unknown>)[k]]))
+      : null;
+    const undo = comboOn || wasCombo || !(editedId || addedId) ? null : async (): Promise<boolean> => {
+      const { error: undoError } = editedId
+        ? await supabase.from('menu_items').update(was as never).eq('id', editedId)
+        : await supabase.from('menu_items').delete().eq('id', addedId!);
+      if (undoError) { toast.error(`Could not undo: ${undoError.message}`); return false; }
+      // The photo this save brought in, if it brought one: no dish uses it now.
+      if (newImage && (addedId || replacedImage)) void deleteMenuImage(newImage);
+      toast.success(editedId ? `${item?.name ?? 'The dish'} is back as it was` : `${payload.name} is off the menu again`);
+      onSaved();
+      return true;
+    };
+    let undone = false;
+    let settled = false;
+    const settle = () => {
+      if (settled || undone) return;
+      settled = true;
+      if (replacedImage) void deleteMenuImage(replacedImage);
+    };
 
-    toast.success(isEdit ? 'Item updated' : 'Item added');
+    toast.success(isEdit ? 'Item updated' : 'Item added', undo ? {
+      duration: 10_000,
+      action: {
+        label: 'Undo',
+        onClick: () => {
+          undone = true;
+          void undo().then((ok) => { if (!ok) { undone = false; settle(); } });
+        },
+      },
+      onAutoClose: settle,
+      onDismiss: settle,
+    } : undefined);
+    if (!undo) settle();
     onOpenChange(false);
     onSaved();
   };

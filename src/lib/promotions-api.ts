@@ -11,13 +11,16 @@ import {
 } from '@/lib/promotions';
 import type { Database } from '@/integrations/supabase/types';
 
-// Promotion fields are absent until the pending migration is applied.
+// Promotion fields are absent until the pending migration is applied; so are
+// the bin's (20261105120000_menu_undo.sql, src/lib/menu-bin.ts).
 export type MenuItemRow = Database['public']['Tables']['menu_items']['Row'] & SaleFields & {
   new_until?: string | null;
   featured_rank?: number | null;
   featured_note?: string | null;
   featured_note_bs?: string | null;
   featured_note_ar?: string | null;
+  deleted_at?: string | null;
+  available_before_delete?: boolean | null;
 };
 
 /**

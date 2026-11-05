@@ -7,7 +7,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import SmartImage from '@/components/ui/SmartImage';
 import {
   ChevronDown, ChevronRight, ChevronUp, EyeOff, Image as ImageIcon, Languages,
-  Loader2, MoreVertical, Pencil, Plus, RefreshCw, Search, Trash2, UtensilsCrossed, X,
+  Loader2, MoreVertical, Pencil, Plus, RefreshCw, RotateCcw, Search, Trash2, UtensilsCrossed, X,
 } from 'lucide-react';
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
@@ -23,13 +23,21 @@ import { DIET_BY_KEY, getItemTags } from '@/lib/dietary';
 import { Link } from 'react-router-dom';
 import { isNew, saleScheduled } from '@/lib/promotions';
 import { shownVenueSlug } from '@/lib/current-venue';
+import {
+  SHOW_DELETED, binEntries, binReady, deleteMenuEntry, deletedWhen, liveMenu, restoreMenuEntry, whatWent,
+  type BinKind, type Binnable,
+} from '@/lib/menu-bin';
 import type { Database } from '@/integrations/supabase/types';
 
 type CategoryInsert = Database['public']['Tables']['categories']['Insert'];
 type SubcategoryInsert = Database['public']['Tables']['subcategories']['Insert'];
 type MenuItemRow = import('@/lib/promotions-api').MenuItemRow;
-type AdminSubcategory = Database['public']['Tables']['subcategories']['Row'] & { menu_items?: MenuItemRow[] | null };
-type AdminCategory = Database['public']['Tables']['categories']['Row'] & { subcategories?: AdminSubcategory[] | null };
+type AdminSubcategory = Database['public']['Tables']['subcategories']['Row'] & Binnable & { menu_items?: MenuItemRow[] | null };
+type AdminCategory = Database['public']['Tables']['categories']['Row'] & Binnable & { subcategories?: AdminSubcategory[] | null };
+
+const BIN_KIND = { categories: 'category', subcategories: 'subcategory', menu_items: 'item' } as const satisfies Record<string, BinKind>;
+/** How long a toast's Undo stays on screen. */
+const UNDO_MS = 10_000;
 
 interface TranslateMenuResponse { message?: string }
 interface MigrateImagesResponse { migrated: number; skipped: number; failed: number }
@@ -117,7 +125,16 @@ const AvailabilitySwitch = ({ item, onToggle }: { item: MenuItemRow; onToggle: (
 );
 
 const AdminMenu = () => {
-  const [categories, setCategories] = useState<AdminCategory[]>([]);
+  /** Everything the database sent, the bin included; the page shows `categories`. */
+  const [menuRows, setMenuRows] = useState<AdminCategory[]>([]);
+  /** The menu as guests see it. */
+  const categories = useMemo(() => liveMenu(menuRows), [menuRows]);
+  /** The bin, newest first, and whether this database has one yet. */
+  const bin = useMemo(() => binEntries(menuRows), [menuRows]);
+  const binOn = binReady(menuRows) === true;
+  const [binOpen, setBinOpen] = useState(false);
+  const [restoring, setRestoring] = useState<string | null>(null);
+  const binRef = useRef<HTMLDivElement>(null);
   const [loading, setLoading] = useState(true);
   const [expandedCategory, setExpandedCategory] = useState<string | null>(null);
   const [expandedSubcategory, setExpandedSubcategory] = useState<string | null>(null);
@@ -149,6 +166,8 @@ const AdminMenu = () => {
     const { data, error } = await supabase
       .from('categories')
       .select('*, subcategories(*, menu_items(*))')
+      // The bin's rows too; the database shows them to this restaurant's staff only.
+      .setHeader(SHOW_DELETED[0], SHOW_DELETED[1])
       .order('sort_order');
     if (error) { setLoadFailed(true); setLoading(false); return; }
     setLoadFailed(false);
@@ -156,7 +175,7 @@ const AdminMenu = () => {
       ...cat,
       subcategories: sortByOrder(cat.subcategories).map((sub) => ({ ...sub, menu_items: sortByOrder(sub.menu_items) })),
     }));
-    setCategories(sorted);
+    setMenuRows(sorted);
     setLoading(false);
   }, []);
 
@@ -181,14 +200,24 @@ const AdminMenu = () => {
   };
 
   // ---- Rename ----
-  const rename = async (kind: 'category' | 'subcategory', id: string, { name, name_bs, name_ar }: Names) => {
+  /** `was`: the names being replaced, which an Undo passes on (its own page state is older). */
+  const rename = async (kind: 'category' | 'subcategory', id: string, { name, name_bs, name_ar }: Names, was?: Names) => {
     if (!name.trim()) { toast.error('Name required'); return; }
+    const row = kind === 'category'
+      ? categories.find((c) => c.id === id)
+      : categories.flatMap((c) => c.subcategories ?? []).find((s) => s.id === id);
+    const before: Names | null = was ?? (row ? { name: row.name, name_bs: row.name_bs ?? '', name_ar: row.name_ar ?? '' } : null);
     const patch = { name: name.trim(), name_bs: name_bs.trim() || null, name_ar: name_ar.trim() || null };
     const { error } = kind === 'category'
       ? await supabase.from('categories').update(patch).eq('id', id)
       : await supabase.from('subcategories').update(patch).eq('id', id);
     if (error) { toast.error(error.message); return; }
-    toast.success('Renamed'); setEditing(null); await fetchMenu();
+    const now: Names = { name: patch.name, name_bs: patch.name_bs ?? '', name_ar: patch.name_ar ?? '' };
+    toast.success(before ? `Renamed “${before.name}” to “${patch.name}”` : 'Renamed', before ? {
+      duration: UNDO_MS,
+      action: { label: 'Undo', onClick: () => { void rename(kind, id, before, now); } },
+    } : undefined);
+    setEditing(null); await fetchMenu();
   };
 
   // ---- Reorder (renormalizes sort_order) ----
@@ -219,7 +248,7 @@ const AdminMenu = () => {
   // ---- Toggle / delete ----
   /** Patch one item in the local tree, without a refetch. */
   const patchItem = useCallback((id: string, changes: Partial<MenuItemRow>) => {
-    setCategories((prev) => prev.map((cat) => ({
+    setMenuRows((prev) => prev.map((cat) => ({
       ...cat,
       subcategories: (cat.subcategories ?? []).map((sub) => ({
         ...sub,
@@ -246,11 +275,52 @@ const AdminMenu = () => {
       return;
     }
     // Taking something off mid-service is a decision worth confirming out
-    // loud — it is the single most common live menu action.
-    toast.success(next ? `${item.name} is back on the menu` : `${item.name} is now sold out`);
+    // loud — it is the single most common live menu action. A wrong tap is
+    // one more tap to put right.
+    toast.success(next ? `${item.name} is back on the menu` : `${item.name} is now sold out`, {
+      duration: UNDO_MS,
+      action: { label: 'Undo', onClick: () => { void toggleAvailability({ ...item, is_available: next }); } },
+    });
+  };
+
+  /**
+   * Put it in the bin: guests stop seeing it at once, past orders keep it,
+   * and the toast's Undo (or Restore in "Recently deleted", any time later)
+   * puts back exactly what went.
+   */
+  const moveToBin = async (kind: BinKind, id: string) => {
+    const { data, error } = await deleteMenuEntry(kind, id);
+    if (error) { toast.error(`Could not delete: ${error.message}`); return; }
+    await fetchMenu();
+    const label = whatWent({
+      kind, name: data?.name ?? 'It',
+      sections: data?.subcategories ?? 0, dishes: kind === 'item' ? 0 : data?.items ?? 0,
+    });
+    toast.success(`Deleted ${label}`, {
+      description: 'Guests no longer see it. Undo, or restore it later from “Recently deleted” at the bottom of this page.',
+      duration: UNDO_MS,
+      action: { label: 'Undo', onClick: () => { void restoreFromBin(kind, id); } },
+    });
+  };
+
+  const restoreFromBin = async (kind: BinKind, id: string) => {
+    setRestoring(id);
+    const { data, error } = await restoreMenuEntry(kind, id);
+    setRestoring(null);
+    if (error) { toast.error(`Could not restore: ${error.message}`); return; }
+    await fetchMenu();
+    toast.success(`${data?.name ?? 'It'} is back on the menu`);
+  };
+
+  /** Show the bin, from the button at the top of the page. */
+  const openBin = () => {
+    setBinOpen(true);
+    requestAnimationFrame(() => binRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
   };
 
   const remove = async (table: 'categories' | 'subcategories' | 'menu_items', id: string) => {
+    if (binOn) { await moveToBin(BIN_KIND[table], id); return; }
+    // A database without the bin yet (20261105120000): the old, final delete.
     const { error } = table === 'categories'
       ? await supabase.from('categories').delete().eq('id', id)
       : table === 'subcategories'
@@ -295,7 +365,10 @@ const AdminMenu = () => {
       toast.error(`Could not change the price of ${item.name}: ${error.message}`);
       return false;
     }
-    toast.success(`${item.name}: ${Number(before).toFixed(2)} → ${price.toFixed(2)} KM`);
+    toast.success(`${item.name}: ${Number(before).toFixed(2)} → ${price.toFixed(2)} KM`, {
+      duration: UNDO_MS,
+      action: { label: 'Undo', onClick: () => { void changePrice({ ...item, price }, Number(before)); } },
+    });
     return true;
   };
 
@@ -311,6 +384,16 @@ const AdminMenu = () => {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, []);
+
+  /**
+   * A dish goes straight to the bin, with Undo in the toast: a mistake is one
+   * tap to put right, so it no longer needs asking first. Without the bin
+   * (an older database) it is final, and asks.
+   */
+  const deleteItem = (item: MenuItemRow) => {
+    if (binOn) void remove('menu_items', item.id);
+    else setPendingDelete(item);
+  };
 
   const markSoldOutInstead = async (item: MenuItemRow) => {
     setUndeletable(null);
@@ -401,6 +484,11 @@ const AdminMenu = () => {
           <Button asChild variant="outline" size="sm" className="rounded-lg font-sans gap-1">
             <Link to="/admin/promotions">Promotions</Link>
           </Button>
+          {bin.length > 0 && (
+            <Button onClick={openBin} variant="outline" size="sm" className="rounded-lg font-sans gap-1">
+              <Trash2 className="w-4 h-4" /> Recently deleted ({bin.length})
+            </Button>
+          )}
           <Button onClick={() => setAddingCategory(true)} className="rounded-lg font-sans" size="sm">
             <Plus className="w-4 h-4 mr-1" /> Add Category
           </Button>
@@ -575,7 +663,9 @@ const AdminMenu = () => {
                     <ConfirmDelete
                       trigger={<Button variant="ghost" size="icon" className="h-8 w-8" aria-label={`Delete category ${cat.name}`}><Trash2 className="w-4 h-4 text-destructive" /></Button>}
                       title={`Delete “${cat.name}”?`}
-                      description="This permanently deletes the category and all of its subcategories and items. This cannot be undone."
+                      description={binOn
+                        ? 'Guests stop seeing it, with all of its subcategories and items. You can undo this, or restore it later from “Recently deleted”.'
+                        : 'This permanently deletes the category and all of its subcategories and items. This cannot be undone.'}
                       onConfirm={() => remove('categories', cat.id)}
                     />
                   </div>
@@ -607,7 +697,9 @@ const AdminMenu = () => {
                               <ConfirmDelete
                                 trigger={<Button variant="ghost" size="icon" className="h-11 w-11 md:h-7 md:w-7" aria-label={`Delete subcategory ${sub.name}`}><Trash2 className="w-3.5 h-3.5 text-destructive" /></Button>}
                                 title={`Delete “${sub.name}”?`}
-                                description="This permanently deletes the subcategory and all of its items."
+                                description={binOn
+                                  ? 'Guests stop seeing it and its items. You can undo this, or restore it later from “Recently deleted”.'
+                                  : 'This permanently deletes the subcategory and all of its items.'}
                                 onConfirm={() => remove('subcategories', sub.id)}
                               />
                             </div>
@@ -654,7 +746,7 @@ const AdminMenu = () => {
                                       <Button variant="ghost" size="icon" className="h-9 w-9" disabled={itemIdx === 0} aria-label="Move up" onClick={() => move('menu_items', items, item.id, 'up')}><ChevronUp className="w-4 h-4" /></Button>
                                       <Button variant="ghost" size="icon" className="h-9 w-9" disabled={itemIdx === items.length - 1} aria-label="Move down" onClick={() => move('menu_items', items, item.id, 'down')}><ChevronDown className="w-4 h-4" /></Button>
                                       <Button variant="ghost" size="icon" className="h-9 w-9" aria-label={`Edit ${item.name}`} onClick={() => setItemDialog({ item })}><Pencil className="w-4 h-4" /></Button>
-                                      <Button variant="ghost" size="icon" className="h-9 w-9" aria-label={`Delete ${item.name}`} onClick={() => setPendingDelete(item)}><Trash2 className="w-4 h-4 text-destructive" /></Button>
+                                      <Button variant="ghost" size="icon" className="h-9 w-9" aria-label={`Delete ${item.name}`} onClick={() => deleteItem(item)}><Trash2 className="w-4 h-4 text-destructive" /></Button>
                                     </div>
                                     <DropdownMenu>
                                       <DropdownMenuTrigger asChild>
@@ -673,7 +765,7 @@ const AdminMenu = () => {
                                           <ChevronDown className="w-4 h-4 mr-2" /> Move down
                                         </DropdownMenuItem>
                                         <DropdownMenuSeparator />
-                                        <DropdownMenuItem className="min-h-[44px] text-destructive focus:text-destructive" onSelect={() => setPendingDelete(item)}>
+                                        <DropdownMenuItem className="min-h-[44px] text-destructive focus:text-destructive" onSelect={() => deleteItem(item)}>
                                           <Trash2 className="w-4 h-4 mr-2" /> Delete
                                         </DropdownMenuItem>
                                       </DropdownMenuContent>
@@ -695,6 +787,58 @@ const AdminMenu = () => {
             );
           })}
         </div>
+      )}
+
+      {/*
+        The bin. Everything deleted stays here, newest first: a dish deleted by
+        mistake last week is one tap away, with its photo, prices, translations
+        and pairings. Guests never see it.
+      */}
+      {binOn && bin.length > 0 && (
+        <Card ref={binRef} className="mt-6 scroll-mt-4">
+          <CardContent className="p-3">
+            <button
+              type="button"
+              className="w-full flex items-center gap-2 min-h-[44px] text-left"
+              aria-expanded={binOpen}
+              onClick={() => setBinOpen(!binOpen)}
+            >
+              {binOpen ? <ChevronDown className="w-4 h-4 shrink-0" /> : <ChevronRight className="w-4 h-4 shrink-0" />}
+              <Trash2 className="w-4 h-4 shrink-0 text-muted-foreground" />
+              <span className="font-serif font-semibold text-foreground">Recently deleted</span>
+              <span className="text-xs text-muted-foreground">({bin.length})</span>
+            </button>
+            {binOpen && (
+              <div className="mt-1 space-y-1">
+                <p className="text-xs font-sans text-muted-foreground px-1 pb-1">
+                  Guests don't see these. Restore puts one back where it was, as it was.
+                </p>
+                {bin.map((entry) => (
+                  <div key={`${entry.kind}:${entry.id}`} className="flex items-center justify-between gap-2 py-2 px-2 rounded-lg hover:bg-muted/30">
+                    <div className="min-w-0">
+                      <p className="text-sm font-sans font-medium text-foreground break-words">{whatWent(entry)}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {entry.kind === 'category' ? 'Category' : entry.kind === 'subcategory' ? `Subcategory in ${entry.where}` : entry.where}
+                        {' · deleted '}{deletedWhen(entry.deletedAt)}
+                      </p>
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="min-h-[44px] shrink-0 gap-1"
+                      disabled={restoring !== null}
+                      aria-label={`Restore ${entry.name}`}
+                      onClick={() => { void restoreFromBin(entry.kind, entry.id); }}
+                    >
+                      {restoring === entry.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <RotateCcw className="w-4 h-4" />}
+                      Restore
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
       )}
 
       <AlertDialog open={confirmRetranslate} onOpenChange={setConfirmRetranslate}>
@@ -723,7 +867,9 @@ const AdminMenu = () => {
           <AlertDialogHeader>
             <AlertDialogTitle>Delete “{pendingCategoryDelete?.name}”?</AlertDialogTitle>
             <AlertDialogDescription>
-              This permanently deletes the category and all of its subcategories and items. This cannot be undone.
+              {binOn
+                ? 'Guests stop seeing it, with all of its subcategories and items. You can undo this, or restore it later from “Recently deleted”.'
+                : 'This permanently deletes the category and all of its subcategories and items. This cannot be undone.'}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

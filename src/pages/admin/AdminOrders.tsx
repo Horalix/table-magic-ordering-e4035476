@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { formatStamp } from '@/lib/timing';
 import { supabase } from '@/integrations/supabase/client';
+import { SHOW_DELETED } from '@/lib/menu-bin';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -102,6 +103,8 @@ const AdminOrders = () => {
     let query = supabase
       .from('orders')
       .select(`*, table_sessions!inner(tables!inner(table_number)), order_items(*, menu_items(name))`)
+      // Names of dishes deleted since (src/lib/menu-bin.ts).
+      .setHeader(SHOW_DELETED[0], SHOW_DELETED[1])
       .gte('created_at', start)
       .lt('created_at', end)
       .order('created_at', { ascending: false })

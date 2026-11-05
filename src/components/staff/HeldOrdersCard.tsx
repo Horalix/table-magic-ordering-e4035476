@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { AlertTriangle, Ban, Check, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
+import { SHOW_DELETED } from '@/lib/menu-bin';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import {
@@ -87,6 +88,8 @@ function useHeldOrders(soundEnabled: boolean) {
         table_sessions!inner(tables!inner(table_number)),
         order_items(quantity, notes, menu_items(name))
       `)
+      // Names of dishes deleted since (src/lib/menu-bin.ts).
+      .setHeader(SHOW_DELETED[0], SHOW_DELETED[1])
       .eq('status', 'pending')
       .is('released_to_kitchen_at', null)
       .not('held_reason', 'is', null)
