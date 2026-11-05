@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
+import { SHOW_DELETED } from '@/lib/menu-bin';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   BellRing, Check, ChefHat, CreditCard, CupSoda, Hand, Keyboard, LayoutList, Maximize2, Minimize2, Printer, RotateCcw,
@@ -730,6 +731,8 @@ const KitchenDisplay = () => {
         table_sessions!inner(assigned_waiter_id, tables!inner(table_number, section_id, sections(name, color))),
         order_items(*, menu_items(name, allergens))
       `)
+      // Names of dishes deleted since (src/lib/menu-bin.ts).
+      .setHeader(SHOW_DELETED[0], SHOW_DELETED[1])
       .in('id', ids)
       // Food already up, served or voided is not printed again by itself.
       .in('status', ['pending', 'confirmed', 'preparing']);
@@ -781,6 +784,8 @@ const KitchenDisplay = () => {
           menu_items(name, allergens)
         )
       `)
+      // Names of dishes deleted since (src/lib/menu-bin.ts).
+      .setHeader(SHOW_DELETED[0], SHOW_DELETED[1])
       .in('status', historyView ? ['served', 'cancelled'] : ['pending', 'confirmed', 'preparing', 'ready']);
     // A held order is `pending` but has not been released: it is a question
     // for staff (the "Needs confirming" card), not kitchen work. Unpaid card

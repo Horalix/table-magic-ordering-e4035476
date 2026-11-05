@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { supabase } from '@/integrations/supabase/client';
+import { SHOW_DELETED } from '@/lib/menu-bin';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -210,6 +211,8 @@ const WaiterDashboard = () => {
           supabase
             .from('orders')
             .select('*, table_sessions!inner(tables!inner(table_number)), order_items(quantity, status, notes, menu_items(name))')
+            // Names of dishes deleted since (src/lib/menu-bin.ts).
+            .setHeader(SHOW_DELETED[0], SHOW_DELETED[1])
             .in('table_session_id', sessionIds)
             .neq('status', 'cancelled')
             .order('created_at', { ascending: true }),
