@@ -327,6 +327,14 @@ export async function installStaffStubs(page: Page, state: StaffState) {
       case 'has_role':
         return json(route, body._role === 'admin' ? state.signedIn && state.isAdmin : state.signedIn);
 
+      // What a guest's phone is told, and every staff screen's Menu only notice (src/components/staff/MenuOnlyNotice.tsx).
+      case 'guest_get_service_status':
+        return json(route, {
+          ordering_enabled: state.settings.ordering_enabled !== false, online_card_enabled: false, pay_at_table_enabled: true,
+          paused_message: null, last_order_time: null, kitchen_delay_minutes: 0, recommendations_enabled: false,
+          menu_only: state.settings.menu_only === true,
+        });
+
       case 'staff_close_session': {
         state.rpcCalls.push({ fn, body });
         const owed = state.closeOutstanding;

@@ -142,12 +142,16 @@ const AdminMenu = () => {
   /** An item the database refused to delete because past orders point at it. */
   const [undeletable, setUndeletable] = useState<MenuItemRow | null>(null);
 
+  /** The menu did not load: said as that, never as an empty menu to build again. */
+  const [loadFailed, setLoadFailed] = useState(false);
+
   const fetchMenu = useCallback(async () => {
     const { data, error } = await supabase
       .from('categories')
       .select('*, subcategories(*, menu_items(*))')
       .order('sort_order');
-    if (error) { toast.error('Failed to load menu'); setLoading(false); return; }
+    if (error) { setLoadFailed(true); setLoading(false); return; }
+    setLoadFailed(false);
     const sorted = (data ?? []).map((cat) => ({
       ...cat,
       subcategories: sortByOrder(cat.subcategories).map((sub) => ({ ...sub, menu_items: sortByOrder(sub.menu_items) })),
@@ -243,7 +247,7 @@ const AdminMenu = () => {
     }
     // Taking something off mid-service is a decision worth confirming out
     // loud — it is the single most common live menu action.
-    toast.success(next ? `${item.name} is back on` : `86'd — ${item.name} is sold out`);
+    toast.success(next ? `${item.name} is back on the menu` : `${item.name} is now sold out`);
   };
 
   const remove = async (table: 'categories' | 'subcategories' | 'menu_items', id: string) => {
@@ -438,7 +442,7 @@ const AdminMenu = () => {
         <Card className="mb-4 border-accent/40 bg-accent/5">
           <CardContent className="p-3">
             <p className="text-xs font-sans font-semibold text-accent uppercase tracking-wide flex items-center gap-1.5 mb-2">
-              <EyeOff className="w-3.5 h-3.5" /> Off the menu right now ({offMenu.length})
+              <EyeOff className="w-3.5 h-3.5" /> Sold out right now ({offMenu.length})
             </p>
             <div className="flex flex-wrap gap-1.5">
               {offMenu.map((item) => (
@@ -450,7 +454,7 @@ const AdminMenu = () => {
                   title={`Put ${item.name} back on the menu`}
                 >
                   {item.name}
-                  <span className="text-muted-foreground">· put back</span>
+                  <span className="text-muted-foreground">· tap when back in stock</span>
                 </button>
               ))}
             </div>
@@ -505,6 +509,14 @@ const AdminMenu = () => {
         <div className="space-y-3">
           {[1, 2, 3].map((i) => <Skeleton key={i} className="h-14 w-full rounded-xl" />)}
         </div>
+      ) : loadFailed ? (
+        <Card role="alert" className="border-destructive/30">
+          <CardContent className="py-12 text-center space-y-3">
+            <p className="font-serif text-lg font-semibold text-foreground">The menu could not be loaded</p>
+            <p className="text-sm font-sans text-muted-foreground">Nothing is lost. Check the internet connection and try again.</p>
+            <Button variant="outline" className="min-h-[44px]" onClick={() => { setLoading(true); void fetchMenu(); }}>Try again</Button>
+          </CardContent>
+        </Card>
       ) : categories.length === 0 && !addingCategory ? (
         <Card className="border-dashed">
           <CardContent className="py-14 text-center">

@@ -17,7 +17,7 @@
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
-import { loadEnv, type Plugin, type ResolvedConfig } from 'vite';
+import { loadEnv, type Plugin, type ResolvedConfig, type Rollup } from 'vite';
 import type { Locale } from '../src/lib/i18n';
 import { siteT } from '../src/lib/site-copy';
 import { VERA_OG_IMAGE, veraLlms, veraPages, veraSeoMenu } from '../src/lib/seo/vera-seo';
@@ -66,18 +66,98 @@ export function withBrand(html: string, venue: Venue): string {
     .replace(/(<link rel="preload" as="font" type="font\/woff2" href=")\/fonts\/lora\.woff2/, `$1${venue.brand.headingFont}`);
 }
 
+/*
+ * The screen a page shows is lazy-loaded (src/App.tsx), so a phone used to
+ * ask for it only once the app's own code had arrived and run — a round trip
+ * later on a slow connection, and two for the menu, whose PageTransition
+ * wrapper loads before the menu itself. Each page now names the code it
+ * needs in its HTML, so it comes down alongside the app's.
+ */
+const SHELL = 'src/components/PageTransition.tsx';
+const SCREEN = {
+  site: 'src/pages/site/SiteHome.tsx',
+  vera: 'src/pages/vera/VeraSite.tsx',
+  menu: 'src/pages/GuestMenu.tsx',
+  category: 'src/pages/CategoryPage.tsx',
+  dish: 'src/pages/DishLink.tsx',
+  privacy: 'src/pages/Trust.tsx',
+  table: 'src/pages/TableEntry.tsx',
+  start: 'src/pages/TableNumberEntry.tsx',
+};
+
+/** The modules a prerendered address draws first (see src/App.tsx's routes). */
+export function pageModules(urlPath: string, veraHome: boolean): string[] {
+  if (/^\/menu\/[^/]+\/dish\//.test(urlPath)) return [SCREEN.dish, SHELL, SCREEN.category];
+  if (/^\/menu\/[^/]+\/$/.test(urlPath)) return [SHELL, SCREEN.menu];
+  if (/^\/menu\//.test(urlPath)) return [SHELL, SCREEN.category];
+  if (urlPath === PRIVACY_PATH) return [SHELL, SCREEN.privacy];
+  return [veraHome || urlPath.startsWith('/veraitalia') ? SCREEN.vera : SCREEN.site];
+}
+
+/** The built files behind `modules` — their chunks, the chunks those import, and their CSS — less what `template` already loads. */
+export function moduleFiles(bundle: Rollup.OutputBundle, template: string, modules: string[]): string[] {
+  const chunks = Object.values(bundle).filter((c): c is Rollup.OutputChunk => c.type === 'chunk');
+  const byFile = new Map(chunks.map((c) => [c.fileName, c]));
+  const files = new Set<string>();
+  const visit = (chunk: Rollup.OutputChunk) => {
+    if (files.has(chunk.fileName)) return;
+    files.add(chunk.fileName);
+    for (const css of chunk.viteMetadata?.importedCss ?? []) files.add(css);
+    for (const dep of chunk.imports) {
+      const next = byFile.get(dep);
+      if (next) visit(next);
+    }
+  };
+  for (const m of modules) {
+    const chunk = chunks.find((c) => c.facadeModuleId?.replace(/\\/g, '/').endsWith(`/${m}`));
+    if (chunk) visit(chunk);
+  }
+  return [...files].filter((f) => !template.includes(`/${f}"`)).map((f) => `/${f}`);
+}
+
+/** The tags that fetch `files` ahead: crossorigin, as Vite's own loader asks for them, so nothing is fetched twice. */
+export function preloadTags(files: string[]): string {
+  return files.map((f) => (f.endsWith('.css')
+    ? `<link rel="preload" as="style" crossorigin href="${f}">`
+    : `<link rel="modulepreload" crossorigin href="${f}">`)).join('');
+}
+
+/**
+ * The home page's HTML is also what every address without a page of its own
+ * gets (Netlify's fallback, the service worker's): a QR code's /table/… and
+ * /start, the staff screens. So its preloads are chosen by the address the
+ * phone opened, not written as tags — a waiter's phone does not fetch the
+ * website, and a guest scanning a table's code fetches the menu.
+ */
+export function rootPreloadScript(byPath: { home: string[]; table: string[]; start: string[] }): string {
+  const lists = JSON.stringify(byPath);
+  return `<script>(function(){var m=${lists},p=location.pathname,`
+    + `f=p==='/'?m.home:/^\\/table\\//.test(p)?m.table:/^\\/start\\/?$/.test(p)?m.start:null;if(!f)return;`
+    + `f.forEach(function(u){var l=document.createElement('link'),c=/\\.css$/.test(u);l.rel=c?'preload':'modulepreload';`
+    + `if(c)l.as='style';l.crossOrigin='';l.href=u;document.head.appendChild(l)})})()</script>`;
+}
+
 export function seoPrerender(): Plugin {
   let config: ResolvedConfig;
   return {
     name: 'lasoul-seo-prerender',
     apply: 'build',
     configResolved(resolved) { config = resolved; },
-    async writeBundle() {
+    async writeBundle(_options, bundle) {
       const outDir = path.resolve(config.root, config.build.outDir);
       const templatePath = path.join(outDir, 'index.html');
       if (!existsSync(templatePath)) return;
       const template = readFileSync(templatePath, 'utf8');
       const venue = VENUES[DEFAULT_VENUE];
+      const veraHome = HOME_VENUE === 'veraitalia';
+      const code = (modules: string[]) => moduleFiles(bundle, template, modules);
+      const preloadsFor = (urlPath: string) => (urlPath === '/'
+        ? rootPreloadScript({
+          home: code(pageModules('/', veraHome)),
+          table: code([SCREEN.table, SHELL, SCREEN.menu]),
+          start: code([SCREEN.start, SHELL, SCREEN.menu]),
+        })
+        : preloadTags(code(pageModules(urlPath, veraHome))));
 
       const env = { ...loadEnv(config.mode, config.root, 'VITE_'), ...process.env } as Record<string, string | undefined>;
       const offline = config.mode === 'e2e' || process.env.SEO_OFFLINE === '1';
@@ -102,7 +182,7 @@ export function seoPrerender(): Plugin {
       const write = (urlPath: string, html: string) => {
         const file = urlPath === '/' ? templatePath : path.join(outDir, urlPath.replace(/^\//, ''), 'index.html');
         mkdirSync(path.dirname(file), { recursive: true });
-        writeFileSync(file, html);
+        writeFileSync(file, html.replace('</head>', `    ${preloadsFor(urlPath)}\n  </head>`));
       };
 
       // The privacy notice and terms of the restaurant whose site this is

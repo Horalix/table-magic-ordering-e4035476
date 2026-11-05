@@ -1,19 +1,20 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { ClipboardList, LayoutDashboard, LayoutGrid, Menu as MenuIcon, Printer, UtensilsCrossed } from 'lucide-react';
+import { ClipboardList, LayoutDashboard, LayoutGrid, Menu as MenuIcon, QrCode, UtensilsCrossed } from 'lucide-react';
 
 /**
  * The four admin jobs that happen on a phone, mid-service, one tap away.
  *
  * Everything else stays in the drawer. These are the ones a manager does
- * standing at the pass: see how today is going, find an order, take a dish
- * off (or change its price), check the printers.
+ * standing at the pass: see how today is going, take a dish off (or change
+ * its price), show or print a QR code, find an order. Printing is in the
+ * drawer, and one tap from the kitchen board's gear.
  */
 const TABS = [
-  { label: 'Today', path: '/admin', icon: LayoutDashboard },
-  { label: 'Orders', path: '/admin/orders', icon: ClipboardList },
+  { label: 'Dashboard', path: '/admin', icon: LayoutDashboard },
   { label: 'Menu', path: '/admin/menu', icon: UtensilsCrossed },
-  { label: 'Printing', path: '/admin/printing', icon: Printer },
+  { label: 'QR Codes', path: '/admin/qr-codes', icon: QrCode },
+  { label: 'Orders', path: '/admin/orders', icon: ClipboardList },
 ] as const;
 
 /** The owner's first look, wherever they are: both restaurants at once. */

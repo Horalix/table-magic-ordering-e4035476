@@ -51,6 +51,11 @@ import { useStaffDocument, useStaffVenueLook } from '@/components/staff/useStaff
 import { isHeld, isInKitchen, kitchenStart, orderStatusLabel } from '@/components/staff/order-status';
 import { attentionSummary as summarize, plural } from '@/components/staff/floor-words';
 import HeldOrdersCard from '@/components/staff/HeldOrdersCard';
+import MenuOnlyNotice from '@/components/staff/MenuOnlyNotice';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { useStaffVenue } from '@/hooks/useStaffVenue';
 import type { Database } from '@/integrations/supabase/types';
 
@@ -135,6 +140,9 @@ const WaiterDashboard = () => {
    */
   const [loaded, setLoaded] = useState(false);
   const [soundOn, setSoundOn] = useState<boolean>(() => localStorage.getItem(SOUND_KEY) !== 'false');
+  // Signing out stops every alert for this waiter's tables, and signing back
+  // in needs the password from the manager: one stray tap must not do it.
+  const [confirmSignOut, setConfirmSignOut] = useState(false);
   const { unlocked: audioUnlocked, unlock: unlockSound } = useAudioUnlock();
   /** null until the first load: alerts that were already open then are not "new". */
   const prevAlertIds = useRef<Set<string> | null>(null);
@@ -693,7 +701,7 @@ const WaiterDashboard = () => {
             >
               {soundOn ? <Volume2 className="w-5 h-5" /> : <VolumeX className="w-5 h-5 text-muted-foreground" />}
             </Button>
-            <Button variant="ghost" onClick={logout} className="tap-sm min-h-[44px] min-w-[44px] px-2" aria-label="Sign out">
+            <Button variant="ghost" onClick={() => setConfirmSignOut(true)} className="tap-sm min-h-[44px] min-w-[44px] px-2" aria-label="Sign out">
               <LogOut className="w-5 h-5 sm:mr-1" /><span className="hidden sm:inline text-sm">Sign out</span>
             </Button>
           </div>
@@ -702,6 +710,22 @@ const WaiterDashboard = () => {
         {/* Phones suspend audio until a tap. Saying so is the difference
             between a waiter who knows to tap once and one who trusts a
             silent phone all evening. */}
+        {/* Muted on purpose is still worth saying in words: the crossed-out
+            speaker alone let a phone stay silent all evening, and the choice
+            is remembered into the next shift. */}
+        {!soundOn && (
+          <div className="max-w-6xl mx-auto px-4 sm:px-6 pb-2">
+            <button
+              onClick={() => { void toggleSound(); }}
+              className="w-full min-h-[44px] rounded-xl bg-amber-100 text-amber-900 border border-amber-200 text-sm font-sans font-semibold flex items-center justify-center gap-2 px-3"
+            >
+              <VolumeX className="w-4 h-4 shrink-0" aria-hidden /> Sound is off — you will not hear calls or ready food. Tap to turn on.
+            </button>
+          </div>
+        )}
+
+        <MenuOnlyNotice audience="waiter" outerClassName="max-w-6xl mx-auto px-4 sm:px-6 pb-2" />
+
         {soundOn && !audioUnlocked && (
           <div className="max-w-6xl mx-auto px-4 sm:px-6 pb-2">
             <button
@@ -969,6 +993,21 @@ const WaiterDashboard = () => {
         knownOwed={freeing ? owedFor(freeing.id).amount : 0}
         onFreed={refetch}
       />
+
+      <AlertDialog open={confirmSignOut} onOpenChange={setConfirmSignOut}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Sign out?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Your phone stops alerting you about your tables until you sign in again, and signing in needs your password.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="min-h-[44px]">Stay signed in</AlertDialogCancel>
+            <AlertDialogAction className="min-h-[44px]" onClick={() => { void logout(); }}>Sign out</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };

@@ -20,6 +20,7 @@
  *
  * Run:  npm run images            (only rows whose image changed)
  *       npm run images -- --force (rebuild every row)
+ *       npm run images -- --only=b7a1d000 (rebuild just the rows whose id starts so)
  * Requires .env with VITE_SUPABASE_URL + VITE_SUPABASE_PUBLISHABLE_KEY.
  *
  * Better originals: a file at scripts/image-sources/<row id>.<jpg|jpeg|png|webp>
@@ -80,6 +81,26 @@ const THUMB_CENTRE = {
 // burger looking like a burger at thumbnail size.
 const SHARPEN = { sigma: 0.6, m1: 0.5, m2: 2.5 };
 const QUALITY = 80;
+// The most a large rung may weigh before its quality is stepped down (to no
+// lower than QUALITY_FLOOR, where a phone still shows no difference). Most
+// photos are well under it and keep QUALITY; densely textured ones — Vera
+// Italia's travertine and linen — were 300KB at 1152, three times La Soul's,
+// and made its menu the slowest page on a phone.
+const BYTE_BUDGET = { 768: 90_000, 1152: 180_000 };
+const QUALITY_FLOOR = 66;
+// `--only=<id prefix>`: rebuild just those rows (e.g. --only=b7a1d000 for
+// Vera Italia's dishes) and leave every other row's files as they are.
+const ONLY = process.argv.find((a) => a.startsWith('--only='))?.slice('--only='.length) || null;
+
+/** WebP at `quality`, stepped down while it is over the rung's budget. */
+async function encodeWithin(img, width, quality) {
+  const budget = BYTE_BUDGET[width] ?? Infinity;
+  let buf = await img.clone().webp({ quality }).toBuffer();
+  for (let q = quality - 4; buf.length > budget && q >= QUALITY_FLOOR; q -= 4) {
+    buf = await img.clone().webp({ quality: q, smartSubsample: true, effort: 6 }).toBuffer();
+  }
+  return buf;
+}
 // The largest variant ever written. A 3x phone showing a full-width dish
 // needs ~1125px, which the 1152 rung already covers; anything wider is
 // bytes nobody sees.
@@ -161,13 +182,14 @@ function currentOverride(id, imageUrl) {
 async function processRow(row, manifest, counters) {
   const { id, image_url } = row;
   if (!image_url) return;
+  if (ONLY && !id.startsWith(ONLY)) { counters.skipped++; return; }
 
   const override = currentOverride(id, image_url);
   const hash = override ? sha1(`file:${sha1(readFileSync(override).toString('base64'))}`) : sha1(image_url);
   const dir = resolve(OUT_DIR, id);
 
   // Skip if unchanged AND assets already present.
-  if (!FORCE && manifest[id] && (await readHash(id)) === hash && existsSync(dir)) {
+  if (!FORCE && !ONLY && manifest[id] && (await readHash(id)) === hash && existsSync(dir)) {
     manifest[id].src = image_url;
     counters.skipped++;
     return;
@@ -198,10 +220,10 @@ async function processRow(row, manifest, counters) {
     if (!widths.includes(top) && top > (widths[widths.length - 1] ?? 0)) widths.push(top);
 
     await Promise.all(
-      widths.map((w) => {
+      widths.map(async (w) => {
         let img = sharp(input).rotate().resize(w, null, { withoutEnlargement: true });
         if (w <= 384) img = img.sharpen(SHARPEN);
-        return img.webp({ quality: w <= 384 ? 82 : QUALITY }).toFile(resolve(dir, `${w}.webp`));
+        await writeFile(resolve(dir, `${w}.webp`), await encodeWithin(img, w, w <= 384 ? 82 : QUALITY));
       }),
     );
 

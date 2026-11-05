@@ -141,6 +141,8 @@ staffTest.describe('the Menu only switch on Admin → Service', () => {
   staffTest('before the database update, it cannot be switched and says what is needed', async ({ page }) => {
     await page.goto('/admin/service');
     await staffExpect(page.getByRole('switch', { name: /Show guests the menu and nothing else/ })).toBeDisabled();
-    await staffExpect(page.getByText(/Needs the database update first/)).toBeVisible();
+    // In words a manager can act on — no developer instructions.
+    await staffExpect(page.getByText(/Not available yet: the database needs an update first\. Ask your developer\./)).toBeVisible();
+    await staffExpect(page.getByText(/Lovable/)).toHaveCount(0);
   });
 });

@@ -84,7 +84,7 @@ high = (slowest dish × 1.35) + same
 ## 5. What gets suggested
 
 Score, all normalised to 0–1 before weighting (weights configurable in
-**Service & suggestions**):
+**Ordering & service**):
 
 | signal | default | source |
 | --- | --- | --- |

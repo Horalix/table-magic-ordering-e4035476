@@ -20,6 +20,7 @@ import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { VENUES } from '@/lib/venues';
+import MenuOnlyNotice from '@/components/staff/MenuOnlyNotice';
 import type { User } from '@supabase/supabase-js';
 
 /*
@@ -36,29 +37,36 @@ const ownerGroup = {
 };
 const OWNER_PATHS = ownerGroup.items.map((i) => i.path);
 
-// Grouped so the sidebar reads as a hierarchy, not a flat list.
+// Grouped so the sidebar reads as a hierarchy, not a flat list. What a
+// manager does every day comes first (the menu, the QR codes, whether guests
+// can order); the service screens next; what is set up once, after.
 const navGroups = [
   {
-    heading: 'Operations',
+    heading: 'Every day',
     items: [
       { label: 'Dashboard', icon: LayoutDashboard, path: '/admin' },
-      { label: 'Tonight', icon: CalendarCheck, path: '/admin/tonight' },
+      { label: 'Menu', icon: UtensilsCrossed, path: '/admin/menu' },
+      { label: 'QR Codes', icon: QrCode, path: '/admin/qr-codes' },
+      { label: 'Ordering & service', icon: Sparkles, path: '/admin/service' },
+      { label: 'Promotions', icon: Tag, path: '/admin/promotions' },
+    ],
+  },
+  {
+    heading: 'During service',
+    items: [
       { label: 'Orders', icon: ClipboardList, path: '/admin/orders' },
+      { label: 'Tonight’s waiters', icon: CalendarCheck, path: '/admin/tonight' },
       { label: 'Tables', icon: TableProperties, path: '/admin/tables' },
       { label: 'Floor Monitor', icon: Monitor, path: '/waiter/monitor' },
       { label: 'Kitchen', icon: ChefHat, path: '/kitchen' },
     ],
   },
   {
-    heading: 'Menu & Setup',
+    heading: 'Setup',
     items: [
-      { label: 'Menu', icon: UtensilsCrossed, path: '/admin/menu' },
-      { label: 'Promotions', icon: Tag, path: '/admin/promotions' },
-      { label: 'Sections', icon: Layers, path: '/admin/sections' },
+      { label: 'Floor sections', icon: Layers, path: '/admin/sections' },
       { label: 'Waiters', icon: Users, path: '/admin/waiters' },
-      { label: 'QR Codes', icon: QrCode, path: '/admin/qr-codes' },
       { label: 'Printing', icon: Printer, path: '/admin/printing' },
-      { label: 'Service & suggestions', icon: Sparkles, path: '/admin/service' },
     ],
   },
   {
@@ -470,6 +478,8 @@ const AdminLayout = () => {
           </div>
         </div>
         <div className="px-4 py-5 pb-24 sm:p-6 sm:pb-24 lg:p-8 max-w-7xl mx-auto w-full">
+          {/* Every restaurant page but the switch's own, which says it in place. */}
+          {staffVenue && !ownerPage && location.pathname !== '/admin/service' && <MenuOnlyNotice audience="admin" className="mb-5" />}
           {page}
         </div>
       </main>

@@ -30,10 +30,11 @@ import type { PrintOutcome } from '@/lib/print-outcome';
 import { printerHealth, type PrinterHealth } from '@/lib/printers-api';
 import { cloudCoveredTypes, printerFor, printerSummary, ticketStateLabel, type TicketState } from '@/lib/print-routing';
 import ConnectionPill from '@/components/staff/ConnectionPill';
+import MenuOnlyNotice from '@/components/staff/MenuOnlyNotice';
 import KitchenOrderCard, {
   type KitchenItem, type KitchenOrder, type OrderItemStatus, type OrderStatus, type PrintStateLine, type StationFilter,
 } from '@/components/staff/KitchenOrderCard';
-import { kitchenStart } from '@/components/staff/order-status';
+import { kitchenStart, orderStatusLabel } from '@/components/staff/order-status';
 import AllDayPanel from '@/components/staff/AllDayPanel';
 import FreeTableDialog from '@/components/staff/FreeTableDialog';
 import HeldOrdersCard from '@/components/staff/HeldOrdersCard';
@@ -1030,7 +1031,7 @@ const KitchenDisplay = () => {
   const revertOrder = useCallback(async (orderId: string, status: OrderStatus) => {
     try {
       await revertOrderStatus(orderId, status, 'kitchen undo');
-      toast.success(`Back to ${status}`);
+      toast.success(`Back to “${orderStatusLabel(status)}”`);
       setLastBump((b) => (b?.orderId === orderId ? null : b));
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Could not undo');
@@ -1294,7 +1295,7 @@ const KitchenDisplay = () => {
               {venueName && <span className="ml-2 align-middle text-sm font-sans font-medium text-muted-foreground">{venueName}</span>}
             </h1>
             <div className="flex items-center gap-2 flex-wrap">
-              <p className="text-sm text-muted-foreground font-sans">{visible.length} orders</p>
+              <p className="text-sm text-muted-foreground font-sans">{visible.length} {visible.length === 1 ? 'order' : 'orders'}</p>
 
               <ConnectionPill state={connection} />
 
@@ -1615,6 +1616,9 @@ const KitchenDisplay = () => {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Larger than the guests' notice: read from arm's length. */}
+      <MenuOnlyNotice audience="kitchen" outerClassName="px-4 pt-4" className="text-base" />
 
       {view === 'allday' && <AllDayPanel station={station} onChanged={fetchOrders} />}
 

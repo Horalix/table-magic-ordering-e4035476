@@ -23,6 +23,7 @@ import { useStaffVenue } from '@/hooks/useStaffVenue';
 import { useWakeLock } from '@/lib/wake-lock';
 import { isHeld, isInKitchen, kitchenStart } from '@/components/staff/order-status';
 import HeldOrdersCard from '@/components/staff/HeldOrdersCard';
+import MenuOnlyNotice from '@/components/staff/MenuOnlyNotice';
 import type { Database } from '@/integrations/supabase/types';
 import { isKitchenUsername } from '@/lib/staff-accounts';
 
@@ -310,8 +311,10 @@ const WaiterMonitor = () => {
       if (cur.fails >= 3) {
         cur.until = Date.now() + 30_000;
         cur.fails = 0;
-        setPinError('Too many tries. Locked 30s.');
+        // The pad closes, so the reason goes where it can still be read.
+        setPinError(null);
         setPinTarget(null);
+        toast.error('Three wrong PINs. Try again in 30 seconds.');
       } else {
         setPinError(`Wrong PIN (${3 - cur.fails} left)`);
       }
@@ -478,6 +481,7 @@ const WaiterMonitor = () => {
             Could not refresh — this floor may be out of date. Retrying automatically.
           </div>
         )}
+        <MenuOnlyNotice audience="waiter" outerClassName="px-4 sm:px-6 pb-3" />
       </header>
 
       <main className="p-4 sm:p-6">

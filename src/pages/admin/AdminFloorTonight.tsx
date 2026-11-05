@@ -87,7 +87,7 @@ const AdminFloorTonight = () => {
     <div>
       <div className="flex flex-wrap items-end justify-between gap-4 mb-6">
         <div>
-          <h1 className="font-serif text-3xl font-bold text-foreground">Tonight’s Floor</h1>
+          <h1 className="font-serif text-3xl font-bold text-foreground">Tonight’s waiters</h1>
           <p className="text-sm font-sans text-muted-foreground mt-1">Tap a section to set who’s covering it. That’s it — tables route to that waiter automatically.</p>
         </div>
         <div className="flex items-center gap-2">

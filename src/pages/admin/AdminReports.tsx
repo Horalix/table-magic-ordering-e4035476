@@ -10,6 +10,8 @@ import { dayReconciliation, type DayReconciliation } from '@/lib/staff-api';
 import ShiftClosePanel from '@/components/admin/ShiftClosePanel';
 import PrepForecastCard from '@/components/admin/PrepForecastCard';
 import { businessDayISO, businessDayRange } from '@/lib/reporting';
+import { useOutletContext } from 'react-router-dom';
+import type { AdminOutletContext } from '@/components/admin/AdminLayout';
 
 interface DayOrder {
   id: string;
@@ -55,6 +57,10 @@ const Stat = ({ icon: Icon, label, value, sub, color = 'text-primary' }: { icon:
 );
 
 const AdminReports = () => {
+  // This restaurant's name on the export, not always La Soul's.
+  const outlet = useOutletContext<AdminOutletContext | null>();
+  const venueName = outlet?.venueName ?? 'La Soul';
+  const fileSlug = outlet?.venueSlug ?? 'lasoul';
   const [date, setDate] = useState(todayISO());
   const [orders, setOrders] = useState<DayOrder[]>([]);
   const [recon, setRecon] = useState<DayReconciliation | null>(null);
@@ -103,7 +109,7 @@ const AdminReports = () => {
 
   const exportCsv = () => {
     const rows = [
-      ['La Soul daily report', date],
+      [`${venueName} daily report`, date],
       [],
       ['Metric', 'Value'],
       ['Orders', String(s.count)],
@@ -134,7 +140,7 @@ const AdminReports = () => {
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = url; a.download = `la-soul-report-${date}.csv`;
+    a.href = url; a.download = `${fileSlug}-report-${date}.csv`;
     document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
   };
 
