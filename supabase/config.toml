@@ -20,7 +20,8 @@ verify_jwt = false
 [functions.monri-create-payment]
 verify_jwt = true
 
-# manage-admins (Admin -> Team) appoints and revokes restaurant admins. It
+# manage-admins (Admin -> Team) appoints and revokes restaurant admins, and
+# removes any account but the caller's own. It
 # requires a valid JWT, and inside checks that the caller is the owner (an
 # admin of no one restaurant) before using the service role.
 [functions.manage-admins]

@@ -1,5 +1,6 @@
 import { createClient, type SupabaseClient, type User } from "https://esm.sh/@supabase/supabase-js@2.45.0";
-import { ownerMayResetLogin } from "../_shared/venue-access.ts";
+import { ownerMayRemoveAccount, ownerMayResetLogin } from "../_shared/venue-access.ts";
+import { releaseSignatures } from "../_shared/remove-login.ts";
 
 /**
  * manage-admins — the owner's Team page (src/pages/admin/AdminTeam.tsx).
@@ -9,7 +10,10 @@ import { ownerMayResetLogin } from "../_shared/venue-access.ts";
  * included. Body `{ action, … }`:
  *
  *   list                        every owner, restaurant admin, waiter and
- *                               kitchen account, with its restaurant.
+ *                               kitchen account, with its restaurant, and
+ *                               every sign-in left with no role at all (it
+ *                               opens nothing; the owner can remove it), each
+ *                               with when it last signed in.
  *   appoint { email, venue,     make the account with that email the admin
  *             password? }       of that restaurant (slug). An existing account
  *                               only gets the role. A new one is created with
@@ -32,6 +36,14 @@ import { ownerMayResetLogin } from "../_shared/venue-access.ts";
  *                               in the admin menu. 10+ characters; the
  *                               password goes to Supabase Auth and nowhere
  *                               else, as in appoint.
+ *   remove { user_id }          delete that account's sign-in for good —
+ *                               anyone's but the caller's own
+ *                               (ownerMayRemoveAccount): a restaurant's admin,
+ *                               a waiter, a kitchen tablet, another owner, a
+ *                               sign-in with no role. Its roles and waiter
+ *                               rows at both restaurants go with it; orders,
+ *                               bills, calls and shift closes stay, without
+ *                               the name (_shared/remove-login.ts).
  */
 
 const corsHeaders = {
@@ -39,7 +51,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-type Action = 'list' | 'appoint' | 'revoke' | 'reset_password';
+type Action = 'list' | 'appoint' | 'revoke' | 'reset_password' | 'remove';
 
 interface Body {
   action?: Action;
@@ -67,17 +79,22 @@ interface WaiterRow {
   display_name: string;
 }
 
-/** What the Team page shows: one row per role an account holds. */
+/**
+ * What the Team page shows: one row per role an account holds, and one for
+ * each sign-in with no role (`none`).
+ */
 interface Account {
   user_id: string;
   /** Null for a waiter, who signs in with a username. */
   email: string | null;
   username: string | null;
   display_name: string | null;
-  kind: 'owner' | 'admin' | 'waiter' | 'kitchen';
-  /** The restaurant's slug; null for the owner, who has every one. */
+  kind: 'owner' | 'admin' | 'waiter' | 'kitchen' | 'none';
+  /** The restaurant's slug; null for the owner, who has every one, and for no role. */
   venue: string | null;
   you: boolean;
+  /** When the account last signed in, anywhere; null if it never has. */
+  last_sign_in_at: string | null;
 }
 
 const MIN_PASSWORD = 10;
@@ -138,6 +155,7 @@ Deno.serve(async (req) => {
       ]);
       if (rErr) return reply({ error: rErr.message }, 500);
       const emails = new Map(users.map((u) => [u.id, u.email ?? null]));
+      const lastSignIn = new Map(users.map((u) => [u.id, u.last_sign_in_at ?? null]));
       const waiters = new Map(((waiterRows as WaiterRow[] | null) ?? []).filter((w) => w.user_id).map((w) => [w.user_id as string, w]));
       const slugOf = new Map(venues.map((v) => [v.id, v.slug]));
 
@@ -155,8 +173,27 @@ Deno.serve(async (req) => {
           kind,
           venue: r.venue_id ? slugOf.get(r.venue_id) ?? null : null,
           you: r.user_id === me.id,
+          last_sign_in_at: lastSignIn.get(r.user_id) ?? null,
         };
       });
+      // Sign-ins with no role: a revoked admin, a waiter whose last role went
+      // but whose sign-in stayed. They open nothing, and the owner sees them.
+      const withRole = new Set(accounts.map((a) => a.user_id));
+      for (const u of users) {
+        if (withRole.has(u.id) || u.is_anonymous) continue;
+        const address = (u.email ?? '').toLowerCase();
+        const waiterName = address.endsWith(WAITER_DOMAIN) ? address.slice(0, -WAITER_DOMAIN.length) : null;
+        accounts.push({
+          user_id: u.id,
+          email: waiterName ? null : u.email ?? null,
+          username: waiterName,
+          display_name: waiters.get(u.id)?.display_name ?? null,
+          kind: 'none',
+          venue: null,
+          you: u.id === me.id,
+          last_sign_in_at: u.last_sign_in_at ?? null,
+        });
+      }
       return reply({ venues: venues.map(({ slug, name }) => ({ slug, name })), accounts });
     }
 
@@ -248,6 +285,42 @@ Deno.serve(async (req) => {
           : reply({ error: updErr.message }, 400);
       }
       return reply({ ok: true, reset: true });
+    }
+
+    if (body.action === 'remove') {
+      const userId = typeof body.user_id === 'string' ? body.user_id : '';
+      if (!userId) return reply({ error: 'Whose account?' }, 400);
+      if (!ownerMayRemoveAccount({ userId, callerId: me.id })) {
+        return reply({ error: 'You cannot remove your own account' }, 403);
+      }
+      const { data: found, error: findErr } = await admin.auth.admin.getUserById(userId);
+      if (findErr || !found?.user) return reply({ error: 'No such account: it may already be removed' }, 404);
+
+      // Calls, bills and shift closes that name them let go first, or Auth refuses.
+      const held = await releaseSignatures(
+        (table, column, id) => admin.from(table).update({ [column]: null }).eq(column, id),
+        userId,
+      );
+      if (held) return reply({ error: `Could not remove the account: ${held}` }, 500);
+
+      // Its roles go with it (user_roles: ON DELETE CASCADE).
+      const { error: delErr } = await admin.auth.admin.deleteUser(userId);
+      if (delErr) return reply({ error: `Supabase Auth did not delete the account: ${delErr.message}` }, 500);
+
+      // Their waiter rows at either restaurant: section places go with them;
+      // their tables, orders and ratings stay, unassigned (ON DELETE SET NULL).
+      const [{ error: waiterErr }, { error: roleErr }] = await Promise.all([
+        admin.from('waiters').delete().eq('user_id', userId),
+        admin.from('user_roles').delete().eq('user_id', userId),
+      ]);
+      if (waiterErr || roleErr) {
+        return reply({
+          ok: true,
+          removed: true,
+          warning: `The sign-in is gone, but ${waiterErr ? 'their waiter row' : 'a role'} stayed: ${(waiterErr ?? roleErr)?.message}`,
+        });
+      }
+      return reply({ ok: true, removed: true });
     }
 
     return reply({ error: 'Unknown action' }, 400);

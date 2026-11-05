@@ -1,5 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { managesVenue, mayRemoveLogin, type RoleRow } from "../_shared/venue-access.ts";
+import { releaseSignatures } from "../_shared/remove-login.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -67,19 +68,25 @@ Deno.serve(async (req) => {
         admin.from('user_roles').select('id', { count: 'exact', head: true }).eq('user_id', waiter.user_id),
         admin.from('waiters').select('id', { count: 'exact', head: true }).eq('user_id', waiter.user_id),
       ]);
-      loginRemoved = mayRemoveLogin({
+      const mayGo = mayRemoveLogin({
         roles: rolesErr ? null : rolesLeft,
         waiters: waitersErr ? null : waitersLeft,
         userId: waiter.user_id,
         callerId: userData.user.id,
       });
-      if (loginRemoved) {
-        // Best effort: the waiter is already gone from this restaurant.
-        try {
-          await admin.auth.admin.deleteUser(waiter.user_id);
-        } catch (error) {
-          console.warn('Failed to delete waiter auth user', error);
-        }
+      if (mayGo) {
+        // Best effort: the waiter is already gone from this restaurant. Auth
+        // refuses anyone whose name is on a call, a bill or a shift close
+        // until those let go (_shared/remove-login.ts); and it answers a
+        // refusal rather than throwing, so it is read, not caught. A sign-in
+        // that stays opens nothing, and the owner sees it on Team.
+        const held = await releaseSignatures(
+          (table, column, id) => admin.from(table).update({ [column]: null }).eq(column, id),
+          waiter.user_id,
+        );
+        const { error: delErr } = held ? { error: { message: held } } : await admin.auth.admin.deleteUser(waiter.user_id);
+        if (delErr) console.warn('Failed to delete waiter auth user', delErr.message);
+        loginRemoved = !delErr;
       }
     }
 

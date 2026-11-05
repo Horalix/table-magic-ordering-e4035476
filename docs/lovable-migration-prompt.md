@@ -2,7 +2,46 @@
 
 Copy everything between the rules into Lovable. Nothing else needs to be said.
 
-## Next: "Generate a new code" for the QR codes
+## Next: removing accounts from Team (two functions, no SQL)
+
+Send this once `main` has `feature/team-remove-accounts` merged.
+
+- **`manage-admins`** gets `remove`: the owner deletes any account's sign-in
+  from Team, anyone's but their own, with its roles and waiter rows at both
+  restaurants. Its `list` now also shows sign-ins left with no role, and when
+  each account last signed in.
+- **`delete-waiter`**: removing a waiter who had ever acknowledged a call or a
+  bill, or closed a shift, left their sign-in behind without saying so,
+  because five history columns name the account without `ON DELETE`. Both
+  functions now clear those names first (`_shared/remove-login.ts`); the
+  calls, bills and shift closes stay.
+- No migration, no SQL, no types to regenerate. Until this is deployed, Team's
+  Remove says "the manage-admins function needs redeploying" and changes
+  nothing.
+
+---
+
+> **Task: redeploy two Edge Functions. Do not write or run any SQL, and do not
+> change the schema.**
+>
+> Make sure your checkout is the latest `main`.
+>
+> 1. Redeploy the Edge Functions `manage-admins` and `delete-waiter` from
+>    `supabase/functions/`, with the settings in `supabase/config.toml`. Both
+>    import from `supabase/functions/_shared/`, which includes the new file
+>    `remove-login.ts`. Paste the deploy result.
+> 2. Do not call either function to test it: `remove` and `delete-waiter`
+>    delete real accounts.
+>
+> Do not create or change any user account, password or credential, do not
+> change any Auth setting, and do not enable online card payments.
+
+---
+
+## Done: "Generate a new code" for the QR codes (4 November 2026)
+
+Lovable applied it on 4 November 2026: both functions show `uses_core = true`
+and `uses_pgcrypto = false`. Neither was called. What was sent:
 
 Send this once `main` has `fix/qr-codes-without-pgcrypto` merged (the runner
 is pinned to its commit 2472909).

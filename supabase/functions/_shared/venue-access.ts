@@ -98,6 +98,16 @@ export function ownerMayResetLogin(targetRoles: readonly RoleRow[] | null, ids: 
   return !isOwner(targetRoles);
 }
 
+/**
+ * manage-admins' remove: the owner (the caller is checked to be one first)
+ * deletes any account's sign-in for good — a restaurant's admin, a waiter, a
+ * kitchen tablet, another owner, or a sign-in with no role left — but never
+ * their own. Since the caller is an owner and stays, there is always one.
+ */
+export function ownerMayRemoveAccount(ids: { userId: string | null | undefined; callerId: string }): boolean {
+  return !!ids.userId && ids.userId !== ids.callerId;
+}
+
 export function resolveAdminVenue(
   roles: readonly RoleRow[],
   named: string | null | undefined,

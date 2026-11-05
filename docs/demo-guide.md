@@ -199,8 +199,13 @@ Sign in as the owner.
    printers. It refreshes every 30 seconds.
 2. **Open Vera Italia admin** → the full admin of that restaurant; the switch
    at the top of the menu goes back to La Soul.
-3. **Team**: who runs each restaurant, their waiters and kitchen tablets;
-   appoint or revoke a restaurant admin.
+3. **Team**: who runs each restaurant, their waiters and kitchen tablets,
+   and when each last signed in. Appoint a restaurant admin, give anyone a new
+   password, or **Remove** any account but your own: its sign-in is deleted
+   for good, and orders and history stay. An admin's Remove also offers
+   **Only stop running** that restaurant, which keeps the account. **Copy all
+   sign-ins** copies the whole list, with the address each one opens and no
+   passwords (nobody can read those; Password gives a new one).
 
 ---
 
@@ -211,4 +216,4 @@ Sign in as the owner.
 - Demo orders stay in today's reports. To start the next day clean, see
   `docs/operations-runbook.md`, *Free every table before a demo or rehearsal*.
 - Switch off (Waiters → the switch on their row) or remove any account made
-  only for the demo.
+  only for the demo (the owner: **Team → Remove**).

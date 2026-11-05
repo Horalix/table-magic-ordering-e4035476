@@ -88,14 +88,18 @@ async function stubOwnerParts(page: Page) {
     from: weekAgo, to: today, today, waiters: [], unassigned: { orders: 0, net_sales: 0 }, low_ratings: [],
   }));
 
+  const daysAgo = (n: number) => new Date(Date.now() - n * 24 * 60 * 60_000).toISOString();
   const team: TeamStub = {
     calls: [],
     accounts: [
-      { user_id: 'staff-user-1', email: 'kitchen@lasoul.test', username: null, display_name: null, kind: 'owner', venue: null, you: true },
-      { user_id: 'u-ana', email: 'ana@lasoul.test', username: null, display_name: null, kind: 'admin', venue: 'lasoul', you: false },
-      { user_id: 'u-amar', email: null, username: 'amar', display_name: 'Amar', kind: 'waiter', venue: 'lasoul', you: false },
-      { user_id: 'u-kitchen', email: 'kitchen-screen@lasoul.test', username: null, display_name: null, kind: 'kitchen', venue: 'lasoul', you: false },
-      { user_id: 'u-giulia', email: null, username: 'giulia', display_name: 'Giulia', kind: 'waiter', venue: 'veraitalia', you: false },
+      { user_id: 'staff-user-1', email: 'kitchen@lasoul.test', username: null, display_name: null, kind: 'owner', venue: null, you: true, last_sign_in_at: daysAgo(0) },
+      { user_id: 'u-partner', email: 'partner@lasoul.test', username: null, display_name: null, kind: 'owner', venue: null, you: false, last_sign_in_at: daysAgo(30) },
+      { user_id: 'u-ana', email: 'ana@lasoul.test', username: null, display_name: null, kind: 'admin', venue: 'lasoul', you: false, last_sign_in_at: daysAgo(2) },
+      { user_id: 'u-amar', email: null, username: 'amar', display_name: 'Amar', kind: 'waiter', venue: 'lasoul', you: false, last_sign_in_at: null },
+      { user_id: 'u-kitchen', email: 'kitchen-screen@lasoul.test', username: null, display_name: null, kind: 'kitchen', venue: 'lasoul', you: false, last_sign_in_at: daysAgo(1) },
+      { user_id: 'u-giulia', email: null, username: 'giulia', display_name: 'Giulia', kind: 'waiter', venue: 'veraitalia', you: false, last_sign_in_at: daysAgo(3) },
+      // A revoked admin: the sign-in stayed, with no role.
+      { user_id: 'u-old', email: 'old-admin@lasoul.test', username: null, display_name: null, kind: 'none', venue: null, you: false, last_sign_in_at: daysAgo(90) },
     ],
   };
   const known = new Set(['ana@lasoul.test', 'kitchen@lasoul.test', 'kitchen-screen@lasoul.test', 'existing@vera.test']);
@@ -121,6 +125,11 @@ async function stubOwnerParts(page: Page) {
     if (body.action === 'reset_password') {
       if (String(body.password ?? '').length < 10) return json(route, { error: 'The new password needs at least 10 characters', code: 'weak_password' }, 400);
       return json(route, { ok: true, reset: true });
+    }
+    if (body.action === 'remove') {
+      if (body.user_id === 'staff-user-1') return json(route, { error: 'You cannot remove your own account' }, 403);
+      team.accounts = team.accounts.filter((a) => a.user_id !== body.user_id);
+      return json(route, { ok: true, removed: true });
     }
     return json(route, { error: 'Unknown action' }, 400);
   });
@@ -480,18 +489,139 @@ test.describe('the owner', () => {
     await existing.getByRole('button', { name: 'Done' }).click();
     expect(team.calls.filter((c) => c.action === 'appoint').at(-1)).not.toHaveProperty('password');
 
-    // Revoke La Soul's admin: that role only.
-    await laSoul.getByRole('button', { name: 'Revoke ana@lasoul.test as La Soul admin' }).click();
-    await expect(page.getByRole('alertdialog', { name: 'Revoke ana@lasoul.test?' })).toBeVisible();
-    await page.getByRole('button', { name: 'Revoke admin' }).click();
+    // La Soul's admin stops running La Soul, and keeps the account: Remove → that role only.
+    await laSoul.getByRole('button', { name: 'Remove ana@lasoul.test' }).click();
+    const removing = page.getByRole('alertdialog', { name: 'Remove ana@lasoul.test?' });
+    await expect(removing.getByText('La Soul admin.')).toBeVisible();
+    await removing.getByRole('button', { name: 'Only stop running La Soul' }).click();
+    await expect(removing).toHaveCount(0);
     await expect(laSoul.getByText('ana@lasoul.test')).toHaveCount(0);
     expect(team.calls.find((c) => c.action === 'revoke')).toEqual({ action: 'revoke', user_id: 'u-ana', venue: 'lasoul' });
+    expect(team.calls.some((c) => c.action === 'remove')).toBe(false);
 
-    // The owner is listed, and cannot be revoked from here.
+    // The owner is listed, and cannot remove themselves.
     const owner = page.getByRole('list').filter({ hasText: '(you)' });
     await expect(owner).toContainText('kitchen@lasoul.test');
-    await expect(owner.getByRole('button', { name: /Revoke/ })).toHaveCount(0);
+    await expect(owner.getByRole('button', { name: 'Remove kitchen@lasoul.test' })).toHaveCount(0);
     expect(errors).toEqual([]);
+  });
+
+  test('removes any account but their own: a waiter, an admin, another owner, a sign-in with no role', async ({ page }) => {
+    const errors = watchErrors(page);
+    const { team } = await stubOwnerParts(page);
+    // One person with two roles: a waiter at La Soul who runs Vera Italia.
+    team.accounts.push(
+      { user_id: 'u-dino', email: null, username: 'dino', display_name: 'Dino', kind: 'waiter', venue: 'lasoul', you: false, last_sign_in_at: null },
+      { user_id: 'u-dino', email: 'dino@vera.test', username: null, display_name: null, kind: 'admin', venue: 'veraitalia', you: false, last_sign_in_at: null },
+    );
+    await page.goto('/admin/team');
+    const laSoul = page.getByRole('region', { name: 'La Soul team' });
+    const vera = page.getByRole('region', { name: 'Vera Italia team' });
+    const noRole = page.getByRole('region', { name: 'Sign-ins with no role' });
+
+    // Each row says who they sign in as and when they last did.
+    await expect(laSoul.getByText('@amar · never signed in')).toBeVisible();
+    await expect(laSoul.getByText('signed in 2 days ago')).toBeVisible();
+    await expect(noRole.getByText('old-admin@lasoul.test')).toBeVisible();
+    await expect(page.getByText(/Passwords can't be shown/)).toBeVisible();
+
+    // A waiter: the dialog names everything the account does; no "only stop running".
+    await laSoul.getByRole('button', { name: 'Remove Amar' }).click();
+    let dialog = page.getByRole('alertdialog', { name: 'Remove Amar?' });
+    await expect(dialog.getByText('La Soul waiter.')).toBeVisible();
+    await expect(dialog.getByText(/Orders, bills and history stay/)).toBeVisible();
+    await expect(dialog.getByRole('button', { name: /Only stop running/ })).toHaveCount(0);
+    // Keep them: nothing happens.
+    await dialog.getByRole('button', { name: 'Keep them' }).click();
+    await expect(dialog).toHaveCount(0);
+    expect(team.calls.some((c) => c.action === 'remove')).toBe(false);
+    await laSoul.getByRole('button', { name: 'Remove Amar' }).click();
+    await dialog.getByRole('button', { name: 'Remove account' }).click();
+    await expect(dialog).toHaveCount(0);
+    await expect(laSoul.getByText('Amar', { exact: true })).toHaveCount(0);
+    expect(team.calls.filter((c) => c.action === 'remove').at(-1)).toEqual({ action: 'remove', user_id: 'u-amar' });
+
+    // Two roles, one account: Remove takes both, from either row.
+    await laSoul.getByRole('button', { name: 'Remove Dino' }).click();
+    dialog = page.getByRole('alertdialog', { name: 'Remove Dino?' });
+    await expect(dialog.getByText('La Soul waiter · Vera Italia admin.')).toBeVisible();
+    await dialog.getByRole('button', { name: 'Remove account' }).click();
+    await expect(laSoul.getByText('Dino', { exact: true })).toHaveCount(0);
+    await expect(vera.getByText('dino@vera.test')).toHaveCount(0);
+
+    // An admin, all the way.
+    await laSoul.getByRole('button', { name: 'Remove ana@lasoul.test' }).click();
+    dialog = page.getByRole('alertdialog', { name: 'Remove ana@lasoul.test?' });
+    await expect(dialog.getByRole('button', { name: 'Only stop running La Soul' })).toBeVisible();
+    await dialog.getByRole('button', { name: 'Remove account' }).click();
+    await expect(laSoul.getByText('ana@lasoul.test')).toHaveCount(0);
+    expect(team.calls.filter((c) => c.action === 'remove').at(-1)).toEqual({ action: 'remove', user_id: 'u-ana' });
+
+    // Another owner.
+    const owners = page.getByRole('list').filter({ hasText: '(you)' });
+    await owners.getByRole('button', { name: 'Remove partner@lasoul.test' }).click();
+    dialog = page.getByRole('alertdialog', { name: 'Remove partner@lasoul.test?' });
+    await expect(dialog.getByText('Owner of every restaurant.')).toBeVisible();
+    await dialog.getByRole('button', { name: 'Remove account' }).click();
+    await expect(owners.getByText('partner@lasoul.test')).toHaveCount(0);
+
+    // A sign-in with no role; the list goes once it is empty.
+    await noRole.getByRole('button', { name: 'Remove old-admin@lasoul.test' }).click();
+    dialog = page.getByRole('alertdialog', { name: 'Remove old-admin@lasoul.test?' });
+    await expect(dialog.getByText(/No role: it signs in and opens nothing/)).toBeVisible();
+    await dialog.getByRole('button', { name: 'Remove account' }).click();
+    await expect(noRole).toHaveCount(0);
+
+    // Never their own.
+    await expect(owners).toContainText('kitchen@lasoul.test');
+    await expect(page.getByRole('button', { name: 'Remove kitchen@lasoul.test' })).toHaveCount(0);
+    expect(team.calls.filter((c) => c.action === 'remove').map((c) => c.user_id)).toEqual(['u-amar', 'u-dino', 'u-ana', 'u-partner', 'u-old']);
+    expect(errors).toEqual([]);
+  });
+
+  test('a function not yet redeployed: Remove says so, and nothing is gone', async ({ page }) => {
+    const { team } = await stubOwnerParts(page);
+    await page.route('**/functions/v1/manage-admins', async (route) => {
+      const body = route.request().postDataJSON() ?? {};
+      if (body.action !== 'remove') return route.fallback();
+      return json(route, { error: 'Unknown action' }, 400);
+    });
+    await page.goto('/admin/team');
+    const laSoul = page.getByRole('region', { name: 'La Soul team' });
+    await laSoul.getByRole('button', { name: 'Remove Amar' }).click();
+    const dialog = page.getByRole('alertdialog', { name: 'Remove Amar?' });
+    await dialog.getByRole('button', { name: 'Remove account' }).click();
+    await expect(page.getByText('The server cannot do this yet: the manage-admins function needs redeploying.')).toBeVisible();
+    // The dialog stays, to try again later or keep them.
+    await expect(dialog).toBeVisible();
+    await dialog.getByRole('button', { name: 'Keep them' }).click();
+    await expect(dialog).toHaveCount(0);
+    await expect(laSoul.getByText('Amar', { exact: true })).toBeVisible();
+    expect(team.accounts.some((a) => a.user_id === 'u-amar')).toBe(true);
+  });
+
+  test('copies every sign-in, with the address each opens, and no password', async ({ page }) => {
+    await page.addInitScript(() => {
+      Object.defineProperty(navigator, 'clipboard', {
+        configurable: true,
+        value: { writeText: async (text: string) => { (window as unknown as { __copied: string }).__copied = text; } },
+      });
+    });
+    await stubOwnerParts(page);
+    await page.goto('/admin/team');
+    await expect(page.getByRole('region', { name: 'La Soul team' }).getByText('ana@lasoul.test')).toBeVisible();
+    await page.getByRole('button', { name: 'Copy all sign-ins' }).click();
+    // Seven accounts: two owners, an admin, two waiters, a kitchen screen, one with no role.
+    await expect(page.getByText('Copied 7 sign-ins, without passwords')).toBeVisible();
+    const copied = await page.evaluate(() => (window as unknown as { __copied?: string }).__copied ?? '');
+    expect(copied).toContain('La Soul — https://lasoul.net');
+    expect(copied).toContain('Admin: ana@lasoul.test · https://lasoul.net/admin/login');
+    expect(copied).toContain('Waiter: Amar, username amar · https://lasoul.net/waiter/login?u=amar');
+    expect(copied).toContain('Waiter: Giulia, username giulia · https://veraitalia.net/waiter/login?u=giulia');
+    expect(copied).toContain('Owner: kitchen@lasoul.test (you)');
+    expect(copied).toContain('No role — signs in, opens nothing\nold-admin@lasoul.test');
+    expect(copied).not.toMatch(/Password:/);
+    expect(copied).not.toContain(INITIAL_PASSWORD);
   });
 
   test('changes their password from the admin menu', async ({ page }) => {
