@@ -1,6 +1,13 @@
 # menu.lasoul.net, once it points here (docs/seo-and-domain.md): its front
 # door is the menu, not the website. The restaurant's printed QR codes open it.
 https://menu.lasoul.net/       https://menu.lasoul.net/menu/lasoul/        301!
+# The old menu's own front page (its "back" link went to index.html), and the
+# plain-http address an old printed code may carry: the menu too. Over http
+# only in the minutes before Netlify has the certificate; after that Netlify
+# sends http to https itself.
+https://menu.lasoul.net/index.html  https://menu.lasoul.net/menu/lasoul/   301!
+http://menu.lasoul.net/             /menu/lasoul/                          301!
+http://menu.lasoul.net/index.html   /menu/lasoul/                          301!
 
 # The old static menu that used to live at menu.lasoul.net. Printed QR codes,
 # Google results and saved home-screen icons still point at these pages.
