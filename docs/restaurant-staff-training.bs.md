@@ -73,8 +73,14 @@ Na telefonu su dole kartice **Dashboard**, **Menu**, **QR Codes** i
   i vibrira samo dok je ovaj ekran otvoren — kad je zatvoren ili je telefon
   zaključan, obavještenja ne stižu.
 - Podesite da ekran ostane upaljen što duže.
-- Ako piše **Alerts are silent — tap to enable sound**, dodirnite to.
-- Ako piše **Sound is off — you will not hear calls or ready food**, dodirnite to.
+- Zvuk i vibracija su **uključeni sami od sebe**. Kad otvorite ekran, dodirnite ga
+  jednom: telefoni drže zvuk (a Android telefoni i vibraciju) ugašenim do prvog
+  dodira. Ako piše **Alerts are silent — tap once to turn on sound**, dodirnite to.
+- Dugme sa zvučnikom gasi samo zvuk; telefon i dalje vibrira. Utišavanje se samo
+  ugasi nakon 4 sata, tako da svaka sljedeća smjena počinje sa zvukom. Dok je
+  utišan, ekran piše **Sound is off until** i vrijeme — dodirnite to da vratite zvuk.
+- **iPhone:** web stranica ne može vibrirati iPhone, zato držite jačinu zvuka gore.
+  Obavještenja zvone i kad je uključen prekidač za tihi način rada (iOS 16.4 i noviji).
 - **Sign out** prvo pita. Dodirnite **Stay signed in** osim ako vam je smjena gotova.
 
 **Kuhinja i šank**

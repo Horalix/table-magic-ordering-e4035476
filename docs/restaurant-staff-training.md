@@ -69,8 +69,15 @@ On a phone the tabs at the bottom are **Dashboard**, **Menu**, **QR Codes** and
   buzzes while this screen is open — there are no notifications when it is
   closed or the screen is locked.
 - Set the screen to stay on as long as possible.
-- If it says **Alerts are silent — tap to enable sound**, tap it.
-- If it says **Sound is off — you will not hear calls or ready food**, tap it.
+- Sound and vibration are **on by default**. After opening the screen, tap it
+  once: phones keep sound (and Android phones keep vibration) off until the
+  first tap. If it says **Alerts are silent — tap once to turn on sound**, tap it.
+- The speaker button mutes the sound only; the phone still buzzes. A mute ends by
+  itself after 4 hours, so the next shift always starts with sound on. While it is
+  muted the screen says **Sound is off until** and the time — tap it to turn
+  sound back on.
+- **iPhone:** web pages cannot vibrate an iPhone, so keep the volume up. Alerts ring
+  even with the silent switch on (iOS 16.4 and newer).
 - **Sign out** asks first. Tap **Stay signed in** unless your shift is over.
 
 **Kitchen and bar**

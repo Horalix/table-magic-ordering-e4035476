@@ -15,8 +15,9 @@ import { ArrowLeft, Bell, CheckCircle2, ChefHat, Clock, Grid3x3, Lock, LogIn, Re
 import PinPad from '@/components/monitor/PinPad';
 import { toast } from 'sonner';
 import {
-  playOrderAlert, playWaiterCallAlert, playBillRequestAlert, useAudioUnlock, useReminderChime,
+  playOrderAlert, playWaiterCallAlert, playBillRequestAlert, useAudioUnlock, useReminderChime, vibrate,
 } from '@/lib/kitchen-sounds';
+import { useStaffSound } from '@/lib/staff-sound';
 import { useStaffDocument, useStaffVenueLook } from '@/components/staff/useStaffDocument';
 import { plural } from '@/components/staff/floor-words';
 import { useStaffVenue } from '@/hooks/useStaffVenue';
@@ -105,7 +106,8 @@ const WaiterMonitor = () => {
   const idleTimerRef = useRef<number | null>(null);
 
   // Sound alerts (shared floor display)
-  const [soundOn, setSoundOn] = useState(() => localStorage.getItem('monitor:sound') !== 'false');
+  // On unless muted, and a mute ends by itself (src/lib/staff-sound.ts).
+  const { soundOn, setSoundOn } = useStaffSound('floor');
   const soundOnRef = useRef(soundOn);
   useEffect(() => { soundOnRef.current = soundOn; }, [soundOn]);
   const initialLoadRef = useRef(false);
@@ -160,11 +162,18 @@ const WaiterMonitor = () => {
     const callIds = new Set((c.data ?? []).map((x) => x.id));
     const billIds = new Set((b.data ?? []).map((x) => x.id));
     const readyIds = new Set((o.data ?? []).filter((x) => x.status === 'ready').map((x) => x.id));
-    if (initialLoadRef.current && soundOnRef.current) {
+    if (initialLoadRef.current) {
       const hasNew = (cur: Set<string>, prev: Set<string>) => [...cur].some((id) => !prev.has(id));
-      if (hasNew(billIds, prevBillIds.current)) playBillRequestAlert();
-      else if (hasNew(callIds, prevCallIds.current)) playWaiterCallAlert();
-      else if (hasNew(readyIds, prevReadyIds.current)) playOrderAlert();
+      const newBill = hasNew(billIds, prevBillIds.current);
+      const newCall = hasNew(callIds, prevCallIds.current);
+      // A waiter holding the floor screen on a phone feels a table asking,
+      // muted or not. Tablets have no motor; this does nothing there.
+      if (newBill || newCall) vibrate();
+      if (soundOnRef.current) {
+        if (newBill) playBillRequestAlert();
+        else if (newCall) playWaiterCallAlert();
+        else if (hasNew(readyIds, prevReadyIds.current)) playOrderAlert();
+      }
     }
     prevCallIds.current = callIds;
     prevBillIds.current = billIds;
@@ -431,7 +440,7 @@ const WaiterMonitor = () => {
           </div>
           <div className="flex items-center gap-1.5 shrink-0">
             <button
-              onClick={() => { const next = !soundOn; setSoundOn(next); localStorage.setItem('monitor:sound', String(next)); if (next) void unlockSound(); }}
+              onClick={() => { const next = !soundOn; setSoundOn(next); if (next) void unlockSound(); }}
               aria-label={soundOn ? 'Mute alerts' : 'Enable alerts'}
               className="inline-flex items-center justify-center w-11 h-11 rounded-full border border-border bg-card hover:bg-muted"
             >

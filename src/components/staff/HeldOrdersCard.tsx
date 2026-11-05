@@ -98,11 +98,12 @@ function useHeldOrders(soundEnabled: boolean) {
 
     const rows = ((data ?? []) as unknown as HeldOrderRow[]).map(toHeld);
     // A chime means "new", not "refetched" — and never on the first load,
-    // or every screen beeps when someone opens it.
+    // or every screen beeps when someone opens it. The buzz comes even with
+    // the sound muted: a waiter mutes the speaker, not the phone.
     const seen = known.current;
-    if (seen !== null && rows.some((o) => !seen.has(o.id)) && soundRef.current) {
-      playWaiterCallAlert();
+    if (seen !== null && rows.some((o) => !seen.has(o.id))) {
       vibrate();
+      if (soundRef.current) playWaiterCallAlert();
     }
     known.current = new Set([...(seen ?? []), ...rows.map((o) => o.id)]);
     setHeld(rows);
@@ -118,7 +119,10 @@ function useHeldOrders(soundEnabled: boolean) {
   useStaffRefresh(useCallback(() => { refetch(); }, [refetch]));
 
   // Someone is standing at a table waiting for food that has not been made.
-  useReminderChime(soundEnabled && (held?.length ?? 0) > 0, playWaiterCallAlert);
+  useReminderChime((held?.length ?? 0) > 0, () => {
+    vibrate();
+    if (soundRef.current) playWaiterCallAlert();
+  });
 
   return { held: held ?? [], refetch: fetchHeld };
 }
