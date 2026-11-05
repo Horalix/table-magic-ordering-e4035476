@@ -329,7 +329,7 @@ Two things bring that into a month:
 
 The default holdout is unchanged (0: everybody sees suggestions). To measure:
 
-1. **Admin → Service & suggestions → Measurement holdout**: set **50**, then
+1. **Admin → Ordering & service → Measurement holdout**: set **50**, then
    press **Start measuring at 50%**. (The Impact page's button starts a 10%
    holdout; the number box alone starts nothing — assignment is recorded per
    table when it opens, under a running experiment.) Starting closes any

@@ -86,7 +86,10 @@ const TABLE_TO_KEYS: Record<string, Key[]> = {
   bill_requests: [staffKeys.billRequests],
   table_sessions: [staffKeys.sessions, staffKeys.tables],
   tables: [staffKeys.tables],
-  restaurant_settings: [staffKeys.settings],
+  // ['service-status']: the Menu only notice on every staff screen
+  // (src/components/staff/MenuOnlyNotice.tsx), so it appears and goes the
+  // moment the manager flips the switch.
+  restaurant_settings: [staffKeys.settings, ['service-status']],
 };
 
 const WATCHED_TABLES = Object.keys(TABLE_TO_KEYS);

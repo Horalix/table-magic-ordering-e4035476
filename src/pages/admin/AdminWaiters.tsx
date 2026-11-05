@@ -100,6 +100,9 @@ const AdminWaiters = () => {
   const username = typedUsername ?? (kind === 'kitchen' ? kitchenUsername(venueSlug) : suggestUsername(name));
   const displayName = name.trim() || (kind === 'kitchen' ? 'Kitchen' : '');
 
+  /** The list did not load: said as that, not as a restaurant with no waiters. */
+  const [loadFailed, setLoadFailed] = useState(false);
+
   const fetchAll = useCallback(async () => {
     const [w, s, a] = await Promise.all([
       supabase.from('waiters').select('id, display_name, username, is_active, has_pin, user_id, created_at, pin_set_at, venue_id').order('display_name'),
@@ -108,7 +111,8 @@ const AdminWaiters = () => {
       // at 00:30 "today's sections" are the ones from the shift still running.
       supabase.from('section_assignments').select('section_id, waiter_id').eq('shift_date', businessDayISO()),
     ]);
-    if (w.error) { toast.error('Failed to load waiters'); return; }
+    if (w.error) { setLoadFailed(true); toast.error('Could not load the waiters'); return; }
+    setLoadFailed(false);
     setWaiters(w.data ?? []);
     setSections((s.data as SectionLite[]) ?? []);
     setAssignments(a.data ?? []);
@@ -422,10 +426,15 @@ const AdminWaiters = () => {
 
       <Card>
         <CardHeader>
-          <CardTitle className="font-serif text-lg">Team</CardTitle>
+          <CardTitle className="font-serif text-lg">Waiters and kitchen tablets</CardTitle>
         </CardHeader>
         <CardContent>
-          {waiters.length === 0 ? (
+          {loadFailed ? (
+            <div role="alert" className="text-sm font-sans">
+              <p className="text-foreground">The list could not be loaded. Nothing is lost.</p>
+              <Button variant="outline" size="sm" className="mt-2 min-h-[44px]" onClick={() => { void fetchAll(); }}>Try again</Button>
+            </div>
+          ) : waiters.length === 0 ? (
             <p className="text-sm font-sans text-muted-foreground">No waiters yet.</p>
           ) : (
             <div className="divide-y divide-border">

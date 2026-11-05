@@ -41,8 +41,8 @@ const AdminLogin = () => {
          * which half of the login failed.
          */
         toast.error(
-          'Password accepted, but this account has no admin or staff role yet. ' +
-          'It needs a row in user_roles before it can sign in here.',
+          'Password accepted, but this account is not a manager yet. ' +
+          'Ask the owner to add it in Admin → Team.',
           { duration: 8000 },
         );
         return;

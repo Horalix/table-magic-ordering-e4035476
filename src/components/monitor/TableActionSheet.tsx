@@ -239,7 +239,7 @@ const TableActionSheet = ({ table, meId, onClose, onChanged }: Props) => {
                 {/* Unknown is a real answer. A guess here quietly corrupts every
                     per-head number in the reports. */}
                 <p className="text-sm text-muted-foreground font-sans">
-                  {covers === null ? 'Not counted — leave it if you are not sure' : `${covers} covers`}
+                  {covers === null ? 'Not counted — leave it if you are not sure' : `${covers} ${covers === 1 ? 'person' : 'people'}`}
                 </p>
               </div>
               <div className="flex items-center gap-1">

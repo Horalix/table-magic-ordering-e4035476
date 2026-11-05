@@ -221,7 +221,7 @@ const AdminService = () => {
   if (!loading && (loadError || !settings)) {
     return (
       <div className="space-y-6">
-        <h1 className="font-serif text-3xl font-bold text-foreground">Service &amp; merchandising</h1>
+        <h1 className="font-serif text-3xl font-bold text-foreground">Ordering &amp; service</h1>
         <Card className="border-destructive/30">
           <CardContent className="py-10 text-center space-y-3">
             <AlertTriangle className="w-8 h-8 mx-auto text-destructive/60" />
@@ -246,7 +246,7 @@ const AdminService = () => {
 
   return (
     <div className="space-y-6">
-      <h1 className="font-serif text-3xl font-bold text-foreground">Service &amp; merchandising</h1>
+      <h1 className="font-serif text-3xl font-bold text-foreground">Ordering &amp; service</h1>
 
       {/*
         A restaurant goes live on its own address with its menu before the
@@ -266,7 +266,7 @@ const AdminService = () => {
               <Label htmlFor="menu-only" className="font-sans font-semibold">Show guests the menu and nothing else</Label>
               <p className="text-xs text-muted-foreground font-sans mt-0.5">
                 No ordering, no calling the waiter, no asking for the bill; a table&rsquo;s QR code opens the menu.
-                The database refuses all of it too. The staff screens, printing and this admin stay as they are.
+                The waiters&rsquo; phones, the floor screen and the kitchen board say that Menu only is on.
               </p>
             </div>
             <Switch
@@ -279,7 +279,7 @@ const AdminService = () => {
           {settings.menu_only === undefined && (
             <div className="flex items-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs font-sans text-amber-700 dark:text-amber-400">
               <AlertTriangle className="w-4 h-4 shrink-0" />
-              Needs the database update first: send Lovable the &ldquo;Next&rdquo; prompt in docs/lovable-migration-prompt.md.
+              Not available yet: the database needs an update first. Ask your developer.
             </div>
           )}
         </CardContent>

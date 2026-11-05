@@ -42,8 +42,10 @@ import {
   useCoalesced, useLatestRequest, useStaffRealtime, useStaffRealtimeEvent, useStaffRefresh,
 } from '@/lib/realtime';
 import {
-  playBillRequestAlert, playOrderAlert, playOrderPlacedAlert, playWaiterCallAlert, useAudioUnlock, useReminderChime, vibrate,
+  canVibrate, playBillRequestAlert, playOrderAlert, playOrderPlacedAlert, playWaiterCallAlert, ringThroughSilentSwitch,
+  useAudioUnlock, useReminderChime, vibrate,
 } from '@/lib/kitchen-sounds';
+import { soundBackAt, useStaffSound } from '@/lib/staff-sound';
 import ConnectionPill from '@/components/staff/ConnectionPill';
 import PaymentConfirm from '@/components/staff/PaymentConfirm';
 import FreeTableDialog from '@/components/staff/FreeTableDialog';
@@ -51,6 +53,11 @@ import { useStaffDocument, useStaffVenueLook } from '@/components/staff/useStaff
 import { isHeld, isInKitchen, kitchenStart, orderStatusLabel } from '@/components/staff/order-status';
 import { attentionSummary as summarize, plural } from '@/components/staff/floor-words';
 import HeldOrdersCard from '@/components/staff/HeldOrdersCard';
+import MenuOnlyNotice from '@/components/staff/MenuOnlyNotice';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { useStaffVenue } from '@/hooks/useStaffVenue';
 import type { Database } from '@/integrations/supabase/types';
 
@@ -89,8 +96,6 @@ type FloorAlert = {
 
 /** Who is on their way to an alert. */
 type Claimer = { name: string; mine: boolean };
-
-const SOUND_KEY = 'waiter-sound-on';
 
 /** A per-table settle-up that is waiting for its second tap. */
 interface PendingSettle {
@@ -134,7 +139,16 @@ const WaiterDashboard = () => {
    * words are the ones a busy waiter believes.
    */
   const [loaded, setLoaded] = useState(false);
-  const [soundOn, setSoundOn] = useState<boolean>(() => localStorage.getItem(SOUND_KEY) !== 'false');
+  // On unless muted, and a mute ends by itself (src/lib/staff-sound.ts):
+  // it used to be remembered into every later shift.
+  const { soundOn, mutedUntil, setSoundOn } = useStaffSound('waiter');
+  const soundOnRef = useRef(soundOn);
+  useEffect(() => { soundOnRef.current = soundOn; }, [soundOn]);
+  // An iPhone on its silent switch muted every alert, and it cannot buzz.
+  useEffect(() => { ringThroughSilentSwitch(); }, []);
+  // Signing out stops every alert for this waiter's tables, and signing back
+  // in needs the password from the manager: one stray tap must not do it.
+  const [confirmSignOut, setConfirmSignOut] = useState(false);
   const { unlocked: audioUnlocked, unlock: unlockSound } = useAudioUnlock();
   /** null until the first load: alerts that were already open then are not "new". */
   const prevAlertIds = useRef<Set<string> | null>(null);
@@ -540,11 +554,13 @@ const WaiterDashboard = () => {
     ]);
     const prev = prevAlertIds.current;
     prevAlertIds.current = ids;
-    if (prev === null || !soundOn) return;
+    if (prev === null) return;
     const newBill = billRequests.some((b) => !prev.has(`b:${b.id}`));
     const newCall = waiterCalls.some((c) => !prev.has(`c:${c.id}`));
     if (!newBill && !newCall) return;
+    // The buzz comes even with the sound muted: it used to be muted with it.
     vibrate();
+    if (!soundOn) return;
     if (newBill) playBillRequestAlert(); else playWaiterCallAlert();
   }, [waiterCalls, billRequests, soundOn, loading]);
 
@@ -583,17 +599,18 @@ const WaiterDashboard = () => {
     if (soundOn) playOrderPlacedAlert();
   }, [orders, soundOn, loading]);
 
-  /* Again every ~75s while a table is waiting and nobody is on the way. */
+  /* Again every ~75s while a table is waiting and nobody is on the way — a buzz, and the chime unless muted. */
   const alertsRef = useRef({ calls: waiterCalls, bills: billRequests });
   useEffect(() => { alertsRef.current = { calls: waiterCalls, bills: billRequests }; }, [waiterCalls, billRequests]);
   useReminderChime(
-    soundOn && (waiterCalls.length > 0 || billRequests.length > 0),
+    waiterCalls.length > 0 || billRequests.length > 0,
     useCallback(() => {
       const waiting = (a: FloorAlert) => a.status === 'pending'
         || !a.acknowledged_at || Date.now() - new Date(a.acknowledged_at).getTime() > 3 * 60_000;
       const { calls, bills } = alertsRef.current;
       if (!calls.some(waiting) && !bills.some(waiting)) return;
       vibrate();
+      if (!soundOnRef.current) return;
       if (bills.some(waiting)) playBillRequestAlert(); else playWaiterCallAlert();
     }, []),
   );
@@ -601,9 +618,10 @@ const WaiterDashboard = () => {
   const toggleSound = async () => {
     const next = !soundOn;
     setSoundOn(next);
-    localStorage.setItem(SOUND_KEY, String(next));
     if (next && (await unlockSound())) playWaiterCallAlert();
   };
+  /** Only Android buzzes from a web page; an iPhone must not be promised it. */
+  const buzzes = canVibrate();
 
   const startSettle = (sessionId: string, tableNumber: number | string, method: TablePaymentMethod) => {
     const { due, amount } = owedFor(sessionId);
@@ -693,7 +711,7 @@ const WaiterDashboard = () => {
             >
               {soundOn ? <Volume2 className="w-5 h-5" /> : <VolumeX className="w-5 h-5 text-muted-foreground" />}
             </Button>
-            <Button variant="ghost" onClick={logout} className="tap-sm min-h-[44px] min-w-[44px] px-2" aria-label="Sign out">
+            <Button variant="ghost" onClick={() => setConfirmSignOut(true)} className="tap-sm min-h-[44px] min-w-[44px] px-2" aria-label="Sign out">
               <LogOut className="w-5 h-5 sm:mr-1" /><span className="hidden sm:inline text-sm">Sign out</span>
             </Button>
           </div>
@@ -702,13 +720,31 @@ const WaiterDashboard = () => {
         {/* Phones suspend audio until a tap. Saying so is the difference
             between a waiter who knows to tap once and one who trusts a
             silent phone all evening. */}
+        {/* Muted on purpose is still worth saying in words: the crossed-out
+            speaker alone let a phone stay silent all evening. The mute ends by
+            itself, and the strip says when. */}
+        {!soundOn && (
+          <div className="max-w-6xl mx-auto px-4 sm:px-6 pb-2">
+            <button
+              onClick={() => { void toggleSound(); }}
+              className="w-full min-h-[44px] rounded-xl bg-amber-100 text-amber-900 border border-amber-200 text-sm font-sans font-semibold flex items-center justify-center gap-2 px-3"
+            >
+              <VolumeX className="w-4 h-4 shrink-0" aria-hidden />
+              {mutedUntil ? `Sound is off until ${soundBackAt(mutedUntil)}` : 'Sound is off'}
+              {buzzes ? ' — the phone only buzzes. Tap to turn on.' : ' — you will not hear calls or ready food. Tap to turn on.'}
+            </button>
+          </div>
+        )}
+
+        <MenuOnlyNotice audience="waiter" outerClassName="max-w-6xl mx-auto px-4 sm:px-6 pb-2" />
+
         {soundOn && !audioUnlocked && (
           <div className="max-w-6xl mx-auto px-4 sm:px-6 pb-2">
             <button
               onClick={() => { void unlockSound().then((ok) => { if (ok) playWaiterCallAlert(); }); }}
               className="w-full min-h-[44px] rounded-xl bg-amber-100 text-amber-900 border border-amber-200 text-sm font-sans font-semibold flex items-center justify-center gap-2"
             >
-              <VolumeX className="w-4 h-4" aria-hidden /> Alerts are silent — tap to enable sound
+              <VolumeX className="w-4 h-4" aria-hidden /> {buzzes ? 'Alerts are silent — tap once to turn on sound and vibration' : 'Alerts are silent — tap once to turn on sound'}
             </button>
           </div>
         )}
@@ -969,6 +1005,21 @@ const WaiterDashboard = () => {
         knownOwed={freeing ? owedFor(freeing.id).amount : 0}
         onFreed={refetch}
       />
+
+      <AlertDialog open={confirmSignOut} onOpenChange={setConfirmSignOut}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Sign out?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Your phone stops alerting you about your tables until you sign in again, and signing in needs your password.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="min-h-[44px]">Stay signed in</AlertDialogCancel>
+            <AlertDialogAction className="min-h-[44px]" onClick={() => { void logout(); }}>Sign out</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };

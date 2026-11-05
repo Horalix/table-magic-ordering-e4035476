@@ -51,7 +51,7 @@ staff-facing "how do I do X", see `docs/restaurant-staff-training.md`.
 
 ## 5. The emergency brakes
 
-All in **Admin → Service & suggestions**. All take effect immediately, no
+All in **Admin → Ordering & service**. All take effect immediately, no
 deploy, and all are enforced **server-side** — an old cached app build cannot
 work around them.
 
@@ -237,7 +237,7 @@ If the amount does **not** match, do not release. Refund and re-take.
 | An order shows "Online payment pending" for a long time | Callback never arrived | Check the webhook logs. Do **not** mark it paid manually. |
 | Daily report does not match the drawer | Cash recorded as terminal or vice versa | Check `audit_log` for `payment.recorded_*` on those orders |
 | A guest was charged twice | Should be impossible | `SELECT * FROM payment_transactions WHERE order_id = …` — more than one `approved` is a duplicate. Refund via Monri, then `record_order_refund`. Capture the timeline and open an issue. |
-| Suggestions are not showing | Switched off, or nothing curated and no order history | Admin → Service & suggestions |
+| Suggestions are not showing | Switched off, or nothing curated and no order history | Admin → Ordering & service |
 
 ---
 

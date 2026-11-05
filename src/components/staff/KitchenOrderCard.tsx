@@ -563,7 +563,7 @@ const KitchenOrderCard = ({
             <UndoButton
               since={revertFrom.since}
               windowSeconds={undoSeconds}
-              label={`Undo ${order.status}`}
+              label={`Undo “${orderStatusLabel(order.status)}”`}
               onUndo={() => { void run('revert', () => onRevertOrder(order.id, revertFrom.to)); }}
             />
           )}

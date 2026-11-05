@@ -60,14 +60,14 @@ the fallback, so the moment a manager adds a real pairing it wins.
 **Scoring.** `priority + 40` for curated, `10` for fallback, tie-broken by
 `margin_score`, then by price ascending (a cheaper add is an easier yes).
 
-Managed in **Admin → Service & suggestions**.
+Managed in **Admin → Ordering & service**.
 
 ---
 
 ## How the engine actually decides
 
 Four signals, scored, then guardrails applied on top. Every weight is visible
-and editable in **Admin → Service & suggestions**, and the live values are shown
+and editable in **Admin → Ordering & service**, and the live values are shown
 in **Admin → Menu Intelligence**.
 
 | Signal | Default weight | Source | What it means |
@@ -147,7 +147,7 @@ Two numbers, and they answer different questions.
 suggestion, in orders that completed, priced by the server. Precise, but an
 **upper bound**: some of those guests wanted the coffee anyway.
 
-**The holdout** — set `reco_holdout_pct` to 10 in Admin → Service & suggestions.
+**The holdout** — set `reco_holdout_pct` to 10 in Admin → Ordering & service.
 One table in ten then sees no suggestions at all, deterministically and
 consistently for the whole visit. Menu Intelligence compares average order value
 between the two groups. That difference is the real effect.
@@ -310,7 +310,7 @@ and Arabic names on the ten most-ordered dishes with a native speaker. Then look
 at *most viewed but least ordered* — that gap is a description or price problem.
 
 ### Week 3 — attachment
-Curate 10–15 real pairings in Admin → Service & suggestions — the ones the
+Curate 10–15 real pairings in Admin → Ordering & service — the ones the
 waiters would actually suggest. Turn on the after-meal placement. Measure
 acceptance **by placement and type**. Delete anything under 5% acceptance;
 it is noise to the guest and clutter to you. Compare AOV and items-per-order

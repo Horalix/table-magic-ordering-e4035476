@@ -150,7 +150,7 @@ These cannot be done from this repository and are **not** done:
 
 **Suspected credential exposure.**
 1. Rotate the affected secret first, ask questions second.
-2. Turn off online card payment (Admin → Service & suggestions).
+2. Turn off online card payment (Admin → Ordering & service).
 3. Review `audit_log` for the exposure window.
 4. Review `payment_callback_events` for `unknown_transaction` outcomes.
 

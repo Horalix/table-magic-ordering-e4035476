@@ -153,7 +153,7 @@ const AdminSections = () => {
     <div className="max-w-5xl">
       <div className="flex flex-wrap items-end justify-between gap-4 mb-8">
         <div>
-          <h1 className="font-serif text-3xl font-bold text-foreground">Sections & Waiters</h1>
+          <h1 className="font-serif text-3xl font-bold text-foreground">Floor sections & waiters</h1>
           <p className="text-sm font-sans text-muted-foreground mt-1">Group tables into sections, then tap a waiter to assign them. Tables auto-route to the assigned waiter when guests sit down.</p>
         </div>
         {/* Shift control — today by default, other days tucked away */}

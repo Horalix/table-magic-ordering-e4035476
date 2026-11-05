@@ -24,18 +24,61 @@ Add your screen to the phone's home screen so it opens like an app.
 
 ---
 
+## Right now: Menu only
+
+Both restaurants show their **menu only** for now. Guests scan the code and
+read the menu on their phones, in Bosnian, English or Arabic. They **cannot**
+order, call you or ask for the bill from the phone — take orders the usual way.
+
+Every staff screen says so in a bar at the top: **Menu only is on.** While it
+is there, an empty phone, floor or kitchen screen is normal. Nothing is broken.
+
+When the owner decides to take orders through the app, the manager turns it
+off in **Admin → Ordering & service**. The bar disappears from every screen by
+itself, and the rest of this guide applies.
+
+---
+
+## The manager's admin, day to day
+
+On a phone the tabs at the bottom are **Dashboard**, **Menu**, **QR Codes** and
+**Orders**; everything else is under **More**.
+
+- **Menu** — tap a price to change it. When something runs out, switch it to
+  **Sold out**: guests see it greyed at once. The list **Sold out right now**
+  at the top reminds you what to put back; tap a dish there when it is back.
+- **QR Codes** — the room code says **Scan for the menu** and keeps working
+  when ordering is turned on, so it is printed once. **Replace code…** stops
+  every printed room code at once: only if someone has copied your code. It
+  asks before it does anything.
+- **Ordering & service** — the **Menu only** switch, and later the switches
+  for taking orders.
+- If a page says it **could not be loaded**, nothing is lost: check the
+  internet and tap **Try again**.
+
+---
+
 ## Before every service
 
 **Manager**
-- **Tonight**: tap each section and the waiters who cover it → **Done**. Do it
-  every day. If it is not done, every table shows up under *No waiter yet*.
+- **Tonight’s waiters**: tap each section and the waiters who cover it → **Done**. Do it
+  every day (once ordering is on). If it is not done, every table shows up under *No waiter yet*.
 
 **Waiters**
 - Sign in, open `/waiter`, and **leave it open**. Your phone only beeps and
   buzzes while this screen is open — there are no notifications when it is
   closed or the screen is locked.
 - Set the screen to stay on as long as possible.
-- If it says **Alerts are silent — tap to enable sound**, tap it.
+- Sound and vibration are **on by default**. After opening the screen, tap it
+  once: phones keep sound (and Android phones keep vibration) off until the
+  first tap. If it says **Alerts are silent — tap once to turn on sound**, tap it.
+- The speaker button mutes the sound only; the phone still buzzes. A mute ends by
+  itself after 4 hours, so the next shift always starts with sound on. While it is
+  muted the screen says **Sound is off until** and the time — tap it to turn
+  sound back on.
+- **iPhone:** web pages cannot vibrate an iPhone, so keep the volume up. Alerts ring
+  even with the silent switch on (iOS 16.4 and newer).
+- **Sign out** asks first. Tap **Stay signed in** unless your shift is over.
 
 **Kitchen and bar**
 - Tablet charging, set to never sleep (if it says **Screen may sleep — set the
