@@ -106,7 +106,7 @@ const SiteVisit = ({ venue }: { venue: Venue }) => {
 
         <Reveal className="lg:col-span-7" delay={0.06}>
           <div className="relative aspect-[4/3] overflow-hidden rounded-[28px] bg-ls-sand shadow-[0_40px_80px_-50px_rgba(35,46,40,0.55)] sm:aspect-[3/2]">
-            <SiteImage fill name="visit" alt={st('visit_alt')} sizes="(min-width: 1240px) 680px, (min-width: 1024px) 55vw, 100vw" className="object-[80%_50%]" />
+            <SiteImage fill name="visit" alt={st('visit_alt')} sizes="(min-width: 1240px) 680px, (min-width: 1024px) 55vw, calc(100vw - 2.5rem)" className="object-[80%_50%]" />
           </div>
         </Reveal>
       </Container>

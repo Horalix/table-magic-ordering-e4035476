@@ -54,6 +54,16 @@
     ],
     "blur": "data:image/webp;base64,UklGRqIAAABXRUJQVlA4IJYAAACwBACdASoQABgAPu1iqU2ppaOiMAgBMB2JbACdMoR3ACrwBRuStN8r19S+bM9kAP6v86MZTQTL3Z0ishYKWGwgxhCE3nTfUvlkWox+Ns0ioW4ZD63vuAud65bEypjR98SBjVsnf8TdkZaN/3keLZarPjfrenAyUgrAcPflPlDOtizcWol0v/X6wR+nqe+u4JALIXfcIAA="
   },
+  "cat-drinks-phone": {
+    "width": 1024,
+    "height": 768,
+    "widths": [
+      600,
+      800,
+      1024
+    ],
+    "blur": "data:image/webp;base64,UklGRmwAAABXRUJQVlA4IGAAAADwAQCdASoQAAwAA4BaJbACdAEPBS8u/AAA+PKq5P+30HknZL20us0xQJ/DMriQ55tpWkwCdmtmk9GVtEhQvi4o64sw6tPi+dyYT6LsZtbeAZDF5My9OF6o35GYzCD+gAA="
+  },
   "cat-food": {
     "width": 1024,
     "height": 1536,
@@ -64,6 +74,16 @@
       1024
     ],
     "blur": "data:image/webp;base64,UklGRp4AAABXRUJQVlA4IJIAAADwAwCdASoQABgAPu1iqU2ppaOiMAgBMB2JZACsAB4ccWuOiMwlZgJwAP6zo/o8AU+qmc6PcEfa9kmScA2onlxTVAKaGnxEFMXxS6nGsRIitbkBhfgP5mQFMhygYXVTsh1YrenYe47LQeGIdNntaPTk75F1IMxIE86j1pvP9jfU7irpdgJIbyl9CdCj6g0M8qAAAA=="
+  },
+  "cat-food-phone": {
+    "width": 1024,
+    "height": 768,
+    "widths": [
+      600,
+      800,
+      1024
+    ],
+    "blur": "data:image/webp;base64,UklGRm4AAABXRUJQVlA4IGIAAAAQAgCdASoQAAwAA4BaJbACdADdZH8Zqc1gAP7JRQlRYIao2oQldtjfuqgD9RAiBDyk+CMlmgtV/MMsUVRB7fWQRvBKlzxEJEcohkKpq6xF2kvPa7sctFYx5WF0w27crgAAAA=="
   },
   "cat-desserts": {
     "width": 1024,
@@ -76,12 +96,23 @@
     ],
     "blur": "data:image/webp;base64,UklGRqoAAABXRUJQVlA4IJ4AAABwBACdASoQABgAPu1iqU2ppaOiMAgBMB2JZACw7ywBX/XM3ucBwWoZ75xKAAD+kBgBD96MBtcYQQsgQHJKAEWNFOFBWqVU8Ke6BJxPr2Q3dT6R2Hvlnt45LgwkMLFuqZN7pUQwaH56bk/WPux78HqkE/mULgTXwx2UT/eov58KZEgVeYY+Bd/F8gQei/tPqIdyUIUciMLZrRNlpBhAAA=="
   },
+  "cat-desserts-phone": {
+    "width": 1024,
+    "height": 768,
+    "widths": [
+      600,
+      800,
+      1024
+    ],
+    "blur": "data:image/webp;base64,UklGRm4AAABXRUJQVlA4IGIAAAAQAgCdASoQAAwAA4BaJagCdAD7Vw7nxdAAAPzdeDO+oLbR2uXVO4d/n0POSbfBx5XxSPcyp80+jlGYBxl5O6poP2bcWWuv0licVfIrVmgffjerqV1dGlxiw3bdlX1tpYAAAA=="
+  },
   "order-table": {
     "width": 1536,
     "height": 1024,
     "widths": [
       640,
       960,
+      1088,
       1280,
       1536
     ],
@@ -93,6 +124,7 @@
     "widths": [
       640,
       960,
+      1088,
       1280,
       1536
     ],
@@ -104,6 +136,7 @@
     "widths": [
       640,
       960,
+      1088,
       1280,
       1536
     ],

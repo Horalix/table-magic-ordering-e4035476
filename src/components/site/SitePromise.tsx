@@ -40,7 +40,7 @@ const SitePromise = () => {
         </div>
         <Reveal className="lg:col-span-6" delay={0.1}>
           <div className="relative aspect-[4/3] overflow-hidden rounded-[28px] bg-ls-forest-soft ls-arch-5x6 lg:aspect-[5/6]">
-            <SiteImage fill name="promise" alt={st('promise_alt')} sizes="(min-width: 1240px) 580px, (min-width: 1024px) 46vw, 100vw" className="object-[60%_50%]" />
+            <SiteImage fill name="promise" alt={st('promise_alt')} sizes="(min-width: 1240px) 580px, (min-width: 1024px) 46vw, calc(100vw - 2.5rem)" className="object-[60%_50%]" />
           </div>
         </Reveal>
       </Container>
