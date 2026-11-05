@@ -29,7 +29,7 @@ const SiteOrderSteps = () => {
 
         <Reveal className="lg:col-span-7 lg:col-start-1 lg:row-span-2 lg:row-start-1 lg:self-center">
           <div className="relative aspect-[4/3] overflow-hidden rounded-[28px] bg-ls-cream shadow-[0_40px_80px_-50px_rgba(35,46,40,0.6)] sm:aspect-[3/2] lg:aspect-[5/4]">
-            <SiteImage fill name="order-table" alt={st('order_alt')} sizes="(min-width: 1240px) 680px, (min-width: 1024px) 55vw, 100vw" className="object-[38%_50%]" />
+            <SiteImage fill name="order-table" alt={st('order_alt')} sizes="(min-width: 1240px) 680px, (min-width: 1024px) 55vw, calc(100vw - 2.5rem)" className="object-[38%_50%]" />
           </div>
         </Reveal>
 

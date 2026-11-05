@@ -8,10 +8,14 @@ import type { SiteImageName } from './site-image-data';
 import { Container, SectionHeading } from './SiteSection';
 import { categoryHref, type SiteCategory } from './signature-dishes';
 
-const CARDS: { category: SiteCategory; image: SiteImageName; title: SiteKey; desc: SiteKey }[] = [
-  { category: 'Drinks', image: 'cat-drinks', title: 'cat_drinks', desc: 'cat_drinks_desc' },
-  { category: 'Food', image: 'cat-food', title: 'cat_food', desc: 'cat_food_desc' },
-  { category: 'Desserts', image: 'cat-desserts', title: 'cat_desserts', desc: 'cat_desserts_desc' },
+/**
+ * `phone`: the card is 4:3 on a phone and shows the middle of the tall
+ * photograph (object-position 50% 62%); the phone downloads just that part.
+ */
+const CARDS: { category: SiteCategory; image: SiteImageName; phone: SiteImageName; title: SiteKey; desc: SiteKey }[] = [
+  { category: 'Drinks', image: 'cat-drinks', phone: 'cat-drinks-phone', title: 'cat_drinks', desc: 'cat_drinks_desc' },
+  { category: 'Food', image: 'cat-food', phone: 'cat-food-phone', title: 'cat_food', desc: 'cat_food_desc' },
+  { category: 'Desserts', image: 'cat-desserts', phone: 'cat-desserts-phone', title: 'cat_desserts', desc: 'cat_desserts_desc' },
 ];
 
 /**
@@ -37,6 +41,8 @@ const SiteMenuCards = ({ venue }: { venue: Venue }) => {
                   <SiteImage
                     fill
                     name={c.image}
+                    phone={c.phone}
+                    phoneSizes="calc(100vw - 2.5rem)"
                     alt=""
                     sizes="(min-width: 1240px) 380px, (min-width: 640px) 31vw, 100vw"
                     className="object-[50%_62%] transition-transform [transition-duration:1400ms] ease-out group-hover:scale-[1.04]"

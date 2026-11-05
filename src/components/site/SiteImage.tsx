@@ -13,17 +13,28 @@ interface Props {
   /** Above the fold: fetched first, never lazily. */
   priority?: boolean;
   style?: CSSProperties;
+  /**
+   * On a phone (under 640px), this photograph instead: the same picture cut
+   * to the shape the phone shows (scripts/site-images.mjs), so it does not
+   * download the part it crops away.
+   */
+  phone?: SiteImageName;
+  /** The phone photograph's rendered width. */
+  phoneSizes?: string;
 }
+
+/** Tailwind's `sm`: below it the page has its phone layout. */
+const PHONE_MEDIA = '(max-width: 639px)';
 
 /**
  * A website photograph: responsive WebP, real width and height so nothing
  * shifts while it loads, a 16-pixel blurred copy painted underneath until the
  * real one arrives, and lazy loading below the fold.
  */
-const SiteImage = ({ name, alt, sizes, className, fill = false, priority = false, style }: Props) => {
+const SiteImage = ({ name, alt, sizes, className, fill = false, priority = false, style, phone, phoneSizes }: Props) => {
   const entry = siteImage(name);
   const [loaded, setLoaded] = useState(false);
-  return (
+  const img = (
     <img
       src={siteSrc(name, 960)}
       srcSet={siteSrcSet(name)}
@@ -42,6 +53,14 @@ const SiteImage = ({ name, alt, sizes, className, fill = false, priority = false
         ...style,
       }}
     />
+  );
+  if (!phone) return img;
+  const small = siteImage(phone);
+  return (
+    <picture>
+      <source media={PHONE_MEDIA} srcSet={siteSrcSet(phone)} sizes={phoneSizes ?? sizes} width={small.width} height={small.height} />
+      {img}
+    </picture>
   );
 };
 

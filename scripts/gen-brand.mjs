@@ -50,11 +50,11 @@ async function tint(buf, color) {
   return sharp({ create: { width, height, channels: 3, background: color } }).joinChannel(alpha).png().toBuffer();
 }
 
-async function emit(name, buf, resize, colors, quality = 92) {
+async function emit(name, buf, resize, colors, quality = 92, alphaQuality = 100) {
   for (const c of colors) {
     const out = resolve(BRAND, `${name}-${c}.webp`);
     const sized = await sharp(buf).resize(resize).png().toBuffer();
-    await sharp(await tint(sized, COLORS[c])).webp({ quality, alphaQuality: 100, effort: 6 }).toFile(out);
+    await sharp(await tint(sized, COLORS[c])).webp({ quality, alphaQuality, effort: 6 }).toFile(out);
     console.log(`  ✓ brand/${name}-${c}.webp`);
   }
 }
@@ -85,7 +85,9 @@ await emit('wordmark', await sharp(word.png).trim().png().toBuffer(), { width: 9
 await emit('emblem', emblem, { width: 480 }, ['white', 'dark']);
 await emit('arch', archOnly, { width: 360 }, ['white', 'dark']);
 await emit('lockup', lockup, { height: 960 }, ['white', 'dark']);
-await emit('branch', await sharp(branch.png).trim().png().toBuffer(), { width: 720 }, ['white'], 85);
+// Only ever a faint decoration (10–30% opacity) behind the menu, the TV and the
+// website: 33 KB at these settings, where 85 / lossless edges cost 81 KB.
+await emit('branch', await sharp(branch.png).trim().png().toBuffer(), { width: 720 }, ['white'], 70, 60);
 
 // ---- App icons ----------------------------------------------------------
 // The emblem fills the icon; the old icons scaled the whole poster into it.
