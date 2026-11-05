@@ -22,6 +22,10 @@ All at **lasoul.net** (the old address, lasoulapp.netlify.app, still works).
 
 Add your screen to the phone's home screen so it opens like an app.
 
+Forgot your password? Ask the manager: they give you a new one. When someone
+leaves, the manager removes them under **Waiters**, or the owner under
+**Team → Remove**. Their sign-in stops working at once.
+
 ---
 
 ## Right now: Menu only

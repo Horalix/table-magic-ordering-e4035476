@@ -25,6 +25,10 @@ Sve je na **lasoul.net** (stara adresa, lasoulapp.netlify.app, i dalje radi).
 
 Dodajte svoj ekran na početni ekran telefona, pa će se otvarati kao aplikacija.
 
+Zaboravili ste lozinku? Pitajte menadžera: on vam da novu. Kad neko ode,
+menadžer ga ukloni u **Waiters**, ili vlasnik u **Team → Remove**. Njegova
+prijava odmah prestaje raditi.
+
 ---
 
 ## Trenutno: samo meni

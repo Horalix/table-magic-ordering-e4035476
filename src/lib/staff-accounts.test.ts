@@ -2,8 +2,9 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
-  afterWaiterSignIn, generatePassword, isKitchenUsername, kitchenUsername, loginCardText, MIN_PASSWORD,
-  plainRefusal, readRefusal, refusalField, signInUrl, staffSiteUrl, suggestUsername, type LoginDetails,
+  afterWaiterSignIn, generatePassword, isKitchenTablet, isKitchenUsername, kitchenUsername, lastSignInWords,
+  loginCardText, MIN_PASSWORD, plainRefusal, readRefusal, refusalField, signInUrl, staffSiteUrl, suggestUsername,
+  teamSignInsText, type LoginDetails, type TeamAccount,
 } from './staff-accounts';
 
 /**
@@ -198,5 +199,84 @@ describe('a function’s refusal, in its own words', () => {
     // The old catch-all is about every field, so about none of them.
     expect(refusalField({ message: 'Username (3+ chars), password (6+ chars), and display name are required' })).toBeNull();
     expect(refusalField({ message: 'Admin only' })).toBeNull();
+  });
+});
+
+describe('the owner’s Team list (manage-admins list)', () => {
+  const now = new Date('2026-11-05T12:00:00Z');
+  const account = (over: Partial<TeamAccount>): TeamAccount => ({
+    user_id: 'u', email: null, username: null, display_name: null, kind: 'waiter', venue: 'lasoul', you: false, ...over,
+  });
+  const VENUES_SHOWN = [{ slug: 'lasoul', name: 'La Soul' }, { slug: 'veraitalia', name: 'Vera Italia' }];
+  const TEAM: TeamAccount[] = [
+    account({ user_id: 'u-me', email: 'owner@team.test', kind: 'owner', venue: null, you: true }),
+    account({ user_id: 'u-co', email: 'partner@team.test', kind: 'owner', venue: null }),
+    account({ user_id: 'u-ana', email: 'ana@team.test', kind: 'admin' }),
+    account({ user_id: 'u-amar', username: 'amar', display_name: 'Amar' }),
+    account({ user_id: 'u-kt', username: 'lasoul-kitchen', display_name: 'Kitchen' }),
+    account({ user_id: 'u-hand', email: 'screen@team.test', kind: 'kitchen' }),
+    account({ user_id: 'u-giulia', username: 'giulia', display_name: 'Giulia', venue: 'veraitalia' }),
+    account({ user_id: 'u-old', email: 'old@team.test', kind: 'none', venue: null }),
+    account({ user_id: 'u-oldw', username: 'gone', kind: 'none', venue: null }),
+  ];
+
+  it('a kitchen screen: one made by hand, or a tablet made under Waiters; never an admin', () => {
+    expect(isKitchenTablet(account({ kind: 'kitchen', email: 'screen@team.test' }))).toBe(true);
+    expect(isKitchenTablet(account({ username: 'lasoul-kitchen' }))).toBe(true);
+    expect(isKitchenTablet(account({ username: 'amar' }))).toBe(false);
+    expect(isKitchenTablet(account({ kind: 'admin', username: 'x-kitchen' }))).toBe(false);
+  });
+
+  it('says when each last signed in, and nothing when the function did not say', () => {
+    expect(lastSignInWords(undefined, now)).toBeNull();
+    expect(lastSignInWords(null, now)).toBe('never signed in');
+    expect(lastSignInWords('not a date', now)).toBeNull();
+    expect(lastSignInWords('2026-11-05T11:40:00Z', now)).toBe('signed in within the hour');
+    expect(lastSignInWords('2026-11-05T07:00:00Z', now)).toBe('signed in 5 h ago');
+    expect(lastSignInWords('2026-11-04T09:00:00Z', now)).toBe('signed in yesterday');
+    expect(lastSignInWords('2026-10-26T12:00:00Z', now)).toBe('signed in 10 days ago');
+    expect(lastSignInWords('2026-06-01T12:00:00Z', now)).toBe('last signed in 1 Jun 2026');
+    // A clock a little ahead is not "in the future".
+    expect(lastSignInWords('2026-11-05T12:05:00Z', now)).toBe('signed in within the hour');
+  });
+
+  it('copies every sign-in: each restaurant’s staff with the address they open, then the owners, then no role', () => {
+    const text = teamSignInsText(VENUES_SHOWN, TEAM);
+    expect(text.split('\n\n').map((block) => block.split('\n')[0])).toEqual([
+      'La Soul — https://lasoul.net',
+      'Vera Italia — https://veraitalia.net',
+      'Owner — every restaurant',
+      'No role — signs in, opens nothing',
+      expect.stringMatching(/^No passwords here/),
+    ]);
+    expect(text).toContain('Admin: ana@team.test · https://lasoul.net/admin/login');
+    expect(text).toContain('Waiter: Amar, username amar · https://lasoul.net/waiter/login?u=amar');
+    expect(text).toContain('Kitchen tablet: Kitchen, username lasoul-kitchen · https://lasoul.net/waiter/login?u=lasoul-kitchen&to=kitchen');
+    expect(text).toContain('Kitchen tablet: screen@team.test (signs in with that email)');
+    expect(text).toContain('Waiter: Giulia, username giulia · https://veraitalia.net/waiter/login?u=giulia');
+    expect(text).toContain('Owner: owner@team.test (you) · https://lasoul.net/admin/login');
+    expect(text).toContain('Owner: partner@team.test · https://lasoul.net/admin/login');
+    expect(text).toContain('old@team.test');
+    expect(text).toContain('username gone');
+    // Admins first, then waiters, then the kitchen, within a restaurant.
+    const laSoul = text.split('\n\n')[0];
+    expect(laSoul.indexOf('Admin:')).toBeLessThan(laSoul.indexOf('Waiter:'));
+    expect(laSoul.indexOf('Waiter:')).toBeLessThan(laSoul.indexOf('Kitchen tablet:'));
+    // Vera's block has nothing of La Soul's.
+    expect(text.split('\n\n')[1]).not.toMatch(/amar|ana@|lasoul/);
+  });
+
+  it('never a password, and says why there is none', () => {
+    const text = teamSignInsText(VENUES_SHOWN, TEAM);
+    expect(text).not.toMatch(/Password:/);
+    expect(text).toMatch(/stores them scrambled/);
+    expect(text).toMatch(/Team → Password gives anyone a new one/);
+  });
+
+  it('a restaurant with no staff yet says so; no owner or no-role block when there are none', () => {
+    const text = teamSignInsText(VENUES_SHOWN, [TEAM[2]]);
+    expect(text).toContain('Vera Italia — https://veraitalia.net\nNo staff sign-ins yet');
+    expect(text).not.toContain('Owner —');
+    expect(text).not.toContain('No role —');
   });
 });

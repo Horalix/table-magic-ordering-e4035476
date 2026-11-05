@@ -1,13 +1,14 @@
 import React, { useRef, useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { ChefHat, Crown, Loader2, LockKeyhole, ShieldCheck, UserMinus, UserPlus, Users } from 'lucide-react';
+import { ChefHat, Copy, Crown, Loader2, LockKeyhole, ShieldCheck, Trash2, UserMinus, UserPlus, Users, UserX } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import LoginCard from '@/components/admin/LoginCard';
 import NewPasswordField from '@/components/admin/NewPasswordField';
 import {
-  isKitchenUsername, MIN_PASSWORD, plainRefusal, readRefusal, refusalField, staffSiteUrl, type LoginDetails,
+  isKitchenTablet, lastSignInWords, MIN_PASSWORD, plainRefusal, readRefusal, refusalField, staffSiteUrl,
+  teamSignInsText, type LoginDetails, type TeamAccount,
 } from '@/lib/staff-accounts';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -16,14 +17,11 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
   AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { VENUES } from '@/lib/venues';
@@ -37,25 +35,27 @@ import type { AdminOutletContext } from '@/components/admin/AdminLayout';
  * new one is created with the initial password typed here, which goes to
  * Supabase Auth and nowhere else, and which the new admin changes after
  * signing in (Admin menu → Change password). The login card says where
- * (their restaurant's own site) and shows that password once. Revoking takes
- * away that one restaurant's admin role and nothing else. Waiters and kitchen
- * tablets are added and removed under Waiters, as before.
+ * (their restaurant's own site) and shows that password once. Waiters and
+ * kitchen tablets are added under Waiters, as before.
  *
  * Every row has a Password button: anyone on the team who forgot theirs gets
  * a new one here, shown once on the login card (manage-admins
  * reset_password). The owner's own row opens Change password instead, which
- * asks for the current one.
+ * asks for the current one. Passwords themselves are never shown: Supabase
+ * keeps them scrambled, so there is nothing to show.
+ *
+ * Every row but the owner's own has Remove (manage-admins remove): the
+ * account's sign-in is deleted for good, with every role it holds at both
+ * restaurants — an admin, a waiter, a kitchen tablet, another owner. Orders,
+ * bills and history stay. An admin's Remove also offers the old Revoke: stop
+ * running that one restaurant and keep the account. Sign-ins left with no role
+ * at all (a revoked admin, say) are listed on their own, to be removed.
+ *
+ * Copy all sign-ins copies the whole list — who, what they type, the address
+ * they open, never a password (teamSignInsText).
  */
 
-interface Account {
-  user_id: string;
-  email: string | null;
-  username: string | null;
-  display_name: string | null;
-  kind: 'owner' | 'admin' | 'waiter' | 'kitchen';
-  venue: string | null;
-  you: boolean;
-}
+type Account = TeamAccount;
 
 interface TeamList {
   venues: { slug: string; name: string }[];
@@ -85,25 +85,20 @@ async function callTeam<T>(body: Record<string, unknown>): Promise<T> {
 }
 
 const who = (a: Account) => a.email ?? (a.username ? `@${a.username}` : 'Unknown account');
-
-/**
- * A kitchen screen: an account with no waiter's row (made by hand), or one
- * made under Waiters → Kitchen tablet, which signs in like a waiter
- * (kitchenUsername in src/lib/staff-accounts.ts).
- */
-const kitchenTablet = (a: Account) => a.kind === 'kitchen' || (a.kind === 'waiter' && isKitchenUsername(a.username));
+const personOf = (a: Account) => a.display_name ?? who(a);
 
 /**
  * Who gets a Password button: a restaurant's admin (signs in with their
  * email), a waiter or a kitchen tablet (with their username). A kitchen
  * account made by hand has no username, so no sign-in the card could point
- * to; an owner changes their own.
+ * to; an owner changes their own; a sign-in with no role opens nothing.
  */
-const resettable = (a: Account) => (a.kind === 'admin' && !!a.email) || (a.kind !== 'owner' && !!a.username);
+const resettable = (a: Account) =>
+  (a.kind === 'admin' && !!a.email) || (a.kind !== 'owner' && a.kind !== 'none' && !!a.username);
 
 /** The login card after a new password. */
 function resetCard(a: Account, venueName: string, password: string): LoginDetails {
-  const kind = a.kind === 'admin' ? 'admin' : kitchenTablet(a) ? 'kitchen' : 'waiter';
+  const kind = a.kind === 'admin' ? 'admin' : isKitchenTablet(a) ? 'kitchen' : 'waiter';
   const username = (kind === 'admin' ? a.email : a.username) ?? '';
   return {
     kind, venueSlug: a.venue ?? '', venueName, name: kind === 'admin' ? username : a.display_name ?? username,
@@ -126,18 +121,22 @@ const People = ({ title, icon: Icon, people, empty, action }: {
       <p className="text-sm font-sans text-muted-foreground py-1.5">{empty}</p>
     ) : (
       <ul className="divide-y divide-border">
-        {people.map((a) => (
-          <li key={`${a.user_id}-${a.kind}`} className="flex items-center justify-between gap-3 py-2 min-h-[44px]">
-            <div className="min-w-0">
-              <p className="text-sm font-sans font-medium text-foreground truncate">
-                {a.display_name ?? who(a)}
-                {a.you && <span className="ml-1.5 text-xs font-normal text-muted-foreground">(you)</span>}
-              </p>
-              {a.display_name && <p className="text-xs font-sans text-muted-foreground truncate">{who(a)}</p>}
-            </div>
-            {action?.(a)}
-          </li>
-        ))}
+        {people.map((a) => {
+          // Who they sign in as, under a name, and when they last did.
+          const sub = [a.display_name ? who(a) : null, lastSignInWords(a.last_sign_in_at)].filter(Boolean).join(' · ');
+          return (
+            <li key={`${a.user_id}-${a.kind}`} className="flex items-center justify-between gap-3 py-2 min-h-[44px]">
+              <div className="min-w-0">
+                <p className="text-sm font-sans font-medium text-foreground truncate">
+                  {personOf(a)}
+                  {a.you && <span className="ml-1.5 text-xs font-normal text-muted-foreground">(you)</span>}
+                </p>
+                {sub && <p className="text-xs font-sans text-muted-foreground truncate">{sub}</p>}
+              </div>
+              {action?.(a)}
+            </li>
+          );
+        })}
       </ul>
     )}
   </div>
@@ -156,6 +155,8 @@ const AdminTeam = () => {
   const [resetPassword, setResetPassword] = useState('');
   const [resetProblem, setResetProblem] = useState<string | null>(null);
   const [resetting, setResetting] = useState(false);
+  const [removeTarget, setRemoveTarget] = useState<Account | null>(null);
+  const [removing, setRemoving] = useState<'remove' | 'revoke' | null>(null);
 
   const { data, error, isLoading, refetch } = useQuery({
     queryKey: ['owner-team'],
@@ -208,39 +209,64 @@ const AdminTeam = () => {
     }
   };
 
+  /** An admin stops running that one restaurant; the account and its other roles stay. */
   const revoke = async (a: Account) => {
+    setRemoving('revoke');
     try {
       await callTeam({ action: 'revoke', user_id: a.user_id, venue: a.venue });
+      setRemoveTarget(null);
       toast.success(`${who(a)} no longer runs ${nameOf(a.venue)}`);
       await refetch();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Could not revoke');
+    } finally {
+      setRemoving(null);
     }
   };
 
-  const revokeButton = (a: Account) => (
-    <AlertDialog>
-      <AlertDialogTrigger asChild>
-        <Button variant="outline" size="sm" className="gap-1.5 min-h-[40px] shrink-0" aria-label={`Revoke ${who(a)} as ${nameOf(a.venue)} admin`}>
-          <UserMinus className="w-4 h-4" /> Revoke
-        </Button>
-      </AlertDialogTrigger>
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>Revoke {who(a)}?</AlertDialogTitle>
-          <AlertDialogDescription>
-            They will no longer manage {nameOf(a.venue)}. Their account stays, and so does anything else it does
-            (another restaurant's floor or kitchen, for instance).
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel>Keep them</AlertDialogCancel>
-          <AlertDialogAction onClick={() => void revoke(a)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-            Revoke admin
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
+  /** The account's sign-in, deleted for good, with every role it holds. */
+  const removeAccount = async (a: Account) => {
+    setRemoving('remove');
+    try {
+      const result = await callTeam<{ removed?: boolean; warning?: string }>({ action: 'remove', user_id: a.user_id });
+      setRemoveTarget(null);
+      if (result?.warning) toast.warning(result.warning);
+      else toast.success(`${personOf(a)} is removed: that sign-in no longer works`);
+      await refetch();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Could not remove the account';
+      // A manage-admins from before remove does not know the action.
+      toast.error(/unknown action/i.test(message)
+        ? 'The server cannot do this yet: the manage-admins function needs redeploying.'
+        : message);
+    } finally {
+      setRemoving(null);
+    }
+  };
+
+  /** What one row of the account does, for the Remove dialog. */
+  const roleWords = (x: Account) => x.kind === 'owner'
+    ? 'owner of every restaurant'
+    : x.kind === 'none'
+      ? 'no role: it signs in and opens nothing'
+      : `${nameOf(x.venue)} ${x.kind === 'admin' ? 'admin' : isKitchenTablet(x) ? 'kitchen tablet' : 'waiter'}`;
+  /** Everything that account does, at both restaurants: Remove takes all of it. */
+  const everythingOf = (a: Account) => {
+    const words = [...new Set(accounts.filter((x) => x.user_id === a.user_id).map(roleWords))];
+    const all = (words.length ? words : [roleWords(a)]).join(' · ');
+    return all.charAt(0).toUpperCase() + all.slice(1);
+  };
+
+  const removeButton = (a: Account) => (
+    <Button
+      variant="outline"
+      size="sm"
+      onClick={() => setRemoveTarget(a)}
+      className="gap-1.5 min-h-[40px] shrink-0 text-destructive hover:text-destructive"
+      aria-label={`Remove ${personOf(a)}`}
+    >
+      <Trash2 className="w-4 h-4" aria-hidden /> <span className="hidden sm:inline">Remove</span>
+    </Button>
   );
 
   const closeReset = () => { setResetTarget(null); setResetPassword(''); setResetProblem(null); };
@@ -290,22 +316,48 @@ const AdminTeam = () => {
     );
   };
 
-  const adminActions = (a: Account) => (
+  /** Password (or, on your own row, Change password), and Remove on everyone's but yours. */
+  const rowActions = (a: Account) => (
     <div className="flex items-center gap-2 shrink-0">
       {passwordButton(a)}
-      {revokeButton(a)}
+      {!a.you && removeButton(a)}
     </div>
   );
 
   const owners = accounts.filter((a) => a.kind === 'owner');
+  const noRole = accounts.filter((a) => a.kind === 'none');
+
+  const copyAll = async () => {
+    const text = teamSignInsText(venues, accounts);
+    const people = new Set(accounts.map((a) => a.user_id)).size;
+    try {
+      await navigator.clipboard.writeText(text);
+      toast.success(`Copied ${people} sign-in${people === 1 ? '' : 's'}, without passwords`);
+    } catch {
+      toast.error('This browser would not copy. Try again, or from a laptop.');
+    }
+  };
 
   return (
     <div>
-      <div className="mb-6">
-        <h1 className="font-serif text-3xl font-bold text-foreground">Team</h1>
-        <p className="text-sm font-sans text-muted-foreground mt-1">
-          Who runs each restaurant. Only you, the owner, see this page.
-        </p>
+      <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h1 className="font-serif text-3xl font-bold text-foreground">Team</h1>
+          <p className="text-sm font-sans text-muted-foreground mt-1">
+            Who runs each restaurant, and every sign-in. Only you, the owner, see this page.
+          </p>
+          <p className="text-xs font-sans text-muted-foreground mt-1">
+            Passwords can't be shown, not even here: they are stored scrambled. Password gives someone a new one.
+          </p>
+        </div>
+        <Button
+          variant="outline"
+          onClick={() => void copyAll()}
+          disabled={!data}
+          className="gap-2 min-h-[44px] rounded-xl shrink-0"
+        >
+          <Copy className="w-4 h-4" aria-hidden /> Copy all sign-ins
+        </Button>
       </div>
 
       <Card className="mb-6">
@@ -404,21 +456,21 @@ const AdminTeam = () => {
                         icon={ShieldCheck}
                         people={here.filter((a) => a.kind === 'admin')}
                         empty="No admin of its own yet: you run it."
-                        action={adminActions}
+                        action={rowActions}
                       />
                       <People
                         title="Waiters"
                         icon={Users}
-                        people={here.filter((a) => a.kind === 'waiter' && !kitchenTablet(a))}
+                        people={here.filter((a) => a.kind === 'waiter' && !isKitchenTablet(a))}
                         empty="No waiters yet. Add them under Waiters."
-                        action={passwordButton}
+                        action={rowActions}
                       />
                       <People
                         title="Kitchen screens"
                         icon={ChefHat}
-                        people={here.filter(kitchenTablet)}
+                        people={here.filter(isKitchenTablet)}
                         empty="No kitchen tablet yet. Add one under Waiters → Kitchen tablet."
-                        action={passwordButton}
+                        action={rowActions}
                       />
                     </CardContent>
                   </Card>
@@ -432,11 +484,73 @@ const AdminTeam = () => {
               <CardTitle className="font-serif text-lg flex items-center gap-2"><Crown className="w-5 h-5" /> Owner</CardTitle>
             </CardHeader>
             <CardContent>
-              <People title="Every restaurant" icon={Crown} people={owners} empty="No owner account." action={passwordButton} />
+              <People title="Every restaurant" icon={Crown} people={owners} empty="No owner account." action={rowActions} />
             </CardContent>
           </Card>
+
+          {noRole.length > 0 && (
+            <section aria-label="Sign-ins with no role" className="mt-6">
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="font-serif text-lg flex items-center gap-2"><UserX className="w-5 h-5" /> Sign-ins with no role</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  <p className="text-sm font-sans text-muted-foreground">
+                    These still sign in, but open nothing: an admin whose role was revoked, or a waiter whose sign-in stayed
+                    behind. Remove them, or appoint one above by their email.
+                  </p>
+                  <People title="No role" icon={UserX} people={noRole} empty="" action={rowActions} />
+                </CardContent>
+              </Card>
+            </section>
+          )}
         </>
       ) : null}
+
+      {/* Remove: the sign-in goes for good, with everything it does at both
+          restaurants. An admin's row also offers the old Revoke. */}
+      <AlertDialog open={!!removeTarget} onOpenChange={(open) => { if (!open && !removing) setRemoveTarget(null); }}>
+        <AlertDialogContent className="max-w-[calc(100vw-2rem)] sm:max-w-md rounded-2xl">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove {removeTarget ? personOf(removeTarget) : ''}?</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2">
+                {removeTarget && <p className="font-medium text-foreground">{everythingOf(removeTarget)}.</p>}
+                <p>
+                  Their sign-in is deleted for good, with all of that. They lose access at once.
+                  Orders, bills and history stay.
+                </p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="gap-2">
+            <Button type="button" variant="outline" disabled={!!removing} onClick={() => setRemoveTarget(null)}>
+              Keep them
+            </Button>
+            {removeTarget?.kind === 'admin' && (
+              <Button
+                type="button"
+                variant="outline"
+                disabled={!!removing}
+                onClick={() => removeTarget && void revoke(removeTarget)}
+                className="gap-2"
+              >
+                {removing === 'revoke' ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserMinus className="w-4 h-4" />}
+                Only stop running {nameOf(removeTarget.venue)}
+              </Button>
+            )}
+            <Button
+              type="button"
+              disabled={!!removing}
+              onClick={() => removeTarget && void removeAccount(removeTarget)}
+              className="gap-2 bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {removing === 'remove' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+              Remove account
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* A forgotten password: a new one, shown once on the card. The old
           one stops working at once; nothing else about them changes. */}
@@ -446,7 +560,7 @@ const AdminTeam = () => {
             <DialogHeader>
               <DialogTitle className="font-serif">New password for {resetTarget ? resetTarget.display_name ?? who(resetTarget) : ''}</DialogTitle>
               <DialogDescription>
-                {resetTarget && <>{nameOf(resetTarget.venue)} · {resetTarget.kind === 'admin' ? 'admin' : kitchenTablet(resetTarget) ? 'kitchen tablet' : 'waiter'}. </>}
+                {resetTarget && <>{nameOf(resetTarget.venue)} · {resetTarget.kind === 'admin' ? 'admin' : isKitchenTablet(resetTarget) ? 'kitchen tablet' : 'waiter'}. </>}
                 Their old password stops working.
               </DialogDescription>
             </DialogHeader>

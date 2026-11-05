@@ -199,3 +199,95 @@ export function plainRefusal(r: Refusal): string {
   }
   return r.message;
 }
+
+/**
+ * One row of the owner's Team list (manage-admins `list`): one per role an
+ * account holds — the same person can run one restaurant and wait tables at
+ * the other — and one per sign-in left with no role (`none`), which opens
+ * nothing until it is removed or appointed.
+ */
+export interface TeamAccount {
+  user_id: string;
+  /** Null for a waiter or kitchen tablet, who signs in with a username. */
+  email: string | null;
+  username: string | null;
+  display_name: string | null;
+  kind: 'owner' | 'admin' | 'waiter' | 'kitchen' | 'none';
+  /** The restaurant's slug; null for an owner, who has every one, and for no role. */
+  venue: string | null;
+  you: boolean;
+  /** When it last signed in; null if never. Absent from a manage-admins deployed before it was added. */
+  last_sign_in_at?: string | null;
+}
+
+/**
+ * A kitchen screen: an account with no waiter's row (made by hand), or one
+ * made under Waiters → Kitchen tablet, which signs in like a waiter
+ * (kitchenUsername).
+ */
+export const isKitchenTablet = (a: TeamAccount) => a.kind === 'kitchen' || (a.kind === 'waiter' && isKitchenUsername(a.username));
+
+const DAY_MS = 24 * 60 * 60_000;
+
+/**
+ * When the account last signed in, for the Team list: helps the owner tell a
+ * sign-in in use from one nobody needs. Null when the function did not say
+ * (one deployed before it did), so nothing is claimed.
+ */
+export function lastSignInWords(iso: string | null | undefined, now: Date = new Date()): string | null {
+  if (iso === undefined) return null;
+  if (iso === null) return 'never signed in';
+  const then = new Date(iso);
+  if (Number.isNaN(then.getTime())) return null;
+  const ago = Math.max(0, now.getTime() - then.getTime());
+  if (ago < 60 * 60_000) return 'signed in within the hour';
+  if (ago < DAY_MS) return `signed in ${Math.floor(ago / (60 * 60_000))} h ago`;
+  const days = Math.floor(ago / DAY_MS);
+  if (days === 1) return 'signed in yesterday';
+  if (days < 60) return `signed in ${days} days ago`;
+  return `last signed in ${then.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}`;
+}
+
+const NO_PASSWORDS = 'No passwords here: Supabase stores them scrambled, so nobody can read them, the owner included. Team → Password gives anyone a new one, shown once.';
+
+/** One account as a line of the list: who, what they type, where they sign in. */
+function signInLine(a: TeamAccount): string {
+  const you = a.you ? ' (you)' : '';
+  if (a.kind === 'owner' || a.kind === 'admin') {
+    const role = a.kind === 'owner' ? 'Owner' : 'Admin';
+    return `${role}: ${a.email ?? 'no email'}${you} · ${signInUrl('admin', a.venue ?? DEFAULT_VENUE)}`;
+  }
+  if (a.kind === 'none') {
+    return `${a.display_name ? `${a.display_name}, ` : ''}${a.email ?? (a.username ? `username ${a.username}` : 'no sign-in name')}${you}`;
+  }
+  const kitchen = isKitchenTablet(a);
+  const role = kitchen ? 'Kitchen tablet' : 'Waiter';
+  if (!a.username) return `${role}: ${a.email ?? 'no sign-in name'}${you} (signs in with that email)`;
+  const name = a.display_name && a.display_name !== a.username ? `${a.display_name}, ` : '';
+  return `${role}: ${name}username ${a.username}${you} · ${signInUrl(kitchen ? 'kitchen' : 'waiter', a.venue ?? DEFAULT_VENUE, a.username)}`;
+}
+
+/**
+ * Every sign-in on the team as plain text, for Team → Copy all sign-ins: each
+ * restaurant's admins, waiters and kitchen tablets with the address each
+ * opens, then the owners, then the sign-ins with no role. Never a password:
+ * there is none to give, and the footer says so.
+ */
+export function teamSignInsText(venues: readonly { slug: string; name: string }[], accounts: readonly TeamAccount[]): string {
+  const blocks: string[] = [];
+  for (const v of venues) {
+    const here = accounts.filter((a) => a.venue === v.slug && a.kind !== 'owner' && a.kind !== 'none');
+    const ordered = [
+      ...here.filter((a) => a.kind === 'admin'),
+      ...here.filter((a) => a.kind === 'waiter' && !isKitchenTablet(a)),
+      ...here.filter(isKitchenTablet),
+    ];
+    blocks.push([`${v.name} — ${staffSiteUrl(v.slug)}`, ...(ordered.length ? ordered.map(signInLine) : ['No staff sign-ins yet'])].join('\n'));
+  }
+  const owners = accounts.filter((a) => a.kind === 'owner');
+  if (owners.length) blocks.push(['Owner — every restaurant', ...owners.map(signInLine)].join('\n'));
+  const loose = accounts.filter((a) => a.kind === 'none');
+  if (loose.length) blocks.push(['No role — signs in, opens nothing', ...loose.map(signInLine)].join('\n'));
+  blocks.push(NO_PASSWORDS);
+  return blocks.join('\n\n');
+}
