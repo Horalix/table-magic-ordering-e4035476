@@ -126,7 +126,7 @@ const People = ({ title, icon: Icon, people, empty, action }: {
           const sub = [a.display_name ? who(a) : null, lastSignInWords(a.last_sign_in_at)].filter(Boolean).join(' · ');
           return (
             <li key={`${a.user_id}-${a.kind}`} className="flex items-center justify-between gap-3 py-2 min-h-[44px]">
-              <div className="min-w-0">
+              <div className="min-w-0 flex-1">
                 <p className="text-sm font-sans font-medium text-foreground truncate">
                   {personOf(a)}
                   {a.you && <span className="ml-1.5 text-xs font-normal text-muted-foreground">(you)</span>}
@@ -257,12 +257,16 @@ const AdminTeam = () => {
     return all.charAt(0).toUpperCase() + all.slice(1);
   };
 
+  // On a phone the row's buttons are icons only, each a full 44 px tap, so
+  // both fit beside a name at 360 px; their labels come back from sm up.
+  const rowButton = 'gap-1.5 min-h-[44px] min-w-[44px] px-2.5 sm:min-h-[40px] sm:px-3 shrink-0';
+
   const removeButton = (a: Account) => (
     <Button
       variant="outline"
       size="sm"
       onClick={() => setRemoveTarget(a)}
-      className="gap-1.5 min-h-[40px] shrink-0 text-destructive hover:text-destructive"
+      className={`${rowButton} text-destructive hover:text-destructive`}
       aria-label={`Remove ${personOf(a)}`}
     >
       <Trash2 className="w-4 h-4" aria-hidden /> <span className="hidden sm:inline">Remove</span>
@@ -297,8 +301,8 @@ const AdminTeam = () => {
   const passwordButton = (a: Account) => {
     if (a.you) {
       return context?.changePassword ? (
-        <Button variant="outline" size="sm" onClick={context.changePassword} className="gap-1.5 min-h-[40px] shrink-0">
-          <LockKeyhole className="w-4 h-4" /> Change password
+        <Button variant="outline" size="sm" onClick={context.changePassword} className={rowButton} aria-label="Change password">
+          <LockKeyhole className="w-4 h-4" aria-hidden /> <span className="hidden sm:inline">Change password</span>
         </Button>
       ) : null;
     }
@@ -308,10 +312,10 @@ const AdminTeam = () => {
         variant="outline"
         size="sm"
         onClick={() => { setResetTarget(a); setResetPassword(''); setResetProblem(null); }}
-        className="gap-1.5 min-h-[40px] shrink-0"
+        className={rowButton}
         aria-label={`New password for ${a.display_name ?? who(a)}`}
       >
-        <LockKeyhole className="w-4 h-4" /> Password
+        <LockKeyhole className="w-4 h-4" aria-hidden /> <span className="hidden sm:inline">Password</span>
       </Button>
     );
   };
@@ -347,7 +351,7 @@ const AdminTeam = () => {
             Who runs each restaurant, and every sign-in. Only you, the owner, see this page.
           </p>
           <p className="text-xs font-sans text-muted-foreground mt-1">
-            Passwords can't be shown, not even here: they are stored scrambled. Password gives someone a new one.
+            Passwords can't be shown, not even here: they are stored scrambled. Password (the lock) gives someone a new one.
           </p>
         </div>
         <Button
@@ -441,11 +445,13 @@ const AdminTeam = () => {
         </div>
       ) : data ? (
         <>
-          <div className="grid gap-4 lg:grid-cols-2 mb-6">
+          {/* grid-cols-1 is minmax(0, 1fr): without it a phone's one column
+              grows to the longest name, and the cards run off the screen. */}
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 mb-6">
             {venues.map((v) => {
               const here = accounts.filter((a) => a.venue === v.slug);
               return (
-                <section key={v.slug} aria-label={`${v.name} team`}>
+                <section key={v.slug} aria-label={`${v.name} team`} className="min-w-0">
                   <Card className="h-full">
                     <CardHeader className="pb-3">
                       <CardTitle className="font-serif text-xl">{v.name}</CardTitle>

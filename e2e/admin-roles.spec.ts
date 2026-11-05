@@ -1,5 +1,5 @@
 import { test, expect } from './staff-fixtures';
-import type { Page, Route } from '@playwright/test';
+import type { Locator, Page, Route } from '@playwright/test';
 
 /**
  * Whose admin is this? The owner, La Soul's admin, Vera Italia's admin.
@@ -151,6 +151,24 @@ function watchErrors(page: Page) {
 }
 
 const isPhone = (page: Page) => (page.viewportSize()?.width ?? 1280) < 1024;
+
+/**
+ * All of it inside the screen's width, once any opening animation settles;
+ * a dialog also as far from the left edge as from the right.
+ */
+async function onScreen(page: Page, target: Locator, what: string, { centred = false } = {}) {
+  const width = page.viewportSize()!.width;
+  const box = async () => {
+    const b = await target.boundingBox();
+    return b ? { left: Math.round(b.x), right: Math.round(width - b.x - b.width) } : null;
+  };
+  // 'fits', or the last margins seen, so a failure says by how much.
+  await expect.poll(async () => {
+    const b = await box();
+    const fits = !!b && b.left >= 0 && b.right >= 0 && (!centred || Math.abs(b.left - b.right) <= 2);
+    return fits ? 'fits' : `margins ${JSON.stringify(b)}`;
+  }, { message: what }).toBe('fits');
+}
 
 /** The sidebar: always there on a laptop, behind the menu button on a phone. */
 async function openDrawer(page: Page) {
@@ -622,6 +640,100 @@ test.describe('the owner', () => {
     expect(copied).toContain('No role — signs in, opens nothing\nold-admin@lasoul.test');
     expect(copied).not.toMatch(/Password:/);
     expect(copied).not.toContain(INITIAL_PASSWORD);
+  });
+
+  test('on a phone, Team fits the screen: every row\'s Password and Remove, and every dialog', async ({ page }) => {
+    const { team } = await stubOwnerParts(page);
+    // Long names and addresses: the rows that pushed Remove off a phone.
+    team.accounts.push(
+      { user_id: 'u-lejla', email: null, username: 'lejla.hadzihafizbegovic', display_name: 'Lejla Hadžihafizbegović', kind: 'waiter', venue: 'veraitalia', you: false, last_sign_in_at: null },
+      { user_id: 'u-manager', email: 'restaurant.manager.veraitalia@example.com', username: null, display_name: null, kind: 'admin', venue: 'veraitalia', you: false, last_sign_in_at: null },
+    );
+    await page.goto('/admin/team');
+    const vera = page.getByRole('region', { name: 'Vera Italia team' });
+    await expect(vera.getByText('Lejla Hadžihafizbegović')).toBeVisible();
+
+    // The project's own phone (390 or 412 wide), then a small Android at 360,
+    // loaded at that width as a phone would.
+    const widths = isPhone(page) ? [page.viewportSize()!.width, 360] : [page.viewportSize()!.width];
+    for (const width of widths) {
+      if (page.viewportSize()!.width !== width) {
+        await page.setViewportSize({ width, height: page.viewportSize()!.height });
+        await page.reload();
+        await expect(vera.getByText('Lejla Hadžihafizbegović')).toBeVisible();
+      }
+      // Nothing scrolls sideways, and no card is wider than the screen. A
+      // phone zooms out to show a page that overflows, which widens
+      // innerWidth itself: so it must also still be the phone's width.
+      const [scrollWidth, innerWidth] = await page.evaluate(() => [document.documentElement.scrollWidth, window.innerWidth]);
+      expect(scrollWidth, `page at ${width}px`).toBeLessThanOrEqual(innerWidth);
+      expect(innerWidth, `page at ${width}px`).toBe(width);
+      for (const region of ['La Soul team', 'Vera Italia team', 'Sign-ins with no role']) {
+        const box = (await page.getByRole('region', { name: region }).boundingBox())!;
+        expect(box.x + box.width, `${region} at ${width}px`).toBeLessThanOrEqual(width);
+      }
+
+      const rows = page.getByRole('listitem').filter({ has: page.getByRole('button', { name: /^Remove / }) });
+      const count = await rows.count();
+      expect(count).toBeGreaterThanOrEqual(8);
+      for (let i = 0; i < count; i++) {
+        const row = rows.nth(i);
+        const remove = row.getByRole('button', { name: /^Remove / });
+        const password = row.getByRole('button', { name: /^New password for / });
+        const name = await remove.getAttribute('aria-label');
+        await remove.scrollIntoViewIfNeeded();
+        const r = (await remove.boundingBox())!;
+        expect(r.x, `${name} at ${width}px`).toBeGreaterThanOrEqual(0);
+        expect(r.x + r.width, `${name} at ${width}px`).toBeLessThanOrEqual(width);
+        expect(r.height, `${name} at ${width}px`).toBeGreaterThanOrEqual(40);
+        // A tap lands on Remove itself, not on the button beside it.
+        await remove.click({ trial: true, timeout: 3_000 });
+        if (await password.count()) {
+          const p = (await password.boundingBox())!;
+          expect(p.x, `${name}: Password at ${width}px`).toBeGreaterThanOrEqual(0);
+          expect(p.x + p.width, `${name}: Password at ${width}px`).toBeLessThanOrEqual(r.x);
+          await password.click({ trial: true, timeout: 3_000 });
+        }
+      }
+
+      // Every dialog Team opens: centred, all of it on screen, its X too.
+      const lejla = 'Lejla Hadžihafizbegović';
+      await vera.getByRole('button', { name: `Remove ${lejla}` }).click();
+      const removing = page.getByRole('alertdialog', { name: `Remove ${lejla}?` });
+      await onScreen(page, removing, `Remove dialog at ${width}px`, { centred: true });
+      await onScreen(page, removing.getByRole('button', { name: 'Remove account' }), `its Remove account at ${width}px`);
+      await removing.getByRole('button', { name: 'Keep them' }).click();
+      await expect(removing).toHaveCount(0);
+
+      await vera.getByRole('button', { name: `New password for ${lejla}` }).click();
+      const resetForm = page.getByRole('dialog', { name: `New password for ${lejla}` });
+      await onScreen(page, resetForm, `New password dialog at ${width}px`, { centred: true });
+      await onScreen(page, resetForm.getByRole('button', { name: 'Close' }), `its X at ${width}px`);
+      await onScreen(page, resetForm.getByRole('button', { name: 'Set new password' }), `its Set new password at ${width}px`);
+      await resetForm.locator('#team-reset-password').fill('e2e-phone-pass-1');
+      await resetForm.getByRole('button', { name: 'Set new password' }).click();
+      // The login card, with Lejla's long waiter link.
+      const resetCard = page.getByRole('dialog', { name: `New password for ${lejla}` }).filter({ has: page.getByTestId('login-card-password') });
+      await onScreen(page, resetCard, `the new password's login card at ${width}px`, { centred: true });
+      await onScreen(page, resetCard.getByRole('button', { name: 'Close' }), `its X at ${width}px`);
+      await onScreen(page, resetCard.getByRole('button', { name: 'Done' }), `its Done at ${width}px`);
+      await resetCard.getByRole('button', { name: 'Done' }).click();
+      await expect(resetCard).toHaveCount(0);
+
+      // The login card for a newly appointed admin.
+      const email = `marco.${width}@vera.test`;
+      await page.getByLabel('Their email').fill(email);
+      await page.getByRole('group', { name: 'Restaurant they will run' }).getByRole('button', { name: 'Vera Italia' }).click();
+      await page.locator('#team-password').fill(INITIAL_PASSWORD);
+      await page.getByRole('button', { name: 'Appoint Vera Italia admin' }).click();
+      const appointed = page.getByRole('dialog', { name: `${email} now runs Vera Italia` });
+      await onScreen(page, appointed, `the appointed admin's login card at ${width}px`, { centred: true });
+      await onScreen(page, appointed.getByRole('button', { name: 'Close' }), `its X at ${width}px`);
+      await onScreen(page, appointed.getByRole('button', { name: 'Done' }), `its Done at ${width}px`);
+      await appointed.getByRole('button', { name: 'Done' }).click();
+      await expect(appointed).toHaveCount(0);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth), `page after the dialogs at ${width}px`).toBeLessThanOrEqual(width);
+    }
   });
 
   test('changes their password from the admin menu', async ({ page }) => {
