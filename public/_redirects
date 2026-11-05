@@ -8,8 +8,6 @@ https://menu.lasoul.net/       https://menu.lasoul.net/menu/lasoul/        301!
 https://menu.lasoul.net/index.html  https://menu.lasoul.net/menu/lasoul/   301!
 http://menu.lasoul.net/             /menu/lasoul/                          301!
 http://menu.lasoul.net/index.html   /menu/lasoul/                          301!
-# PROBE (preview only, removed before merge): does a rewrite to /index.html meet a rule?
-/index.html                         /menu/lasoul/?probe=1                  301!
 
 # The old static menu that used to live at menu.lasoul.net. Printed QR codes,
 # Google results and saved home-screen icons still point at these pages.
