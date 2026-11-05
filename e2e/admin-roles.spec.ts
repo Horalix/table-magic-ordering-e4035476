@@ -624,6 +624,57 @@ test.describe('the owner', () => {
     expect(copied).not.toContain(INITIAL_PASSWORD);
   });
 
+  test('on a phone, every row\'s Password and Remove sit on screen and take a tap', async ({ page }) => {
+    const { team } = await stubOwnerParts(page);
+    // Long names and addresses: the rows that pushed Remove off a phone.
+    team.accounts.push(
+      { user_id: 'u-lejla', email: null, username: 'lejla.hadzihafizbegovic', display_name: 'Lejla Hadžihafizbegović', kind: 'waiter', venue: 'veraitalia', you: false, last_sign_in_at: null },
+      { user_id: 'u-manager', email: 'restaurant.manager.veraitalia@example.com', username: null, display_name: null, kind: 'admin', venue: 'veraitalia', you: false, last_sign_in_at: null },
+    );
+    await page.goto('/admin/team');
+    const vera = page.getByRole('region', { name: 'Vera Italia team' });
+    await expect(vera.getByText('Lejla Hadžihafizbegović')).toBeVisible();
+
+    // The project's own phone (390 or 412 wide), then a small Android at 360.
+    const widths = isPhone(page) ? [page.viewportSize()!.width, 360] : [page.viewportSize()!.width];
+    for (const width of widths) {
+      await page.setViewportSize({ width, height: page.viewportSize()!.height });
+      // Nothing scrolls sideways, and no card is wider than the screen.
+      expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
+      for (const region of ['La Soul team', 'Vera Italia team', 'Sign-ins with no role']) {
+        const box = (await page.getByRole('region', { name: region }).boundingBox())!;
+        expect(box.x + box.width, `${region} at ${width}px`).toBeLessThanOrEqual(width);
+      }
+
+      const rows = page.getByRole('listitem').filter({ has: page.getByRole('button', { name: /^Remove / }) });
+      const count = await rows.count();
+      expect(count).toBeGreaterThanOrEqual(8);
+      for (let i = 0; i < count; i++) {
+        const row = rows.nth(i);
+        const remove = row.getByRole('button', { name: /^Remove / });
+        const password = row.getByRole('button', { name: /^New password for / });
+        const name = await remove.getAttribute('aria-label');
+        await remove.scrollIntoViewIfNeeded();
+        const r = (await remove.boundingBox())!;
+        expect(r.x, `${name} at ${width}px`).toBeGreaterThanOrEqual(0);
+        expect(r.x + r.width, `${name} at ${width}px`).toBeLessThanOrEqual(width);
+        expect(r.height, `${name} at ${width}px`).toBeGreaterThanOrEqual(40);
+        // A tap lands on Remove itself, not on the button beside it.
+        await remove.click({ trial: true, timeout: 3_000 });
+        if (await password.count()) {
+          const p = (await password.boundingBox())!;
+          expect(p.x, `${name}: Password at ${width}px`).toBeGreaterThanOrEqual(0);
+          expect(p.x + p.width, `${name}: Password at ${width}px`).toBeLessThanOrEqual(r.x);
+          await password.click({ trial: true, timeout: 3_000 });
+        }
+      }
+    }
+
+    // And a real tap opens the right dialog.
+    await vera.getByRole('button', { name: 'Remove Lejla Hadžihafizbegović' }).click();
+    await expect(page.getByRole('alertdialog', { name: 'Remove Lejla Hadžihafizbegović?' })).toBeVisible();
+  });
+
   test('changes their password from the admin menu', async ({ page }) => {
     const errors = watchErrors(page);
     await stubOwnerParts(page);
