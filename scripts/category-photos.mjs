@@ -33,6 +33,8 @@ const MODEL = process.env.IMAGE_MODEL ?? 'gpt-image-2.5-sunburst';
 const SIZE = process.env.IMAGE_SIZE ?? '3072x2048';
 const PARALLEL = Number(process.env.IMAGE_PARALLEL ?? 4);
 const WIDTHS = [640, 1080, 1600];
+/** The most each cover width may weigh before its quality is stepped down. */
+const COVER_BUDGET = { 640: 70_000, 1080: 160_000, 1600: 320_000 };
 
 const STYLE = {
   lasoul: {
@@ -160,8 +162,14 @@ async function importCovers() {
     if (!t.length) { console.log(`skip ${c.key}: no take`); continue; }
     const file = join(OUT, `${c.key}-${Math.max(...t)}.png`);
     for (const w of WIDTHS) {
-      await sharp(file).resize(w, Math.round((w * 2) / 3), { fit: 'cover', position: 'centre' })
-        .webp({ quality: 84 }).toFile(join(COVERS, `${c.key}-${w}.webp`));
+      const img = sharp(file).resize(w, Math.round((w * 2) / 3), { fit: 'cover', position: 'centre' });
+      // Stepped down while over budget, as the dish photos are (fetch-images.mjs):
+      // Vera Italia's travertine made its four covers 250KB each at 1080.
+      let buf = await img.clone().webp({ quality: 84 }).toBuffer();
+      for (let q = 80; buf.length > COVER_BUDGET[w] && q >= 66; q -= 4) {
+        buf = await img.clone().webp({ quality: q, smartSubsample: true, effort: 6 }).toBuffer();
+      }
+      writeFileSync(join(COVERS, `${c.key}-${w}.webp`), buf);
     }
     console.log(`ok   ${c.key}  ← take ${Math.max(...t)}`);
   }

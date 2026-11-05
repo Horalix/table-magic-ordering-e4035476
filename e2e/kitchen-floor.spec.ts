@@ -170,7 +170,7 @@ test.describe('a combo on the bar', () => {
     await expect(card).not.toContainText('Fries');
 
     // Counted: the header and the column, and no "No drinks waiting".
-    await expect(page.getByText('1 orders')).toBeVisible();
+    await expect(page.getByText('1 order', { exact: true })).toBeVisible();
     await expect(page.getByText('No drinks waiting')).toHaveCount(0);
   });
 
@@ -211,7 +211,7 @@ test.describe('a combo on the bar', () => {
     const card = page.locator('#ticket-order-combo');
     await expect(card.getByTestId('combo-part-line')).toContainText('Kitchen: up');
     await expect(card.getByRole('button', { name: /Mark served/ })).toHaveCount(0);
-    await expect(card.getByRole('button', { name: /Undo ready/ })).toHaveCount(0);
+    await expect(card.getByRole('button', { name: /Undo “Ready”/ })).toHaveCount(0);
 
     await station(page, 'Kitchen');
     await expect(card.getByRole('button', { name: /Mark served/ })).toBeVisible();
@@ -344,11 +344,13 @@ test.describe('the screen is honest about itself', () => {
     await expect(page.locator('html')).toHaveAttribute('dir', 'ltr');
   });
 
-  test('sends a signed-out device to the login screen', async ({ staff, page }) => {
+  test('sends a signed-out device to the kitchen’s own sign-in screen', async ({ staff, page }) => {
     staff.signedIn = false;
     await clearStaffSession(page);
     await page.goto('/kitchen');
-    await expect(page).toHaveURL(/\/admin\/login/, { timeout: 10_000 });
+    // The kitchen account signs in there, not on the manager's email form.
+    await expect(page).toHaveURL(/\/waiter\/login\?to=kitchen/, { timeout: 10_000 });
+    await expect(page.getByRole('heading', { level: 1, name: 'Kitchen Sign In' })).toBeVisible();
   });
 });
 

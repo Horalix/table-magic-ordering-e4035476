@@ -228,6 +228,33 @@ export function vibrate(pattern: number | number[] = [200, 100, 200]): boolean {
   }
 }
 
+/** Whether this phone can buzz from a web page at all: Android yes, iPhone no. */
+export function canVibrate(): boolean {
+  return typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function';
+}
+
+type NavigatorWithAudioSession = Navigator & { audioSession?: { type: string } };
+
+/**
+ * Let alerts ring with an iPhone's silent switch on.
+ *
+ * Safari treats web audio like a game's background sound, which the silent
+ * switch mutes — and an iPhone cannot buzz from a web page, so a waiter's
+ * phone on silent got nothing at all. "playback" is how a music app plays:
+ * through the switch. The screen's own mute button still silences it.
+ * Safari 16.4+; elsewhere `navigator.audioSession` does not exist and this
+ * does nothing. Only the waiter's phone asks for it: on a kitchen iPad playing
+ * music it would pause the music.
+ */
+export function ringThroughSilentSwitch(): void {
+  try {
+    const session = (navigator as NavigatorWithAudioSession).audioSession;
+    if (session && session.type !== 'playback') session.type = 'playback';
+  } catch {
+    // Not supported: the switch keeps muting web audio, as before.
+  }
+}
+
 /**
  * Track whether alerts can be heard, and unlock them on the first tap.
  *

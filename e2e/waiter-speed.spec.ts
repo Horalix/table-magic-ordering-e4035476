@@ -90,6 +90,50 @@ test.describe('what needs me now', () => {
   });
 });
 
+test.describe('sound and vibration are on by default', () => {
+  const recordBuzzes = (page: Page) => page.addInitScript(() => {
+    const w = window as unknown as { __buzz: unknown[] };
+    w.__buzz = [];
+    Object.defineProperty(navigator, 'vibrate', { value: (p: unknown) => { w.__buzz.push(p); return true; }, configurable: true });
+  });
+  const buzzes = (page: Page) => page.evaluate(() => (window as unknown as { __buzz: unknown[] }).__buzz);
+
+  // A mute used to be kept forever: one tap in a staff meeting, silent every shift after.
+  test('a phone muted in an earlier shift starts with sound on', async ({ page }) => {
+    await page.addInitScript(() => localStorage.setItem('waiter-sound-on', 'false'));
+    await asMarko(page);
+    await page.goto('/waiter');
+    await expect(page.getByRole('button', { name: 'Mute waiter alert sound' })).toBeVisible();
+    await expect(page.getByText(/Sound is off/)).toHaveCount(0);
+  });
+
+  test('a mute that has run out is over', async ({ page }) => {
+    await page.addInitScript(() => localStorage.setItem('waiter-sound-muted-until', String(Date.now() - 1_000)));
+    await asMarko(page);
+    await page.goto('/waiter');
+    await expect(page.getByRole('button', { name: 'Mute waiter alert sound' })).toBeVisible();
+  });
+
+  // Calls and bills used to be muted along with the speaker: no sound and no buzz.
+  test('muted, a call still buzzes the phone, and the screen says when sound comes back', async ({ staff, page }) => {
+    await recordBuzzes(page);
+    await asMarko(page);
+    await page.goto('/waiter');
+    await expect(page.getByRole('heading', { level: 1, name: 'Marko' })).toBeVisible();
+    await page.getByRole('button', { name: 'Mute waiter alert sound' }).click();
+    const strip = page.getByText(/^Sound is off until \d\d:\d\d — the phone only buzzes\. Tap to turn on\.$/);
+    await expect(strip).toBeVisible();
+
+    staff.waiterCalls = [{ id: 'c1', status: 'pending', created_at: iso(0), table_session_id: 'session-1', table_sessions: t7 }];
+    await page.evaluate(() => window.dispatchEvent(new Event('online')));
+    await expect.poll(() => buzzes(page)).toEqual([[200, 100, 200]]);
+
+    await strip.click();
+    await expect(page.getByRole('button', { name: 'Mute waiter alert sound' })).toBeVisible();
+    await expect(page.getByText(/Sound is off/)).toHaveCount(0);
+  });
+});
+
 /**
  * The live feed (Supabase Realtime, protocol 2.0.0), faked: it lets the staff
  * channel join, says whether the database will send its changes, and

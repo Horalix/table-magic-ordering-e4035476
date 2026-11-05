@@ -120,7 +120,7 @@ working. The owner can do the same for anyone, at either restaurant, from
 4. **QR Codes** → **Per table**. Print a few, or show one on a laptop screen to
    scan. Vera Italia's codes open veraitalia.net; La Soul's open
    lasoulapp.netlify.app.
-5. **Service & suggestions** → **Accept orders from guests** on, and **Service
+5. **Ordering & service** → **Accept orders from guests** on, and **Service
    hours** wide enough to cover the demo. An order sent outside them waits for
    a waiter to confirm it.
 

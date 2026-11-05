@@ -121,6 +121,8 @@ const PrinterCard = ({ printer, onChanged }: { printer: PrinterRow; onChanged: (
   const [open, setOpen] = useState(!printer.last_seen_at);
   const [busy, setBusy] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  // A new address stops the printer until someone types it into the printer itself.
+  const [confirmNewAddress, setConfirmNewAddress] = useState(false);
   const summary = printerSummary({
     enabled: printer.enabled,
     online: !!printer.last_seen_at && Date.now() - new Date(printer.last_seen_at).getTime() < 60_000,
@@ -207,11 +209,7 @@ const PrinterCard = ({ printer, onChanged }: { printer: PrinterRow; onChanged: (
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 className="min-h-[40px] gap-2"
-                onSelect={() => act('New address', async () => {
-                  await rotatePollToken(printer.id);
-                  setOpen(true);
-                  toast.success('New address made — paste it into the printer, the old one no longer works');
-                })}
+                onSelect={() => setConfirmNewAddress(true)}
               >
                 <RefreshCw className="w-4 h-4" /> New address
               </DropdownMenuItem>
@@ -232,6 +230,30 @@ const PrinterCard = ({ printer, onChanged }: { printer: PrinterRow; onChanged: (
         {open ? 'Hide setup' : 'Address & setup steps'} <ChevronDown className={`w-4 h-4 transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
       {open && <Setup printer={printer} />}
+
+      <AlertDialog open={confirmNewAddress} onOpenChange={setConfirmNewAddress}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Give {printer.name} a new address?</AlertDialogTitle>
+            <AlertDialogDescription>
+              It stops printing tickets until someone enters the new address on the printer itself. Only do this if the old address was shared by mistake.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="min-h-[44px]">Keep the current address</AlertDialogCancel>
+            <AlertDialogAction
+              className="min-h-[44px] bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => act('New address', async () => {
+                await rotatePollToken(printer.id);
+                setOpen(true);
+                toast.success('New address made — paste it into the printer, the old one no longer works');
+              })}
+            >
+              Make a new address
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
         <AlertDialogContent>

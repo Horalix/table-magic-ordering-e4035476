@@ -71,7 +71,7 @@ here is in the admin menu on the left (on a phone: **More**).
 - [ ] *Printing on* and *Print new orders by themselves* switched on, *Copies
       per ticket* set → **Save settings**.
 
-### Service settings — Service & suggestions
+### Service settings — Ordering & service
 
 - [ ] **Accept orders from guests**: on. **Pay at the table**: on.
 - [ ] **Online card payment (Monri)**: **off**. It stays off until Monri is
@@ -221,7 +221,7 @@ Date: ______________ Started: ______ Finished: ______
 
 ### H. When things go wrong
 
-22. - [ ] Manager: **Service & suggestions** → *Accept orders from guests*
+22. - [ ] Manager: **Ordering & service** → *Accept orders from guests*
           off → **Stop orders**. Within a minute the guest's cart says
           *Ordering is paused*, and **Send order** is greyed out. Switch it
           back on.
@@ -259,7 +259,7 @@ Date: ______________ Started: ______ Finished: ______
 
 | Button | Why |
 |---|---|
-| QR Codes → **New code** | Kills every printed venue code at once |
+| QR Codes → **Replace code…** | Kills every printed room code at once (it asks first) |
 | **Online card payment (Monri)** | Guests are charged for real |
 | Tables → bin icon (**Delete table**) | Ends the session and removes its orders |
 | Waiters → **Remove** | Deletes that waiter's login for good |
@@ -328,10 +328,10 @@ Fastest first. None of these needs a code change.
 
 | To stop | Do | Effect |
 |---|---|---|
-| **Online card payments** | Service & suggestions → *Online card payment (Monri)* off | Immediate. Payments already in progress still resolve; pay-at-table unaffected |
-| **All guest ordering** | Service & suggestions → *Accept orders from guests* off | Guests see the pause message and ask a waiter; the server refuses orders. Existing orders continue |
-| **A rush** | Service & suggestions → *Kitchen delay notice (minutes)* | Guests are warned it may take longer, and still order. Use before stopping orders |
-| **Suggestions** | Service & suggestions → *Show suggestions to guests* off | No suggestions anywhere |
+| **Online card payments** | Ordering & service → *Online card payment (Monri)* off | Immediate. Payments already in progress still resolve; pay-at-table unaffected |
+| **All guest ordering** | Ordering & service → *Accept orders from guests* off | Guests see the pause message and ask a waiter; the server refuses orders. Existing orders continue |
+| **A rush** | Ordering & service → *Kitchen delay notice (minutes)* | Guests are warned it may take longer, and still order. Use before stopping orders |
+| **Suggestions** | Ordering & service → *Show suggestions to guests* off | No suggestions anywhere |
 | **Printing** | Kitchen → printer icon off, or Printing → *Printing on* off | The kitchen screen keeps working |
 | **A bad website or app update** | Netlify → Deploys → the previous deploy → *Publish deploy* | About a minute; the database is untouched |
 

@@ -5,7 +5,7 @@ case below passes. Two independent switches enforce that:
 
 | Switch | Where | Effect |
 |---|---|---|
-| `restaurant_settings.online_card_enabled` | Admin → Service & suggestions | Whether the **database** accepts a card order at all, and whether the app offers the button. Refuses to turn on until Monri is connected |
+| `restaurant_settings.online_card_enabled` | Admin → Ordering & service | Whether the **database** accepts a card order at all, and whether the app offers the button. Refuses to turn on until Monri is connected |
 | `VITE_MONRI_ENABLED=false` | build env | Emergency OFF only: a build with it never offers cards. Unset by default |
 
 The server-side one is authoritative. With it off, `guest_place_order` raises
@@ -64,7 +64,7 @@ site (lasoulapp.netlify.app), the published Lovable address and localhost
 replaces the list, so a value without lasoulapp.netlify.app refuses every card
 payment started there.
 
-**Admin → Service & suggestions** shows the state at any time: whether Monri
+**Admin → Ordering & service** shows the state at any time: whether Monri
 is connected (the two secrets are set), test or production, the currency, and
 the callback URL to register in the Monri dashboard, with a copy button. The
 "Online card payment" switch refuses to turn on until Monri is connected.
@@ -159,7 +159,7 @@ the live provider rather than the first time anyone tries it.
 3. Redeploy both Edge Functions.
 4. Update the callback URL in the Monri production dashboard.
 5. Set `VITE_MONRI_ENABLED = true` in Netlify and redeploy the site.
-6. Turn on **Admin → Service & suggestions → Online card payment**.
+6. Turn on **Admin → Ordering & service → Online card payment**.
 7. Do one **real** low-value transaction (e.g. an espresso) on a real card.
    Confirm: order released once, one ticket, `paid`, correct amount in
    `day_reconciliation()`.
@@ -172,7 +172,7 @@ the live provider rather than the first time anyone tries it.
 
 In order of speed:
 
-1. **Admin → Service & suggestions → Online card payment → off.** Immediate,
+1. **Admin → Ordering & service → Online card payment → off.** Immediate,
    no deploy. Existing in-flight payments still resolve correctly; no new card
    orders can be created. Pay-at-table is unaffected.
 2. Set `VITE_MONRI_ENABLED = false` and redeploy — removes the button.
@@ -212,7 +212,7 @@ SELECT created_at, outcome, detail, normalized_status, amount_minor, currency
 | Symptom | Likely cause | Check |
 |---|---|---|
 | `card_unavailable / not_configured` | Edge Function secrets missing | Supabase → Edge Functions → Secrets |
-| `card_unavailable / disabled` | Server switch off | Admin → Service & suggestions |
+| `card_unavailable / disabled` | Server switch off | Admin → Ordering & service |
 | Guest stuck on "still confirming" | Callback never arrived | Monri dashboard callback log; `MONRI_CALLBACK_URL` correctness |
 | `invalid_signature` in webhook logs | Wrong `MONRI_MERCHANT_KEY`, or a proxy altering the body | Compare environments; the digest is over the **raw** body |
 | `amount_mismatch` | Provider sent a different amount | Do not release manually. Contact Monri. |

@@ -188,7 +188,7 @@ const PAGES: AdminPage[] = [
     },
   },
   {
-    label: 'Tonight', path: '/admin/tonight', heading: 'Tonight’s Floor',
+    label: 'Tonight’s waiters', path: '/admin/tonight', heading: 'Tonight’s waiters',
     act: async (page) => {
       await page.getByRole('button', { name: /Terrace/ }).first().click();
       await expect(page.getByRole('dialog', { name: 'Terrace' })).toBeVisible();
@@ -228,7 +228,7 @@ const PAGES: AdminPage[] = [
     act: async (page) => { await page.getByLabel('Find a dish').fill('pizza'); },
   },
   {
-    label: 'Sections', path: '/admin/sections', heading: 'Sections & Waiters',
+    label: 'Floor sections', path: '/admin/sections', heading: 'Floor sections & waiters',
     act: async (page) => {
       await page.getByRole('button', { name: 'Delete section Terrace' }).click();
       await expect(page.getByRole('alertdialog')).toBeVisible();
@@ -262,7 +262,7 @@ const PAGES: AdminPage[] = [
     },
   },
   {
-    label: 'Service & suggestions', path: '/admin/service', heading: 'Service & merchandising',
+    label: 'Ordering & service', path: '/admin/service', heading: 'Ordering & service',
     act: async (page) => {
       await page.getByRole('switch', { name: 'Accept orders from guests' }).click();
       await expect(page.getByRole('alertdialog', { name: 'Stop accepting orders?' })).toBeVisible();

@@ -27,18 +27,61 @@ Dodajte svoj ekran na početni ekran telefona, pa će se otvarati kao aplikacija
 
 ---
 
+## Trenutno: samo meni
+
+Oba restorana zasad prikazuju **samo meni**. Gosti skeniraju kod i čitaju meni
+na svom telefonu, na bosanskom, engleskom ili arapskom. Preko telefona **ne
+mogu** naručiti, pozvati vas niti tražiti račun — narudžbe primajte kao i do
+sada.
+
+Svaki ekran za osoblje to kaže u traci na vrhu: **Menu only is on.** Dok je ta
+traka tu, prazan telefon, ekran za salu ili kuhinjski ekran je normalan.
+Ništa nije pokvareno.
+
+Kad vlasnik odluči da se narudžbe primaju preko aplikacije, menadžer to
+isključi u **Admin → Ordering & service**. Traka sama nestane sa svih ekrana i
+tada važi ostatak ovog vodiča.
+
+---
+
+## Admin za menadžera, iz dana u dan
+
+Na telefonu su dole kartice **Dashboard**, **Menu**, **QR Codes** i
+**Orders**; sve ostalo je pod **More**.
+
+- **Menu** — dodirnite cijenu da je promijenite. Kad nešto nestane, uključite
+  **Sold out**: gosti to odmah vide posivljeno. Lista **Sold out right now**
+  na vrhu podsjeća šta treba vratiti; dodirnite jelo tu kad ga opet ima.
+- **QR Codes** — kod za salu kaže **Scan for the menu** i radi i kad se
+  uključe narudžbe, pa se štampa samo jednom. **Replace code…** odmah gasi sve
+  odštampane kodove za salu: samo ako je neko kopirao vaš kod. Prvo pita.
+- **Ordering & service** — prekidač **Menu only**, a kasnije i prekidači za
+  primanje narudžbi.
+- Ako stranica kaže da se **could not be loaded**, ništa nije izgubljeno:
+  provjerite internet i dodirnite **Try again**.
+
+---
+
 ## Prije svake smjene
 
 **Menadžer**
-- **Tonight**: dodirnite svaku sekciju i konobare koji je pokrivaju → **Done**.
-  Svaki dan. Ako se to ne uradi, svaki sto se pojavljuje pod *No waiter yet*.
+- **Tonight’s waiters**: dodirnite svaku sekciju i konobare koji je pokrivaju → **Done**.
+  Svaki dan (kad se uključe narudžbe). Ako se to ne uradi, svaki sto se pojavljuje pod *No waiter yet*.
 
 **Konobari**
 - Prijavite se, otvorite `/waiter` i **ostavite ga otvorenog**. Telefon zvoni
   i vibrira samo dok je ovaj ekran otvoren — kad je zatvoren ili je telefon
   zaključan, obavještenja ne stižu.
 - Podesite da ekran ostane upaljen što duže.
-- Ako piše **Alerts are silent — tap to enable sound**, dodirnite to.
+- Zvuk i vibracija su **uključeni sami od sebe**. Kad otvorite ekran, dodirnite ga
+  jednom: telefoni drže zvuk (a Android telefoni i vibraciju) ugašenim do prvog
+  dodira. Ako piše **Alerts are silent — tap once to turn on sound**, dodirnite to.
+- Dugme sa zvučnikom gasi samo zvuk; telefon i dalje vibrira. Utišavanje se samo
+  ugasi nakon 4 sata, tako da svaka sljedeća smjena počinje sa zvukom. Dok je
+  utišan, ekran piše **Sound is off until** i vrijeme — dodirnite to da vratite zvuk.
+- **iPhone:** web stranica ne može vibrirati iPhone, zato držite jačinu zvuka gore.
+  Obavještenja zvone i kad je uključen prekidač za tihi način rada (iOS 16.4 i noviji).
+- **Sign out** prvo pita. Dodirnite **Stay signed in** osim ako vam je smjena gotova.
 
 **Kuhinja i šank**
 - Tablet na punjaču, podešen da se ekran nikad ne gasi (ako piše **Screen may

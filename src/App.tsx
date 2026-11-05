@@ -205,7 +205,7 @@ const App = () => (
             {/* Kitchen & Waiter. Wrapped in ClockProvider so every elapsed-time
                 card on these screens shares one interval instead of owning its
                 own — forty table cards used to mean forty timers. */}
-            <Route path="/kitchen" element={<StaffGate><ClockProvider><KitchenDisplay /></ClockProvider></StaffGate>} />
+            <Route path="/kitchen" element={<StaffGate redirectTo="/waiter/login?to=kitchen"><ClockProvider><KitchenDisplay /></ClockProvider></StaffGate>} />
             <Route path="/waiter/login" element={<WaiterLogin />} />
             <Route path="/waiter/monitor" element={<StaffGate redirectTo="/waiter/login"><ClockProvider><WaiterMonitor /></ClockProvider></StaffGate>} />
             <Route path="/waiter" element={<StaffGate redirectTo="/waiter/login"><ClockProvider><WaiterDashboard /></ClockProvider></StaffGate>} />
