@@ -99,6 +99,27 @@ export function ownerMayResetLogin(targetRoles: readonly RoleRow[] | null, ids: 
 }
 
 /**
+ * manage-admins' appoint: which of the restaurants the owner ticked an
+ * existing account still needs an admin row for. One person may run both
+ * (20261106120000_admin_of_both_restaurants.sql): a restaurant they already
+ * run is left as it is, and only an owner — who runs every restaurant
+ * already — is refused.
+ */
+export function adminRowsToAdd(theirRoles: readonly RoleRow[], venueIds: readonly string[]): {
+  owner: boolean;
+  already: string[];
+  add: string[];
+} {
+  const runs = new Set(theirRoles.filter((r) => r.role === "admin" && r.venue_id).map((r) => r.venue_id as string));
+  const wanted = [...new Set(venueIds)];
+  return {
+    owner: isOwner(theirRoles),
+    already: wanted.filter((v) => runs.has(v)),
+    add: wanted.filter((v) => !runs.has(v)),
+  };
+}
+
+/**
  * manage-admins' remove: the owner (the caller is checked to be one first)
  * deletes any account's sign-in for good — a restaurant's admin, a waiter, a
  * kitchen tablet, another owner, or a sign-in with no role left — but never

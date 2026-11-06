@@ -18,6 +18,8 @@ type Venue = typeof LA_SOUL;
 
 const OWNER_ROLES = [{ user_id: 'staff-user-1', role: 'admin', venue_id: null }];
 const adminOf = (v: Venue) => [{ user_id: 'staff-user-1', role: 'admin', venue_id: v.id }];
+/** One person who runs both restaurants (20261106120000_admin_of_both_restaurants.sql). */
+const ADMIN_OF_BOTH = [...adminOf(LA_SOUL), ...adminOf(VERA)];
 
 /** A test value for the Team form; it exists only in this file and the stub. */
 const INITIAL_PASSWORD = 'e2e-initial-pass-1';
@@ -115,7 +117,11 @@ async function stubOwnerParts(page: Page) {
       if (!known.has(email) && !body.password) {
         return json(route, { error: `No account uses ${email} yet. Type an initial password (10+ characters) to create it`, code: 'needs_password' }, 400);
       }
-      team.accounts.push({ user_id: `u-${email}`, email, username: null, display_name: null, kind: 'admin', venue: body.venue, you: false });
+      // One restaurant (`venue`), or both (`venues`): a row under each they do not run yet.
+      for (const venue of body.venues ?? [body.venue]) {
+        if (team.accounts.some((a) => a.email === email && a.kind === 'admin' && a.venue === venue)) continue;
+        team.accounts.push({ user_id: `u-${email}`, email, username: null, display_name: null, kind: 'admin', venue, you: false });
+      }
       return json(route, { ok: true, created: !known.has(email) });
     }
     if (body.action === 'revoke') {
@@ -524,6 +530,54 @@ test.describe('the owner', () => {
     expect(errors).toEqual([]);
   });
 
+  test('appoints one person to run both restaurants', async ({ page }) => {
+    const errors = watchErrors(page);
+    const { team } = await stubOwnerParts(page);
+    await page.goto('/admin');
+    await go(page, 'Team');
+
+    // ana already runs La Soul; she runs Vera Italia too from now on.
+    await page.getByLabel('Their email').fill('ana@lasoul.test');
+    await page.getByRole('group', { name: 'Restaurant they will run' }).getByRole('button', { name: 'Both' }).click();
+    await expect(page.getByText(/or veraitalia\.net\/admin\/login/)).toBeVisible();
+    await page.getByRole('button', { name: 'Appoint La Soul & Vera Italia admin' }).click();
+    const card = page.getByRole('dialog', { name: 'ana@lasoul.test now runs La Soul & Vera Italia' });
+    await expect(card.getByText('Their own, unchanged')).toBeVisible();
+    await card.getByRole('button', { name: 'Done' }).click();
+    expect(team.calls.filter((c) => c.action === 'appoint').at(-1)).toEqual({ action: 'appoint', email: 'ana@lasoul.test', venues: ['lasoul', 'veraitalia'] });
+    await expect(page.getByRole('region', { name: 'Vera Italia team' }).getByText('ana@lasoul.test')).toBeVisible();
+    await expect(page.getByRole('region', { name: 'La Soul team' }).getByText('ana@lasoul.test')).toBeVisible();
+
+    // A new person for both: one account, its initial password, both restaurants.
+    await page.getByLabel('Their email').fill('lejla@both.test');
+    await page.locator('#team-password').fill(INITIAL_PASSWORD);
+    await page.getByRole('button', { name: 'Appoint La Soul & Vera Italia admin' }).click();
+    const created = page.getByRole('dialog', { name: 'lejla@both.test now runs La Soul & Vera Italia' });
+    await expect(created.getByTestId('login-card-password')).toHaveText(INITIAL_PASSWORD);
+    await created.getByRole('button', { name: 'Done' }).click();
+    expect(team.calls.filter((c) => c.action === 'appoint').at(-1)).toEqual({
+      action: 'appoint', email: 'lejla@both.test', venues: ['lasoul', 'veraitalia'], password: INITIAL_PASSWORD,
+    });
+    expect(errors).toEqual([]);
+  });
+
+  test('a Team function not yet redeployed: Both says so, and appoints no one', async ({ page }) => {
+    await stubOwnerParts(page);
+    // Today's manage-admins reads only `venue`.
+    await page.route('**/functions/v1/manage-admins', async (route) => {
+      const body = route.request().postDataJSON() ?? {};
+      if (body.action === 'appoint' && !body.venue) return json(route, { error: 'Choose the restaurant' }, 400);
+      return route.fallback();
+    });
+    await page.goto('/admin');
+    await go(page, 'Team');
+    await page.getByLabel('Their email').fill('ana@lasoul.test');
+    await page.getByRole('group', { name: 'Restaurant they will run' }).getByRole('button', { name: 'Both' }).click();
+    await page.getByRole('button', { name: 'Appoint La Soul & Vera Italia admin' }).click();
+    await expect(page.getByText('The server cannot appoint both restaurants yet: the manage-admins function needs redeploying.')).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Vera Italia team' }).getByText('ana@lasoul.test')).toHaveCount(0);
+  });
+
   test('removes any account but their own: a waiter, an admin, another owner, a sign-in with no role', async ({ page }) => {
     const errors = watchErrors(page);
     const { team } = await stubOwnerParts(page);
@@ -817,6 +871,50 @@ for (const [venue, other] of [[VERA, LA_SOUL], [LA_SOUL, VERA]] as const) {
     });
   });
 }
+
+test.describe('an admin of both restaurants', () => {
+  test.beforeEach(({ staff }) => { staff.roles = ADMIN_OF_BOTH; });
+
+  test('switches between the two, as the owner does, and still has no Overview or Team', async ({ page }) => {
+    const errors = watchErrors(page);
+    const { overviewCalls, team } = await stubOwnerParts(page);
+    await page.goto('/admin');
+    const home = process.env.E2E_HOME_VENUE === 'veraitalia' ? VERA : LA_SOUL;
+    const away = home === VERA ? LA_SOUL : VERA;
+    // Until they pick, the site's own restaurant.
+    await expect(page).toHaveTitle(`Dashboard · ${home.name} admin`);
+
+    await openDrawer(page);
+    await expect(restaurantSwitch(page).getByRole('button', { name: home.name })).toHaveAttribute('aria-pressed', 'true');
+    await restaurantSwitch(page).getByRole('button', { name: away.name }).click();
+    await expect(page).toHaveTitle(`Dashboard · ${away.name} admin`);
+    await expect(page.locator('aside h1')).toHaveText(away.name);
+    expect(await page.evaluate(() => localStorage.getItem('lasoul.staff-venue'))).toBe(away.slug);
+
+    // The choice stays on this device, and the database is asked for that restaurant.
+    const asked: (string | undefined)[] = [];
+    page.on('request', (r) => { if (r.url().includes('/rest/v1/orders')) asked.push(r.headers()['x-venue']); });
+    await page.reload();
+    await expect(page).toHaveTitle(`Dashboard · ${away.name} admin`);
+    await go(page, 'Orders');
+    await expect.poll(() => asked.length).toBeGreaterThan(0);
+    expect(new Set(asked)).toEqual(new Set([away.slug]));
+
+    // Waiters: added to the restaurant shown, with a way to the other.
+    await go(page, 'Waiters');
+    await expect(page.getByRole('button', { name: `Add to ${home.name} instead` })).toBeVisible();
+
+    // Still a restaurant's admin: no Overview, no Team.
+    await openDrawer(page);
+    await expect(page.getByRole('link', { name: 'Team' })).toHaveCount(0);
+    await expect(page.getByRole('link', { name: 'Overview' })).toHaveCount(0);
+    await page.goto('/admin/team');
+    await expect(page).toHaveURL(/\/admin$/);
+    expect(overviewCalls).toEqual([]);
+    expect(team.calls).toEqual([]);
+    expect(errors).toEqual([]);
+  });
+});
 
 /*
  * Making every account a demo or a service needs, and the card that says how

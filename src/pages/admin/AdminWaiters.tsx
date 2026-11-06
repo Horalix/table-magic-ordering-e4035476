@@ -69,7 +69,8 @@ const AdminWaiters = () => {
   // (create-waiter is sent the same, below).
   const venueSlug = context?.venueSlug ?? shownVenueSlug();
   const venueName = context?.venueName ?? VENUES[venueSlug]?.name ?? venueSlug;
-  const others = context?.owner ? Object.values(VENUES).filter((v) => v.slug !== venueSlug) : [];
+  // The other restaurants this account can switch to: every one for the owner, the other it runs for an admin of both.
+  const others = (context?.choices ?? []).filter((slug) => slug !== venueSlug).map((slug) => VENUES[slug]).filter(Boolean);
 
   const [waiters, setWaiters] = useState<Waiter[]>([]);
   const [sections, setSections] = useState<SectionLite[]>([]);

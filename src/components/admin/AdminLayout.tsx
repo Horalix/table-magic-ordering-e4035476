@@ -90,6 +90,8 @@ export interface AdminOutletContext {
   venueSlug: string | null;
   /** The owner, who has every restaurant; null while the roles load. */
   owner: boolean | null;
+  /** The restaurants this account can switch between (useStaffVenue); empty while the roles load. */
+  choices?: string[];
   /** Opens Change password for the signed-in account (Team's "you" row). */
   changePassword?: () => void;
 }
@@ -350,6 +352,7 @@ const AdminLayout = () => {
           venueName,
           venueSlug: staffVenue?.venue.slug ?? null,
           owner,
+          choices: staffVenue?.choices.map((v) => v.slug) ?? [],
           changePassword: () => setPasswordOpen(true),
         } satisfies AdminOutletContext}
       />
@@ -372,10 +375,10 @@ const AdminLayout = () => {
               ? <h1 className="font-serif text-xl font-bold text-sidebar-foreground">{venueName}</h1>
               : <Skeleton aria-label="Loading the restaurant" className="h-7 w-32 rounded bg-sidebar-accent/60" />}
             <p className="text-xs text-sidebar-foreground/60 font-sans mt-0.5">{owner ? 'Owner · Admin Dashboard' : 'Admin Dashboard'}</p>
-            {/* The owner looks at one restaurant at a time; everyone else only ever has theirs. */}
-            {staffVenue?.owner && (
+            {/* The owner, or an admin of both, looks at one restaurant at a time; everyone else only ever has theirs. */}
+            {staffVenue && staffVenue.choices.length > 1 && (
               <div role="group" aria-label="Restaurant" className="mt-3 grid grid-cols-2 gap-1 rounded-lg bg-sidebar-accent/40 p-1">
-                {Object.values(VENUES).map((v) => {
+                {staffVenue.choices.map((v) => {
                   const current = v.slug === staffVenue.venue.slug;
                   return (
                     <button

@@ -31,7 +31,9 @@ import type { AdminOutletContext } from '@/components/admin/AdminLayout';
  * The owner's team: who runs each restaurant (supabase/functions/manage-admins).
  *
  * Every admin, waiter and kitchen account, by restaurant. The owner appoints
- * a restaurant's admin by email — an account that exists gets the role; a
+ * a restaurant's admin by email, for one restaurant or both — one person may
+ * run both, and switches between them at the top of the admin menu
+ * (20261106120000_admin_of_both_restaurants.sql). An account that exists gets the role; a
  * new one is created with the initial password typed here, which goes to
  * Supabase Auth and nowhere else, and which the new admin changes after
  * signing in (Admin menu → Change password). The login card says where
@@ -83,6 +85,9 @@ async function callTeam<T>(body: Record<string, unknown>): Promise<T> {
   }
   return data as T;
 }
+
+/** The Team form's third choice: one person runs every restaurant (20261106120000_admin_of_both_restaurants.sql). */
+const BOTH = 'both';
 
 const who = (a: Account) => a.email ?? (a.username ? `@${a.username}` : 'Unknown account');
 const personOf = (a: Account) => a.display_name ?? who(a);
@@ -145,6 +150,7 @@ const People = ({ title, icon: Icon, people, empty, action }: {
 const AdminTeam = () => {
   const context = useOutletContext<AdminOutletContext | null>();
   const [email, setEmail] = useState('');
+  /** The restaurant the new admin will run, or BOTH. */
   const [venue, setVenue] = useState<string>(() => context?.venueSlug ?? Object.keys(VENUES)[0]);
   const [password, setPassword] = useState('');
   const [needsPassword, setNeedsPassword] = useState<string | null>(null);
@@ -168,6 +174,8 @@ const AdminTeam = () => {
   const venues = data?.venues?.length ? data.venues : Object.values(VENUES).map(({ slug, name }) => ({ slug, name }));
   const nameOf = (slug: string | null) => venues.find((v) => v.slug === slug)?.name ?? VENUES[slug ?? '']?.name ?? slug ?? '';
   const accounts = data?.accounts ?? [];
+  const chosen = venue === BOTH ? venues.map((v) => v.slug) : [venue];
+  const chosenNames = chosen.map(nameOf).join(' & ');
 
   const appoint = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -182,16 +190,27 @@ const AdminTeam = () => {
     setNeedsPassword(null);
     const initial = password;
     try {
-      const result = await callTeam<Appointed>({ action: 'appoint', email: address, venue, password: password || undefined });
+      const result = await callTeam<Appointed>({
+        action: 'appoint',
+        email: address,
+        ...(chosen.length > 1 ? { venues: chosen } : { venue: chosen[0] }),
+        password: password || undefined,
+      }).catch((err: unknown) => {
+        // A manage-admins from before both restaurants reads only `venue`.
+        if (chosen.length > 1 && err instanceof TeamError && /choose the restaurant/i.test(err.message)) {
+          throw new TeamError('The server cannot appoint both restaurants yet: the manage-admins function needs redeploying.');
+        }
+        throw err;
+      });
       // The password has gone to Supabase Auth; the card shows it once, and
       // it is not kept anywhere here either.
       setPassword('');
       setEmail('');
       if (result.already) {
-        toast.success(`${address} is already the admin of ${nameOf(venue)}`);
+        toast.success(`${address} is already the admin of ${chosenNames}`);
       } else {
         setCard({
-          kind: 'admin', venueSlug: venue, venueName: nameOf(venue), name: address, username: address,
+          kind: 'admin', venueSlug: chosen[0], venueName: chosenNames, name: address, username: address,
           password: result.created ? initial : null, event: result.created ? 'created' : 'appointed',
         });
       }
@@ -386,8 +405,8 @@ const AdminTeam = () => {
               </div>
               <div>
                 <Label id="team-venue" className="font-sans text-sm">Restaurant they will run</Label>
-                <div role="group" aria-labelledby="team-venue" className="mt-1.5 grid grid-cols-2 gap-1 rounded-lg bg-muted/60 p-1">
-                  {venues.map((v) => (
+                <div role="group" aria-labelledby="team-venue" className="mt-1.5 grid grid-cols-3 gap-1 rounded-lg bg-muted/60 p-1">
+                  {[...venues, { slug: BOTH, name: 'Both' }].map((v) => (
                     <button
                       key={v.slug}
                       type="button"
@@ -417,11 +436,18 @@ const AdminTeam = () => {
             </div>
             <Button type="submit" disabled={saving || !email.trim()} className="gap-2 min-h-[44px] rounded-xl">
               {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <ShieldCheck className="w-4 h-4" />}
-              Appoint {nameOf(venue)} admin
+              Appoint {chosenNames} admin
             </Button>
             <p className="text-xs font-sans text-muted-foreground">
-              They sign in at <span className="font-medium text-foreground break-all">{staffSiteUrl(venue).replace(/^https?:\/\//, '')}/admin/login</span> with
-              this email. You get a card to copy or share as soon as they are appointed.
+              They sign in at{' '}
+              {chosen.map((slug, i) => (
+                <span key={slug}>
+                  {i > 0 && ' or '}
+                  <span className="font-medium text-foreground break-all">{staffSiteUrl(slug).replace(/^https?:\/\//, '')}/admin/login</span>
+                </span>
+              ))}{' '}
+              with this email{chosen.length > 1 ? ', and switch between the two restaurants at the top of the admin menu' : ''}.
+              You get a card to copy or share as soon as they are appointed.
             </p>
           </form>
         </CardContent>
