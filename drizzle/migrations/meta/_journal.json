@@ -64,6 +64,13 @@
       "when": 1793540523751,
       "tag": "0008_apply_verified_reco_quality_runner",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1793982881829,
+      "tag": "0009_apply_verified_admin_of_both_restaurants_runner",
+      "breakpoints": true
     }
   ]
 }
