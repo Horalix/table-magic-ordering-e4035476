@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { boardLocale, buildSlides, oneLine, slideSeconds, splitEvenly, TV_PAGE_SIZE, type TvItem } from './tv-board';
+import { boardLocale, buildSlides, keepShortWords, oneLine, slideSeconds, splitEvenly, TV_PAGE_SIZE, type TvItem } from './tv-board';
 
 const category = (id: string, sort_order: number) => ({ id, name: id, sort_order });
 const section = (id: string, category_id: string, sort_order: number) => ({ id, category_id, name: id, sort_order });
@@ -135,5 +135,21 @@ describe('the board’s address', () => {
     expect(boardLocale('?lang=bs&every=5')).toBe('bs');
     expect(boardLocale('?lang=de')).toBeNull();
     expect(boardLocale('')).toBeNull();
+  });
+});
+
+describe('keepShortWords', () => {
+  const NBSP = ' ';
+  it('takes a one-letter word down to the next line with the word after it', () => {
+    expect(keepShortWords('Klasični burger s hrskavom piletinom')).toBe(`Klasični burger s${NBSP}hrskavom piletinom`);
+    expect(keepShortWords('Ćevapi u somunu i luk')).toBe(`Ćevapi u${NBSP}somunu i${NBSP}luk`);
+    expect(keepShortWords('A Latte')).toBe(`A${NBSP}Latte`);
+  });
+
+  it('leaves longer words, numbers and a last letter alone', () => {
+    expect(keepShortWords('Topla čokolada sa slanim karamelom')).toBe('Topla čokolada sa slanim karamelom');
+    expect(keepShortWords('Pizza 4 sira')).toBe('Pizza 4 sira');
+    expect(keepShortWords('Vitamin C')).toBe('Vitamin C');
+    expect(keepShortWords('قهوة')).toBe('قهوة');
   });
 });

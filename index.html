@@ -4,6 +4,21 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#7E9B79" />
+    <!--
+      The TV menu board (/tv) is drawn for one look. A browser set to darken
+      every page (the entrance TV's was) is asked not to, before the first
+      paint; the board keeps it so (src/lib/light-only.ts).
+    -->
+    <script>
+      (function () {
+        if (!/^\/tv(\/|$)/.test(location.pathname)) return;
+        var meta = document.createElement('meta');
+        meta.name = 'color-scheme';
+        meta.content = 'only light';
+        document.head.appendChild(meta);
+        document.documentElement.style.colorScheme = 'only light';
+      })();
+    </script>
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="La Soul" />
