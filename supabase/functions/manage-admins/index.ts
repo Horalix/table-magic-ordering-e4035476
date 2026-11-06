@@ -1,5 +1,5 @@
 import { createClient, type SupabaseClient, type User } from "https://esm.sh/@supabase/supabase-js@2.45.0";
-import { ownerMayRemoveAccount, ownerMayResetLogin } from "../_shared/venue-access.ts";
+import { adminRowsToAdd, ownerMayRemoveAccount, ownerMayResetLogin } from "../_shared/venue-access.ts";
 import { releaseSignatures } from "../_shared/remove-login.ts";
 
 /**
@@ -14,9 +14,12 @@ import { releaseSignatures } from "../_shared/remove-login.ts";
  *                               every sign-in left with no role at all (it
  *                               opens nothing; the owner can remove it), each
  *                               with when it last signed in.
- *   appoint { email, venue,     make the account with that email the admin
- *             password? }       of that restaurant (slug). An existing account
- *                               only gets the role. A new one is created with
+ *   appoint { email, venue |    make the account with that email the admin
+ *             venues,           of that restaurant (slug), or of each of
+ *             password? }       `venues` — one person may run both
+ *                               (20261106120000_admin_of_both_restaurants.sql).
+ *                               An existing account only gets the roles it
+ *                               does not have yet. A new one is created with
  *                               the initial password the owner typed — 10+
  *                               characters, confirmed, so it signs in at once
  *                               — which the new admin changes after signing
@@ -24,11 +27,11 @@ import { releaseSignatures } from "../_shared/remove-login.ts";
  *                               nowhere else: never logged, never stored,
  *                               never sent back.
  *   revoke { user_id, venue }   remove that restaurant's admin role from that
- *                               account, and nothing else: its other roles and
- *                               the account itself stay. An owner is never a
- *                               restaurant's admin (one admin role per account,
- *                               user_roles), so no owner — the caller or the
- *                               last one — can be removed through here.
+ *                               account, and nothing else: its other roles —
+ *                               the other restaurant it runs, say — and the
+ *                               account itself stay. An owner's admin row
+ *                               names no restaurant, so no owner — the caller
+ *                               or the last one — can be removed through here.
  *   reset_password { user_id,   a new password for anyone on the team who
  *                    password } forgot theirs: a restaurant's admin, a
  *                               waiter, a kitchen tablet. Never an owner's
@@ -57,6 +60,8 @@ interface Body {
   action?: Action;
   email?: string;
   venue?: string;
+  /** appoint: every restaurant they will run, in place of `venue`. */
+  venues?: string[];
   password?: string;
   user_id?: string;
 }
@@ -199,27 +204,36 @@ Deno.serve(async (req) => {
 
     if (body.action === 'appoint') {
       const email = (body.email ?? '').trim().toLowerCase();
-      const venue = venueBySlug(body.venue);
+      const slugs = Array.isArray(body.venues) ? body.venues : body.venue ? [body.venue] : [];
+      const picked = slugs.map(venueBySlug);
       if (!EMAIL.test(email)) return reply({ error: 'Type the email address they will sign in with' }, 400);
-      if (email.endsWith(WAITER_DOMAIN)) return reply({ error: 'That is a waiter\'s sign-in. Appoint an admin by their own email address' }, 400);
-      if (!venue) return reply({ error: 'Choose the restaurant' }, 400);
+      if (email.endsWith(WAITER_DOMAIN)) return reply({ error: "That is a waiter's sign-in. Appoint an admin by their own email address" }, 400);
+      if (!picked.length || picked.some((v) => !v)) return reply({ error: 'Choose the restaurant' }, 400);
+      const ids = [...new Set((picked as VenueRow[]).map((v) => v.id))];
+      const nameOf = (id: string) => venues.find((v) => v.id === id)?.name ?? 'that restaurant';
 
       const existing = (await allUsers(admin)).find((u) => (u.email ?? '').toLowerCase() === email);
 
       if (existing) {
-        const { data: theirs } = await admin.from('user_roles').select('role, venue_id').eq('user_id', existing.id);
-        const adminRole = ((theirs as Omit<RoleRow, 'user_id'>[] | null) ?? []).find((r) => r.role === 'admin');
-        if (adminRole?.venue_id === null) {
-          return reply({ error: `${email} is the owner, who already runs every restaurant` }, 409);
+        const { data: theirs, error: tErr } = await admin.from('user_roles').select('role, venue_id').eq('user_id', existing.id);
+        if (tErr) return reply({ error: tErr.message }, 500);
+        const rows = (theirs as Omit<RoleRow, 'user_id'>[] | null) ?? [];
+        const plan = adminRowsToAdd(rows, ids);
+        if (plan.owner) return reply({ error: `${email} is the owner, who already runs every restaurant` }, 409);
+        if (!plan.add.length) return reply({ ok: true, created: false, already: true });
+        const { error: insErr } = await admin.from('user_roles')
+          .insert(plan.add.map((venue_id) => ({ user_id: existing.id, role: 'admin', venue_id })));
+        if (insErr) {
+          // A database from before 20261106120000 still allows one admin role per account.
+          const runs = rows.find((r) => r.role === 'admin' && r.venue_id)?.venue_id;
+          if ((insErr as { code?: string }).code === '23505' && runs) {
+            return reply({
+              error: `${email} already runs ${nameOf(runs)}, and the database does not let one person run both restaurants yet. It needs the latest database update (docs/lovable-migration-prompt.md).`,
+              code: 'needs_update',
+            }, 409);
+          }
+          return reply({ error: insErr.message }, 400);
         }
-        if (adminRole?.venue_id === venue.id) return reply({ ok: true, created: false, already: true });
-        if (adminRole) {
-          const other = venues.find((v) => v.id === adminRole.venue_id)?.name ?? 'another restaurant';
-          // One admin role per account (user_roles is unique on user and role).
-          return reply({ error: `${email} is already the admin of ${other}. Revoke that first, or appoint another address` }, 409);
-        }
-        const { error: insErr } = await admin.from('user_roles').insert({ user_id: existing.id, role: 'admin', venue_id: venue.id });
-        if (insErr) return reply({ error: insErr.message }, 400);
         return reply({ ok: true, created: false });
       }
 
@@ -238,11 +252,14 @@ Deno.serve(async (req) => {
       const { data: created, error: createErr } = await admin.auth.admin.createUser({ email, password, email_confirm: true });
       if (createErr || !created.user) return reply({ error: createErr?.message || 'Could not create the account' }, 400);
 
-      const { error: roleErr } = await admin.from('user_roles').insert({ user_id: created.user.id, role: 'admin', venue_id: venue.id });
+      const { error: roleErr } = await admin.from('user_roles')
+        .insert(ids.map((venue_id) => ({ user_id: created.user.id, role: 'admin', venue_id })));
       if (roleErr) {
         // An account with no role can sign in to nothing; do not leave one behind.
         await admin.auth.admin.deleteUser(created.user.id).catch(() => undefined);
-        return reply({ error: roleErr.message }, 400);
+        return (roleErr as { code?: string }).code === '23505'
+          ? reply({ error: 'The database does not let one person run both restaurants yet. Appoint one restaurant, or run the latest database update first (docs/lovable-migration-prompt.md).', code: 'needs_update' }, 409)
+          : reply({ error: roleErr.message }, 400);
       }
       return reply({ ok: true, created: true });
     }

@@ -341,7 +341,7 @@ describe('1. a manager acts on their own restaurant’s rows', () => {
       as(user, () => db.query(`INSERT INTO public.user_roles(user_id, role, venue_id) VALUES ($1, $2, $3)`, [who, role, venue]));
     const write = (user: string, sql: string, params: unknown[]) => as(user, () => affected(sql, params));
 
-    // (One staff role and one admin role per person: user_roles is unique on user and role.)
+    // (A restaurant's admin hires staff; making anyone an admin is the owner's.)
     await add(ADMIN_V, NEWCOMER, 'staff', V);
     await expect(add(ADMIN_V, WAITER_L, 'admin', V)).rejects.toThrow(ROLE_REFUSED);
     await expect(add(ADMIN_V, NEWCOMER, 'admin', V)).rejects.toThrow(ROLE_REFUSED);

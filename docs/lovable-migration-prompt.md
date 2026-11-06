@@ -2,7 +2,65 @@
 
 Copy everything between the rules into Lovable. Nothing else needs to be said.
 
-## Next: Delete on the menu can be undone, and Team's Remove (two migrations, two functions)
+## Next: one person can run both restaurants (one migration, one function)
+
+Send this once `main` has `feature/admin-both-restaurants` merged (the runner
+is pinned to its commit 2d419ee).
+
+- **`20261106120000_admin_of_both_restaurants.sql`**: `user_roles` allowed one
+  admin role per account (unique on user and role), so the owner could not
+  make the same person the admin of La Soul and of Vera Italia. The rule
+  becomes one row per account, role and restaurant, and still one owner row
+  per account. Nothing is deleted or changed: every row that exists already
+  fits. Until this is applied, Team's **Both** says the database needs this
+  update.
+- **Function**: `manage-admins`, whose `appoint` now takes one restaurant or
+  both. Until it is redeployed, Team's **Both** says the function needs
+  redeploying, and appoints no one.
+- The generated types are unchanged; the app does not need them regenerated.
+
+---
+
+> **Task: apply one migration with `docs/migration-runner.sql`, then
+> redeploy one Edge Function. Do not retype the migration file and do not
+> write any other SQL that changes data or schema.**
+>
+> Make sure your checkout is the latest `main`.
+>
+> 1. Run `docs/migration-runner.sql` step by step, each step as its own query:
+>    Step 0 (pg_net installed), Step 1 (queue the download, expect 1 row),
+>    Step 2 (expect 1 row, `arrived_exactly = true`), then Step 3, its one
+>    block (1 of 1). If one fails, stop and report the exact error; a failed
+>    block changes nothing.
+> 2. Check, and paste the raw output:
+>    ```sql
+>    SELECT (SELECT count(*) FROM pg_constraint
+>             WHERE conrelid = 'public.user_roles'::regclass AND conname = 'user_roles_user_id_role_key') AS old_rule,
+>           (SELECT count(*) FROM pg_indexes
+>             WHERE schemaname = 'public' AND tablename = 'user_roles'
+>               AND indexname IN ('user_roles_one_per_restaurant', 'user_roles_one_without_restaurant')) AS new_rules,
+>           (SELECT count(*) FROM public.user_roles) AS roles;
+>    ```
+>    Expected: `old_rule = 0`, `new_rules = 2`, and `roles` the same number
+>    as before step 1 (run the last line on its own first to know it).
+> 3. Redeploy the Edge Function `manage-admins` from `supabase/functions/`,
+>    with the settings in `supabase/config.toml`. It imports from
+>    `supabase/functions/_shared/` (`venue-access.ts`, `remove-login.ts`).
+>    Paste the deploy result.
+> 4. Change no file.
+>
+> Do not call `manage-admins` to test it: it creates and deletes real
+> accounts. Do not insert, change or delete any row of `user_roles`. Do not
+> create or change any user account, password or credential, do not change
+> any Auth setting, and do not enable online card payments.
+
+---
+
+## Done: Delete on the menu can be undone, and Team's Remove (5 November 2026)
+
+The user ran it on 5 November 2026: the `deleted_at` column and
+`menu_deleted_asked()` answer on the live project. Lovable's check output was
+not pasted. What was sent:
 
 Send this once `main` has `feature/menu-undo` merged. It also carries the
 Team redeploy below, in case that was not sent yet; redeploying twice is

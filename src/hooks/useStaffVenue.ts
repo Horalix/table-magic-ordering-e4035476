@@ -11,6 +11,12 @@ export interface StaffVenue {
   venue: Venue;
   /** The owner: an admin of no one restaurant, who picks which one to look at. */
   owner: boolean;
+  /**
+   * The restaurants these screens can switch between: every one for the
+   * owner, each one they run for an admin of more than one
+   * (20261106120000_admin_of_both_restaurants.sql), else only theirs.
+   */
+  choices: Venue[];
 }
 
 type RoleRow = StaffRoleRow;
@@ -28,10 +34,17 @@ export function venueOfRoles(rows: readonly RoleRow[], askedSlug: string | null)
   return venueByDbId(answeredVenueId(rows, asked, VENUES[DEFAULT_VENUE].dbId));
 }
 
+/** The restaurants an account runs as a restaurant's admin (not the owner's row, which names none). */
+export function venuesRun(rows: readonly RoleRow[]): Venue[] {
+  const ids = rows.filter((r) => r.role === 'admin' && typeof r.venue_id === 'string' && r.venue_id).map((r) => r.venue_id as string);
+  return Object.values(VENUES).filter((v) => ids.includes(v.dbId));
+}
+
 /**
  * Which restaurant a signed-in account is looking at (docs/two-restaurants.md):
- * the one they work at, or, for the owner, the one picked in the admin —
- * La Soul until they pick. Null while their roles load.
+ * the one they work at; for the owner, the one picked in the admin — La Soul
+ * until they pick; for an admin of both restaurants, the one picked among
+ * theirs — the site's own until they pick. Null while their roles load.
  */
 export function useStaffVenue(userId: string | null): StaffVenue | null {
   const [state, setState] = useState<StaffVenue | null>(null);
@@ -46,7 +59,18 @@ export function useStaffVenue(userId: string | null): StaffVenue | null {
       const owner = rows.some((r) => r.role === 'admin' && 'venue_id' in r && r.venue_id === null);
       if (owner) {
         // Until they pick, the restaurant whose site this is.
-        setState({ owner, venue: VENUES[staffVenue() ?? HOME_VENUE] ?? VENUES[HOME_VENUE] });
+        setState({ owner, venue: VENUES[staffVenue() ?? HOME_VENUE] ?? VENUES[HOME_VENUE], choices: Object.values(VENUES) });
+        return;
+      }
+      const runs = venuesRun(rows);
+      if (runs.length > 1) {
+        // An admin of more than one restaurant picks among theirs, as the owner
+        // does among all. Until they pick, what the database answers this page:
+        // the site's own restaurant (La Soul's site names none, and La Soul
+        // comes first among theirs; Vera Italia's names Vera Italia).
+        const venue = venueOfRoles(rows, currentVenueSlug()) ?? runs[0];
+        chooseStaffVenue(venue.slug);
+        setState({ owner, venue, choices: runs });
         return;
       }
       // Anyone else works where the database already knows; a choice the
@@ -58,7 +82,7 @@ export function useStaffVenue(userId: string | null): StaffVenue | null {
       // everyone (menu_venue(), 20261031100500), so La Soul's staff on Vera
       // Italia's site must not ask for Vera Italia's.
       chooseStaffVenue(venue.slug);
-      setState({ owner, venue });
+      setState({ owner, venue, choices: [venue] });
     })();
     return () => { cancelled = true; };
   }, [userId]);
@@ -67,7 +91,7 @@ export function useStaffVenue(userId: string | null): StaffVenue | null {
 }
 
 /**
- * The owner switches restaurant. Every screen loaded the other restaurant's
+ * The owner, or an admin of both, switches restaurant. Every screen loaded the other restaurant's
  * rows, so the page starts again rather than mixing the two.
  */
 export function switchStaffVenue(slug: string): void {
