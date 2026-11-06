@@ -88,3 +88,30 @@ test('speaks the language the address asks for, right to left in Arabic', async 
   await expect(page.getByText('الطعام', { exact: true })).toBeVisible();
   await expect(page.locator('footer p').first()).toHaveText('امسح الرمز لتصفّح القائمة كاملة');
 });
+
+test('offers Full screen until it fills the screen, and installs as a TV app that opens it', async ({ page, browserName }) => {
+  await page.goto('/tv?every=600');
+  await expect(page.getByRole('heading', { level: 2, name: 'Burgers' })).toBeVisible();
+
+  // "Install app" on the TV makes an icon that opens this board, full screen, not the guest menu.
+  await expect(page.locator('link[rel="manifest"]')).toHaveAttribute('href', '/manifest-tv-lasoul.webmanifest');
+  if (browserName === 'chromium') {
+    const cdp = await page.context().newCDPSession(page);
+    const manifest = await cdp.send('Page.getAppManifest');
+    expect(manifest.url).toMatch(/\/manifest-tv-lasoul\.webmanifest$/);
+    expect(manifest.errors).toEqual([]);
+    const { installabilityErrors } = await cdp.send('Page.getInstallabilityErrors');
+    expect(installabilityErrors.map((e) => e.errorId)).toEqual([]);
+  }
+
+  const button = page.getByRole('button', { name: 'Full screen' });
+  // A browser that cannot put a page full screen (Safari on an iPhone) is offered no button.
+  if (!(await page.evaluate(() => document.fullscreenEnabled))) {
+    await expect(button).toHaveCount(0);
+    return;
+  }
+  await expect(button).toBeVisible();
+  await button.click();
+  await expect(button).toHaveCount(0);
+  expect(await page.evaluate(() => document.fullscreenElement === document.documentElement)).toBe(true);
+});

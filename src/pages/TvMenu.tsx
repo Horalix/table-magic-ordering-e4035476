@@ -11,7 +11,8 @@
  *
  * It runs all day unattended: the menu is read again every five minutes and
  * the last one that arrived stays on screen if a read fails; the screen is
- * kept awake and the pointer hidden; a new version of the app is taken while
+ * kept awake and the pointer hidden; it stays light on a browser set to
+ * darken pages (src/lib/light-only.ts); a new version of the app is taken while
  * it is left alone (src/lib/app-update.ts); and nothing it shows is counted
  * as a guest browsing (src/lib/analytics.ts).
  *
@@ -24,7 +25,7 @@ import { useLocation } from 'react-router-dom';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { useQuery } from '@tanstack/react-query';
 import { QRCodeSVG } from 'qrcode.react';
-import { BadgeCheck } from 'lucide-react';
+import { BadgeCheck, Maximize } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import SmartImage from '@/components/ui/SmartImage';
 import { PriceTag } from '@/components/guest/PriceTag';
@@ -32,11 +33,13 @@ import { LightLine, RuledTitle } from '@/components/vera/VeraMenu';
 import { COURSES, ROMAN, VERA, pick } from '@/components/vera/copy';
 import { getLocalizedDescription, getLocalizedName, localeLabels, useLanguageStore, useT, type Locale } from '@/lib/i18n';
 import { HOME_VENUE } from '@/lib/home-venue';
+import { useFullScreen, useTvApp } from '@/lib/full-screen';
+import { useLightOnly } from '@/lib/light-only';
 import { saleView } from '@/lib/promotions';
 import type { MenuItemRow } from '@/lib/promotions-api';
 import { useNoIndex } from '@/lib/seo/noindex';
 import { absoluteUrl } from '@/lib/seo/site-url';
-import { boardLocale, buildSlides, oneLine, slideSeconds, type TvSlide } from '@/lib/tv-board';
+import { boardLocale, buildSlides, keepShortWords, oneLine, slideSeconds, type TvSlide } from '@/lib/tv-board';
 import { VENUES, menuPath } from '@/lib/venues';
 import { useWakeLock } from '@/lib/wake-lock';
 import type { Database } from '@/integrations/supabase/types';
@@ -87,6 +90,7 @@ const LOOK = VERA_HOME
       scan: 'italic font-normal text-[60px]',
       progress: 'bg-[hsl(var(--vi-brass))]',
       leader: 'border-foreground/30',
+      fullScreen: 'rounded-[3px]',
     }
   : {
       // The menu sheet comes up over the sage band, as on the phone menu.
@@ -102,6 +106,7 @@ const LOOK = VERA_HOME
       scan: 'font-semibold text-[52px]',
       progress: 'bg-[hsl(var(--gold))]',
       leader: 'border-foreground/25',
+      fullScreen: 'rounded-full',
     };
 
 interface BoardMenu {
@@ -142,12 +147,14 @@ function useStageScale(): number {
 
 /**
  * A screen nobody uses with a mouse: the pointer, left wherever the browser
- * was opened, would sit over the menu all day. No scrollbars either, and it
- * never dims (src/lib/wake-lock.ts).
+ * was opened, would sit over the menu all day. No scrollbars either, it
+ * never dims (src/lib/wake-lock.ts), and the TV's browser does not darken it.
  */
 function useUnattendedScreen(title: string) {
   useNoIndex();
   useWakeLock(true);
+  useLightOnly();
+  useTvApp(`/manifest-tv-${HOME_VENUE}.webmanifest`);
   useEffect(() => {
     const root = document.documentElement;
     const before = { cursor: root.style.cursor, overflow: root.style.overflow };
@@ -185,6 +192,7 @@ const TvMenu = () => {
   const seconds = slideSeconds(search);
   const reduced = useReducedMotion() ?? false;
   const scale = useStageScale();
+  const fullScreen = useFullScreen();
 
   // A failed read keeps the last menu that arrived: React Query holds on to
   // its data through an error, and the next read is five minutes away.
@@ -247,6 +255,16 @@ const TvMenu = () => {
                 </motion.div>
               )}
             </AnimatePresence>
+            {/* Until the board fills the screen: one tap on the TV and it does (src/lib/full-screen.ts). */}
+            {fullScreen.offer && (
+              <button
+                type="button"
+                onClick={fullScreen.enter}
+                className={`absolute end-[24px] top-[24px] z-20 inline-flex cursor-pointer items-center gap-[14px] bg-background/90 px-[34px] py-[20px] font-sans text-[30px] font-semibold text-foreground shadow-lux-lg ${LOOK.fullScreen}`}
+              >
+                <Maximize className="h-[34px] w-[34px]" aria-hidden /> {t('tv_full_screen')}
+              </button>
+            )}
             {/* The next slide's photograph, loaded while this one is up, so it fades in whole. */}
             {next && (
               <div aria-hidden className="pointer-events-none absolute h-px w-px overflow-hidden opacity-0">
@@ -406,7 +424,7 @@ const SlideView = ({ slide, course, scale, seconds, reduced }: SlideProps) => {
             <li key={item.id} className={roomy ? 'pt-[22px] pb-[4px]' : 'pt-[20px] pb-[2px]'}>
               <div className="flex items-end gap-[20px]">
                 <span className={`min-w-0 font-serif leading-[1.12] text-foreground [text-wrap:balance] ${roomy ? 'text-[52px]' : 'text-[48px]'} ${LOOK.name}`}>
-                  {getLocalizedName(item, locale)}
+                  {keepShortWords(getLocalizedName(item, locale))}
                 </span>
                 <span aria-hidden className={`mb-[14px] min-w-[32px] flex-1 border-b-[3px] border-dotted ${LOOK.leader}`} />
                 <PriceTag

@@ -501,6 +501,7 @@ const translations: Record<string, Record<Locale, string>> = {
 
   // ---- The TV menu board at the entrance (/tv)
   'tv_scan_full_menu': { en: 'Scan for the full menu', bs: 'Skenirajte za cijeli meni', ar: 'امسح الرمز لتصفّح القائمة كاملة' },
+  'tv_full_screen': { en: 'Full screen', bs: 'Cijeli ekran', ar: 'ملء الشاشة' },
 };
 
 /** Read-only view of the table, for the completeness tests. */

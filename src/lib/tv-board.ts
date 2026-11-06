@@ -130,6 +130,14 @@ export function buildSlides<T extends TvItem>(
 const CLAUSE_END = /[,;،]\s|\s[–—]\s/g;
 
 /**
+ * A dish's name as a typesetter would break it: a one-letter word ("s", "i",
+ * "u", "a") goes down with the word after it, never left at the end of a
+ * line — "Klasični burger / s hrskavom piletinom", not "Klasični burger s /
+ * hrskavom piletinom", as the board showed two of La Soul's burgers.
+ */
+export const keepShortWords = (text: string): string => text.replace(/(?<=^|\s)(\p{L})\s+(?=\S)/gu, '$1 ');
+
+/**
  * A dish's description as the one line the board has room for: its first
  * sentence, or as much of it as fits in `max` characters — up to the last
  * comma if that keeps a fair part of it ("Fragrant and soothing chamomile
