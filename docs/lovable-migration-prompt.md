@@ -2,7 +2,61 @@
 
 Copy everything between the rules into Lovable. Nothing else needs to be said.
 
-## Next: one person can run both restaurants (one migration, one function)
+## Next: tables closed at the end of the work day (one migration, no function)
+
+Send this once `main` has `feature/close-all-tables` merged (the runner is
+pinned to its commit e959ede).
+
+- **`20261110120000_close_all_tables.sql`**: Close all tables, the end-of-day
+  notice on the waiter phone, the floor and the admin, the "Work day ends at"
+  setting (Admin → Ordering & service), and the overnight close of settled
+  tables whose guests have gone (pg_cron, 03:10 UTC, where it is installed).
+  A table that still owes money is never closed by it. Until this is applied,
+  the notice and the button do not appear; nothing else changes.
+- No Edge Function changes.
+
+---
+
+> **Task: apply one migration with `docs/migration-runner.sql`. Do not retype
+> the migration file and do not write any other SQL that changes data or
+> schema.**
+>
+> Make sure your checkout is the latest `main`.
+>
+> 1. Run `docs/migration-runner.sql` step by step, each step as its own query:
+>    Step 0 (pg_net installed), Step 1 (queue the download, expect 1 row),
+>    Step 2 (expect 1 row, `arrived_exactly = true`), then Step 3, its one
+>    block (1 of 1). If one fails, stop and report the exact error; a failed
+>    block changes nothing.
+> 2. Check, read-only, and paste the raw output:
+>    ```sql
+>    SELECT (SELECT count(*) FROM pg_proc
+>             WHERE pronamespace = 'public'::regnamespace
+>               AND proname IN ('staff_close_all_tables', 'staff_open_tables', 'close_tables_overnight')) AS functions,
+>           (SELECT count(*) FROM information_schema.columns
+>             WHERE table_schema = 'public' AND table_name = 'restaurant_settings'
+>               AND column_name = 'day_ends_at') AS setting;
+>    ```
+>    Expected: `functions = 3` and `setting = 1`. Then, on its own:
+>    `SELECT count(*) FROM cron.job WHERE jobname = 'lasoul-close-tables';`
+>    Expected `1`. If that fails because pg_cron is not installed, say so and
+>    stop there: the rest is still correct.
+> 3. Change no file. No Edge Function needs redeploying.
+>
+> Do not call `staff_close_all_tables`, `staff_open_tables`,
+> `close_tables_overnight` or `run_scheduled_table_close`. The first closes
+> the open tables of a restaurant, and the others close them too. Do not
+> insert, change or delete any row. Do not create or change any user account,
+> password or credential, do not change any Auth setting, and do not enable
+> online card payments.
+
+---
+
+## Done: one person can run both restaurants (6 November 2026)
+
+Applied by Lovable on 6 November 2026: the old one-admin-role rule is gone,
+the two new rules are in place, roles stayed at 4, and `manage-admins` was
+redeployed. What was sent:
 
 Send this once `main` has `feature/admin-both-restaurants` merged (the runner
 is pinned to its commit 2d419ee).
