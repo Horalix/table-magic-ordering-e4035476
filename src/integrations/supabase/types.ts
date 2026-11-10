@@ -1749,6 +1749,7 @@ export type Database = {
       restaurant_settings: {
         Row: {
           after_meal_prompt_minutes: number
+          day_ends_at: string | null
           default_cost_pct: Json
           hold_auto_admitted: boolean | null
           hold_burst_sessions: number | null
@@ -1796,6 +1797,7 @@ export type Database = {
         }
         Insert: {
           after_meal_prompt_minutes?: number
+          day_ends_at?: string | null
           default_cost_pct?: Json
           hold_auto_admitted?: boolean | null
           hold_burst_sessions?: number | null
@@ -1843,6 +1845,7 @@ export type Database = {
         }
         Update: {
           after_meal_prompt_minutes?: number
+          day_ends_at?: string | null
           default_cost_pct?: Json
           hold_auto_admitted?: boolean | null
           hold_burst_sessions?: number | null
@@ -3134,6 +3137,10 @@ export type Database = {
         Args: { _device_id: string; _order_id: string; _ticket_type?: string }
         Returns: boolean
       }
+      close_settled_sessions: {
+        Args: { _idle_only: boolean; _reason: string; _venue: string }
+        Returns: Json
+      }
       close_shift: {
         Args: {
           _acknowledge_issues?: boolean
@@ -3148,6 +3155,7 @@ export type Database = {
       }
       close_stale_orders: { Args: { _hours?: number }; Returns: Json }
       close_stale_sessions: { Args: never; Returns: number }
+      close_tables_overnight: { Args: never; Returns: Json }
       cloud_print_candidates: {
         Args: { _types: string[] }
         Returns: {
@@ -4018,6 +4026,7 @@ export type Database = {
       run_daily_maintenance: { Args: never; Returns: Json }
       run_scheduled_learning_refresh: { Args: never; Returns: Json }
       run_scheduled_maintenance: { Args: never; Returns: Json }
+      run_scheduled_table_close: { Args: never; Returns: Json }
       sales_analytics: { Args: { _from?: string; _to?: string }; Returns: Json }
       sales_change_terms: {
         Args: {
@@ -4150,8 +4159,10 @@ export type Database = {
         }
         Returns: Json
       }
+      staff_close_all_tables: { Args: never; Returns: Json }
       staff_close_session: { Args: { _session_id: string }; Returns: Json }
       staff_mark_session_seen: { Args: { _session_id: string }; Returns: Json }
+      staff_open_tables: { Args: never; Returns: Json }
       staff_performance: {
         Args: { _from?: string; _to?: string }
         Returns: Json
