@@ -109,6 +109,52 @@ test.describe('menu and discovery', () => {
     await expect(page.getByRole('button', { name: /Add to order La Soul Burger/i })).toHaveCount(0);
   });
 
+  test('a sold-out dish offers what to have instead, one tap from the order', async ({ page, state }) => {
+    // The page of a sold-out dish said "Sold out" and nothing else: the sale
+    // was lost, though the database knew what to offer (guest_get_substitutes).
+    state.menuItems = [{ ...state.menuItems[0], is_available: false }];
+    const asked: unknown[] = [];
+    await page.route('**/rest/v1/rpc/guest_get_substitutes**', (route) => {
+      asked.push(route.request().postDataJSON());
+      return route.fulfill({
+        status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' },
+        body: JSON.stringify([
+          { id: 'item-manhattan', name: 'Manhattan Burger', name_bs: 'Manhattan Burger', name_ar: null, price: 15, image_url: null, dietary_tags: [], match_reason: 'similar dish' },
+          { id: 'item-mushroom', name: 'Mushroom Burger', name_bs: null, name_ar: null, price: '16.50', image_url: null, dietary_tags: [], match_reason: 'similar dish' },
+        ]),
+      });
+    });
+    await seedSession(page);
+    await page.goto('/menu/food');
+    await page.getByText('La Soul Burger').first().click();
+
+    const sheet = page.getByRole('dialog');
+    const instead = sheet.getByRole('region', { name: /Similar, and available now|Slično, a dostupno sada/ });
+    await expect(instead.getByRole('listitem')).toHaveCount(2);
+    await expect(instead).toContainText('Manhattan Burger');
+    await expect(instead).toContainText(/16[.,]50/);
+    expect(asked).toEqual([{ _item_id: 'item-burger', _limit: 4 }]);
+    // The sold-out dish itself still cannot be added.
+    await expect(sheet.getByRole('button', { name: /^Add to order ·|^Dodaj u narudžbu ·/ })).toHaveCount(0);
+
+    await instead.getByRole('button', { name: /Add Manhattan Burger to order|Dodaj Manhattan Burger u narudžbu/ }).click();
+    await expect(instead.getByRole('button', { name: /Added to order|Dodano u narudžbu/ })).toBeDisabled();
+    await expect(page.getByRole('status').filter({ hasText: /Manhattan Burger/ })).toHaveCount(1);
+  });
+
+  test('a guest only reading the menu sees the alternatives, with nothing to tap', async ({ page, state }) => {
+    state.menuItems = [{ ...state.menuItems[0], is_available: false }];
+    await page.route('**/rest/v1/rpc/guest_get_substitutes**', (route) => route.fulfill({
+      status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' },
+      body: JSON.stringify([{ id: 'item-manhattan', name: 'Manhattan Burger', name_bs: null, name_ar: null, price: 15, image_url: null }]),
+    }));
+    await page.goto('/menu/food');
+    await page.getByText('La Soul Burger').first().click();
+    const instead = page.getByRole('dialog').getByRole('region', { name: /Similar, and available now|Slično, a dostupno sada/ });
+    await expect(instead).toContainText('Manhattan Burger');
+    await expect(instead.getByRole('button')).toHaveCount(0);
+  });
+
   test('an item outside its hours says when it comes back', async ({ page, state }) => {
     // A breakfast item at 23:00 was orderable, because nothing read
     // available_from/available_to outside the database.

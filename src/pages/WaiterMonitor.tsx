@@ -24,6 +24,7 @@ import { useStaffVenue } from '@/hooks/useStaffVenue';
 import { useWakeLock } from '@/lib/wake-lock';
 import { isHeld, isInKitchen, kitchenStart } from '@/components/staff/order-status';
 import HeldOrdersCard from '@/components/staff/HeldOrdersCard';
+import EndOfDayTables from '@/components/staff/EndOfDayTables';
 import MenuOnlyNotice from '@/components/staff/MenuOnlyNotice';
 import type { Database } from '@/integrations/supabase/types';
 import { isKitchenUsername } from '@/lib/staff-accounts';
@@ -491,6 +492,7 @@ const WaiterMonitor = () => {
           </div>
         )}
         <MenuOnlyNotice audience="waiter" outerClassName="px-4 sm:px-6 pb-3" />
+        {staffVenue && <EndOfDayTables hours={staffVenue.venue.hours} outerClassName="px-4 sm:px-6 pb-3" />}
       </header>
 
       <main className="p-4 sm:p-6">

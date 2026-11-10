@@ -20,7 +20,7 @@ import { toast } from 'sonner';
 import MenuItemDialog from '@/components/admin/MenuItemDialog';
 import InlinePrice from '@/components/admin/InlinePrice';
 import { DIET_BY_KEY, getItemTags } from '@/lib/dietary';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { isNew, saleScheduled } from '@/lib/promotions';
 import { shownVenueSlug } from '@/lib/current-venue';
 import {
@@ -180,6 +180,18 @@ const AdminMenu = () => {
   }, []);
 
   useEffect(() => { void fetchMenu(); }, [fetchMenu]);
+
+  // "Edit dish" on a Menu intelligence card lands here as ?dish=<id>: the dish's editor opens, once.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const wantedDish = searchParams.get('dish');
+  useEffect(() => {
+    if (!wantedDish || loading) return;
+    const item = menuRows.flatMap((c) => c.subcategories ?? []).flatMap((s) => s.menu_items ?? [])
+      .find((i) => i.id === wantedDish && !(i as { deleted_at?: string | null }).deleted_at);
+    if (item) setItemDialog({ item: item as MenuItemRow });
+    else toast.message('That dish is no longer on the menu');
+    setSearchParams((prev) => { prev.delete('dish'); return prev; }, { replace: true });
+  }, [wantedDish, loading, menuRows, setSearchParams]);
 
   // ---- Create ----
   const addCategory = async ({ name, name_bs, name_ar }: Names) => {

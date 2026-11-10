@@ -34,6 +34,8 @@ interface Settings {
   ordering_paused_message: string | null;
   kitchen_delay_minutes: number;
   last_order_time: string | null;
+  /** Absent on a database from before 20261110120000_close_all_tables.sql. */
+  day_ends_at?: string | null;
   // Fake-order protection. NULL switches a rule off.
   hold_first_order_km: number | null;
   hold_first_order_items: number | null;
@@ -400,6 +402,20 @@ const AdminService = () => {
                 onBlur={(e) => patch({ last_order_time: e.target.value || null })}
               />
             </div>
+            {'day_ends_at' in settings && (
+              <div>
+                <Label htmlFor="day-ends" className="font-sans font-semibold text-sm">Work day ends at</Label>
+                <p className="text-xs text-muted-foreground font-sans mb-1.5">
+                  From then on, staff screens say which tables are still open and offer Close all tables. Blank: half an hour after closing time.
+                </p>
+                <Input
+                  id="day-ends"
+                  type="time"
+                  defaultValue={settings.day_ends_at?.slice(0, 5) ?? ''}
+                  onBlur={(e) => patch({ day_ends_at: e.target.value || null })}
+                />
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>

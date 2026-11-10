@@ -15,7 +15,10 @@ import { toast } from 'sonner';
 import { QRCodeSVG } from 'qrcode.react';
 import { useElapsed, formatDuration } from '@/lib/timing';
 import { outstandingFor } from '@/lib/staff-api';
+import { CloseAllTablesDialog } from '@/components/staff/EndOfDayTables';
+import { useOpenTables } from '@/hooks/useOpenTables';
 import FreeTableDialog from '@/components/staff/FreeTableDialog';
+import { endOfDay } from '@/lib/end-of-day';
 import type { Database } from '@/integrations/supabase/types';
 import { HOME_VENUE } from '@/lib/home-venue';
 import { qrOrigin, venueByDbId } from '@/lib/venues';
@@ -39,6 +42,9 @@ const AdminTables = () => {
   const [loadError, setLoadError] = useState(false);
   /** The table whose "Free" was tapped, with what it is believed to owe. */
   const [freeing, setFreeing] = useState<{ sessionId: string; tableNumber: number; owed: number } | null>(null);
+  // Close all tables, at any hour: every open table that owes nothing (null before the database knows how).
+  const openTables = useOpenTables();
+  const [closingAll, setClosingAll] = useState(false);
 
   const fetchTables = useCallback(async () => {
     const [{ data: t, error: tErr }, { data: s, error: sErr }] = await Promise.all([
@@ -124,7 +130,15 @@ const AdminTables = () => {
 
   return (
     <div>
-      <h1 className="font-serif text-3xl font-bold text-foreground mb-6">Table Management</h1>
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+        <h1 className="font-serif text-3xl font-bold text-foreground">Table Management</h1>
+        {openTables && openTables.tables.length > 0 && (
+          <Button variant="outline" className="min-h-[44px] font-sans" onClick={() => setClosingAll(true)}>
+            Close all tables ({openTables.tables.length} open)
+          </Button>
+        )}
+      </div>
+      <CloseAllTablesDialog open={closingAll} onOpenChange={setClosingAll} state={endOfDay(openTables, null)} />
 
       <Card className="mb-6 border-border">
         <CardContent className="p-4 flex flex-wrap items-center gap-2">

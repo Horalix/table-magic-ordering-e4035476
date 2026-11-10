@@ -72,9 +72,91 @@ test.describe('analytics', () => {
   });
 });
 
+/** Menu intelligence's own parts of the database: the dishes, and what its buttons write. */
+interface MenuWrites {
+  patches: { id: string; body: Record<string, unknown> }[];
+  binned: string[];
+  restored: string[];
+}
+
+async function stubMenuWrites(page: Page, dishes: Record<string, unknown>[]): Promise<MenuWrites> {
+  const writes: MenuWrites = { patches: [], binned: [], restored: [] };
+  const reply = (route: import('@playwright/test').Route, body: unknown, status = 200) => route.fulfill({
+    status, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify(body),
+  });
+  await page.route('**/rest/v1/menu_items**', (route) => {
+    const request = route.request();
+    // The dish a request names: ?id=eq.<id>.
+    const id = new URL(request.url()).searchParams.get('id')?.replace(/^eq\./, '') ?? '';
+    if (request.method() === 'PATCH') {
+      const body = request.postDataJSON() as Record<string, unknown>;
+      writes.patches.push({ id, body });
+      const dish = dishes.find((d) => d.id === id);
+      if (dish) Object.assign(dish, body);
+      return reply(route, [], 204);
+    }
+    // "Which dishes are featured?" asks for the ones with a place.
+    if (request.url().includes('featured_rank=not.is.null')) return reply(route, dishes.filter((d) => d.featured_rank != null));
+    // One dish, by id (its name for a button's message).
+    if (id) return reply(route, dishes.filter((d) => d.id === id));
+    return reply(route, dishes);
+  });
+  await page.route('**/rest/v1/rpc/admin_delete_menu_entry**', (route) => {
+    writes.binned.push(String(route.request().postDataJSON()._id));
+    return reply(route, { name: 'Plain toast' });
+  });
+  await page.route('**/rest/v1/rpc/admin_restore_menu_entry**', (route) => {
+    writes.restored.push(String(route.request().postDataJSON()._id));
+    return reply(route, { name: 'Plain toast' });
+  });
+  return writes;
+}
+
+const DISHES = () => [
+  { id: 'La Soul Burger', name: 'La Soul Burger', price: 18, food_cost: 6, featured_rank: 1, is_available: true },
+  { id: 'Truffle risotto', name: 'Truffle risotto', price: 22, food_cost: null, featured_rank: null, is_available: true },
+  { id: 'item-toast', name: 'Plain toast', price: 4, food_cost: null, featured_rank: null, is_available: true },
+  { id: 'item-cake', name: 'Chocolate cake', price: 9, food_cost: null, featured_rank: null, is_available: false },
+];
+
 test.describe('menu intelligence', () => {
+  test('opens on four numbers and what to do, with the rest one tab away', async ({ page }) => {
+    await page.goto('/admin/menu-intelligence');
+    const summary = page.getByRole('region', { name: 'Summary' });
+    // 167 + 100 + 35 + 24, every card a weekly figure.
+    await expect(summary).toContainText('~326 KM a week');
+    await expect(summary).toContainText('4 things to do');
+    await expect(summary).toContainText('Not measured');
+    await expect(summary).toContainText('1 star');
+    await expect(summary).toContainText('1 plowhorse');
+    await expect(summary).toContainText('1 more too close to call.');
+    await expect(summary).toContainText('4 of 5');
+
+    await expect(page.getByRole('tab', { name: /To do/ })).toHaveAttribute('aria-selected', 'true');
+    await expect(page.getByRole('tab', { name: /To do/ })).toContainText('4');
+    await expect(page.getByRole('list', { name: 'What to do next' })).toBeVisible();
+    // The matrix is on the page, not on screen.
+    await expect(page.getByRole('region', { name: 'Stars' })).toBeHidden();
+
+    // A number opens its part of the page.
+    await summary.getByRole('button', { name: /Menu shape/ }).click();
+    await expect(page.getByRole('tab', { name: 'Menu' })).toHaveAttribute('aria-selected', 'true');
+    await expect(page.getByRole('region', { name: 'Stars' })).toBeVisible();
+    await summary.getByRole('button', { name: /Exact margins/ }).click();
+    await expect(page.getByRole('heading', { name: 'What each dish costs you' })).toBeInViewport();
+  });
+
+  test('a link to a section opens the part it is in', async ({ page }) => {
+    await page.goto('/admin/menu-intelligence#pairings');
+    await expect(page.getByRole('tab', { name: 'Suggestions' })).toHaveAttribute('aria-selected', 'true');
+    await expect(page.getByText('What actually goes together')).toBeVisible();
+    await page.goto('/admin/menu-intelligence#engineering');
+    await expect(page.getByRole('tab', { name: 'Menu' })).toHaveAttribute('aria-selected', 'true');
+  });
+
   test('draws the menu-engineering matrix with an action per box', async ({ page }) => {
     await page.goto('/admin/menu-intelligence');
+    await page.getByRole('tab', { name: 'Menu' }).click();
     const stars = page.getByRole('region', { name: 'Stars' });
     await expect(stars).toContainText('La Soul Burger');
     await expect(stars).toContainText('Protect it');
@@ -83,21 +165,45 @@ test.describe('menu intelligence', () => {
     await expect(puzzles).toContainText('Truffle risotto');
     await expect(puzzles).toContainText('estimated cost');
     await expect(page.getByRole('region', { name: 'Dogs' })).toContainText('Plain toast');
-    await expect(page.getByText('Too close to call')).toBeVisible();
+    await expect(page.getByText(/^Too close to call/)).toBeVisible();
     await expect(page.getByText('Tufahija', { exact: true })).toBeVisible();
     // The old revenue × margin-score list is gone.
     await expect(page.getByText('Worth protecting')).toHaveCount(0);
   });
 
+  test('draws the menu as a map, and a dot opens its dish', async ({ page }) => {
+    await page.goto('/admin/menu-intelligence');
+    await page.getByRole('tab', { name: 'Menu' }).click();
+    const map = page.getByRole('img', { name: 'Menu map: 1 stars, 1 plowhorses, 1 puzzles, 1 dogs' });
+    await expect(map).toBeVisible();
+    // One dot per dish that can be placed (the one too close to call is drawn too).
+    const dots = map.locator('.recharts-scatter-symbol');
+    await expect(dots).toHaveCount(5);
+    await map.locator('path[name="Truffle risotto"]').click();
+    const dish = page.getByTestId('matrix-dish');
+    await expect(dish).toContainText('Truffle risotto');
+    await expect(dish).toContainText('Puzzles: profitable, not popular');
+    await expect(dish).toContainText('Keeps a portion (estimate)');
+    await expect(dish).toContainText('12.00 KM');
+    // 25 a week × 0.50 KM, rounded.
+    await expect(dish).toContainText('+13 KM a week');
+    await expect(dish).toContainText('if it sells the same');
+    await expect(dish).toContainText('Rename it, give it a better photo');
+    await expect(dish.getByRole('link', { name: 'Edit dish' })).toHaveAttribute('href', '/admin/menu?dish=Truffle%20risotto');
+  });
+
   test('narrows the matrix to one kind of dish', async ({ page }) => {
     await page.goto('/admin/menu-intelligence');
+    await page.getByRole('tab', { name: 'Menu' }).click();
     await page.getByRole('button', { name: 'Starters' }).click();
     await expect(page.getByRole('region', { name: 'Dogs' })).toContainText('Plain toast');
     await expect(page.getByRole('region', { name: 'Stars' })).not.toContainText('La Soul Burger');
+    await expect(page.getByRole('img', { name: /^Menu map/ }).locator('.recharts-scatter-symbol')).toHaveCount(1);
   });
 
   test('shows one funnel from suggestion to sale, and says the increment is not measured', async ({ page }) => {
     await page.goto('/admin/menu-intelligence');
+    await page.getByRole('tab', { name: 'Suggestions' }).click();
     const cart = page.getByRole('region', { name: 'In the cart' });
     await expect(cart).toContainText('252.00 KM');
     await expect(cart).toContainText('434.48 KM per 1,000 seen');
@@ -111,13 +217,102 @@ test.describe('menu intelligence', () => {
     await list.getByRole('button', { name: 'Suggest it' }).click();
     await expect.poll(() => staff.curated.length).toBe(1);
     expect(staff.curated[0]).toMatchObject({ source_item_id: 'item-burger', recommended_item_id: 'item-cola' });
+    await expect(list.getByRole('status').filter({ hasText: 'Added to suggestions' })).toBeVisible();
   });
 
-  test('fits a phone', async ({ page }) => {
+  test('every card has its own button: take a dish off and Undo, put one back on, edit one', async ({ page }) => {
+    const writes = await stubMenuWrites(page, DISHES());
+    await page.goto('/admin/menu-intelligence');
+    const list = page.getByRole('list', { name: 'What to do next' });
+
+    // The dish that sells little and earns little goes to the bin, and comes back.
+    const toast = list.getByRole('listitem').filter({ hasText: 'Plain toast sells little' });
+    await toast.getByRole('button', { name: 'Take it off the menu' }).click();
+    await expect(toast.getByRole('status')).toContainText('Plain toast is off the menu. It is in Menu → Recently deleted.');
+    expect(writes.binned).toEqual(['item-toast']);
+    await expect(toast.getByRole('button', { name: 'Take it off the menu' })).toHaveCount(0);
+    await toast.getByRole('button', { name: 'Undo' }).click();
+    await expect.poll(() => writes.restored).toEqual(['item-toast']);
+    await expect(toast.getByRole('button', { name: 'Take it off the menu' })).toBeVisible();
+
+    // The dish that has been sold out for days goes back on sale.
+    const cake = list.getByRole('listitem').filter({ hasText: 'Chocolate cake has been sold out' });
+    await cake.getByRole('button', { name: 'Put it back on' }).click();
+    await expect(cake.getByRole('status')).toContainText('Chocolate cake is back on the menu');
+    expect(writes.patches).toContainEqual({ id: 'item-cake', body: { is_available: true } });
+
+    // The dish people look at and do not order opens in the menu's editor.
+    const salad = list.getByRole('listitem').filter({ hasText: 'Quinoa salad is looked at' });
+    await expect(salad.getByRole('link', { name: 'Edit dish' })).toHaveAttribute('href', '/admin/menu?dish=item-salad');
+  });
+
+  test('"Feature it" takes the first free place of three, and says so when there is none', async ({ staff, page }) => {
+    staff.analytics.insights = [
+      { kind: 'puzzle', item_id: 'Truffle risotto', related_item_id: null, headline: 'Truffle risotto is profitable but rarely ordered',
+        why: '6.0% of mains orders.', action: 'Rename Truffle risotto, give it a better photo and move it up its section',
+        est_km_per_week: 60, confidence: 'high', evidence: 500, evidence_label: 'mains orders', link: '/admin/menu-intelligence#engineering' },
+    ];
+    const dishes = DISHES();
+    const writes = await stubMenuWrites(page, dishes);
+    await page.goto('/admin/menu-intelligence');
+    const card = page.getByRole('list', { name: 'What to do next' }).getByRole('listitem');
+    await card.getByRole('button', { name: 'Feature it' }).click();
+    // The burger has place 1.
+    await expect(card.getByRole('status')).toContainText('Truffle risotto now leads the menu home');
+    expect(writes.patches).toContainEqual({ id: 'Truffle risotto', body: { featured_rank: 2 } });
+    await card.getByRole('button', { name: 'Undo' }).click();
+    await expect.poll(() => writes.patches.at(-1)).toEqual({ id: 'Truffle risotto', body: { featured_rank: null } });
+
+    // With three featured, nothing is pushed out behind the owner's back.
+    dishes[2].featured_rank = 2;
+    dishes[3].featured_rank = 3;
+    await card.getByRole('button', { name: 'Feature it' }).click();
+    await expect(page.getByText(/Three dishes are already featured \(La Soul Burger, Plain toast, Chocolate cake\)/)).toBeVisible();
+  });
+
+  test('a dish\'s cost is typed where the margins are read', async ({ page }) => {
+    const writes = await stubMenuWrites(page, DISHES());
+    await page.goto('/admin/menu-intelligence#costs');
+    await expect(page.getByText('1 of 4 dishes have a cost')).toBeVisible();
+    const costs = page.getByRole('list', { name: 'Dish costs' });
+    // No cost yet and the most money a week first; the one already recorded last.
+    await expect(costs.getByRole('listitem').first()).toContainText('Truffle risotto');
+    await expect(costs.getByRole('listitem').last()).toContainText('La Soul Burger');
+    // The estimate in use is the placeholder, not a value.
+    const risotto = page.getByLabel('Ingredient cost of Truffle risotto, in KM');
+    await expect(risotto).toHaveValue('');
+    await expect(risotto).toHaveAttribute('placeholder', '6.00');
+
+    await risotto.fill('abc');
+    await expect(costs.getByRole('listitem').first()).toContainText('A number like 3,20');
+    await risotto.fill('7,50');
+    await risotto.press('Enter');
+    await expect.poll(() => writes.patches).toContainEqual({ id: 'Truffle risotto', body: { food_cost: 7.5 } });
+    await expect(costs.getByRole('listitem').first()).toContainText('Keeps 14.50 KM · 66%');
+    await expect(page.getByText('2 of 4 dishes have a cost')).toBeVisible();
+    // It stays where it was typed.
+    await expect(costs.getByRole('listitem').first()).toContainText('Truffle risotto');
+
+    // Emptying it goes back to the estimate.
+    await risotto.fill('');
+    await risotto.press('Enter');
+    await expect.poll(() => writes.patches.at(-1)).toEqual({ id: 'Truffle risotto', body: { food_cost: null } });
+    await expect(page.getByText('1 of 4 dishes have a cost')).toBeVisible();
+  });
+
+  test('fits a phone, on every tab', async ({ page }) => {
+    await stubMenuWrites(page, DISHES());
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto('/admin/menu-intelligence');
-    await expect(page.getByRole('region', { name: 'Stars' })).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Summary' })).toContainText('~326 KM a week');
     await fitsWidth(page);
+    for (const tab of ['Menu', 'Suggestions', 'Kitchen']) {
+      await page.getByRole('tab', { name: tab }).click();
+      await fitsWidth(page);
+    }
+    await page.getByRole('tab', { name: 'Menu' }).click();
+    await expect(page.getByRole('region', { name: 'Stars' })).toBeVisible();
+    await expect(page.getByLabel('Ingredient cost of Truffle risotto, in KM')).toBeVisible();
   });
 });
 

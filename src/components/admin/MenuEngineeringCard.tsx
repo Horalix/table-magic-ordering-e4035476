@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, LayoutGrid } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
+import MenuMatrixChart from '@/components/admin/MenuMatrixChart';
 import {
   getMenuEngineering, groupByQuadrant, menuClassLabel, QUADRANTS,
   type MenuEngineeringRow, type Quadrant,
@@ -79,18 +80,26 @@ const Box = ({ q, rows }: { q: Exclude<Quadrant, 'insufficient'>; rows: MenuEngi
   );
 };
 
-const MenuEngineeringCard = ({ days = 28 }: { days?: number }) => {
-  const [rows, setRows] = useState<MenuEngineeringRow[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
+const MenuEngineeringCard = ({ days = 28, data }: {
+  days?: number;
+  /** The rows, when the page already reads them (it shares them with the summary and the costs). */
+  data?: { rows: MenuEngineeringRow[] | null; error: string | null };
+}) => {
+  const [ownRows, setRows] = useState<MenuEngineeringRow[] | null>(null);
+  const [ownError, setError] = useState<string | null>(null);
   const [menuClass, setMenuClass] = useState<string>('');
+  const rows = data ? data.rows : ownRows;
+  const error = data ? data.error : ownError;
+  const handed = data !== undefined;
 
   useEffect(() => {
+    if (handed) return;
     let cancelled = false;
     getMenuEngineering(days)
       .then((r) => { if (!cancelled) { setRows(r); setError(null); } })
       .catch((e) => { if (!cancelled) setError(e instanceof Error ? e.message : String(e)); });
     return () => { cancelled = true; };
-  }, [days]);
+  }, [days, handed]);
 
   const classes = useMemo(() => [...new Set((rows ?? []).map((r) => r.menu_class))].sort(), [rows]);
   const boxes = useMemo(() => groupByQuadrant(rows ?? [], menuClass || undefined), [rows, menuClass]);
@@ -138,6 +147,8 @@ const MenuEngineeringCard = ({ days = 28 }: { days?: number }) => {
                 </button>
               ))}
             </div>
+
+            <MenuMatrixChart rows={rows} menuClass={menuClass || undefined} />
 
             <div className="hidden md:grid grid-cols-[auto_1fr_1fr] gap-x-3 text-[11px] font-sans uppercase tracking-wide text-muted-foreground">
               <span />

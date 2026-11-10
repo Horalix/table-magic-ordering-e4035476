@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import SmartImage from '@/components/ui/SmartImage';
 import CartSuggestion from '@/components/guest/CartSuggestion';
+import DishSubstitutes from '@/components/guest/DishSubstitutes';
 import { useT, useLanguageStore, getLocalizedName, getLocalizedDescription, useI18n } from '@/lib/i18n';
 import { sheetUp, fade, duration, easeEnter, exitTransition, springSheet, shouldDismissSheet } from '@/lib/motion';
 import { track } from '@/lib/analytics';
@@ -278,6 +279,8 @@ const MenuItemDetail = ({ item, onClose, onAdded, canOrder = true, unavailableLa
                 <Clock className="w-4 h-4" aria-hidden /> {unavailableLabel}
               </p>
             )}
+            {/* Sold out or not served at this hour: what to have instead, one tap away. */}
+            {unavailableLabel && menuOnly !== true && <DishSubstitutes itemId={item.id} canOrder={canOrder} />}
 
             {/* Allergens are a safety field: always shown in full, never
                 abbreviated, never behind a tap. */}
