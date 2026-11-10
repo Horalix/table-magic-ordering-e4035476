@@ -251,6 +251,8 @@ const MenuItemDialog = ({ open, onOpenChange, subcategoryId, item, onSaved, star
   const [descBs, setDescBs] = useState('');
   const [descAr, setDescAr] = useState('');
   const [price, setPrice] = useState('');
+  /** What one portion costs to make, in KM; empty when not recorded. */
+  const [cost, setCost] = useState('');
   const [imageUrl, setImageUrl] = useState('');
   const [diets, setDiets] = useState<string[]>([]);
   const [allergens, setAllergens] = useState<string[]>([]);
@@ -303,6 +305,7 @@ const MenuItemDialog = ({ open, onOpenChange, subcategoryId, item, onSaved, star
     setDescBs(item?.description_bs ?? '');
     setDescAr(item?.description_ar ?? '');
     setPrice(item ? String(item.price) : '');
+    setCost(item?.food_cost != null ? String(item.food_cost) : '');
     setImageUrl(item?.image_url ?? '');
     originalImage.current = item?.image_url ?? null;
     setDiets(getItemTags(item));
@@ -404,6 +407,12 @@ const MenuItemDialog = ({ open, onOpenChange, subcategoryId, item, onSaved, star
       toast.error('Enter an item name and a valid price, e.g. 4.50 or 4,50');
       return;
     }
+    // Optional. Empty clears it, and Menu intelligence goes back to an estimate for this dish.
+    const costNum = cost.trim() ? parsePrice(cost) : null;
+    if (cost.trim() && costNum === null) {
+      toast.error('Ingredient cost must be a number, e.g. 3.20 or 3,20');
+      return;
+    }
     const marginNum = Math.max(0, Math.min(100, Math.round(Number(margin) || 0)));
     const prepNum = prep.trim() ? Math.max(0, Math.min(240, Math.round(Number(prep)))) : null;
     if (prep.trim() && !Number.isFinite(Number(prep))) {
@@ -443,6 +452,7 @@ const MenuItemDialog = ({ open, onOpenChange, subcategoryId, item, onSaved, star
       description_bs: descBs.trim() || null,
       description_ar: descAr.trim() || null,
       price: priceNum,
+      food_cost: costNum,
       image_url: imageUrl.trim() || null,
       dietary_tags: diets,
       allergens,
@@ -643,6 +653,30 @@ const MenuItemDialog = ({ open, onOpenChange, subcategoryId, item, onSaved, star
               <Label className="text-xs text-muted-foreground">Portion note</Label>
               <Input placeholder="e.g. 220 g · serves 2" value={portion} onChange={(e) => setPortion(e.target.value)} className="mt-1" />
             </div>
+          </div>
+          <div>
+            <Label htmlFor="item-food-cost" className="text-xs text-muted-foreground">Ingredient cost per portion (KM)</Label>
+            <Input
+              id="item-food-cost"
+              placeholder="e.g. 3,20"
+              type="text"
+              inputMode="decimal"
+              autoComplete="off"
+              value={cost}
+              onChange={(e) => setCost(e.target.value)}
+              aria-invalid={cost.trim() !== '' && parsePrice(cost) === null}
+              className="mt-1"
+            />
+            <p className="text-[11px] text-muted-foreground font-sans mt-1">
+              {(() => {
+                const c = cost.trim() ? parsePrice(cost) : null;
+                const p = parsePrice(price);
+                if (c === null || p === null || p <= 0) {
+                  return 'Optional. What the ingredients of one portion cost you. Guests never see it; Menu intelligence uses it for exact margins instead of an estimate.';
+                }
+                return `You keep ${(p - c).toFixed(2)} KM a portion (${Math.round(((p - c) / p) * 100)}% of the price). Guests never see this.`;
+              })()}
+            </p>
           </div>
 
           {/* Station */}

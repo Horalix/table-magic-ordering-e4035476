@@ -54,6 +54,7 @@ import { useStaffDocument, useStaffVenueLook } from '@/components/staff/useStaff
 import { isHeld, isInKitchen, kitchenStart, orderStatusLabel } from '@/components/staff/order-status';
 import { attentionSummary as summarize, plural } from '@/components/staff/floor-words';
 import HeldOrdersCard from '@/components/staff/HeldOrdersCard';
+import EndOfDayTables from '@/components/staff/EndOfDayTables';
 import MenuOnlyNotice from '@/components/staff/MenuOnlyNotice';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -740,6 +741,7 @@ const WaiterDashboard = () => {
         )}
 
         <MenuOnlyNotice audience="waiter" outerClassName="max-w-6xl mx-auto px-4 sm:px-6 pb-2" />
+        {staffVenue && <EndOfDayTables hours={staffVenue.venue.hours} outerClassName="max-w-6xl mx-auto px-4 sm:px-6 pb-2" />}
 
         {soundOn && !audioUnlocked && (
           <div className="max-w-6xl mx-auto px-4 sm:px-6 pb-2">

@@ -20,6 +20,7 @@ import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { VENUES } from '@/lib/venues';
+import EndOfDayTables from '@/components/staff/EndOfDayTables';
 import MenuOnlyNotice from '@/components/staff/MenuOnlyNotice';
 import type { User } from '@supabase/supabase-js';
 
@@ -483,6 +484,8 @@ const AdminLayout = () => {
         <div className="px-4 py-5 pb-24 sm:p-6 sm:pb-24 lg:p-8 max-w-7xl mx-auto w-full">
           {/* Every restaurant page but the switch's own, which says it in place. */}
           {staffVenue && !ownerPage && location.pathname !== '/admin/service' && <MenuOnlyNotice audience="admin" className="mb-5" />}
+          {/* After the work day: the tables nobody freed, and Close all tables. */}
+          {staffVenue && !ownerPage && <EndOfDayTables hours={staffVenue.venue.hours} outerClassName="mb-5" />}
           {page}
         </div>
       </main>

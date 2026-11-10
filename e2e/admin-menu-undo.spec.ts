@@ -158,3 +158,47 @@ test('the orders page still names a dish deleted since', async ({ page }) => {
   await expect.poll(() => asked.length).toBeGreaterThan(0);
   expect(asked[0]).toBe('show');
 });
+
+/*
+ * "Edit dish" on a Menu intelligence card opens the dish here (?dish=<id>),
+ * and its editor is where the ingredient cost is recorded: every margin the
+ * owner reads is the price minus it, and there was nowhere to type one.
+ */
+test.describe('a dish opened from Menu intelligence', () => {
+  test('lands in its editor, where its ingredient cost is saved', async ({ page }) => {
+    await withMenu(page, true);
+    const saved: Record<string, unknown>[] = [];
+    await page.route('**/rest/v1/menu_items**', (route) => {
+      if (route.request().method() === 'PATCH') {
+        saved.push(route.request().postDataJSON() as Record<string, unknown>);
+        return route.fulfill(json([], 200));
+      }
+      return route.fulfill(json([]));
+    });
+
+    await page.goto('/admin/menu?dish=m2');
+    const dialog = page.getByRole('dialog');
+    await expect(dialog.getByRole('heading')).toContainText(/La Soul Fries|Edit/);
+    // The address is cleaned, so a reload does not reopen it.
+    await expect(page).toHaveURL(/\/admin\/menu$/);
+
+    const cost = dialog.getByLabel('Ingredient cost per portion (KM)');
+    await expect(cost).toHaveValue('');
+    await expect(dialog.getByText(/Guests never see it/)).toBeVisible();
+    await cost.fill('2,70');
+    // 9.00 − 2.70, and its share of the price.
+    await expect(dialog.getByText('You keep 6.30 KM a portion (70% of the price). Guests never see this.')).toBeVisible();
+    await dialog.getByRole('button', { name: /^Save|^Update/ }).click();
+    await expect.poll(() => saved.length).toBeGreaterThan(0);
+    expect(saved.at(-1)).toMatchObject({ food_cost: 2.7, price: 9 });
+  });
+
+  test('says so when the dish is gone, and opens nothing', async ({ page }) => {
+    await withMenu(page, true);
+    // m3 is in the bin.
+    await page.goto('/admin/menu?dish=m3');
+    await expect(page.getByText('That dish is no longer on the menu')).toBeVisible();
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await expect(page).toHaveURL(/\/admin\/menu$/);
+  });
+});

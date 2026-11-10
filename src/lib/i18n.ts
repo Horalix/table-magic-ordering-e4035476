@@ -164,6 +164,8 @@ const translations: Record<string, Record<Locale, string>> = {
   'halal_promise': { en: '100% halal · alcohol-free', bs: '100% halal · bez alkohola', ar: '100% حلال · بدون كحول' },
   'diet_halal': { en: 'Halal', bs: 'Halal', ar: 'حلال' },
   'sold_out': { en: 'Sold out', bs: 'Trenutno nema', ar: 'نفدت الكمية' },
+  // Under a dish that cannot be ordered: what to have instead (src/components/guest/DishSubstitutes.tsx).
+  'similar_available_now': { en: 'Similar, and available now', bs: 'Slično, a dostupno sada', ar: 'أطباق مشابهة متوفرة الآن' },
 
   // Single-QR table entry
   'which_table': { en: 'Which table are you at?', bs: 'Za kojim ste stolom?', ar: 'على أي طاولة أنت؟' },
