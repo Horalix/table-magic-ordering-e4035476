@@ -16,6 +16,7 @@ import { usePageMeta } from '@/lib/seo/page-meta';
 import { homeGraph, LOCALES, sitePath } from '@/lib/seo/structured-data';
 import { orderingCopy } from '@/lib/seo/ordering';
 import { useMenuOnly } from '@/hooks/useMenuOnly';
+import { useReservationsOffered } from '@/hooks/useReservationsOffered';
 import { DEFAULT_VENUE, VENUES } from '@/lib/venues';
 import './site.css';
 
@@ -55,7 +56,9 @@ const SiteHome = ({ venueSlug = DEFAULT_VENUE, locale: pathLocale }: { venueSlug
   // While the restaurant shows its menu only, the site promises no ordering
   // from the table (src/lib/seo/ordering.ts). Not before it knows which.
   const ordering = useMenuOnly() === false;
-  const jsonLd = useMemo(() => homeGraph(venue, shownLocale, ordering), [venue, shownLocale, ordering]);
+  // Nor a table asked for online, while the restaurant takes no requests there (src/lib/seo/reservations.ts).
+  const reservations = useReservationsOffered(venue.slug);
+  const jsonLd = useMemo(() => homeGraph(venue, shownLocale, ordering, reservations), [venue, shownLocale, ordering, reservations]);
   usePageMeta({
     title: st('seo_title'), description: st(orderingCopy('seo_description', ordering)),
     path: sitePath(shownLocale), locale: shownLocale, alternates: ALTERNATES, jsonLd,
@@ -79,7 +82,7 @@ const SiteHome = ({ venueSlug = DEFAULT_VENUE, locale: pathLocale }: { venueSlug
         <SiteMenuCards venue={venue} />
         {ordering && <SiteOrderSteps />}
         <SitePromise />
-        <SiteFaq venue={venue} ordering={ordering} />
+        <SiteFaq venue={venue} ordering={ordering} reservations={reservations} />
         <SiteVisit venue={venue} />
       </main>
       <SiteFooter venue={venue} />

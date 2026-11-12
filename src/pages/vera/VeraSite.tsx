@@ -13,6 +13,7 @@ import { VERA_OG_IMAGE, veraSeoMenu, veraSiteAlternates, veraSiteGraph, veraSite
 import { sectionSlug } from '@/lib/menu-sections';
 import { VENUES, menuCategoryPath, menuPath } from '@/lib/venues';
 import ReserveLink from '@/components/site/ReserveLink';
+import { useReservationsOffered } from '@/hooks/useReservationsOffered';
 import menuData from '../../../scripts/vera-italia/menu.json';
 
 /**
@@ -95,7 +96,9 @@ const VeraSite = ({ locale: pathLocale }: { locale?: Locale }) => {
   }, [locale, navigate]);
 
   const shownLocale = pathLocale && !settled.current ? pathLocale : locale;
-  const jsonLd = useMemo(() => veraSiteGraph(SEO_MENU, shownLocale), [shownLocale]);
+  // That a table can be asked for online: only while the restaurant takes requests there (src/lib/seo/reservations.ts).
+  const reservations = useReservationsOffered('veraitalia');
+  const jsonLd = useMemo(() => veraSiteGraph(SEO_MENU, shownLocale, reservations), [shownLocale, reservations]);
   usePageMeta({
     title: pick(SITE.seoTitle, shownLocale), description: pick(SITE.seoDescription, shownLocale),
     path: veraSitePath(shownLocale), locale: shownLocale, alternates: veraSiteAlternates(), jsonLd, image: VERA_OG_IMAGE,

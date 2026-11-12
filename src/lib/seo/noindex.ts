@@ -14,9 +14,13 @@ import { useEffect } from 'react';
  *
  * A module of its own, not page-meta's: the staff screens call it, and
  * page-meta brings the website's copy and structured data with it.
+ *
+ * `enabled` false: the page does not know yet which it is (the booking page,
+ * until the database says whether the restaurant takes requests online).
  */
-export function useNoIndex() {
+export function useNoIndex(enabled = true) {
   useEffect(() => {
+    if (!enabled) return;
     let robots = document.head.querySelector<HTMLMetaElement>('meta[name="robots"]');
     const previous = robots?.getAttribute('content') ?? null;
     if (!robots) {
@@ -31,5 +35,5 @@ export function useNoIndex() {
       if (previous === null) current?.remove();
       else current?.setAttribute('content', previous);
     };
-  }, []);
+  }, [enabled]);
 }

@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ArrowLeft, CalendarClock, Loader2, Phone } from 'lucide-react';
+import { ArrowLeft, CalendarClock, ChevronDown, Loader2, Phone } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -11,6 +11,8 @@ import { HOME_VENUE } from '@/lib/home-venue';
 import { VENUES } from '@/lib/venues';
 import { sitePath } from '@/lib/seo/structured-data';
 import { useNoIndex } from '@/lib/seo/noindex';
+import { usePageMeta } from '@/lib/seo/page-meta';
+import { RESERVE_PATH, reserveFaq, reserveMeta, reserveSteps } from '@/lib/seo/reservations';
 import { rcopy, refusalCopy } from '@/lib/reservation-copy';
 import {
   formatReservationDay, looksLikePhone, readReservation, readReservationOptions, recallReservation, rememberReservation,
@@ -26,20 +28,26 @@ const USUAL_TIME = '19:00';
 const selectClass = 'w-full h-12 rounded-xl border border-input bg-background px-3 text-base font-sans text-foreground focus:outline-none focus:ring-2 focus:ring-ring';
 
 /**
- * "Reserve a table" on the restaurant's own website (/reserve).
+ * "Reserve a table" on the restaurant's own website (/reserve/).
  *
  * The guest picks a day, a time and how many, and leaves a name and a phone
  * number. That is a request: the restaurant's admin answers it, and the
- * guest's own page (/reserve/<id>) shows the answer. Days and times are the
- * restaurant's (its date, its clock, its notice), read from the database, so
- * a phone in another time zone is offered what the restaurant still has.
+ * guest's own page (/reservation/<id>) shows the answer. Days and times are
+ * the restaurant's (its date, its clock, its notice), read from the database,
+ * so a phone in another time zone is offered what the restaurant still has.
+ *
+ * While the restaurant takes requests online this page is what search and
+ * answer engines list for "reserve a table at …": its title, description and
+ * address match the page the build wrote (scripts/seo-prerender.ts), and how
+ * it works and its questions are on the page, word for word what its
+ * structured data says (src/lib/seo/reservations.ts). While it does not, the
+ * page asks to be left out of search results.
  */
 const ReservePage = () => {
   const locale = useLanguageStore((s) => s.locale);
   const navigate = useNavigate();
   // Not named t: src/lib/i18n.test.ts reads every rc('…') in the app as a key of the menu's own dictionary.
   const rc = (key: Parameters<typeof rcopy>[0], vars?: Record<string, string | number>) => rcopy(key, locale, vars);
-  useNoIndex();
 
   const [options, setOptions] = useState<ReservationOptions | null>(null);
   const [existing, setExisting] = useState<ReservationKey | null>(null);
@@ -53,7 +61,20 @@ const ReservePage = () => {
   const [sending, setSending] = useState(false);
   const [refusal, setRefusal] = useState<Refusal | null>(null);
 
-  useEffect(() => { document.title = `${rcopy('title', locale)} · ${VENUE.name}`; }, [locale]);
+  // Until the database has answered the page says nothing either way about
+  // search results: what the build wrote stands.
+  const open = options?.enabled === true;
+  const closed = options !== null && !open;
+  // No structured data of its own: the page the build wrote carries it.
+  usePageMeta({ ...reserveMeta(VENUE, locale), path: RESERVE_PATH, locale }, !closed);
+  useNoIndex(closed);
+  useEffect(() => {
+    if (closed) document.title = `${rcopy('title', locale)} · ${VENUE.name}`;
+  }, [closed, locale]);
+  // Built while reservations were off, the page's own HTML says "noindex"; open now, it no longer does.
+  useEffect(() => {
+    if (open) document.head.querySelector('meta[name="robots"]')?.setAttribute('content', 'index, follow, max-image-preview:large');
+  }, [open]);
 
   useEffect(() => {
     let cancelled = false;
@@ -232,6 +253,35 @@ const ReservePage = () => {
             </form>
 
             {callLink && <div className="flex justify-center pt-1">{callLink}</div>}
+
+            {/* What happens next and what guests ask, on the page for people and, word for word,
+                in its structured data for search and answer engines (src/lib/seo/reservations.ts). */}
+            <section aria-labelledby="reserve-how" className="card-lux p-5 space-y-3">
+              <h2 id="reserve-how" className="font-serif text-lg font-semibold text-foreground">{rc('how_title')}</h2>
+              <ol className="space-y-2.5">
+                {reserveSteps(locale).map((step, i) => (
+                  <li key={step} className="flex gap-3 text-sm font-sans text-muted-foreground leading-relaxed">
+                    <span aria-hidden className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">{i + 1}</span>
+                    <span>{step}</span>
+                  </li>
+                ))}
+              </ol>
+            </section>
+
+            <section aria-labelledby="reserve-faq" className="card-lux p-5">
+              <h2 id="reserve-faq" className="font-serif text-lg font-semibold text-foreground">{rc('faq_title')}</h2>
+              <div className="mt-2 divide-y divide-border">
+                {reserveFaq(locale).map(({ q, a }) => (
+                  <details key={q} className="group">
+                    <summary className="flex cursor-pointer list-none items-center justify-between gap-4 py-3 text-start text-sm font-sans font-semibold text-foreground min-h-[44px] [&::-webkit-details-marker]:hidden">
+                      {q}
+                      <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" aria-hidden />
+                    </summary>
+                    <p className="pb-3 text-sm font-sans text-muted-foreground leading-relaxed">{a}</p>
+                  </details>
+                ))}
+              </div>
+            </section>
           </>
         )}
       </main>

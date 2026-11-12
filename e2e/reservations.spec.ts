@@ -2,10 +2,11 @@ import { test, expect } from './staff-fixtures';
 import type { Page, Route } from '@playwright/test';
 
 /**
- * Table reservations: a guest asks on the restaurant's website (/reserve),
- * the admin answers on Admin → Reservations, and the guest's own page shows
- * the answer by itself (src/lib/reservations.ts,
- * supabase/migrations/20261113090000_reservations.sql).
+ * Table reservations: a guest asks on the restaurant's website (/reserve/),
+ * the admin answers on Admin → Reservations, and the guest's own page
+ * (/reservation/<id>) shows the answer by itself (src/lib/reservations.ts,
+ * supabase/migrations/20261113090000_reservations.sql). And what search
+ * engines find at each of those addresses (src/lib/seo/reservations.ts).
  *
  * The database is stubbed: what it would refuse or allow is covered by
  * supabase/tests/reservations.test.ts. Here: what each person sees and what
@@ -78,7 +79,7 @@ test.describe('a guest asks for a table', () => {
     await page.getByLabel(/Anything we should know/).fill('By the window');
     await page.getByRole('button', { name: 'Ask for this table' }).click();
 
-    await expect(page).toHaveURL(new RegExp(`/reserve/${KEY.id}\\?t=${KEY.token}$`));
+    await expect(page).toHaveURL(new RegExp(`/reservation/${KEY.id}\\?t=${KEY.token}$`));
     await expect(page.getByTestId('reservation-status')).toHaveText('We have your request');
     expect(guest.asked).toEqual([{
       _venue: 'lasoul', _name: 'Amina Hadžić', _phone: '+387 61 123-456', _party: 4, _day: '2026-11-14', _time: '19:30',
@@ -116,7 +117,7 @@ test.describe('a guest asks for a table', () => {
     const alert = page.getByRole('alert');
     await expect(alert).toContainText('That is too soon to reserve online. Please call us.');
     await expect(alert.getByRole('link', { name: 'Call +387 33 877 779' })).toHaveAttribute('href', 'tel:+38733877779');
-    await expect(page).toHaveURL(/\/reserve$/);
+    await expect(page).toHaveURL(/\/reserve\/?$/);
   });
 
   test('while the restaurant takes none online, the page says so and gives the phone', async ({ page }) => {
@@ -150,7 +151,7 @@ test.describe('a guest asks for a table', () => {
 });
 
 test.describe('the guest\'s own page', () => {
-  const own = `/reserve/${KEY.id}?t=${KEY.token}`;
+  const own = `/reservation/${KEY.id}?t=${KEY.token}`;
 
   test('shows the answer by itself, the moment the restaurant gives it', async ({ page }) => {
     const guest = await guestStubs(page);
@@ -195,10 +196,18 @@ test.describe('the guest\'s own page', () => {
 
   test('an address without its key finds nothing', async ({ page }) => {
     await guestStubs(page, { reservation: null });
-    await page.goto(`/reserve/${KEY.id}?t=wrong`);
+    await page.goto(`/reservation/${KEY.id}?t=wrong`);
     await expect(page.getByRole('heading', { level: 1, name: 'We could not find this reservation' })).toBeVisible();
-    await page.goto(`/reserve/${KEY.id}`);
+    await page.goto(`/reservation/${KEY.id}`);
     await expect(page.getByRole('heading', { level: 1, name: 'We could not find this reservation' })).toBeVisible();
+  });
+
+  test('is nobody\'s search result: no index, no canonical', async ({ page }) => {
+    await guestStubs(page);
+    await page.goto(own);
+    await expect(page.getByTestId('reservation-status')).toBeVisible();
+    await expect(page.locator('meta[name="robots"]')).toHaveAttribute('content', 'noindex, nofollow');
+    await expect(page.locator('link[rel="canonical"]')).toHaveCount(0);
   });
 });
 
@@ -211,8 +220,79 @@ test.describe('the website', () => {
 
     await guestStubs(page);
     await page.goto('/');
-    await expect(page.getByTestId('reserve-link')).toHaveAttribute('href', '/reserve');
+    await expect(page.getByTestId('reserve-link')).toHaveAttribute('href', '/reserve/');
     await expect(page.getByTestId('reserve-link')).toContainText('Reserve a table');
+  });
+});
+
+/*
+ * This build is made without the database (e2e), so the page it wrote says
+ * what a build believes until told otherwise: not open online, not listed.
+ * The app then says what the database says now.
+ */
+test.describe('what search engines find', () => {
+  const ld = (page: Page) => page.evaluate(() => [...document.querySelectorAll('script[type="application/ld+json"]')].map((s) => s.textContent ?? '').join('\n'));
+
+  test('the booking page is a page of its own before the app runs, and is not the home page', async ({ page }) => {
+    const html = await (await page.request.get('/reserve/')).text();
+    expect(html).toContain('<link rel="canonical" href="https://lasoul.net/reserve/" />');
+    expect(html).toContain('<title>Reserve a table · La Soul</title>');
+    expect(html).toContain('<meta name="robots" content="noindex, follow" />');
+    expect(html).toContain('Online reservations are not open yet');
+  });
+
+  test('open online: listed, named for what people search, with how it works and its questions on the page', async ({ page }) => {
+    await guestStubs(page);
+    await page.goto('/reserve/');
+    await expect(page.getByRole('button', { name: 'Ask for this table' })).toBeVisible();
+    await expect(page).toHaveTitle('Reserve a table at La Soul, Sarajevo');
+    await expect(page.locator('link[rel="canonical"]')).toHaveAttribute('href', 'https://lasoul.net/reserve/');
+    await expect(page.locator('meta[name="robots"]')).toHaveAttribute('content', 'index, follow, max-image-preview:large');
+    await expect(page.locator('meta[name="description"]')).toHaveAttribute('content', /^Ask for a table at La Soul online/);
+    await expect(page.locator('link[rel="alternate"][hreflang]')).toHaveCount(0);
+
+    await expect(page.getByRole('heading', { level: 2, name: 'How it works' })).toBeVisible();
+    await expect(page.getByRole('listitem').filter({ hasText: 'The restaurant answers, usually within minutes.' })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 2, name: 'Questions' })).toBeVisible();
+    // Every answer is in the page, opened or not.
+    await expect(page.getByText('No. Reserving a table is free.')).toBeAttached();
+    await page.getByText('Does a reservation cost anything?').click();
+    await expect(page.getByText('No. Reserving a table is free.')).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
+  });
+
+  test('not open online: the page asks to be left out, and names no canonical', async ({ page }) => {
+    await guestStubs(page, { options: { enabled: false } });
+    await page.goto('/reserve/');
+    await expect(page.getByRole('heading', { level: 2, name: 'Online reservations are not open yet' })).toBeVisible();
+    await expect(page.locator('meta[name="robots"]')).toHaveAttribute('content', 'noindex, nofollow');
+    await expect(page.locator('link[rel="canonical"]')).toHaveCount(0);
+    await expect(page).toHaveTitle('Reserve a table · La Soul');
+    await expect(page.getByRole('heading', { level: 2, name: 'How it works' })).toHaveCount(0);
+  });
+
+  test('the home page says a table can be reserved only while it can: its questions and its structured data', async ({ page }) => {
+    await guestStubs(page, { options: { enabled: false } });
+    await page.goto('/');
+    await expect(page.locator('#faq')).toBeAttached();
+    await expect(page.locator('#faq').getByText('Can I reserve a table?')).toHaveCount(0);
+    expect(await ld(page)).not.toMatch(/ReserveAction|acceptsReservations/);
+
+    await guestStubs(page);
+    await page.goto('/');
+    await expect(page.locator('#faq').getByText('Can I reserve a table?')).toBeAttached();
+    await expect(page.locator('#faq').getByText(/Ask for a table online at lasoul\.net\/reserve/)).toBeAttached();
+    await expect.poll(() => ld(page)).toContain('"acceptsReservations":"https://lasoul.net/reserve/"');
+    expect(await ld(page)).toContain('"@type":"ReserveAction"');
+    expect(await ld(page)).toContain('"name":"Can I reserve a table?"');
+  });
+
+  test('in Bosnian and Arabic the booking page is named in that language', async ({ page }) => {
+    await guestStubs(page);
+    await page.addInitScript(() => { try { localStorage.setItem('lasoul-lang', 'bs'); } catch { /* fresh anyway */ } });
+    await page.goto('/reserve/');
+    await expect(page).toHaveTitle('Rezervišite sto u La Soul, Sarajevo');
+    await expect(page.getByRole('heading', { level: 2, name: 'Kako funkcioniše' })).toBeVisible();
   });
 });
 

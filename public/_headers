@@ -63,12 +63,12 @@
 /tv/*
   X-Robots-Tag: noindex, nofollow
 
-# Nor is the reservation form, or a guest's own reservation, whose address
-# holds the key to it (src/pages/ReservationPage.tsx): never kept by a cache
-# or handed to another site as the page a visitor came from.
-/reserve
-  X-Robots-Tag: noindex, nofollow
-/reserve/*
+# Nor is a guest's own reservation, whose address holds the key to it
+# (src/pages/ReservationPage.tsx): never kept by a cache or handed to another
+# site as the page a visitor came from. The booking page itself (/reserve/) is
+# a search result while the restaurant takes requests online, and says
+# "noindex" in its own HTML while it does not (src/lib/seo/reservations.ts).
+/reservation/*
   X-Robots-Tag: noindex, nofollow
   Referrer-Policy: no-referrer
   Cache-Control: no-store

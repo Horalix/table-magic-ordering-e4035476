@@ -10,11 +10,13 @@ Off at both restaurants until an admin switches it on (Admin → Reservations).
 ## What a guest does
 
 1. Opens `lasoul.net/reserve` or `veraitalia.net/reserve`. The home page shows
-   **Reserve a table** only while the restaurant takes requests online.
+   **Reserve a table** only while the restaurant takes requests online, and
+   answers "Can I reserve a table?" among its questions ("Where guests find
+   it", below).
 2. Picks a day, a time and how many, and leaves a name and a phone number. The
    days and times offered are the restaurant's: its own date and clock, its
    first and last time, its notice. In Bosnian, English or Arabic.
-3. Lands on their own page (`/reserve/<id>?t=<key>`), which says **We have
+3. Lands on their own page (`/reservation/<id>?t=<key>`), which says **We have
    your request** and asks the database again every five seconds. When the
    admin answers, the page changes by itself: **Your table is confirmed**, or
    **We cannot take this reservation**, with the restaurant's line if it wrote
@@ -24,7 +26,50 @@ Off at both restaurants until an admin switches it on (Admin → Reservations).
 
 The page's address holds the key to it. Whoever has the link can read and
 cancel that one request, and nothing else. It is kept on the guest's phone so
-`/reserve` can lead back to an open request.
+`/reserve` can lead back to an open request. It is not under `/reserve/`: that
+is the booking page, which search engines list, and a guest's own page is
+kept out of search results, caches and referrers (`public/_headers`).
+
+## Where guests find it
+
+No app to install: a guest reserves on a web page, reached from wherever they
+already look for the restaurant. A separate "reservation app" would have to be
+found, downloaded and opened by someone who wants one table once; nobody does
+that for one restaurant. (The restaurant's side is the Manager app, below.)
+
+**While reservations are on**, everything a person, a search engine or an AI
+assistant reads says so, and says the same thing
+(`src/lib/seo/reservations.ts`):
+
+| Where | What it says |
+| --- | --- |
+| The website (`/`, `/bs/`, `/ar/`) | **Reserve a table** by the address and phone, and "Can I reserve a table?" among the questions |
+| The booking page (`/reserve/`) | Its own title ("Reserve a table at La Soul, Sarajevo"), description and address; how it works in three steps; four questions answered (is it confirmed at once, cancelling, large groups, cost), in Bosnian, English and Arabic |
+| Structured data (schema.org) | The restaurant `acceptsReservations` at that address and offers a `ReserveAction`; the booking page's questions as `FAQPage`. This is what Google, Bing and maps read |
+| `sitemap.xml` | The booking page, so it is crawled without waiting to be discovered |
+| `llms.txt`, `llms-full.txt` | "Reservations: ask for a table online at …", for ChatGPT, Perplexity, Claude and the like |
+
+**While they are off**, none of that is there: no link, no question, no
+action, no line for AI assistants, no sitemap entry, and the booking page
+itself asks search engines to leave it out (`noindex`). Nothing promises a
+table the restaurant does not give online.
+
+The website follows the switch at once: the link and the question appear the
+moment an admin turns reservations on. What search engines and AI assistants
+read is written when the site is published, so **publish the site again after
+switching reservations on or off** ("Turning it on", step 5). Until then the
+booking page works for guests but is not listed.
+
+**What only the restaurant can do**, and what brings most guests:
+
+- **Google Maps listing** (Google Business Profile): add the booking page as
+  the listing's reservation link. Most people who search a restaurant's name
+  see that listing before its website.
+- **Instagram bio**: the same link.
+- **A QR code to the booking page** on the door, the menu or a table card,
+  for a guest who wants to come back.
+
+Admin → Reservations shows the link with a **Copy** button.
 
 ## What the admin does
 
@@ -123,14 +168,15 @@ reads **not answered in time** once its time has passed.
 | Tables, rules, functions, the reminder | `supabase/migrations/20261113090000_reservations.sql` |
 | Alerts | `supabase/functions/_shared/notify-staff.ts`, `staff-push.ts`, `public/sw-push.js` |
 | Booking page, guest's page | `src/pages/ReservePage.tsx`, `src/pages/ReservationPage.tsx` |
+| What search engines and AI assistants are told | `src/lib/seo/reservations.ts`, `scripts/seo-prerender.ts`, `src/hooks/useReservationsOffered.ts` |
 | Admin | `src/pages/admin/AdminReservations.tsx` |
 | The Manager app | `public/manifest-manager*.webmanifest`, `scripts/manager-icons.mjs`, `src/hooks/useVenue.ts` |
 | Days, times, wording | `src/lib/reservations.ts`, `src/lib/reservation-copy.ts` |
-| Tests | `supabase/tests/reservations.test.ts`, `src/lib/reservations.test.ts`, `e2e/reservations.spec.ts` |
+| Tests | `supabase/tests/reservations.test.ts`, `src/lib/reservations.test.ts`, `src/lib/seo/reservations.test.ts`, `e2e/reservations.spec.ts` |
 
 ## Turning it on
 
-1. Apply the migration and redeploy `notify-staff` (the **Next** prompt in
+1. The migration is applied and `notify-staff` redeployed (12 November 2026,
    `docs/lovable-migration-prompt.md`).
 2. Admin → Reservations: set the times, the largest group and the phone
    number, and save.
@@ -138,3 +184,13 @@ reads **not answered in time** once its time has passed.
    from the Manager app on the Home Screen), and **Send a test**.
 4. Switch **Take reservation requests on the website** on. Ask for a table
    yourself from another phone, answer it, and cancel it.
+5. Publish that restaurant's site again, so search engines and AI assistants
+   are told: in Netlify, the site's **Deploys → Trigger deploy → Deploy
+   site** (or any push to `main`). The build asks the database whether the
+   restaurant takes requests online and writes the booking page, the
+   sitemap, `llms.txt` and the home page to match; its log says `booking page
+   (open, listed)`. Then `npm run indexnow -- https://lasoul.net` (or the
+   Vera Italia address) tells Bing the same day. Do the same after switching
+   reservations off for good.
+6. Add the booking page's link to the Google Maps listing and the Instagram
+   bio ("Where guests find it").

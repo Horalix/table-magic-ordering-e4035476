@@ -6,9 +6,11 @@
  *
  * Pages: the website in English (/), Bosnian (/bs) and Arabic (/ar); the menu
  * (/menu/lasoul) and each category, with every dish read from the live
- * database (read-only); the privacy notice and terms (/privacy). If the database cannot be reached, or the build is
+ * database (read-only); the privacy notice and terms (/privacy); the booking
+ * page (/reserve/), which says what the database says the restaurant does:
+ * takes table requests online, or does not. If the database cannot be reached, or the build is
  * offline (the e2e build, SEO_OFFLINE=1), the menu pages are written without
- * dishes and the build carries on.
+ * dishes, the booking page says "not open online", and the build carries on.
  *
  * Built as Vera Italia's own site (VITE_HOME_VENUE=veraitalia,
  * src/lib/home-venue.ts) it writes Vera Italia's pages instead — its website
@@ -20,14 +22,20 @@ import path from 'node:path';
 import { loadEnv, type Plugin, type ResolvedConfig, type Rollup } from 'vite';
 import type { Locale } from '../src/lib/i18n';
 import { siteT } from '../src/lib/site-copy';
-import { VERA_OG_IMAGE, veraLlms, veraPages, veraSeoMenu } from '../src/lib/seo/vera-seo';
+import { VERA_OG_IMAGE, veraLlms, veraPages, veraRestaurantNode, veraSeoMenu } from '../src/lib/seo/vera-seo';
 import { HOME_VENUE } from '../src/lib/home-venue';
 import { PRIVACY_PATH, privacyBody, privacyCopy, privacyGraph } from '../src/lib/privacy';
 import { OWN_SITE_LIVE, VENUE_URLS } from '../src/lib/seo/site-url';
 import { DEFAULT_VENUE, VENUES, type Venue } from '../src/lib/venues';
 import { fetchSeoMenu, type SeoMenu } from '../src/lib/seo/menu-data';
 import { fetchOrderingOffered, offerOrdering, orderingCopy } from '../src/lib/seo/ordering';
-import { categoryPath, dishGraph, dishPath, homeGraph, LOCALES, menuGraph, menuPath, sitePath } from '../src/lib/seo/structured-data';
+import {
+  RESERVE_PATH, fetchReservationsOffered, offerReservations, reservationsOffered, reserveBody, reserveClosedBody, reserveClosedMeta,
+  reserveGraph, reserveMeta,
+} from '../src/lib/seo/reservations';
+import {
+  categoryPath, dishGraph, dishPath, homeGraph, LOCALES, menuGraph, menuPath, restaurantNode, sitePath,
+} from '../src/lib/seo/structured-data';
 import {
   dishBody, dishMeta, escapeHtml, forwardToOwnSite, headTags, homeBody, llmsFullTxt, llmsTxt, menuBody, ownSiteRedirects, robotsTxt,
   sitemapXml, type SitemapEntry,
@@ -81,6 +89,7 @@ const SCREEN = {
   category: 'src/pages/CategoryPage.tsx',
   dish: 'src/pages/DishLink.tsx',
   privacy: 'src/pages/Trust.tsx',
+  reserve: 'src/pages/ReservePage.tsx',
   table: 'src/pages/TableEntry.tsx',
   start: 'src/pages/TableNumberEntry.tsx',
 };
@@ -91,6 +100,7 @@ export function pageModules(urlPath: string, veraHome: boolean): string[] {
   if (/^\/menu\/[^/]+\/$/.test(urlPath)) return [SHELL, SCREEN.menu];
   if (/^\/menu\//.test(urlPath)) return [SHELL, SCREEN.category];
   if (urlPath === PRIVACY_PATH) return [SHELL, SCREEN.privacy];
+  if (urlPath === RESERVE_PATH) return [SCREEN.reserve];
   return [veraHome || urlPath.startsWith('/veraitalia') ? SCREEN.vera : SCREEN.site];
 }
 
@@ -165,6 +175,9 @@ export function seoPrerender(): Plugin {
       // this restaurant shows its menu only (src/lib/seo/ordering.ts).
       if (!offline && env.VITE_SUPABASE_URL && env.VITE_SUPABASE_PUBLISHABLE_KEY) {
         offerOrdering(await fetchOrderingOffered(env.VITE_SUPABASE_URL, env.VITE_SUPABASE_PUBLISHABLE_KEY, HOME_VENUE));
+        // And whether they may say a table can be asked for online: only while
+        // its admin has that switched on (src/lib/seo/reservations.ts).
+        offerReservations(await fetchReservationsOffered(env.VITE_SUPABASE_URL, env.VITE_SUPABASE_PUBLISHABLE_KEY, HOME_VENUE));
       }
       const manifestPath = path.join(config.root, 'src', 'lib', 'image-manifest.json');
       const manifest: Record<string, { widths?: number[]; v?: string }> = existsSync(manifestPath) ? JSON.parse(readFileSync(manifestPath, 'utf8')) : {};
@@ -197,6 +210,22 @@ export function seoPrerender(): Plugin {
         return { path: PRIVACY_PATH, priority: 0.3 };
       };
 
+      // The booking page (src/pages/ReservePage.tsx) of the restaurant whose
+      // site this is. While it takes requests online: what the page is, how
+      // it works and its questions, for search and answer engines, and a
+      // place in the sitemap. While it does not: the same address says so and
+      // asks to be left out of search results, so a page that was listed once
+      // is dropped, not kept (src/lib/seo/reservations.ts).
+      const writeReserve = (home: Venue, restaurant: Record<string, unknown>, image?: string): SitemapEntry[] => {
+        const on = reservationsOffered();
+        write(RESERVE_PATH, withBrand(renderPage(template, headTags({
+          path: RESERVE_PATH, locale: 'en', venue: home, image, noindex: !on,
+          ...(on ? reserveMeta(home, 'en') : reserveClosedMeta(home, 'en')),
+          jsonLd: on ? reserveGraph(home, 'en', restaurant) : { '@context': 'https://schema.org', ...restaurant },
+        }), on ? reserveBody(home) : reserveClosedBody(home), 'en'), home));
+        return on ? [{ path: RESERVE_PATH, priority: 0.8 }] : [];
+      };
+
       // Vera Italia's pages (src/lib/seo/vera-seo.ts): its website — at "/",
       // /bs/ and /ar/ on its own site, at /veraitalia/ on La Soul's until that
       // is up — its menu, each course and each dish. Without them those
@@ -215,6 +244,7 @@ export function seoPrerender(): Plugin {
       if (HOME_VENUE === 'veraitalia') {
         const pages = veraPages(veraMenu).length;
         const entries = writeVera();
+        entries.push(...writeReserve(vera, veraRestaurantNode(veraMenu, 'en'), VERA_OG_IMAGE));
         entries.push(writePrivacy(vera, VERA_OG_IMAGE));
         const today = new Date().toISOString().slice(0, 10);
         const llms = veraLlms(veraMenu);
@@ -223,7 +253,7 @@ export function seoPrerender(): Plugin {
         writeFileSync(path.join(outDir, 'llms.txt'), llms.short);
         writeFileSync(path.join(outDir, 'llms-full.txt'), llms.full);
         writeFileSync(path.join(outDir, '_redirects'), ownSiteRedirects('veraitalia', VENUE_URLS.lasoul));
-        config.logger.info(`  seo: Vera Italia's own site — ${pages} pages (${vera.live ? 'open' : 'menu and dishes not indexed until it opens'}), privacy, robots.txt, sitemap.xml, llms.txt, _redirects`);
+        config.logger.info(`  seo: Vera Italia's own site — ${pages} pages (${vera.live ? 'open' : 'menu and dishes not indexed until it opens'}), booking page (${reservationsOffered() ? 'open, listed' : 'not open online, not listed'}), privacy, robots.txt, sitemap.xml, llms.txt, _redirects`);
         return;
       }
 
@@ -293,6 +323,7 @@ export function seoPrerender(): Plugin {
         writeFileSync(rules, forwardToOwnSite('veraitalia', VENUE_URLS.veraitalia) + '\n' + current);
       }
 
+      const reserve = writeReserve(venue, restaurantNode(venue, 'en'));
       const privacy = writePrivacy(venue);
 
       const today = new Date().toISOString().slice(0, 10);
@@ -303,6 +334,7 @@ export function seoPrerender(): Plugin {
         // Only prerendered pages: anything else is served the home page's
         // HTML until the app runs, canonical and all.
         ...dishEntries,
+        ...reserve,
         privacy,
         ...veraEntries,
       ];
@@ -312,7 +344,7 @@ export function seoPrerender(): Plugin {
       writeFileSync(path.join(outDir, 'llms-full.txt'), llmsFullTxt(venue, menu));
 
       const dishes = categories.reduce((n, c) => n + c.sections.reduce((m, s) => m + s.items.length, 0), 0);
-      config.logger.info(`  seo: ${LOCALES.length} site pages, ${1 + categories.length} menu pages, ${dishEntries.length} dish pages (${menu ? `${dishes} dishes` : 'menu offline'}), privacy, robots.txt, sitemap.xml, llms.txt`);
+      config.logger.info(`  seo: ${LOCALES.length} site pages, ${1 + categories.length} menu pages, ${dishEntries.length} dish pages (${menu ? `${dishes} dishes` : 'menu offline'}), booking page (${reservationsOffered() ? 'open, listed' : 'not open online, not listed'}), privacy, robots.txt, sitemap.xml, llms.txt`);
     },
   };
 }

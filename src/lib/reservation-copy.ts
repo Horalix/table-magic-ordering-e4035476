@@ -1,5 +1,5 @@
 import type { Locale } from './i18n';
-import type { Refusal, ReservationStatus } from './reservations';
+import type { Refusal, ReservationStatus } from './reservation-types';
 
 /**
  * What the guest reads on /reserve and on their own reservation page, in
@@ -130,6 +130,66 @@ const COPY = {
     en: 'The link may be incomplete. Ask again, or call us.',
     bs: 'Link je možda nepotpun. Pošaljite novi zahtjev ili nas pozovite.',
     ar: 'قد يكون الرابط ناقصاً. أرسل طلباً جديداً أو اتصل بنا.',
+  },
+  // What the page says below the form, and what search engines and answer
+  // engines are told (src/lib/seo/reservations.ts): the same words.
+  seo_title: { en: 'Reserve a table at {venue}, {city}', bs: 'Rezervišite sto u {venue}, {city}', ar: 'احجز طاولة في {venue}، {city}' },
+  seo_description: {
+    en: 'Ask for a table at {venue} online: pick a day, a time and the number of guests, and the restaurant confirms, usually within minutes.',
+    bs: 'Zatražite sto u {venue} online: izaberite dan, vrijeme i broj osoba, a restoran potvrđuje, obično za nekoliko minuta.',
+    ar: 'اطلب طاولة في {venue} عبر الإنترنت: اختر اليوم والوقت وعدد الأشخاص، والمطعم يؤكد، غالباً خلال دقائق.',
+  },
+  how_title: { en: 'How it works', bs: 'Kako funkcioniše', ar: 'كيف يتم الحجز' },
+  how_1: {
+    en: 'Pick a day and a time, and say how many of you are coming.',
+    bs: 'Izaberite dan i vrijeme i recite koliko vas dolazi.',
+    ar: 'اختر اليوم والوقت وعدد الأشخاص.',
+  },
+  how_2: {
+    en: 'Leave your name and phone number, and send the request.',
+    bs: 'Ostavite ime i broj telefona i pošaljite zahtjev.',
+    ar: 'اترك اسمك ورقم هاتفك وأرسل الطلب.',
+  },
+  how_3: {
+    en: 'The restaurant answers, usually within minutes. Your page shows the answer by itself.',
+    bs: 'Restoran odgovara, obično za nekoliko minuta. Odgovor se sam pojavi na vašoj stranici.',
+    ar: 'المطعم يرد، غالباً خلال دقائق. يظهر الرد على صفحتك تلقائياً.',
+  },
+  faq_title: { en: 'Questions', bs: 'Pitanja', ar: 'أسئلة' },
+  faq_confirm_q: {
+    en: 'Is my table reserved as soon as I send the request?',
+    bs: 'Je li sto rezervisan čim pošaljem zahtjev?',
+    ar: 'هل تُحجز الطاولة فور إرسال الطلب؟',
+  },
+  faq_confirm_a: {
+    en: 'Not yet. It is a request until the restaurant confirms it. You see the answer on your page, usually within minutes.',
+    bs: 'Još nije. To je zahtjev dok ga restoran ne potvrdi. Odgovor vidite na svojoj stranici, obično za nekoliko minuta.',
+    ar: 'ليس بعد. يبقى طلباً حتى يؤكده المطعم. ترى الرد على صفحتك، غالباً خلال دقائق.',
+  },
+  faq_cancel_q: {
+    en: 'Can I cancel or change my reservation?',
+    bs: 'Mogu li otkazati ili promijeniti rezervaciju?',
+    ar: 'هل يمكنني إلغاء الحجز أو تغييره؟',
+  },
+  faq_cancel_a: {
+    en: 'Yes. Cancel from your reservation page at any time before the time you reserved. To change it, cancel and ask again, or contact the restaurant.',
+    bs: 'Da. Otkažite na stranici svoje rezervacije bilo kada prije termina. Za promjenu otkažite i pošaljite novi zahtjev ili kontaktirajte restoran.',
+    ar: 'نعم. ألغِ من صفحة حجزك في أي وقت قبل موعد الطاولة. وللتغيير، ألغِ وأرسل طلباً جديداً أو تواصل مع المطعم.',
+  },
+  faq_group_q: { en: 'Can I reserve for a large group?', bs: 'Mogu li rezervisati za veću grupu?', ar: 'هل يمكن الحجز لمجموعة كبيرة؟' },
+  faq_group_a: {
+    en: 'For a large group or a private event, contact the restaurant.',
+    bs: 'Za veću grupu ili privatni događaj kontaktirajte restoran.',
+    ar: 'لمجموعة كبيرة أو مناسبة خاصة، تواصل مع المطعم.',
+  },
+  faq_cost_q: { en: 'Does a reservation cost anything?', bs: 'Košta li rezervacija?', ar: 'هل الحجز بمقابل؟' },
+  faq_cost_a: { en: 'No. Reserving a table is free.', bs: 'Ne. Rezervacija stola je besplatna.', ar: 'لا. حجز الطاولة مجاني.' },
+  // The restaurant's own website, among its other questions.
+  home_faq_q: { en: 'Can I reserve a table?', bs: 'Mogu li rezervisati sto?', ar: 'هل يمكنني حجز طاولة؟' },
+  home_faq_a: {
+    en: 'Yes. Ask for a table online at {url}: pick a day, a time and the number of guests, and we confirm, usually within minutes.',
+    bs: 'Da. Zatražite sto online na {url}: izaberite dan, vrijeme i broj osoba, a mi potvrđujemo, obično za nekoliko minuta.',
+    ar: 'نعم. اطلب طاولة عبر الإنترنت على {url}: اختر اليوم والوقت وعدد الأشخاص، ونحن نؤكد، غالباً خلال دقائق.',
   },
   offline: {
     en: 'No connection. This page updates by itself when it is back.',
