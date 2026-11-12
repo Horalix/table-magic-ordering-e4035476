@@ -184,6 +184,38 @@ const COPY = {
   },
   faq_cost_q: { en: 'Does a reservation cost anything?', bs: 'Košta li rezervacija?', ar: 'هل الحجز بمقابل؟' },
   faq_cost_a: { en: 'No. Reserving a table is free.', bs: 'Ne. Rezervacija stola je besplatna.', ar: 'لا. حجز الطاولة مجاني.' },
+  // The booking page: the parts of the day, the facts under the title, what is being asked for.
+  part_midday: { en: 'Midday', bs: 'Podne', ar: 'الظهيرة' },
+  part_afternoon: { en: 'Afternoon', bs: 'Poslijepodne', ar: 'بعد الظهر' },
+  part_evening: { en: 'Evening', bs: 'Večer', ar: 'المساء' },
+  fact_hours: { en: 'Tables {open} to {close}', bs: 'Stolovi od {open} do {close}', ar: 'الطاولات من {open} إلى {close}' },
+  fact_party: { en: 'Up to {count} guests', bs: 'Do {count} osoba', ar: 'حتى {count} أشخاص' },
+  fact_free: { en: 'Free to reserve', bs: 'Rezervacija je besplatna', ar: 'الحجز مجاني' },
+  summary: { en: 'You are asking for', bs: 'Tražite', ar: 'طلبك' },
+  // The guest's own page: where the request stands, and what to keep once it is confirmed.
+  step_sent: { en: 'Request sent', bs: 'Zahtjev poslan', ar: 'أُرسل الطلب' },
+  step_answer: { en: 'The restaurant answers', bs: 'Restoran odgovara', ar: 'المطعم يرد' },
+  step_confirmed: { en: 'Confirmed', bs: 'Potvrđeno', ar: 'تم التأكيد' },
+  add_calendar: { en: 'Add to calendar', bs: 'Dodaj u kalendar', ar: 'أضف إلى التقويم' },
+  directions: { en: 'Directions', bs: 'Kako do nas', ar: 'الاتجاهات' },
+  calendar_title: { en: 'Table at {venue}', bs: 'Sto u {venue}', ar: 'طاولة في {venue}' },
+  // What the restaurant sends a guest in a message of its own (src/lib/reservation-messages.ts).
+  msg_confirmed: {
+    en: '{venue}: your table is confirmed. {day} at {time}, guests: {party}. Reservation {code}.',
+    bs: '{venue}: vaš sto je potvrđen. {day} u {time}, broj osoba: {party}. Rezervacija {code}.',
+    ar: '{venue}: تم تأكيد طاولتك. {day} الساعة {time}، عدد الأشخاص: {party}. الحجز {code}.',
+  },
+  msg_declined: {
+    en: '{venue}: we are sorry, we cannot take your reservation for {day} at {time}.',
+    bs: '{venue}: žao nam je, ne možemo primiti vašu rezervaciju za {day} u {time}.',
+    ar: '{venue}: نعتذر، لا يمكننا قبول حجزك يوم {day} الساعة {time}.',
+  },
+  msg_cancelled: {
+    en: '{venue}: we are sorry, we had to cancel your reservation for {day} at {time}.',
+    bs: '{venue}: žao nam je, morali smo otkazati vašu rezervaciju za {day} u {time}.',
+    ar: '{venue}: نعتذر، اضطررنا لإلغاء حجزك يوم {day} الساعة {time}.',
+  },
+  msg_call: { en: 'Questions? Call {phone}.', bs: 'Pitanja? Pozovite {phone}.', ar: 'للاستفسار اتصل على {phone}.' },
   // The restaurant's own website, among its other questions.
   home_faq_q: { en: 'Can I reserve a table?', bs: 'Mogu li rezervisati sto?', ar: 'هل يمكنني حجز طاولة؟' },
   home_faq_a: {

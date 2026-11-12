@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ArrowLeft, CalendarClock, ChevronDown, Loader2, Phone } from 'lucide-react';
+import { ArrowLeft, CalendarClock, Check, ChevronDown, Clock, Loader2, Phone, Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -15,8 +15,9 @@ import { usePageMeta } from '@/lib/seo/page-meta';
 import { RESERVE_PATH, reserveFaq, reserveMeta, reserveSteps } from '@/lib/seo/reservations';
 import { rcopy, refusalCopy } from '@/lib/reservation-copy';
 import {
-  formatReservationDay, looksLikePhone, readReservation, readReservationOptions, recallReservation, rememberReservation,
-  requestReservation, reservationDays, reservationPath, reservationTimes, ReservationRefused,
+  DAY_PARTS, formatReservationDay, looksLikePhone, partOfDay, readReservation, readReservationOptions, recallReservation,
+  rememberReservation, requestReservation, reservationDayParts, reservationDays, reservationPath, reservationTimes,
+  ReservationRefused, usualTime,
   type Refusal, type ReservationKey, type ReservationOptions,
 } from '@/lib/reservations';
 
@@ -25,7 +26,11 @@ const VENUE = VENUES[HOME_VENUE];
 /** Dinner time, when the day still has it: the time most tables are asked for. */
 const USUAL_TIME = '19:00';
 
-const selectClass = 'w-full h-12 rounded-xl border border-input bg-background px-3 text-base font-sans text-foreground focus:outline-none focus:ring-2 focus:ring-ring';
+/** A choice among a few: a day, a time, how many. Filled when it is the one chosen. */
+const chip = (chosen: boolean) =>
+  `rounded-xl border font-sans transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
+    chosen ? 'border-primary bg-primary text-primary-foreground shadow-sm' : 'border-input bg-background text-foreground hover:border-primary/50'}`;
+const fact = 'inline-flex items-center gap-1.5 rounded-full bg-primary/5 px-3 py-1.5 text-xs font-sans font-medium text-foreground';
 
 /**
  * "Reserve a table" on the restaurant's own website (/reserve/).
@@ -101,6 +106,10 @@ const ReservePage = () => {
     if (times.includes(time)) return;
     setTime(times.includes(USUAL_TIME) ? USUAL_TIME : times[0] ?? '');
   }, [times, time]);
+
+  // The part of the day the chosen time is in, and the parts this day still has.
+  const part = partOfDay(time || USUAL_TIME);
+  const partsOffered = DAY_PARTS.filter((p) => times.some((x) => partOfDay(x) === p));
 
   const phoneShown = options?.phone ?? (VENUE.phone || null);
   const phoneHref = (phoneShown ?? '').replace(/[^\d+]/g, '');
@@ -184,31 +193,75 @@ const ReservePage = () => {
         ) : (
           <>
             <p className="text-sm text-muted-foreground font-sans px-1 leading-relaxed">{rc('intro')}</p>
+            <ul className="flex flex-wrap gap-2 px-1" aria-label={VENUE.name}>
+              <li className={fact}><Clock className="w-3.5 h-3.5 text-primary" aria-hidden />{rc('fact_hours', { open: ltr(options.open), close: ltr(options.close) })}</li>
+              <li className={fact}><Users className="w-3.5 h-3.5 text-primary" aria-hidden />{rc('fact_party', { count: options.maxParty })}</li>
+              <li className={fact}><Check className="w-3.5 h-3.5 text-primary" aria-hidden />{rc('fact_free')}</li>
+            </ul>
             {/* The restaurant's own line, in whatever language it was written. */}
             {options.note && <p dir="auto" className="text-sm font-sans text-foreground px-1 leading-relaxed">{options.note}</p>}
 
-            <form onSubmit={submit} noValidate className="card-lux p-5 space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="reserve-day" className="font-sans text-sm">{rc('day')}</Label>
-                  <select id="reserve-day" value={day} onChange={(e) => setDay(e.target.value)} className={`${selectClass} mt-1.5`}>
-                    {days.map((d, i) => <option key={d} value={d}>{dayLabel(d, i)}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <Label htmlFor="reserve-time" className="font-sans text-sm">{rc('time')}</Label>
-                  <select id="reserve-time" value={time} onChange={(e) => setTime(e.target.value)} disabled={times.length === 0} className={`${selectClass} mt-1.5`} dir="ltr">
-                    {times.map((x) => <option key={x} value={x}>{x}</option>)}
-                  </select>
+            <form onSubmit={submit} noValidate className="card-lux p-5 space-y-5">
+              {/* A day, a time and how many: each a tap. The groups read to a screen reader as the choices they are. */}
+              <div>
+                <p id="reserve-day-label" className="font-sans text-sm font-medium text-foreground">{rc('day')}</p>
+                <div role="radiogroup" aria-labelledby="reserve-day-label"
+                  className="mt-2 -mx-5 px-5 flex gap-2 overflow-x-auto pb-1 snap-x [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                  {days.map((d, i) => {
+                    const parts = reservationDayParts(d, locale);
+                    const none = reservationTimes(options, d).length === 0;
+                    return (
+                      <button key={d} type="button" role="radio" aria-checked={day === d} aria-label={dayLabel(d, i)} data-value={d}
+                        onClick={() => setDay(d)}
+                        className={`${chip(day === d)} snap-start shrink-0 w-[70px] py-2 flex flex-col items-center leading-tight ${none && day !== d ? 'opacity-50' : ''}`}>
+                        <span className="text-[11px] font-medium opacity-80">{i === 0 ? rc('today') : i === 1 ? rc('tomorrow') : parts.weekday}</span>
+                        <span className="font-serif text-xl font-semibold" dir="ltr">{parts.number}</span>
+                        <span className="text-[11px] opacity-80">{parts.month}</span>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
-              {times.length === 0 && <p role="status" className="text-sm font-sans text-destructive">{rc('no_times')}</p>}
 
               <div>
-                <Label htmlFor="reserve-party" className="font-sans text-sm">{rc('guests')}</Label>
-                <select id="reserve-party" value={party} onChange={(e) => setParty(Number(e.target.value))} className={`${selectClass} mt-1.5`} dir="ltr">
-                  {Array.from({ length: options.maxParty }, (_, i) => i + 1).map((n) => <option key={n} value={n}>{n}</option>)}
-                </select>
+                <p id="reserve-time-label" className="font-sans text-sm font-medium text-foreground">{rc('time')}</p>
+                {times.length === 0 ? (
+                  <p role="status" className="mt-2 text-sm font-sans text-destructive">{rc('no_times')}</p>
+                ) : (
+                  <>
+                    {partsOffered.length > 1 && (
+                      <div className="mt-2 grid gap-1 rounded-xl bg-muted p-1" style={{ gridTemplateColumns: `repeat(${partsOffered.length}, minmax(0, 1fr))` }}>
+                        {partsOffered.map((p) => (
+                          <button key={p} type="button" aria-pressed={part === p} data-part={p} onClick={() => setTime(usualTime(times, p))}
+                            className={`min-h-[40px] rounded-lg text-sm font-sans font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+                              part === p ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}>
+                            {rc(`part_${p}`)}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    <div role="radiogroup" aria-labelledby="reserve-time-label" className="mt-2 grid grid-cols-4 gap-2" dir="ltr">
+                      {times.filter((x) => partOfDay(x) === part).map((x) => (
+                        <button key={x} type="button" role="radio" aria-checked={time === x} data-value={x} onClick={() => setTime(x)}
+                          className={`${chip(time === x)} min-h-[44px] text-sm font-semibold tabular-nums`}>
+                          {x}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+
+              <div>
+                <p id="reserve-party-label" className="font-sans text-sm font-medium text-foreground">{rc('guests')}</p>
+                <div role="radiogroup" aria-labelledby="reserve-party-label" className="mt-2 grid grid-cols-5 gap-2" dir="ltr">
+                  {Array.from({ length: options.maxParty }, (_, i) => i + 1).map((n) => (
+                    <button key={n} type="button" role="radio" aria-checked={party === n} data-value={n} onClick={() => setParty(n)}
+                      className={`${chip(party === n)} min-h-[44px] text-sm font-semibold tabular-nums`}>
+                      {n}
+                    </button>
+                  ))}
+                </div>
               </div>
 
               <div>
@@ -243,6 +296,16 @@ const ReservePage = () => {
                   {phoneShown && ['party', 'soon', 'repeat', 'busy', 'disabled'].includes(refusal) && (
                     <a href={`tel:${phoneHref}`} className="inline-block font-semibold underline underline-offset-4">{rc('call', { phone: ltr(phoneShown) })}</a>
                   )}
+                </div>
+              )}
+
+              {/* What is being asked for, in one line, before it is sent. */}
+              {day && time && (
+                <div data-testid="reserve-summary" className="rounded-xl border border-primary/15 bg-primary/5 px-4 py-3">
+                  <p className="text-[11px] font-sans font-semibold uppercase tracking-wide rtl:tracking-normal text-muted-foreground">{rc('summary')}</p>
+                  <p className="mt-0.5 font-sans font-semibold text-foreground">
+                    {formatReservationDay(day, locale)} · <span dir="ltr">{time}</span> · {rc('for_guests', { count: party })}
+                  </p>
                 </div>
               )}
 

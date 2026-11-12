@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
-import { BellOff, BellRing, CalendarClock, Check, Copy, Loader2, Phone, Smartphone, Users, X } from 'lucide-react';
+import {
+  BellOff, BellRing, CalendarClock, Check, Copy, Loader2, MessageCircle, MessageSquareText, MessagesSquare, Phone, Smartphone, Users, X,
+} from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -24,6 +26,8 @@ import {
   decideReservation, formatReservationDay, listReservations, restaurantDayTime, statusNow, waitedLabel,
   type AdminReservation, type Decision, type ReservationStatus,
 } from '@/lib/reservations';
+import { guestMessage, smsLink, viberLink, whatsappLink, type GuestMessageKind } from '@/lib/reservation-messages';
+import type { Locale } from '@/lib/i18n';
 
 /** How often the page asks for news while it is open; an alert on the phone asks at once. */
 const REFRESH_MS = 10_000;
@@ -112,6 +116,60 @@ const AlertThisPhone = ({ venueId }: { venueId: string }) => {
 
 const telHref = (phone: string) => `tel:${phone.replace(/[^\d+]/g, '')}`;
 
+/** An answer the guest has not been told in a message yet: who, which answer, and the restaurant's own line. */
+interface Told { r: AdminReservation; kind: GuestMessageKind; reply: string }
+
+const LANGUAGE: Record<Locale, string> = { en: 'English', bs: 'Bosnian', ar: 'Arabic' };
+const sendButton = 'inline-flex items-center justify-center gap-2 min-h-[44px] rounded-lg border border-border bg-background px-3 text-sm font-semibold text-foreground hover:border-primary/50 transition-colors';
+
+/**
+ * "Tell the guest": after an answer, the message for the guest, written in
+ * the language they asked in, and one tap to send it from this phone's own
+ * WhatsApp, Viber or Messages. The guest's page already shows the answer;
+ * this reaches a guest who has closed it. Nothing is sent by the system.
+ */
+const TellGuest = ({ told, venueName, phone, onDone }: { told: Told; venueName: string; phone: string | null; onDone: () => void }) => {
+  const { r, kind, reply } = told;
+  const locale: Locale = r.locale === 'bs' || r.locale === 'ar' ? r.locale : 'en';
+  const at = restaurantDayTime(r.reserved_for);
+  const text = guestMessage(kind, {
+    venue: venueName, day: formatReservationDay(at.day, locale), time: at.time, party: r.party_size, code: r.code, reply, phone,
+  }, locale);
+  const copy = async (done: string) => {
+    try { await navigator.clipboard.writeText(text); toast.success(done); } catch { toast.error('Could not copy. Select the message and copy it.'); }
+  };
+  return (
+    <Card data-testid="tell-guest" className="border-primary/40 bg-primary/[0.03]">
+      <CardContent className="pt-5 space-y-3 font-sans">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="font-semibold text-foreground">Tell {r.guest_name}</p>
+            <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
+              Their page already shows your answer. A message from your own phone makes sure they see it. It is written in {LANGUAGE[locale]}, the language they asked in.
+            </p>
+          </div>
+          <Button variant="ghost" size="sm" onClick={onDone} className="shrink-0">Done</Button>
+        </div>
+        <p dir="auto" data-testid="tell-guest-text" className="rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground whitespace-pre-wrap">{text}</p>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          <a href={whatsappLink(r.guest_phone, text)} target="_blank" rel="noreferrer" className={sendButton}>
+            <MessageCircle className="w-4 h-4 text-primary" aria-hidden /> WhatsApp
+          </a>
+          <a href={viberLink(r.guest_phone)} onClick={() => void copy('Message copied: paste it in Viber')} className={sendButton}>
+            <MessagesSquare className="w-4 h-4 text-primary" aria-hidden /> Viber
+          </a>
+          <a href={smsLink(r.guest_phone, text)} className={sendButton}>
+            <MessageSquareText className="w-4 h-4 text-primary" aria-hidden /> Text message
+          </a>
+          <button type="button" onClick={() => void copy('Message copied')} className={sendButton}>
+            <Copy className="w-4 h-4 text-primary" aria-hidden /> Copy
+          </button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+};
+
 /**
  * Admin → Reservations: whether guests can ask for a table online and under
  * which rules, the requests waiting for an answer, and the tables promised.
@@ -137,6 +195,8 @@ const AdminReservations = () => {
   const [answering, setAnswering] = useState<string | null>(null);
   const [cancelling, setCancelling] = useState<AdminReservation | null>(null);
   const [cancelReply, setCancelReply] = useState('');
+  /** The answer just given, until the guest has been told or the admin says it is done. */
+  const [told, setTold] = useState<Told | null>(null);
   const [now, setNow] = useState(() => Date.now());
   const knownPending = useRef<Set<string> | null>(null);
 
@@ -252,6 +312,7 @@ const AdminReservations = () => {
       await decideReservation(r.id, decision, reply);
       toast.success(decision === 'confirm' ? `Confirmed for ${r.guest_name}` : decision === 'decline' ? `Declined for ${r.guest_name}` : `Cancelled for ${r.guest_name}`);
       setReplies((all) => { const next = { ...all }; delete next[r.id]; return next; });
+      setTold({ r, kind: decision === 'confirm' ? 'confirmed' : decision === 'decline' ? 'declined' : 'cancelled', reply });
       await loadRows();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Could not save the answer');
@@ -304,6 +365,10 @@ const AdminReservations = () => {
       </div>
 
       {loadError && <p role="alert" className="rounded-xl bg-destructive/10 px-4 py-3 text-sm font-sans text-destructive">Could not load: {loadError}</p>}
+
+      {told && (
+        <TellGuest told={told} venueName={venueName ?? venue?.name ?? ''} phone={rules?.reservations_phone ?? (venue?.phone || null)} onDone={() => setTold(null)} />
+      )}
 
       {/* Waiting for an answer: first, because a guest is looking at their phone. */}
       <section aria-labelledby="waiting-heading" className="space-y-3">
@@ -374,7 +439,10 @@ const AdminReservations = () => {
                   <span className="font-semibold text-foreground">{r.guest_name}</span>
                   <a href={telHref(r.guest_phone)} className="text-sm text-primary underline underline-offset-4">{r.guest_phone}</a>
                   <span className="text-xs text-muted-foreground">{r.code}</span>
-                  <Button variant="ghost" size="sm" onClick={() => { setCancelReply(''); setCancelling(r); }} className="ml-auto text-muted-foreground">Cancel</Button>
+                  <span className="ml-auto flex items-center gap-1">
+                    <Button variant="ghost" size="sm" onClick={() => setTold({ r, kind: 'confirmed', reply: r.reply ?? '' })} className="text-primary">Message</Button>
+                    <Button variant="ghost" size="sm" onClick={() => { setCancelReply(''); setCancelling(r); }} className="text-muted-foreground">Cancel</Button>
+                  </span>
                   {(r.note || r.reply) && (
                     <p className="basis-full text-xs text-muted-foreground">
                       {r.note && <>Guest: “{r.note}” </>}{r.reply && <>· You: “{r.reply}”</>}

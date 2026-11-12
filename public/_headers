@@ -63,6 +63,13 @@
 /tv/*
   X-Robots-Tag: noindex, nofollow
 
+# What a build believed about the switches its pages depend on
+# (scripts/seo-prerender.ts, scripts/republish-check.mjs): read fresh each
+# time, and no search result.
+/site-state.json
+  Cache-Control: no-cache
+  X-Robots-Tag: noindex
+
 # Nor is a guest's own reservation, whose address holds the key to it
 # (src/pages/ReservationPage.tsx): never kept by a cache or handed to another
 # site as the page a visitor came from. The booking page itself (/reserve/) is

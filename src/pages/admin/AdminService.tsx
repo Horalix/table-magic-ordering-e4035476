@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -13,7 +14,7 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { AlertTriangle, BookOpen, Plus, Trash2, Sparkles, PauseCircle, RefreshCw, ShieldAlert, CheckCircle2, CircleDashed, Copy } from 'lucide-react';
+import { AlertTriangle, BookOpen, CalendarClock, Plus, Trash2, Sparkles, PauseCircle, RefreshCw, ShieldAlert, CheckCircle2, CircleDashed, Copy } from 'lucide-react';
 import { toast } from 'sonner';
 import { cardPaymentStatus, type CardPaymentStatus } from '@/lib/payments';
 
@@ -47,6 +48,8 @@ interface Settings {
   service_close: string | null;
   /** The menu and nothing else for guests. Absent before 20261103120000_menu_only.sql. */
   menu_only?: boolean;
+  /** Guests can ask for a table on the website. Absent before 20261113090000_reservations.sql. */
+  reservations_enabled?: boolean;
 }
 
 /**
@@ -308,6 +311,48 @@ const AdminService = () => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/*
+        The same switch as on Admin → Reservations, here among the other
+        things a restaurant turns on and off, where an admin looks for it.
+      */}
+      <Card className={settings.reservations_enabled ? 'border-primary/40 bg-primary/[0.03]' : 'border-border'} data-testid="service-reservations">
+        <CardHeader>
+          <CardTitle className="font-serif text-lg flex items-center gap-2">
+            <CalendarClock className="w-5 h-5 text-accent" /> Table reservations
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <Label htmlFor="service-reservations" className="font-sans font-semibold">Take reservation requests on the website</Label>
+              <p className="text-xs text-muted-foreground font-sans mt-0.5">
+                {settings.reservations_enabled
+                  ? 'On: guests ask for a table on your website and you confirm or decline each request.'
+                  : 'Off: the booking page tells guests to call instead.'}
+                {' '}Your website shows &ldquo;Reserve a table&rdquo; the moment this is on. Search engines and AI assistants are told by
+                themselves, usually within the hour.
+              </p>
+            </div>
+            <Switch
+              id="service-reservations"
+              checked={settings.reservations_enabled === true}
+              disabled={settings.reservations_enabled === undefined}
+              onCheckedChange={(v) => void patch({ reservations_enabled: v })}
+            />
+          </div>
+          {settings.reservations_enabled === undefined ? (
+            <div className="flex items-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs font-sans text-amber-700 dark:text-amber-400">
+              <AlertTriangle className="w-4 h-4 shrink-0" />
+              Reservations are not available yet: the database needs an update first. Ask your developer.
+            </div>
+          ) : (
+            <Button asChild variant="outline" size="sm" className="min-h-[40px]">
+              <Link to="/admin/reservations">Requests, times and alerts</Link>
+            </Button>
+          )}
+        </CardContent>
+      </Card>
 
       <Card className="border-border">
         <CardHeader>

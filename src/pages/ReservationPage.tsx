@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, CalendarCheck, CalendarClock, CalendarX, Clock, Loader2, Phone, Users } from 'lucide-react';
+import { ArrowLeft, CalendarCheck, CalendarClock, CalendarPlus, CalendarX, Check, Clock, Loader2, MapPin, Phone, Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
@@ -16,6 +16,7 @@ import {
   cancelReservation, forgetReservation, formatReservationDay, readReservation, rememberReservation,
   type GuestReservation, type ReservationStatus,
 } from '@/lib/reservations';
+import { calendarLink } from '@/lib/reservation-messages';
 
 /** While waiting: often enough that an answer feels immediate. Once confirmed: enough to learn of a cancellation. */
 const WAITING_MS = 5_000;
@@ -192,6 +193,22 @@ const ReservationPage = () => {
                 {statusTitle(reservation.status, reservation.cancelledBy, locale)}
               </h1>
               {body && <p className="text-sm text-muted-foreground font-sans leading-relaxed">{body}</p>}
+              {/* Where the request stands: sent, then the restaurant's answer. */}
+              {(status === 'pending' || status === 'confirmed') && (
+                <ol data-testid="reservation-steps" className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1 pt-1 text-xs font-sans">
+                  <li className="inline-flex items-center gap-1.5 font-medium text-foreground">
+                    <span className="grid h-5 w-5 place-items-center rounded-full bg-primary text-primary-foreground"><Check className="h-3 w-3" aria-hidden /></span>
+                    {rc('step_sent')}
+                  </li>
+                  <li aria-hidden className={`h-px w-6 ${status === 'confirmed' ? 'bg-primary' : 'bg-border'}`} />
+                  <li className={`inline-flex items-center gap-1.5 font-medium ${status === 'confirmed' ? 'text-foreground' : 'text-muted-foreground'}`}>
+                    <span className={`grid h-5 w-5 place-items-center rounded-full ${status === 'confirmed' ? 'bg-primary text-primary-foreground' : 'border border-border'}`}>
+                      {status === 'confirmed' ? <Check className="h-3 w-3" aria-hidden /> : <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse" />}
+                    </span>
+                    {rc(status === 'confirmed' ? 'step_confirmed' : 'step_answer')}
+                  </li>
+                </ol>
+              )}
               {reservation.reply && (
                 <div className="rounded-xl bg-muted/60 px-4 py-3 text-start">
                   <p className="text-[11px] font-sans font-semibold uppercase tracking-wide text-muted-foreground">{rc('from_restaurant')}</p>
@@ -219,6 +236,30 @@ const ReservationPage = () => {
             </section>
 
             <div className="flex flex-col gap-2">
+              {/* A confirmed table: into the guest's calendar, and the way there. */}
+              {status === 'confirmed' && (
+                <div className="grid grid-cols-2 gap-2">
+                  <a
+                    href={calendarLink({
+                      id, day: reservation.day, time: reservation.time, title: rc('calendar_title', { venue: venue.name }),
+                      where: [venue.name, venue.address, venue.city].filter(Boolean).join(', '),
+                      details: `${rc('for_guests', { count: reservation.partySize })}. ${rc('code', { code: reservation.code })}`,
+                    })}
+                    download="reservation.ics"
+                    className={`inline-flex items-center justify-center gap-2 min-h-[48px] px-4 rounded-xl bg-primary text-primary-foreground font-sans font-semibold text-sm ${venue.mapsUrl ? '' : 'col-span-2'}`}
+                  >
+                    <CalendarPlus className="w-4 h-4" aria-hidden />
+                    {rc('add_calendar')}
+                  </a>
+                  {venue.mapsUrl && (
+                    <a href={venue.mapsUrl} target="_blank" rel="noreferrer"
+                      className="inline-flex items-center justify-center gap-2 min-h-[48px] px-4 rounded-xl border border-border bg-background font-sans font-semibold text-sm text-foreground">
+                      <MapPin className="w-4 h-4" aria-hidden />
+                      {rc('directions')}
+                    </a>
+                  )}
+                </div>
+              )}
               {phoneShown && (
                 <a href={`tel:${phoneHref}`} className="inline-flex items-center justify-center gap-2 min-h-[48px] px-5 rounded-xl border border-border bg-background font-sans font-semibold text-foreground">
                   <Phone className="w-4 h-4" aria-hidden />

@@ -1,0 +1,50 @@
+name: Republish the sites after a switch
+
+# What a guest sees follows a switch in the admin at once. What search
+# engines and AI assistants read is written when a site is published. Twice
+# an hour this compares the two (scripts/republish-check.mjs) and, where a
+# switch has not reached a site yet, asks Netlify to publish both again by
+# pushing an empty commit to main. Most runs find nothing to do.
+#
+# By hand: Actions → this workflow → Run workflow. Tick "force" to publish
+# now whatever the sites say.
+
+on:
+  schedule:
+    - cron: '9,39 * * * *'
+  workflow_dispatch:
+    inputs:
+      force:
+        description: Publish both sites now, whether or not anything changed
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: republish
+  cancel-in-progress: false
+
+jobs:
+  republish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: main
+
+      - name: Compare each site with its database
+        id: check
+        env:
+          FORCE: ${{ inputs.force }}
+        run: node scripts/republish-check.mjs
+
+      - name: Ask for both sites to be published again
+        if: steps.check.outputs.publish == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit --allow-empty -F "$RUNNER_TEMP/republish-message.txt"
+          git push origin HEAD:main || echo "main moved on while this ran: that push publishes the sites too."

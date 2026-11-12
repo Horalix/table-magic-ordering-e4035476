@@ -28,7 +28,7 @@ import { PRIVACY_PATH, privacyBody, privacyCopy, privacyGraph } from '../src/lib
 import { OWN_SITE_LIVE, VENUE_URLS } from '../src/lib/seo/site-url';
 import { DEFAULT_VENUE, VENUES, type Venue } from '../src/lib/venues';
 import { fetchSeoMenu, type SeoMenu } from '../src/lib/seo/menu-data';
-import { fetchOrderingOffered, offerOrdering, orderingCopy } from '../src/lib/seo/ordering';
+import { fetchOrderingOffered, offerOrdering, orderingCopy, orderingOffered } from '../src/lib/seo/ordering';
 import {
   RESERVE_PATH, fetchReservationsOffered, offerReservations, reservationsOffered, reserveBody, reserveClosedBody, reserveClosedMeta,
   reserveGraph, reserveMeta,
@@ -147,6 +147,24 @@ export function rootPreloadScript(byPath: { home: string[]; table: string[]; sta
     + `if(c)l.as='style';l.crossOrigin='';l.href=u;document.head.appendChild(l)})})()</script>`;
 }
 
+/**
+ * What a build believed about the two switches its pages depend on, written
+ * to /site-state.json. scripts/republish-check.mjs reads it from the live
+ * site, asks the database the same two questions, and asks for a new publish
+ * where they differ, so a switch flipped in the admin reaches search engines
+ * without anyone publishing by hand. `asked` false: the build had no database
+ * to ask (the e2e build), and says nothing more. The address and key are the
+ * ones every page of the app already carries to talk to the database.
+ */
+export function siteState(s: {
+  venue: string; ordering: boolean; reservations: boolean; builtAt: string; api?: string; publishableKey?: string;
+}): Record<string, unknown> {
+  const asked = !!(s.api && s.publishableKey);
+  return asked
+    ? { venue: s.venue, asked, ordering: s.ordering, reservations: s.reservations, builtAt: s.builtAt, api: s.api, publishableKey: s.publishableKey }
+    : { venue: s.venue, asked, builtAt: s.builtAt };
+}
+
 export function seoPrerender(): Plugin {
   let config: ResolvedConfig;
   return {
@@ -179,6 +197,11 @@ export function seoPrerender(): Plugin {
         // its admin has that switched on (src/lib/seo/reservations.ts).
         offerReservations(await fetchReservationsOffered(env.VITE_SUPABASE_URL, env.VITE_SUPABASE_PUBLISHABLE_KEY, HOME_VENUE));
       }
+      const asked = !offline && !!env.VITE_SUPABASE_URL && !!env.VITE_SUPABASE_PUBLISHABLE_KEY;
+      writeFileSync(path.join(outDir, 'site-state.json'), JSON.stringify(siteState({
+        venue: HOME_VENUE, ordering: orderingOffered(), reservations: reservationsOffered(), builtAt: new Date().toISOString(),
+        ...(asked ? { api: env.VITE_SUPABASE_URL, publishableKey: env.VITE_SUPABASE_PUBLISHABLE_KEY } : {}),
+      })));
       const manifestPath = path.join(config.root, 'src', 'lib', 'image-manifest.json');
       const manifest: Record<string, { widths?: number[]; v?: string }> = existsSync(manifestPath) ? JSON.parse(readFileSync(manifestPath, 'utf8')) : {};
       const imageFor = (id: string) => {
