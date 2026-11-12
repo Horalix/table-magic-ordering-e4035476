@@ -5,13 +5,15 @@ Copy everything between the rules into Lovable. Nothing else needs to be said.
 ## Next: WhatsApp messages about reservations (one migration, one new function)
 
 Send this once `main` has `feature/reservation-whatsapp` merged (the runner
-is pinned to its commit 0f1a4c5). It can be sent before or after the four
+is pinned to its commit 277cd3f). It can be sent before or after the four
 WhatsApp secrets are set (docs/whatsapp-messages.md): the function reads them
 whenever it runs, and until they are set nothing is sent and nothing fails.
 
 - **The migration** (`20261114090000_reservation_messages.sql`): each
-  restaurant's two choices on `restaurant_settings` (message guests on
-  WhatsApp; a WhatsApp number to tell about new requests), both off;
+  restaurant's choices on `restaurant_settings` (send guests a WhatsApp
+  confirmation; whether to tell them too when their request arrives; a
+  WhatsApp number to tell about new requests), off until its admin turns
+  them on;
   `reservation_messages`, one row per reservation and kind of message, which
   only the restaurant's admins read and only the function writes; two
   triggers that call the new function when a guest asks for a table and when
@@ -51,7 +53,8 @@ whenever it runs, and until they are set nothing is sent and nothing fails.
 >           to_regprocedure('public.reservation_messages_notify()') IS NOT NULL AS notify,
 >           (SELECT prosrc LIKE '%''whatsapp''%' FROM pg_proc
 >             WHERE oid = to_regprocedure('public.guest_reservation_options(text)')) AS options_say_whatsapp;
->    SELECT v.slug, rs.reservations_whatsapp_guest, rs.reservations_whatsapp_admin, rs.reservations_enabled
+>    SELECT v.slug, rs.reservations_whatsapp_guest, rs.reservations_whatsapp_received, rs.reservations_whatsapp_admin,
+>           rs.reservations_enabled
 >      FROM public.restaurant_settings rs JOIN public.venues v ON v.id = rs.venue_id ORDER BY v.slug;
 >    SELECT tgname FROM pg_trigger
 >     WHERE tgrelid = 'public.reservations'::regclass AND tgname LIKE 'reservation_messages_on_%' ORDER BY 1;
@@ -63,8 +66,9 @@ whenever it runs, and until they are set nothing is sent and nothing fails.
 >    SELECT count(*) AS messages FROM public.reservation_messages;
 >    ```
 >    Expected, in order: `true`, `true`, `true`. Two rows, `lasoul` and
->    `veraitalia`, each with `false` and an empty (null) number; the last
->    column is whatever each restaurant has set and is not changed by this.
+>    `veraitalia`, each with `false`, `true` and an empty (null) number; the
+>    last column is whatever each restaurant has set and is not changed by
+>    this.
 >    Two triggers: `reservation_messages_on_answer` and
 >    `reservation_messages_on_request`. One policy: `reservation_messages`,
 >    `SELECT`, `{authenticated}`. `false`, `false`, `false`, `true`. `0`. If
