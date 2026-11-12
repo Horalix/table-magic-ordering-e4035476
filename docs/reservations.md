@@ -5,7 +5,10 @@ confirms or declines. The guest sees the answer on their own page within
 seconds. Nothing is promised by a machine: a request is a request until a
 person at the restaurant answers it.
 
-Off at both restaurants until an admin switches it on (Admin → Reservations).
+Off at both restaurants until an admin switches it on: **Admin → Ordering &
+service → Table reservations**, or the same switch on **Admin →
+Reservations**. Nothing else has to be done: the website shows it at once,
+and search engines are told by themselves ("Where guests find it").
 
 ## What a guest does
 
@@ -13,16 +16,20 @@ Off at both restaurants until an admin switches it on (Admin → Reservations).
    **Reserve a table** only while the restaurant takes requests online, and
    answers "Can I reserve a table?" among its questions ("Where guests find
    it", below).
-2. Picks a day, a time and how many, and leaves a name and a phone number. The
-   days and times offered are the restaurant's: its own date and clock, its
-   first and last time, its notice. In Bosnian, English or Arabic.
+2. Picks a day, a time and how many, each with one tap (days as a row of
+   dates, times by part of the day, guests as numbers), and leaves a name and
+   a phone number. The days and times offered are the restaurant's: its own
+   date and clock, its first and last time, its notice. One line says what is
+   being asked for before it is sent. In Bosnian, English or Arabic.
 3. Lands on their own page (`/reservation/<id>?t=<key>`), which says **We have
    your request** and asks the database again every five seconds. When the
    admin answers, the page changes by itself: **Your table is confirmed**, or
    **We cannot take this reservation**, with the restaurant's line if it wrote
    one. After eight minutes without an answer it says to call, with the code
    to mention.
-4. Can cancel from that page until the time of the reservation.
+4. Once confirmed, can put the table in their calendar and open the way to
+   the restaurant from that page.
+5. Can cancel from that page until the time of the reservation.
 
 The page's address holds the key to it. Whoever has the link can read and
 cancel that one request, and nothing else. It is kept on the guest's phone so
@@ -56,9 +63,16 @@ table the restaurant does not give online.
 
 The website follows the switch at once: the link and the question appear the
 moment an admin turns reservations on. What search engines and AI assistants
-read is written when the site is published, so **publish the site again after
-switching reservations on or off** ("Turning it on", step 5). Until then the
-booking page works for guests but is not listed.
+read is written when the site is published, and **the sites publish
+themselves again after a switch changes**: each build says what it believed
+(`/site-state.json`), twice an hour that is compared with what the database
+says now, and where they differ both sites are published again
+(`.github/workflows/republish.yml`, `scripts/republish-check.mjs`). So within
+the hour of switching reservations on, the booking page is listed; nobody has
+to publish by hand. The same goes for "Menu only". To publish at once: GitHub
+→ Actions → **Republish the sites after a switch** → Run workflow. It never
+publishes twice for the same thing; if a publish did not help, the run fails
+and GitHub tells the repository's owner.
 
 **What only the restaurant can do**, and what brings most guests:
 
@@ -140,6 +154,24 @@ rings the same way.
 A request nobody answers is not declined by the system: it stays waiting, and
 reads **not answered in time** once its time has passed.
 
+## Telling the guest
+
+The guest's page shows the answer within seconds. For a guest who has closed
+it, the admin sends a message from their own phone: after **Confirm**,
+**Decline** or **Cancel**, **Tell the guest** shows the message, written in
+the language the guest asked in (Bosnian, English or Arabic), with one tap
+for each way to send it:
+
+- **WhatsApp**: opens the chat with the message written; tap send.
+- **Viber**: copies the message and opens the chat; paste and send.
+- **Text message**: opens the phone's Messages with the number and the text.
+- **Copy**, for anything else.
+
+It comes from the restaurant's own number, so the guest can answer it.
+Nothing is sent by the system and nothing costs anything beyond the phone's
+own plan. **Message** on a confirmed table brings the same panel back later.
+The words are in `src/lib/reservation-copy.ts` (`msg_…`).
+
 ## The rules that keep the list honest
 
 - Outside the restaurant's hours, closer than its notice, further ahead than
@@ -154,9 +186,11 @@ reads **not answered in time** once its time has passed.
 
 ## What it does not do (yet)
 
-- **No text message to the guest or the owner.** SMS needs an account with a
-  provider and costs money per message; the alert here is free. The alert
-  function is the place to add it.
+- **No message sent by the system itself.** The admin sends it with one tap
+  ("Telling the guest"). Automatic texts through a provider were priced on 12
+  November 2026: Twilio charges $0.51 for each text to a Bosnian number.
+  Automatic WhatsApp messages from the restaurant's own business number cost
+  a few cents at most and are the way to add it.
 - **No table plan.** The admin decides whether there is room; the system does
   not count seats or assign tables.
 - **No deposit.**
@@ -172,6 +206,8 @@ reads **not answered in time** once its time has passed.
 | Admin | `src/pages/admin/AdminReservations.tsx` |
 | The Manager app | `public/manifest-manager*.webmanifest`, `scripts/manager-icons.mjs`, `src/hooks/useVenue.ts` |
 | Days, times, wording | `src/lib/reservations.ts`, `src/lib/reservation-copy.ts` |
+| Messages to the guest, the calendar entry | `src/lib/reservation-messages.ts` |
+| Publishing again after a switch | `.github/workflows/republish.yml`, `scripts/republish-check.mjs`, `siteState` in `scripts/seo-prerender.ts` |
 | Tests | `supabase/tests/reservations.test.ts`, `src/lib/reservations.test.ts`, `src/lib/seo/reservations.test.ts`, `e2e/reservations.spec.ts` |
 
 ## Turning it on
@@ -184,13 +220,10 @@ reads **not answered in time** once its time has passed.
    from the Manager app on the Home Screen), and **Send a test**.
 4. Switch **Take reservation requests on the website** on. Ask for a table
    yourself from another phone, answer it, and cancel it.
-5. Publish that restaurant's site again, so search engines and AI assistants
-   are told: in Netlify, the site's **Deploys → Trigger deploy → Deploy
-   site** (or any push to `main`). The build asks the database whether the
-   restaurant takes requests online and writes the booking page, the
-   sitemap, `llms.txt` and the home page to match; its log says `booking page
-   (open, listed)`. Then `npm run indexnow -- https://lasoul.net` (or the
-   Vera Italia address) tells Bing the same day. Do the same after switching
-   reservations off for good.
+5. Search engines and AI assistants are told by themselves: within the hour
+   the sites are published again ("Where guests find it"), and the build's
+   log says `booking page (open, listed)`. `npm run indexnow --
+   https://lasoul.net` (or the Vera Italia address) then tells Bing the same
+   day instead of at its next visit.
 6. Add the booking page's link to the Google Maps listing and the Instagram
    bio ("Where guests find it").

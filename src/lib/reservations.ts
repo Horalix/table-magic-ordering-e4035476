@@ -207,15 +207,59 @@ export function reservationTimes(o: Pick<ReservationOptions, 'open' | 'close' | 
   return times;
 }
 
-const INTL: Record<Locale, string> = { en: 'en-GB', bs: 'bs-BA', ar: 'ar-u-nu-latn' };
+const INTL: Record<Locale, string[]> = { en: ['en-GB'], bs: ['bs-BA', 'sr-Latn-BA', 'hr-HR'], ar: ['ar-u-nu-latn'] };
+const tagFor = new Map<string, string>();
+
+/**
+ * The language a date is written in. Some browsers accept Bosnian and carry
+ * none of its words (a date then reads "M11 14, Sat"), so each candidate is
+ * tried on a known day and the first that names the month is kept: Bosnian,
+ * else Serbian in Latin script, which names days and months the same way.
+ */
+export function intlTag(locale: Locale): string {
+  let tag = tagFor.get(locale);
+  if (!tag) {
+    const probe = new Date(Date.UTC(2026, 10, 14));
+    tag = (INTL[locale] ?? INTL.en).find((candidate) => {
+      try {
+        return !/^M?\d+$/.test(new Intl.DateTimeFormat(candidate, { timeZone: 'UTC', month: 'long' }).format(probe));
+      } catch {
+        return false;
+      }
+    }) ?? 'en-GB';
+    tagFor.set(locale, tag);
+  }
+  return tag;
+}
 
 /** "Saturday 15 November" in the guest's language; the day is a calendar day, not an instant. */
 export function formatReservationDay(day: string, locale: Locale, style: 'long' | 'short' = 'long'): string {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return day;
   const [y, m, d] = day.split('-').map(Number);
-  return new Intl.DateTimeFormat(INTL[locale] ?? INTL.en, {
+  return new Intl.DateTimeFormat(intlTag(locale), {
     timeZone: 'UTC', weekday: style, day: 'numeric', month: style,
   }).format(new Date(Date.UTC(y, m - 1, d)));
+}
+
+/** A day as a chip shows it: "Sat", "14", "Nov", in the guest's language. */
+export function reservationDayParts(day: string, locale: Locale): { weekday: string; number: string; month: string } {
+  const [y, m, d] = day.split('-').map(Number);
+  const at = new Date(Date.UTC(y, m - 1, d));
+  const part = (o: Intl.DateTimeFormatOptions) => new Intl.DateTimeFormat(intlTag(locale), { timeZone: 'UTC', ...o }).format(at);
+  return { weekday: part({ weekday: 'short' }), number: part({ day: 'numeric' }).replace(/\.$/, ''), month: part({ month: 'short' }).replace(/\.$/, '') };
+}
+
+/** The three parts a restaurant's day is offered in, so a guest picks among a dozen times, not forty. */
+export const DAY_PARTS = ['midday', 'afternoon', 'evening'] as const;
+export type DayPart = (typeof DAY_PARTS)[number];
+
+export const partOfDay = (time: string): DayPart => (time < '15:00' ? 'midday' : time < '18:00' ? 'afternoon' : 'evening');
+
+/** The time a part of the day opens on: the usual one where the day still has it, else its first. */
+export function usualTime(times: string[], part: DayPart): string {
+  const inPart = times.filter((t) => partOfDay(t) === part);
+  const usual = { midday: '13:00', afternoon: '16:00', evening: '19:00' }[part];
+  return inPart.includes(usual) ? usual : inPart[0] ?? '';
 }
 
 /** What a phone field may hold: digits and the usual separators, eight to fifteen digits. */
@@ -272,6 +316,8 @@ export function reservationsOpen(venueSlug: string): Promise<boolean> {
 
 /** A request as the restaurant's admin reads it (public.reservations). */
 export interface AdminReservation {
+  /** The language the guest asked in: a message to them is written in it. */
+  locale?: string | null;
   id: string;
   code: string;
   status: ReservationStatus;
@@ -286,7 +332,7 @@ export interface AdminReservation {
   decided_at: string | null;
 }
 
-const ADMIN_COLUMNS = 'id, code, status, guest_name, guest_phone, party_size, reserved_for, note, reply, cancelled_by, created_at, decided_at';
+const ADMIN_COLUMNS = 'id, code, status, guest_name, guest_phone, party_size, reserved_for, note, reply, cancelled_by, created_at, decided_at, locale';
 
 /**
  * This restaurant's requests from yesterday on, soonest first. `null`: the
