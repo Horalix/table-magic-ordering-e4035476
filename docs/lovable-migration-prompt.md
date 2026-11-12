@@ -2,10 +2,111 @@
 
 Copy everything between the rules into Lovable. Nothing else needs to be said.
 
-## Next: nothing to send
+## Next: WhatsApp messages about reservations (one migration, one new function)
 
-Every migration in `supabase/migrations/` is applied and every function
-deployed (12 November 2026). The newest prompt is kept below as it was sent.
+Send this once `main` has `feature/reservation-whatsapp` merged (the runner
+is pinned to its commit 0f1a4c5). It can be sent before or after the four
+WhatsApp secrets are set (docs/whatsapp-messages.md): the function reads them
+whenever it runs, and until they are set nothing is sent and nothing fails.
+
+- **The migration** (`20261114090000_reservation_messages.sql`): each
+  restaurant's two choices on `restaurant_settings` (message guests on
+  WhatsApp; a WhatsApp number to tell about new requests), both off;
+  `reservation_messages`, one row per reservation and kind of message, which
+  only the restaurant's admins read and only the function writes; two
+  triggers that call the new function when a guest asks for a table and when
+  a request is confirmed, declined or cancelled, and only for a restaurant
+  that has messages on; and `guest_reservation_options` gains one field,
+  `whatsapp`. No menu, order, payment, staff or analytics data changes.
+  Nothing in it references the `auth` schema. Safe to run again.
+- **One new Edge Function:** `reservation-messages` (`verify_jwt = false`,
+  as `notify-staff`). It sends through Meta's WhatsApp Cloud API with four
+  secrets the owner sets: `WHATSAPP_TOKEN`, `WHATSAPP_BUSINESS_ACCOUNT_ID`,
+  `WHATSAPP_PHONE_ID_LASOUL`, `WHATSAPP_PHONE_ID_VERAITALIA`.
+- Netlify publishes the app itself from `main`. Until this is applied, Admin
+  → Reservations shows nothing about WhatsApp and everything else works as
+  before. After it, messages are still **off** until an admin turns them on.
+
+---
+
+> **Task: apply one migration with `docs/migration-runner.sql`, then deploy
+> one new Edge Function. Do not retype the migration file and do not write
+> any other SQL that changes data, schema or permissions.**
+>
+> Make sure your checkout is the latest `main`.
+>
+> Nothing in the migration references the `auth` schema: user ids are plain
+> uuids. If your schema rules object to anything in the file, stop before
+> Step 1 and quote the line.
+>
+> 1. Run `docs/migration-runner.sql` step by step, each step as its own query:
+>    Step 0 (pg_net installed), Step 1 (queue the download, expect 1 row),
+>    Step 2 (expect 1 row, `arrived_exactly = true`), then Step 3, its one
+>    block (1 of 1). If it fails, stop and report the exact error; a failed
+>    block changes nothing.
+> 2. Check, read-only, each as its own query, and paste the raw output of
+>    each. None of them calls a function of the migration:
+>    ```sql
+>    SELECT to_regclass('public.reservation_messages') IS NOT NULL AS messages,
+>           to_regprocedure('public.reservation_messages_notify()') IS NOT NULL AS notify,
+>           (SELECT prosrc LIKE '%''whatsapp''%' FROM pg_proc
+>             WHERE oid = to_regprocedure('public.guest_reservation_options(text)')) AS options_say_whatsapp;
+>    SELECT v.slug, rs.reservations_whatsapp_guest, rs.reservations_whatsapp_admin, rs.reservations_enabled
+>      FROM public.restaurant_settings rs JOIN public.venues v ON v.id = rs.venue_id ORDER BY v.slug;
+>    SELECT tgname FROM pg_trigger
+>     WHERE tgrelid = 'public.reservations'::regclass AND tgname LIKE 'reservation_messages_on_%' ORDER BY 1;
+>    SELECT tablename, cmd, roles FROM pg_policies WHERE tablename = 'reservation_messages' ORDER BY 1, 2;
+>    SELECT has_table_privilege('anon', 'public.reservation_messages', 'SELECT') AS guests_can_read,
+>           has_table_privilege('authenticated', 'public.reservation_messages', 'INSERT') AS users_can_write,
+>           has_function_privilege('anon', 'public.reservation_messages_url()', 'EXECUTE') AS guests_can_call,
+>           has_function_privilege('anon', 'public.guest_reservation_options(text)', 'EXECUTE') AS guests_can_ask;
+>    SELECT count(*) AS messages FROM public.reservation_messages;
+>    ```
+>    Expected, in order: `true`, `true`, `true`. Two rows, `lasoul` and
+>    `veraitalia`, each with `false` and an empty (null) number; the last
+>    column is whatever each restaurant has set and is not changed by this.
+>    Two triggers: `reservation_messages_on_answer` and
+>    `reservation_messages_on_request`. One policy: `reservation_messages`,
+>    `SELECT`, `{authenticated}`. `false`, `false`, `false`, `true`. `0`. If
+>    anything differs, stop and paste what you got; do not fix it yourself.
+> 3. Deploy the new Edge Function `reservation-messages` from
+>    `supabase/functions/` exactly as it is in `main`, with the settings in
+>    `supabase/config.toml` (`verify_jwt = false`). It imports
+>    `supabase/functions/_shared/http.ts`, `reservation-messages.ts` and
+>    `whatsapp.ts`. Deploy no other function. Paste the deploy result.
+> 4. Call `GET https://jgxnvrrphxnmzongtmzs.supabase.co/functions/v1/reservation-messages`
+>    (no sign-in) and paste the answer. Expected: `{"configured":false,"templates":14}`,
+>    or `"configured":true` if the owner has already set the WhatsApp
+>    secrets. Either is right.
+> 5. Call `POST` on the same address (no sign-in) with the JSON body
+>    `{"id":"00000000-0000-4000-8000-000000000000"}` and paste the status and
+>    the answer. Expected: `404` and `{"skipped":"not_found"}`. It names a
+>    reservation that does not exist and changes nothing.
+>
+> Do not call `guest_request_reservation`, `guest_cancel_reservation`,
+> `staff_decide_reservation`, `guest_reservation_options` or the function
+> with any other body: a real request would message a real person. Do not
+> switch reservations or WhatsApp messages on for either restaurant: that is
+> its admin's to do. Do not set, read or print any `WHATSAPP_` secret. Do not
+> grant anything.
+>
+> Files your schema-change tool writes by itself are fine (its own migration
+> record, a regenerated `src/integrations/supabase/types.ts`, `.lovable`
+> notes). Edit no other file by hand. Do not create or change any user
+> account, password or credential, do not place an order, call a waiter or ask
+> for a bill, and do not enable online card payments.
+
+---
+
+### After it applies: connect the numbers and try it
+
+docs/whatsapp-messages.md, from "Connecting the numbers at Meta". In short:
+the four secrets, then at each restaurant **Admin → Reservations → WhatsApp
+messages → Set up the messages**, wait for **Ready**, turn on **Message
+guests on WhatsApp**, and **Send a test** to your own number. Then ask for a
+table from another phone with WhatsApp on it and confirm it.
+
+---
 
 ## Done: table reservations, and the Manager app's alerts (12 November 2026)
 
