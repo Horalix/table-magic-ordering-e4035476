@@ -9,7 +9,7 @@ import { User, Lock, Loader2, Eye, EyeOff } from 'lucide-react';
 import { useStaffDocument } from '@/components/staff/useStaffDocument';
 import { HOME, STAFF_BRAND } from '@/components/staff/staff-brand';
 import { afterWaiterSignIn, normalizeUsername } from '@/lib/staff-accounts';
-import { inWaiterApp } from '@/lib/waiter-app';
+import { inKitchenApp, inWaiterApp } from '@/lib/waiter-app';
 
 const synthEmail = (u: string) => `${u}@waiter.lasoul.local`;
 
@@ -40,7 +40,9 @@ const WaiterLogin = () => {
    */
   const [params] = useSearchParams();
   const linkedUsername = normalizeUsername(params.get('u') ?? '');
-  const destination = afterWaiterSignIn(params.get('to'));
+  // The Android kitchen app is the kitchen screen only: every sign-in in it goes there.
+  const kitchenApp = inKitchenApp();
+  const destination = kitchenApp ? '/kitchen' : afterWaiterSignIn(params.get('to'));
   const [username, setUsername] = useState(linkedUsername);
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -244,14 +246,16 @@ const WaiterLogin = () => {
           <p className="text-xs text-center text-muted-foreground font-sans">
             Forgot your password? Your manager gives you a new one in Admin → Waiters.
           </p>
-          {!inWaiterApp() && (
+          {!inWaiterApp() && !kitchenApp && (
             <>
               <p className="text-xs text-center text-muted-foreground font-sans">
                 Manager? <button type="button" onClick={() => navigate('/admin/login')} className="underline">Admin login</button>
               </p>
-              {/* A page of its own, outside the app (public/waiter-app/index.html): a plain link, not a route. */}
+              {/* Pages of their own, outside the app (public/waiter-app/, public/kitchen-app/): plain links, not routes. */}
               <p className="text-xs text-center text-muted-foreground font-sans">
-                Android tablet or phone? <a href="/waiter-app/" className="underline">Get the waiter app</a>
+                {forKitchen
+                  ? <>Android tablet? <a href="/kitchen-app/" className="underline">Get the kitchen app</a></>
+                  : <>Android tablet or phone? <a href="/waiter-app/" className="underline">Get the waiter app</a></>}
               </p>
             </>
           )}

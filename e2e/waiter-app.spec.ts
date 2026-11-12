@@ -3,11 +3,11 @@ import type { Page } from '@playwright/test';
 
 /**
  * The Android waiter app (android/README.md) is the waiter screen and nothing
- * else: a waiter signs in, works the shift and signs out. Chrome tells the
- * page which app opened it (the referrer "android-app://<package>/"), and
- * inside the app the screens drop what leads away from the waiter screen. In
- * a browser nothing changes. And each site has the page a tablet gets the
- * app from.
+ * else: a waiter signs in, works the shift and signs out. The kitchen app is
+ * the kitchen screen and nothing else. Chrome tells the page which app opened
+ * it (the referrer "android-app://<package>/"), and inside an app the screens
+ * drop what leads away from its one screen. In a browser nothing changes. And
+ * each site has the pages a tablet gets the apps from.
  */
 
 /**
@@ -16,6 +16,9 @@ import type { Page } from '@playwright/test';
  */
 const openedByTheApp = (page: Page) => page.addInitScript(() => {
   Object.defineProperty(document, 'referrer', { get: () => 'android-app://net.lasoul.waiter/' });
+});
+const openedByTheKitchenApp = (page: Page) => page.addInitScript(() => {
+  Object.defineProperty(document, 'referrer', { get: () => 'android-app://net.lasoul.kitchen/' });
 });
 
 async function asMarko(page: Page) {
@@ -49,6 +52,22 @@ test.describe('inside the Android app', () => {
   });
 });
 
+test.describe('inside the Android kitchen app', () => {
+  test("every sign-in is the kitchen's: no manager link, no link to an app", async ({ page, context }) => {
+    await context.clearCookies();
+    await page.addInitScript(() => { try { localStorage.clear(); } catch { /* fresh anyway */ } });
+    await openedByTheKitchenApp(page);
+    // Even the waiters' address: the app is the kitchen screen only.
+    await page.goto('/waiter/login');
+    await expect(page.getByRole('heading', { level: 1, name: 'Kitchen Sign In' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Admin login' })).toHaveCount(0);
+    await expect(page.getByRole('link', { name: 'Get the kitchen app' })).toHaveCount(0);
+    await expect(page.getByRole('link', { name: 'Get the waiter app' })).toHaveCount(0);
+    expect(await page.evaluate(() => sessionStorage.getItem('kitchen-app'))).toBe('1');
+    expect(await page.evaluate(() => sessionStorage.getItem('waiter-app'))).toBeNull();
+  });
+});
+
 test.describe('in a browser', () => {
   test('the waiter screen and its sign-in are as they were, with a way to the app', async ({ page }) => {
     await asMarko(page);
@@ -58,6 +77,16 @@ test.describe('in a browser', () => {
     await page.goto('/waiter/login');
     await expect(page.getByRole('button', { name: 'Admin login' })).toBeVisible();
     await expect(page.getByRole('link', { name: 'Get the waiter app' })).toHaveAttribute('href', '/waiter-app/');
+  });
+
+  test("the kitchen's sign-in offers the kitchen app", async ({ page, context }) => {
+    await context.clearCookies();
+    await page.addInitScript(() => { try { localStorage.clear(); } catch { /* fresh anyway */ } });
+    await page.goto('/waiter/login?to=kitchen');
+    await expect(page.getByRole('heading', { level: 1, name: 'Kitchen Sign In' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Admin login' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Get the kitchen app' })).toHaveAttribute('href', '/kitchen-app/');
+    await expect(page.getByRole('link', { name: 'Get the waiter app' })).toHaveCount(0);
   });
 });
 
@@ -79,9 +108,25 @@ test.describe('the page a tablet gets the app from', () => {
     await expect(page.getByRole('heading', { level: 2, name: 'Install it' })).toBeHidden();
   });
 
+  test('the kitchen has its own page, with its own app', async ({ page }) => {
+    const response = await page.goto('/kitchen-app/');
+    expect(response?.status()).toBe(200);
+    await expect(page.getByRole('heading', { level: 1, name: 'La Soul Kitchen' })).toBeVisible();
+    const download = page.getByRole('link', { name: /Download the app|Preuzmi aplikaciju/ });
+    await expect(download).toHaveAttribute('href', '/kitchen-app/la-soul-kitchen.apk');
+    await expect(page.locator('meta[name="robots"]')).toHaveAttribute('content', 'noindex, nofollow');
+    await page.getByRole('button', { name: 'EN' }).click();
+    await expect(page.getByRole('heading', { level: 2, name: 'So no order is missed' })).toBeVisible();
+    await page.getByRole('button', { name: 'BS' }).click();
+    await expect(page.getByRole('heading', { level: 2, name: 'Da nijedna narudžba ne promakne' })).toBeVisible();
+    // Its icon is there to be drawn.
+    const icon = await page.request.get('/kitchen-app/la-soul-kitchen.png');
+    expect(icon.status()).toBe(200);
+  });
+
   test('the app itself is there to download, whole', async ({ request }) => {
-    for (const file of ['la-soul-waiter.apk', 'vera-italia-waiter.apk']) {
-      const apk = await request.get(`/waiter-app/${file}`);
+    for (const file of ['waiter-app/la-soul-waiter.apk', 'waiter-app/vera-italia-waiter.apk', 'kitchen-app/la-soul-kitchen.apk', 'kitchen-app/vera-italia-kitchen.apk']) {
+      const apk = await request.get(`/${file}`);
       expect(apk.status()).toBe(200);
       const body = await apk.body();
       expect(body.subarray(0, 2).toString()).toBe('PK');
@@ -93,6 +138,8 @@ test.describe('the page a tablet gets the app from', () => {
     const links = await request.get('/.well-known/assetlinks.json');
     expect(links.status()).toBe(200);
     const apps = (await links.json()) as { target: { package_name: string } }[];
-    expect(apps.map((a) => a.target.package_name).sort()).toEqual(['net.lasoul.waiter', 'net.veraitalia.waiter']);
+    expect(apps.map((a) => a.target.package_name).sort()).toEqual([
+      'net.lasoul.kitchen', 'net.lasoul.waiter', 'net.veraitalia.kitchen', 'net.veraitalia.waiter',
+    ]);
   });
 });

@@ -1,11 +1,18 @@
 /**
- * Is this page running inside the Android waiter app (android/README.md)?
+ * Is this page running inside one of the Android staff apps (android/README.md)?
  *
- * The app is the waiter screen and nothing else: a waiter signs in, works
- * the shift and signs out. So inside it the screens drop what leads away
- * from the waiter screen — the floor monitor button, the manager's sign-in
- * link — and the sign-in sends a kitchen account back rather than on to the
- * kitchen screen. In a browser everything stays as it was.
+ * Each app is one screen and nothing else.
+ *
+ * The waiter app: a waiter signs in, works the shift and signs out. Inside
+ * it the screens drop what leads away from the waiter screen — the floor
+ * monitor button, the manager's sign-in link — and the sign-in sends a
+ * kitchen account back rather than on to the kitchen screen.
+ *
+ * The kitchen app: the kitchen screen on the kitchen's tablet. Inside it
+ * every sign-in goes on to the kitchen screen, and the links to the manager's
+ * pages are gone.
+ *
+ * In a browser everything stays as it was.
  *
  * Chrome tells the page which app opened it: the first page's referrer is
  * "android-app://<package>/". Later pages of the same visit have an ordinary
@@ -13,26 +20,33 @@
  * own tab, never the browser's other tabs).
  */
 
-/** The two apps' package names (android/app/build.gradle). */
+/** The apps' package names (android/app/build.gradle). */
 export const WAITER_APP_PACKAGES = ['net.lasoul.waiter', 'net.veraitalia.waiter'];
+export const KITCHEN_APP_PACKAGES = ['net.lasoul.kitchen', 'net.veraitalia.kitchen'];
 
-const KEY = 'waiter-app';
+type VisitStorage = Pick<Storage, 'getItem' | 'setItem'> | null;
 
-const fromApp = (referrer: string) =>
-  WAITER_APP_PACKAGES.some((id) => referrer === `android-app://${id}` || referrer.startsWith(`android-app://${id}/`));
+const pageReferrer = () => (typeof document === 'undefined' ? '' : document.referrer);
+const visitStorage = (): VisitStorage => (typeof sessionStorage === 'undefined' ? null : sessionStorage);
 
-export function inWaiterApp(
-  referrer: string = typeof document === 'undefined' ? '' : document.referrer,
-  storage: Pick<Storage, 'getItem' | 'setItem'> | null = typeof sessionStorage === 'undefined' ? null : sessionStorage,
-): boolean {
+function openedBy(packages: string[], key: string, referrer: string, storage: VisitStorage): boolean {
+  const fromApp = packages.some((id) => referrer === `android-app://${id}` || referrer.startsWith(`android-app://${id}/`));
   try {
-    if (fromApp(referrer)) {
-      storage?.setItem(KEY, '1');
+    if (fromApp) {
+      storage?.setItem(key, '1');
       return true;
     }
-    return storage?.getItem(KEY) === '1';
+    return storage?.getItem(key) === '1';
   } catch {
     // Storage switched off: the first page still knows, from its referrer.
-    return fromApp(referrer);
+    return fromApp;
   }
+}
+
+export function inWaiterApp(referrer: string = pageReferrer(), storage: VisitStorage = visitStorage()): boolean {
+  return openedBy(WAITER_APP_PACKAGES, 'waiter-app', referrer, storage);
+}
+
+export function inKitchenApp(referrer: string = pageReferrer(), storage: VisitStorage = visitStorage()): boolean {
+  return openedBy(KITCHEN_APP_PACKAGES, 'kitchen-app', referrer, storage);
 }

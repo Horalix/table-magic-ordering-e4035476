@@ -63,10 +63,14 @@
 /tv/*
   X-Robots-Tag: noindex, nofollow
 
-# The Android waiter apps and the page a tablet gets them from
-# (public/waiter-app/, android/README.md). Asked for again each time, so a
-# tablet never installs yesterday's build; nobody's search result.
+# The Android waiter and kitchen apps and the pages a tablet gets them from
+# (public/waiter-app/, public/kitchen-app/, android/README.md). Asked for
+# again each time, so a tablet never installs yesterday's build; nobody's
+# search result.
 /waiter-app/*
+  Cache-Control: no-cache
+  X-Robots-Tag: noindex, nofollow
+/kitchen-app/*
   Cache-Control: no-cache
   X-Robots-Tag: noindex, nofollow
 # What vouches for the apps (Digital Asset Links); Chrome reads it when an app opens.
