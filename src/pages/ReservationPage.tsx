@@ -37,7 +37,7 @@ const LOOK: Record<ReservationStatus, { icon: typeof Clock; tone: string }> = {
 };
 
 /**
- * The guest's own reservation (/reserve/<id>?t=<token>): what they asked for
+ * The guest's own reservation (/reservation/<id>?t=<token>): what they asked for
  * and the restaurant's answer, which appears by itself. The page asks again
  * every few seconds while the request waits, and when the phone comes back
  * to it; nobody has to reload.

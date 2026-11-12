@@ -1,12 +1,13 @@
 import { supabase } from '@/integrations/supabase/client';
 import type { Locale } from '@/lib/i18n';
+import type { Refusal, ReservationStatus } from './reservation-types';
 
 /**
  * Table reservations (supabase/migrations/20261113090000_reservations.sql).
  *
  * A guest asks for a table on the restaurant's website (/reserve); the
  * restaurant's admin confirms or declines on Admin → Reservations; the guest
- * reads the answer on their own page (/reserve/<id>?t=<token>), which asks
+ * reads the answer on their own page (/reservation/<id>?t=<token>), which asks
  * again every few seconds while it waits.
  *
  * Until that migration is applied the functions and the table are not in the
@@ -21,7 +22,8 @@ const untyped = supabase as unknown as { from: (table: string) => any; rpc: (fn:
 const missing = (error: { code?: string; message?: string } | null) =>
   !!error && /PGRST202|PGRST205|42883|42P01|does not exist|Could not find/.test(`${error.code ?? ''} ${error.message ?? ''}`);
 
-export type ReservationStatus = 'pending' | 'confirmed' | 'declined' | 'cancelled' | 'expired';
+// The two types the guest's wording also needs live in a module without imports (./reservation-types.ts).
+export type { Refusal, ReservationStatus };
 
 /** What the booking page is told before anything is typed (guest_reservation_options). */
 export interface ReservationOptions {
@@ -66,8 +68,6 @@ export async function readReservationOptions(venueSlug: string): Promise<Reserva
   }
 }
 
-/** Why a request was not taken, in the database's words (RESERVATION:<word>), or `unknown`. */
-export type Refusal = 'disabled' | 'name' | 'phone' | 'party' | 'time' | 'hours' | 'soon' | 'far' | 'repeat' | 'busy' | 'unknown';
 const REFUSALS: Refusal[] = ['disabled', 'name', 'phone', 'party', 'time', 'hours', 'soon', 'far', 'repeat', 'busy'];
 
 export function refusalOf(message: string | null | undefined): Refusal {
@@ -246,7 +246,25 @@ export function forgetReservation(venueSlug: string): void {
   try { localStorage.removeItem(keyName(venueSlug)); } catch { /* nothing kept */ }
 }
 
-export const reservationPath = (key: ReservationKey) => `/reserve/${key.id}?t=${encodeURIComponent(key.token)}`;
+/**
+ * The guest's own page. Not under /reserve/: that is the booking page's
+ * address, which search engines list, and everything below a guest's page is
+ * kept out of search results, caches and referrers (public/_headers).
+ */
+export const reservationPath = (key: ReservationKey) => `/reservation/${key.id}?t=${encodeURIComponent(key.token)}`;
+
+/** Asked once per page load and restaurant, however many parts of the page want to know. */
+const asked = new Map<string, Promise<boolean>>();
+
+/** Whether this restaurant takes table requests online now. Never a yes when the database cannot say. */
+export function reservationsOpen(venueSlug: string): Promise<boolean> {
+  let answer = asked.get(venueSlug);
+  if (!answer) {
+    answer = readReservationOptions(venueSlug).then((o) => o.enabled, () => false);
+    asked.set(venueSlug, answer);
+  }
+  return answer;
+}
 
 // ---------------------------------------------------------------------
 // The restaurant's side (Admin → Reservations)

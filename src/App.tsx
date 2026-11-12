@@ -182,7 +182,7 @@ const App = () => (
             <Route path="/tv" element={<TvMenu />} />
             {/* A table at this site's restaurant: the request, and the guest's own page with the answer. */}
             <Route path="/reserve" element={<ReservePage />} />
-            <Route path="/reserve/:id" element={<ReservationPage />} />
+            <Route path="/reservation/:id" element={<ReservationPage />} />
 
             {/* Admin Routes */}
             <Route path="/admin/login" element={<AdminLogin />} />

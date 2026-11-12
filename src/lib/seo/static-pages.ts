@@ -22,6 +22,8 @@ import { absoluteUrl, SITE_URL } from './site-url';
 import type { SeoMenu, SeoMenuCategory, SeoMenuItem, SeoMenuSection } from './menu-data';
 import { categoryPath, dishPath, faqEntries, hoursDays, LOCALES, menuPath, OG_IMAGE_PATH, PRIVACY_PATH, sitePath } from './structured-data';
 import { orderingCopy, orderingOffered } from './ordering';
+import { RESERVE_PATH, reservationsOffered } from './reservations';
+import { rcopy } from '../reservation-copy';
 
 const OG_LOCALE: Record<Locale, string> = { en: 'en_GB', bs: 'bs_BA', ar: 'ar_AR' };
 const LANGUAGE_NAME: Record<Locale, string> = { en: 'English', bs: 'Bosanski', ar: 'العربية' };
@@ -107,6 +109,8 @@ function visitBlock(venue: Venue, locale: Locale): string {
     `<address>${escapeHtml(venue.name)}<br />${escapeHtml(venue.address)}<br />${escapeHtml(venue.city)}, Bosna i Hercegovina<br />`,
     `<a href="tel:${venue.phoneHref}">${escapeHtml(venue.phone)}</a></address>`,
     hours.length ? `<h3>${st('visit_hours', locale)}</h3><ul>${hours.join('')}</ul>` : '',
+    // Only while a table can be asked for online (src/lib/seo/reservations.ts).
+    reservationsOffered() ? `<p><a href="${RESERVE_PATH}">${escapeHtml(rcopy('title', locale))}</a></p>` : '',
     `<p><a href="${escapeHtml(venue.mapsUrl)}">${st('visit_directions', locale)}</a>`,
     venue.instagram ? ` · <a href="${escapeHtml(venue.instagram)}">Instagram</a>` : '',
     venue.facebook ? ` · <a href="${escapeHtml(venue.facebook)}">Facebook</a>` : '',
@@ -132,7 +136,7 @@ export function homeBody(venue: Venue, locale: Locale): string {
     `<main>`,
     `<h1>${st('hero_title', locale)}</h1>`,
     `<p>${st(orderingCopy('hero_sub'), locale)}</p>`,
-    `<p><a href="${menuPath(venue.slug)}">${st('hero_cta', locale)}</a></p>`,
+    `<p><a href="${menuPath(venue.slug)}">${st('hero_cta', locale)}</a>${reservationsOffered() ? ` · <a href="${RESERVE_PATH}">${escapeHtml(rcopy('title', locale))}</a>` : ''}</p>`,
     `<section id="story"><h2>${st('story_title', locale)}</h2><p>${st('story_p1', locale)}</p><p>${st('story_p2', locale)}</p></section>`,
     `<section><h2>${st('sig_title', locale)}</h2><p>${st('sig_sub', locale)}</p><ul>${signatures}</ul></section>`,
     `<section><h2>${st('menu_title', locale)}</h2><p>${st('menu_sub', locale)}</p><ul>${categories}</ul></section>`,
@@ -244,8 +248,10 @@ export function dishBody(venue: Venue, category: SeoMenuCategory, section: SeoMe
 /** Which crawlers may read what: everything public, nothing private. */
 export function robotsTxt(): string {
   // The TV menu board (/tv) shows the menu pages' dishes again, one section at a time: nothing for a search result.
-  // Nor is the reservation form, or a guest's own reservation (/reserve/<id>).
-  const privatePaths = ['/admin', '/kitchen', '/waiter', '/cart', '/tab', '/table/', '/start', '/tv', '/reserve'];
+  // Nor is a guest's own reservation (/reservation/<id>). The booking page (/reserve/) is not listed here:
+  // while the restaurant takes no requests online the page itself says "noindex", and a crawler that is
+  // kept away could never read that (src/lib/seo/reservations.ts).
+  const privatePaths = ['/admin', '/kitchen', '/waiter', '/cart', '/tab', '/table/', '/start', '/tv', '/reservation/'];
   const disallow = privatePaths.map((p) => `Disallow: ${p}`).join('\n');
   // Search engines and AI answer engines are welcome to everything public:
   // being quoted correctly is the point.
@@ -300,6 +306,9 @@ function factsMarkdown(venue: Venue): string {
       ? `- Ordering: scan the QR code on the table, order from the menu in Bosnian, English or Arabic, pay the waiter at the table (cash or card terminal)`
       : `- Menu: scan the QR code on the table to see the full menu in Bosnian, English or Arabic; the waiter takes the order and is paid at the table (cash or card terminal)`,
     `- Prices: in convertible marks (KM, BAM)`,
+    ...(reservationsOffered()
+      ? [`- Reservations: ask for a table online at ${absoluteUrl(RESERVE_PATH)} (a day, a time, the number of guests); the restaurant confirms each request itself, usually within minutes; free, and can be cancelled`]
+      : []),
   ].join('\n');
 }
 
@@ -316,6 +325,7 @@ export function llmsTxt(venue: Venue, menu: SeoMenu | null): string {
     `- [Website (Bosnian)](${absoluteUrl(sitePath('bs'))})`,
     `- [Website (Arabic)](${absoluteUrl(sitePath('ar'))})`,
     `- [Full menu with prices](${absoluteUrl(menuPath(venue.slug))})`,
+    ...(reservationsOffered() ? [`- [Reserve a table](${absoluteUrl(RESERVE_PATH)}): ask online, the restaurant confirms`] : []),
     ...cats, '',
     '## Optional', '',
     `- [The whole menu as text](${absoluteUrl('/llms-full.txt')})`, '',
@@ -360,7 +370,7 @@ const rule = (from: string, to: string, status: string) => `${from.padEnd(22)} $
  */
 export const APP_ROUTES = [
   '/bs', '/ar', '/veraitalia', '/menu', '/menu/*', '/cart', '/tab', '/table/*', '/start', '/privacy', '/tv',
-  '/reserve', '/reserve/*',
+  '/reserve', '/reservation/*',
   '/admin', '/admin/*', '/kitchen', '/waiter', '/waiter/*',
 ];
 

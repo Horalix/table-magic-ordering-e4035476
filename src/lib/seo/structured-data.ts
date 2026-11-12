@@ -14,6 +14,7 @@ import { siteT } from '../site-copy';
 import { EVERY_DAY, menuBase, menuCategoryPath, menuPath, type OpeningHours, type Venue } from '../venues';
 import { absoluteUrl } from './site-url';
 import { orderingCopy, orderingOffered } from './ordering';
+import { homeReserveFaq, reservationFacts, reservationsOffered } from './reservations';
 import type { SeoMenu, SeoMenuCategory, SeoMenuItem, SeoMenuSection } from './menu-data';
 
 /* Page addresses end in "/" — see venues.ts. */
@@ -41,8 +42,12 @@ export function hoursDays(h: OpeningHours, locale: Locale): string {
  * The questions on the website, answered — only those whose answer is known.
  * `ordering`: whether the table takes orders (src/lib/seo/ordering.ts); if
  * not, the ordering question becomes the menu-on-your-phone one.
+ * `reservations`: whether a table can be asked for online
+ * (src/lib/seo/reservations.ts); only then is that question there.
  */
-export function faqEntries(venue: Venue, locale: Locale, ordering: boolean = orderingOffered()): { q: string; a: string }[] {
+export function faqEntries(
+  venue: Venue, locale: Locale, ordering: boolean = orderingOffered(), reservations: boolean = reservationsOffered(),
+): { q: string; a: string }[] {
   const hours = venue.hours?.[0];
   const allWeek = hours && EVERY_DAY.every((d) => hours.days.includes(d));
   const entries: { q: string; a: string }[] = [
@@ -53,6 +58,7 @@ export function faqEntries(venue: Venue, locale: Locale, ordering: boolean = ord
   if (hours && allWeek && venue.hours?.length === 1) {
     entries.push({ q: siteT('faq_hours_q', locale), a: siteT('faq_hours_a', locale, { opens: hours.opens, closes: hours.closes }) });
   }
+  if (reservations) entries.push(homeReserveFaq(locale));
   entries.push(
     { q: siteT(orderingCopy('faq_order_q', ordering), locale), a: siteT(orderingCopy('faq_order_a', ordering), locale) },
     { q: siteT('faq_languages_q', locale), a: siteT('faq_languages_a', locale) },
@@ -68,7 +74,9 @@ const restaurantId = () => absoluteUrl('/#restaurant');
 const websiteId = () => absoluteUrl('/#website');
 
 /** La Soul as a place: a restaurant and a café, with everything known for certain. */
-export function restaurantNode(venue: Venue, locale: Locale, ordering: boolean = orderingOffered()) {
+export function restaurantNode(
+  venue: Venue, locale: Locale, ordering: boolean = orderingOffered(), reservations: boolean = reservationsOffered(),
+) {
   const sameAs = [venue.instagram, venue.facebook, venue.mapsUrl].filter((x): x is string => !!x);
   return {
     '@type': ['Restaurant', 'CafeOrCoffeeShop'],
@@ -105,6 +113,8 @@ export function restaurantNode(venue: Venue, locale: Locale, ordering: boolean =
     currenciesAccepted: 'BAM',
     paymentAccepted: 'Cash, Credit Card, Debit Card',
     availableLanguage: ['bs', 'en', 'ar'],
+    // Only while a table can be asked for online: where, and the action an assistant can offer.
+    ...(reservations ? reservationFacts() : {}),
     ...(sameAs.length ? { sameAs } : {}),
   };
 }
@@ -120,12 +130,14 @@ export function websiteNode(venue: Venue, locale: Locale) {
   };
 }
 
-export function faqNode(venue: Venue, locale: Locale, ordering: boolean = orderingOffered()) {
+export function faqNode(
+  venue: Venue, locale: Locale, ordering: boolean = orderingOffered(), reservations: boolean = reservationsOffered(),
+) {
   return {
     '@type': 'FAQPage',
     '@id': absoluteUrl(`${sitePath(locale)}#faq`),
     inLanguage: IN_LANGUAGE[locale],
-    mainEntity: faqEntries(venue, locale, ordering).map(({ q, a }) => ({
+    mainEntity: faqEntries(venue, locale, ordering, reservations).map(({ q, a }) => ({
       '@type': 'Question',
       name: q,
       acceptedAnswer: { '@type': 'Answer', text: a },
@@ -137,10 +149,14 @@ export function faqNode(venue: Venue, locale: Locale, ordering: boolean = orderi
  * Everything the home page says about itself, as one @graph. `ordering`: the
  * live site passes what the database says now (src/lib/seo/ordering.ts).
  */
-export function homeGraph(venue: Venue, locale: Locale, ordering: boolean = orderingOffered()) {
+export function homeGraph(
+  venue: Venue, locale: Locale, ordering: boolean = orderingOffered(), reservations: boolean = reservationsOffered(),
+) {
   return {
     '@context': 'https://schema.org',
-    '@graph': [restaurantNode(venue, locale, ordering), websiteNode(venue, locale), faqNode(venue, locale, ordering)],
+    '@graph': [
+      restaurantNode(venue, locale, ordering, reservations), websiteNode(venue, locale), faqNode(venue, locale, ordering, reservations),
+    ],
   };
 }
 

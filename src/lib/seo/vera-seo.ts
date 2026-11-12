@@ -25,6 +25,15 @@ import { absoluteUrl } from './site-url';
 import { escapeHtml, type PageHead, type SitemapEntry } from './static-pages';
 import { categoryPath, dishPath, LOCALES } from './structured-data';
 import { orderingOffered } from './ordering';
+import { RESERVE_PATH, homeReserveFaq, reservationFacts, reservationsOffered as reservationsOfferedHere } from './reservations';
+import { rcopy } from '../reservation-copy';
+
+/**
+ * Whether Vera Italia takes table requests online. The build asks about the
+ * restaurant whose site it is building (./reservations.ts), and /reserve/ is
+ * that restaurant's page, so on any other site Vera Italia's pages say nothing.
+ */
+const reservationsOffered = (): boolean => HOME_VENUE === 'veraitalia' && reservationsOfferedHere();
 
 const SLUG = 'veraitalia';
 const vera = (): Venue => VENUES[SLUG];
@@ -246,7 +255,7 @@ const WHICH_ONE: Record<Locale, string> = {
 };
 
 /** The restaurant, with everything known for certain; what is not known yet is not said. */
-export function veraRestaurantNode(m: SeoMenu, locale: Locale) {
+export function veraRestaurantNode(m: SeoMenu, locale: Locale, reservations: boolean = reservationsOffered()) {
   const v = vera();
   const sameAs = [v.instagram, v.facebook, v.mapsUrl].filter((x): x is string => !!x);
   const dishImages = signatures(m).map(({ item }) => item.image).filter((x): x is string => !!x);
@@ -267,6 +276,8 @@ export function veraRestaurantNode(m: SeoMenu, locale: Locale) {
     currenciesAccepted: 'BAM',
     availableLanguage: ['bs', 'en', 'ar'],
     ...(v.phoneHref ? { telephone: v.phoneHref } : {}),
+    // Only while a table can be asked for online (src/lib/seo/reservations.ts).
+    ...(reservations ? reservationFacts() : {}),
     // The city as soon as it is known, the street once the owner gives it.
     ...(v.city ? {
       address: {
@@ -333,11 +344,11 @@ const trailHome = () => ({ name: 'Vera Italia', url: absoluteUrl(veraSitePath('e
 const trailMenu = () => ({ name: VERA.menu.en, url: menuUrl() });
 
 /** Everything its website says about itself, in one language, as one @graph. */
-export function veraSiteGraph(m: SeoMenu, locale: Locale) {
+export function veraSiteGraph(m: SeoMenu, locale: Locale, reservations: boolean = reservationsOffered()) {
   return {
     '@context': 'https://schema.org',
     '@graph': [
-      veraRestaurantNode(m, locale),
+      veraRestaurantNode(m, locale, reservations),
       // The site's name in Google's results ("Vera Italia", not "veraitalia.net"), and the other one it may use.
       {
         '@type': 'WebSite', '@id': websiteId(), url: absoluteUrl(veraSitePath('en')), name: 'Vera Italia',
@@ -347,7 +358,8 @@ export function veraSiteGraph(m: SeoMenu, locale: Locale) {
         '@type': 'FAQPage',
         '@id': absoluteUrl(`${veraSitePath(locale)}#faq`),
         inLanguage: locale,
-        mainEntity: veraFaq(m, locale).map(({ q, a }) => ({ '@type': 'Question', name: q, acceptedAnswer: { '@type': 'Answer', text: a } })),
+        mainEntity: [...veraFaq(m, locale), ...(reservations ? [homeReserveFaq(locale)] : [])]
+          .map(({ q, a }) => ({ '@type': 'Question', name: q, acceptedAnswer: { '@type': 'Answer', text: a } })),
       },
     ],
   };
@@ -450,8 +462,10 @@ function siteBody(m: SeoMenu, locale: Locale): string {
     `<ul>${m.categories.map((c) => `<li><a href="${h(categoryPath(SLUG, c.slug))}">${h(c.names[locale])}</a>${COURSES[c.names.en] ? ` — ${pick(COURSES[c.names.en].line)}` : ''} (${range(itemsOf(c, false), locale)})</li>`).join('')}</ul>`,
     `<p><a href="${h(menuPath(SLUG))}">${pick(SITE.viewMenu)}</a></p>`,
     `<h2>${pick(SITE.roomTitle)}</h2><p>${pick(SITE.roomBody)}</p>`,
-    `<section id="faq"><h2>${h(faqTitle[locale])}</h2>${veraFaq(m, locale).map(({ q, a }) => `<h3>${h(q)}</h3><p>${h(a)}</p>`).join('')}</section>`,
+    `<section id="faq"><h2>${h(faqTitle[locale])}</h2>${[...veraFaq(m, locale), ...(reservationsOffered() ? [homeReserveFaq(locale)] : [])].map(({ q, a }) => `<h3>${h(q)}</h3><p>${h(a)}</p>`).join('')}</section>`,
     `<h2>${pick(SITE.visit)}</h2>${facts}`,
+    // Only while a table can be asked for online (src/lib/seo/reservations.ts).
+    reservationsOffered() ? `<p><a href="${RESERVE_PATH}">${h(rcopy('title', locale))}</a></p>` : '',
     ON_OWN_SITE ? `<p>${LOCALES.map((l) => (l === locale ? `<strong>${languageName[l]}</strong>` : `<a href="${veraSitePath(l)}" hreflang="${l}" lang="${l}">${languageName[l]}</a>`)).join(' · ')}</p>` : '',
   ].filter(Boolean).join('\n');
 }
@@ -558,6 +572,9 @@ export function veraLlms(m: SeoMenu): { short: string; full: string } {
     v.address ? `- Address: ${v.address}, ${where}` : v.city ? `- Where: ${where} (street address to be announced)` : '- Address: to be announced',
     v.hours?.length ? `- Hours: ${v.hours.map((x) => `${x.days.join(', ')} ${x.opens}–${x.closes}`).join('; ')}` : '- Hours: to be announced',
     v.phone ? `- Phone: ${v.phone}` : '',
+    reservationsOffered()
+      ? `- Reservations: ask for a table online at ${absoluteUrl(RESERVE_PATH)} (a day, a time, the number of guests); the restaurant confirms each request itself, usually within minutes; free, and can be cancelled`
+      : '',
     v.instagram ? `- Instagram: ${v.instagram}` : '',
     v.live ? '' : '- Status: opening soon',
   ].filter(Boolean);
@@ -569,10 +586,11 @@ export function veraLlms(m: SeoMenu): { short: string; full: string } {
     `- [Vera Italia](${absoluteUrl(veraSitePath('en'))}): the restaurant, its signature dishes, the oven and the room` +
       (ON_OWN_SITE ? ` (also in [Bosnian](${absoluteUrl(veraSitePath('bs'))}) and [Arabic](${absoluteUrl(veraSitePath('ar'))}))` : ''),
     `- [The menu](${menuUrl()}): every dish with its price`,
+    ...(reservationsOffered() ? [`- [Reserve a table](${absoluteUrl(RESERVE_PATH)}): ask online, the restaurant confirms`] : []),
     ...m.categories.map((c) => `- [${c.names.en}](${courseUrl(c)}): ${COURSES[c.names.en]?.line.en ?? ''}`.replace(/: $/, '')),
     '',
     '## Questions', '',
-    ...veraFaq(m, 'en').flatMap(({ q, a }) => [`### ${q}`, '', a, '']),
+    ...[...veraFaq(m, 'en'), ...(reservationsOffered() ? [homeReserveFaq('en')] : [])].flatMap(({ q, a }) => [`### ${q}`, '', a, '']),
   ];
   const short = [...head, ON_OWN_SITE ? `Every dish: ${absoluteUrl('/llms-full.txt')}` : '', ''].join('\n');
   const full = [

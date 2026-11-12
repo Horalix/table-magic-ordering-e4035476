@@ -123,6 +123,6 @@ describe('the restaurant\'s side', () => {
   });
 
   it('the guest\'s page has its key in its address', () => {
-    expect(reservationPath({ id: 'abc', token: 't+k' })).toBe('/reserve/abc?t=t%2Bk');
+    expect(reservationPath({ id: 'abc', token: 't+k' })).toBe('/reservation/abc?t=t%2Bk');
   });
 });

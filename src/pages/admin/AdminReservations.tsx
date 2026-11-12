@@ -413,6 +413,10 @@ const AdminReservations = () => {
                 <a href={guestLink} target="_blank" rel="noreferrer" className="text-sm font-semibold text-primary underline underline-offset-4 break-all">{guestLink}</a>
                 <Button type="button" variant="outline" size="sm" onClick={() => void copyLink()} className="ml-auto gap-1.5"><Copy className="w-3.5 h-3.5" /> Copy</Button>
               </div>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                Put this link where guests look for you: on your Google Maps listing, as its reservation link, and in your Instagram bio.
+                Your website shows it by itself while reservations are on.
+              </p>
 
               <AlertThisPhone venueId={venueId} />
 

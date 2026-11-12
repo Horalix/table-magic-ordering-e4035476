@@ -2,10 +2,20 @@
 
 Copy everything between the rules into Lovable. Nothing else needs to be said.
 
-## Next: table reservations, and the Manager app's alerts (one migration, one function redeployed)
+## Next: nothing to send
 
-Send this once `main` has `feature/reservations` merged (the runner is pinned
-to its commit 8ff2bb5). No new keys: the alerts use the three already set.
+Every migration in `supabase/migrations/` is applied and every function
+deployed (12 November 2026). The newest prompt is kept below as it was sent.
+
+## Done: table reservations, and the Manager app's alerts (12 November 2026)
+
+Applied by Lovable on 12 November 2026 (the runner pinned to 8ff2bb5): the
+migration, then `notify-staff` redeployed. All eight checks matched, its `GET`
+answers `configured: true`, and the `POST` naming a request that does not
+exist answers `404` `{"skipped":"not_found"}`. Reservations are **off** at
+both restaurants until an admin turns them on (docs/reservations.md, "Turning
+it on"); since then a guest's own page is at `/reservation/<id>`, not
+`/reserve/<id>`. No new keys: the alerts use the three already set.
 
 - **The migration** (`20261113090000_reservations.sql`): the restaurant's
   rules for reservations on `restaurant_settings` (off at both restaurants
