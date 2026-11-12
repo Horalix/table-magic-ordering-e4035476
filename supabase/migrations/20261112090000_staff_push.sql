@@ -54,10 +54,17 @@ GRANT EXECUTE ON FUNCTION public.staff_push_endpoint_ok(text) TO authenticated, 
  * that a message is encrypted for. last_seen_at moves each time the waiter
  * screen opens on that phone: someone not on the rota who opened it today is
  * working today.
+ *
+ * user_id is the waiter's sign-in id, kept as a plain uuid the way
+ * public.waiters keeps it: this project's tables do not reference the
+ * sign-in table. So nothing removes a row by itself when its waiter is
+ * removed; staff_push_claim() below does, at the next event. Until then the
+ * row is only unused: notify-staff rings the phones of the restaurant's
+ * working waiters (public.waiters, is_active) and nobody else's.
  */
 CREATE TABLE IF NOT EXISTS public.staff_push_subscriptions (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  user_id uuid NOT NULL,
   venue_id uuid NOT NULL REFERENCES public.venues(id) ON DELETE CASCADE,
   endpoint text NOT NULL,
   keys jsonb NOT NULL,
@@ -174,7 +181,14 @@ GRANT EXECUTE ON FUNCTION public.staff_push_subscribe(text, jsonb, uuid) TO auth
 -- 3. For notify-staff
 -- ---------------------------------------------------------------------
 
-/** True the first time an event is claimed, false ever after. */
+/**
+ * True the first time an event is claimed, false ever after.
+ *
+ * It tidies as it goes: events older than two days, and the phones of anyone
+ * who is no longer a waiter of that restaurant (removed in Admin → Waiters).
+ * A waiter who is only switched off keeps their row and their phones, and is
+ * not rung.
+ */
 CREATE OR REPLACE FUNCTION public.staff_push_claim(_source text, _id uuid)
 RETURNS boolean
 LANGUAGE plpgsql
@@ -183,6 +197,9 @@ SET search_path = public
 AS $$
 BEGIN
   DELETE FROM public.staff_push_sent WHERE sent_at < now() - interval '2 days';
+  DELETE FROM public.staff_push_subscriptions s
+   WHERE NOT EXISTS (SELECT 1 FROM public.waiters w
+                      WHERE w.user_id = s.user_id AND w.venue_id = s.venue_id);
   INSERT INTO public.staff_push_sent(source, source_id) VALUES (_source, _id)
   ON CONFLICT DO NOTHING;
   RETURN FOUND;

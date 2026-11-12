@@ -10,6 +10,8 @@
  * order, call or bill request queues exactly one call — while a missing or
  * failing pg_net never stops a guest's order.
  */
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 // @ts-expect-error -- plain JS harness, no types needed
 import { createTestDatabase, actAs } from '../../scripts/db-harness.mjs';
@@ -193,6 +195,37 @@ describe('the function\'s own helpers', () => {
       `SELECT public.staff_push_claim('orders', 'e0000000-0000-0000-0000-0000000000ff') AS ok`)).rows[0].ok;
     expect(await claim()).toBe(true);
     expect(await claim()).toBe(false);
+  });
+
+  it('forgets the phones of anyone who is no longer a waiter of that restaurant, at the next event', async () => {
+    await as(AMAR, () => subscribe(PHONE, L));
+    await as(LEJLA, () => subscribe('https://fcm.googleapis.com/fcm/send/lejla-phone', L));
+    // Edin is switched off, not removed: he keeps his row, and so his phone.
+    await db.query(
+      `INSERT INTO public.staff_push_subscriptions(user_id, venue_id, endpoint, keys)
+       VALUES ($1, $2, 'https://fcm.googleapis.com/fcm/send/edin-phone', $3)`, [GONE, L, JSON.stringify(KEYS)]);
+    // Lejla is removed in Admin → Waiters. Nothing else takes her phone away.
+    await db.query(`DELETE FROM public.waiters WHERE id = $1`, [W_LEJLA]);
+    expect(await phones()).toHaveLength(3);
+
+    await db.query(`SELECT public.staff_push_claim('orders', gen_random_uuid())`);
+    expect((await phones()).map((p) => p.user_id).sort()).toEqual([AMAR, GONE].sort());
+    // And the event itself was still claimed once.
+    const again = async () => (await db.query<{ ok: boolean }>(
+      `SELECT public.staff_push_claim('orders', 'e0000000-0000-0000-0000-0000000000fe') AS ok`)).rows[0].ok;
+    expect(await again()).toBe(true);
+    expect(await again()).toBe(false);
+  });
+
+  it('keeps the waiter as a plain id: no reference to the sign-in table', async () => {
+    // Lovable's schema rule: only profiles and user_roles may reference auth.users. It stopped
+    // the first version of this migration at exactly that line.
+    const { rows } = await db.query<{ refs: string }>(
+      `SELECT confrelid::regclass::text AS refs FROM pg_constraint
+        WHERE conrelid IN ('public.staff_push_subscriptions'::regclass, 'public.staff_push_sent'::regclass) AND contype = 'f'`);
+    expect(rows.map((r) => r.refs)).toEqual(['venues']);
+    const sql = readFileSync(resolve(__dirname, '..', 'migrations', '20261112090000_staff_push.sql'), 'utf8');
+    expect(sql).not.toMatch(/references\s+auth\./i);
   });
 
   it('knows today\'s rota at one restaurant, and when the trading day began', async () => {
