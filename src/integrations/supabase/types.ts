@@ -2267,6 +2267,62 @@ export type Database = {
           },
         ]
       }
+      staff_push_sent: {
+        Row: {
+          sent_at: string
+          source: string
+          source_id: string
+        }
+        Insert: {
+          sent_at?: string
+          source: string
+          source_id: string
+        }
+        Update: {
+          sent_at?: string
+          source?: string
+          source_id?: string
+        }
+        Relationships: []
+      }
+      staff_push_subscriptions: {
+        Row: {
+          created_at: string
+          endpoint: string
+          id: string
+          keys: Json
+          last_seen_at: string
+          user_id: string
+          venue_id: string
+        }
+        Insert: {
+          created_at?: string
+          endpoint: string
+          id?: string
+          keys: Json
+          last_seen_at?: string
+          user_id: string
+          venue_id: string
+        }
+        Update: {
+          created_at?: string
+          endpoint?: string
+          id?: string
+          keys?: Json
+          last_seen_at?: string
+          user_id?: string
+          venue_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "staff_push_subscriptions_venue_id_fkey"
+            columns: ["venue_id"]
+            isOneToOne: false
+            referencedRelation: "venues"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       subcategories: {
         Row: {
           category_id: string
@@ -4167,6 +4223,17 @@ export type Database = {
         Args: { _from?: string; _to?: string }
         Returns: Json
       }
+      staff_push_claim: {
+        Args: { _id: string; _source: string }
+        Returns: boolean
+      }
+      staff_push_endpoint_ok: { Args: { _endpoint: string }; Returns: boolean }
+      staff_push_shift: { Args: { _venue: string }; Returns: Json }
+      staff_push_subscribe: {
+        Args: { _endpoint: string; _keys: Json; _venue: string }
+        Returns: Json
+      }
+      staff_push_url: { Args: never; Returns: string }
       staff_release_held_order: { Args: { _order_id: string }; Returns: Json }
       staff_resolve_bill_request: {
         Args: { _close_session?: boolean; _request_id: string }
