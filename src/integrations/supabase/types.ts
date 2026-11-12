@@ -1746,6 +1746,115 @@ export type Database = {
           },
         ]
       }
+      reservation_alert_phones: {
+        Row: {
+          created_at: string
+          endpoint: string
+          id: string
+          keys: Json
+          last_seen_at: string
+          user_id: string
+          venue_id: string
+        }
+        Insert: {
+          created_at?: string
+          endpoint: string
+          id?: string
+          keys: Json
+          last_seen_at?: string
+          user_id: string
+          venue_id: string
+        }
+        Update: {
+          created_at?: string
+          endpoint?: string
+          id?: string
+          keys?: Json
+          last_seen_at?: string
+          user_id?: string
+          venue_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reservation_alert_phones_venue_id_fkey"
+            columns: ["venue_id"]
+            isOneToOne: false
+            referencedRelation: "venues"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      reservations: {
+        Row: {
+          cancelled_by: string | null
+          code: string
+          created_at: string
+          decided_at: string | null
+          decided_by: string | null
+          guest_name: string
+          guest_phone: string
+          id: string
+          locale: string
+          note: string | null
+          party_size: number
+          reminded_at: string | null
+          reply: string | null
+          reserved_for: string
+          status: string
+          token: string
+          updated_at: string
+          venue_id: string
+        }
+        Insert: {
+          cancelled_by?: string | null
+          code: string
+          created_at?: string
+          decided_at?: string | null
+          decided_by?: string | null
+          guest_name: string
+          guest_phone: string
+          id?: string
+          locale?: string
+          note?: string | null
+          party_size: number
+          reminded_at?: string | null
+          reply?: string | null
+          reserved_for: string
+          status?: string
+          token: string
+          updated_at?: string
+          venue_id: string
+        }
+        Update: {
+          cancelled_by?: string | null
+          code?: string
+          created_at?: string
+          decided_at?: string | null
+          decided_by?: string | null
+          guest_name?: string
+          guest_phone?: string
+          id?: string
+          locale?: string
+          note?: string | null
+          party_size?: number
+          reminded_at?: string | null
+          reply?: string | null
+          reserved_for?: string
+          status?: string
+          token?: string
+          updated_at?: string
+          venue_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reservations_venue_id_fkey"
+            columns: ["venue_id"]
+            isOneToOne: false
+            referencedRelation: "venues"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       restaurant_settings: {
         Row: {
           after_meal_prompt_minutes: number
@@ -1785,6 +1894,14 @@ export type Database = {
           reco_weight_margin: number
           reco_weight_observed: number
           recommendations_enabled: boolean
+          reservations_close: string
+          reservations_days_ahead: number
+          reservations_enabled: boolean
+          reservations_lead_minutes: number
+          reservations_max_party: number
+          reservations_note: string | null
+          reservations_open: string
+          reservations_phone: string | null
           service_close: string | null
           service_open: string | null
           session_idle_timeout_minutes: number
@@ -1833,6 +1950,14 @@ export type Database = {
           reco_weight_margin?: number
           reco_weight_observed?: number
           recommendations_enabled?: boolean
+          reservations_close?: string
+          reservations_days_ahead?: number
+          reservations_enabled?: boolean
+          reservations_lead_minutes?: number
+          reservations_max_party?: number
+          reservations_note?: string | null
+          reservations_open?: string
+          reservations_phone?: string | null
           service_close?: string | null
           service_open?: string | null
           session_idle_timeout_minutes?: number
@@ -1881,6 +2006,14 @@ export type Database = {
           reco_weight_margin?: number
           reco_weight_observed?: number
           recommendations_enabled?: boolean
+          reservations_close?: string
+          reservations_days_ahead?: number
+          reservations_enabled?: boolean
+          reservations_lead_minutes?: number
+          reservations_max_party?: number
+          reservations_note?: string | null
+          reservations_open?: string
+          reservations_phone?: string | null
           service_close?: string | null
           service_open?: string | null
           session_idle_timeout_minutes?: number
@@ -3341,6 +3474,10 @@ export type Database = {
         Args: { _reason?: string; _session_id: string; _session_token: string }
         Returns: Json
       }
+      guest_cancel_reservation: {
+        Args: { _id: string; _token: string }
+        Returns: Json
+      }
       guest_check_venue_token: { Args: { _token: string }; Returns: Json }
       guest_forget_me: { Args: { _client_id: string }; Returns: Json }
       guest_get_combos: { Args: never; Returns: Json }
@@ -3462,6 +3599,25 @@ export type Database = {
         }
         Returns: Json
       }
+      guest_request_reservation: {
+        Args: {
+          _day: string
+          _locale?: string
+          _name: string
+          _note?: string
+          _party: number
+          _phone: string
+          _time: string
+          _trap?: string
+          _venue: string
+        }
+        Returns: Json
+      }
+      guest_reservation: {
+        Args: { _id: string; _token: string }
+        Returns: Json
+      }
+      guest_reservation_options: { Args: { _venue: string }; Returns: Json }
       guest_resolve_join_request: {
         Args: {
           _request_id: string
@@ -4050,6 +4206,12 @@ export type Database = {
         Args: { _order_id: string; _ticket_type?: string }
         Returns: Json
       }
+      reservation_alerts_subscribe: {
+        Args: { _endpoint: string; _keys: Json; _venue: string }
+        Returns: Json
+      }
+      reservation_phone: { Args: { _raw: string }; Returns: string }
+      reservations_sweep: { Args: never; Returns: Json }
       resolve_table_for_token: {
         Args: { _table_number: number; _token: string }
         Returns: {
@@ -4082,6 +4244,7 @@ export type Database = {
       run_daily_maintenance: { Args: never; Returns: Json }
       run_scheduled_learning_refresh: { Args: never; Returns: Json }
       run_scheduled_maintenance: { Args: never; Returns: Json }
+      run_scheduled_reservation_sweep: { Args: never; Returns: Json }
       run_scheduled_table_close: { Args: never; Returns: Json }
       sales_analytics: { Args: { _from?: string; _to?: string }; Returns: Json }
       sales_change_terms: {
@@ -4217,6 +4380,10 @@ export type Database = {
       }
       staff_close_all_tables: { Args: never; Returns: Json }
       staff_close_session: { Args: { _session_id: string }; Returns: Json }
+      staff_decide_reservation: {
+        Args: { _decision: string; _id: string; _reply?: string }
+        Returns: Json
+      }
       staff_mark_session_seen: { Args: { _session_id: string }; Returns: Json }
       staff_open_tables: { Args: never; Returns: Json }
       staff_performance: {
