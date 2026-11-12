@@ -4,9 +4,15 @@ Copy everything between the rules into Lovable. Nothing else needs to be said.
 
 ## Next: alerts that ring with the screen off, for the waiter apps (one migration, one function)
 
-Send this once `main` has `feature/waiter-android-app` merged (the runner is
-pinned to its commit a80180d), and **after you have set the three keys
+Send this once `main` has `fix/staff-push-plain-user-id` merged (the runner
+is pinned to its commit 721d4b0), and **after you have set the three keys
 yourself** (just below). Lovable never sees, makes or types a key.
+
+Sent once already, on 12 November 2026, pinned to a80180d: Lovable confirmed
+the three keys and pg_net, then stopped before Step 1 and applied nothing.
+Its schema rule lets only `profiles` and `user_roles` reference `auth.users`,
+and `staff_push_subscriptions.user_id` did. The migration now keeps that id as
+a plain uuid, as `waiters` does.
 
 - **The migration** (`20261112090000_staff_push.sql`): where each waiter's
   phone or tablet can be reached (`staff_push_subscriptions`; a waiter sees
@@ -15,7 +21,9 @@ yourself** (just below). Lovable never sees, makes or types a key.
   function about each one through pg_net. No menu, order, payment, staff or
   analytics data changes. A trigger never stops an order: without pg_net, or
   if queuing the call fails, the order goes in as before, without an alert.
-  Safe to run again.
+  Nothing in it references `auth.users`: the phones of a waiter who is
+  removed are forgotten at the next order, call or bill request. Safe to run
+  again.
 - **One new Edge Function:** `notify-staff`, with `verify_jwt = false`
   (already in `supabase/config.toml`), because the database calls it without a
   sign-in. It reads the row itself and sends each alert once, to the table's
@@ -49,6 +57,12 @@ yourself** (just below). Lovable never sees, makes or types a key.
 > any other SQL that changes data or schema.**
 >
 > Make sure your checkout is the latest `main`.
+>
+> You stopped this task once, before Step 1, because
+> `staff_push_subscriptions.user_id` referenced `auth.users`. That reference
+> is gone: `user_id` is now a plain uuid, and nothing in the migration
+> references the `auth` schema. If your schema rules object to anything else
+> in the file, stop before Step 1 again and quote the line.
 >
 > 1. Confirm that the Edge Function secrets `VAPID_PUBLIC_KEY`,
 >    `VAPID_PRIVATE_KEY` and `VAPID_SUBJECT` exist. Report their names only:
@@ -105,9 +119,12 @@ No order is needed: **Send a test** rings exactly the way an order does.
 1. On the tablet, in Chrome, open `lasoul.net/waiter-app/` (Vera Italia:
    `veraitalia.net/waiter-app/`), download and install the app
    (android/README.md, "Setting up a tablet").
-2. Open the app: the waiter sign-in, with **no address bar**. Sign in.
+2. Wait a minute with the tablet online, then open the app: the waiter
+   sign-in, with **no address bar**. Sign in.
 3. Tap the **Alerts on lock screen** switch, then **Allow** on Android's own
-   prompt. It says **On**.
+   prompt (*Allow La Soul Waiter to send you notifications?*). It says **On**.
+   If the site asks instead, close the app, wait a minute and open it again
+   (android/README.md).
 4. Tap **Send a test** and lock the tablet at once. Within about ten seconds
    it rings with the app's chime and shows **Test alert** on the lock screen.
    Tap it: the waiter screen opens.
