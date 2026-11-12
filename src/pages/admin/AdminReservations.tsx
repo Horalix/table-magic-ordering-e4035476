@@ -20,11 +20,12 @@ import type { AdminOutletContext } from '@/components/admin/AdminLayout';
 import { VENUES } from '@/lib/venues';
 import { VENUE_URLS } from '@/lib/seo/site-url';
 import { useLockScreenAlerts } from '@/hooks/useLockScreenAlerts';
+import ReservationWhatsApp from '@/components/admin/ReservationWhatsApp';
 import { isIos, STAFF_PUSH_MESSAGE, type AlertsState } from '@/lib/push-alerts';
 import { playWaiterCallAlert, vibrate } from '@/lib/kitchen-sounds';
 import {
-  decideReservation, formatReservationDay, listReservations, restaurantDayTime, statusNow, waitedLabel,
-  type AdminReservation, type Decision, type ReservationStatus,
+  decideReservation, formatReservationDay, listReservations, listSentMessages, restaurantDayTime, statusNow, waitedLabel,
+  type AdminReservation, type Decision, type ReservationStatus, type SentMessage,
 } from '@/lib/reservations';
 import { guestMessage, smsLink, viberLink, whatsappLink, type GuestMessageKind } from '@/lib/reservation-messages';
 import type { Locale } from '@/lib/i18n';
@@ -128,7 +129,12 @@ const sendButton = 'inline-flex items-center justify-center gap-2 min-h-[44px] r
  * WhatsApp, Viber or Messages. The guest's page already shows the answer;
  * this reaches a guest who has closed it. Nothing is sent by the system.
  */
-const TellGuest = ({ told, venueName, phone, onDone }: { told: Told; venueName: string; phone: string | null; onDone: () => void }) => {
+const TellGuest = ({ told, venueName, phone, auto, onDone }: {
+  told: Told; venueName: string; phone: string | null;
+  /** The same answer, if it went out by itself on WhatsApp. */
+  auto?: SentMessage;
+  onDone: () => void;
+}) => {
   const { r, kind, reply } = told;
   const locale: Locale = r.locale === 'bs' || r.locale === 'ar' ? r.locale : 'en';
   const at = restaurantDayTime(r.reserved_for);
@@ -150,6 +156,13 @@ const TellGuest = ({ told, venueName, phone, onDone }: { told: Told; venueName: 
           </div>
           <Button variant="ghost" size="sm" onClick={onDone} className="shrink-0">Done</Button>
         </div>
+        {auto && auto.status !== 'sending' && (
+          <p data-testid="tell-guest-auto" className={`rounded-lg px-3 py-2 text-xs font-medium ${auto.status === 'sent' ? 'bg-primary/10 text-foreground' : 'bg-destructive/10 text-destructive'}`}>
+            {auto.status === 'sent'
+              ? 'Already sent by itself on WhatsApp. Send it yourself as well only if you want to.'
+              : `WhatsApp could not deliver it by itself${auto.detail ? ` (${auto.detail})` : ''}. Send it yourself:`}
+          </p>
+        )}
         <p dir="auto" data-testid="tell-guest-text" className="rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground whitespace-pre-wrap">{text}</p>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
           <a href={whatsappLink(r.guest_phone, text)} target="_blank" rel="noreferrer" className={sendButton}>
@@ -197,6 +210,8 @@ const AdminReservations = () => {
   const [cancelReply, setCancelReply] = useState('');
   /** The answer just given, until the guest has been told or the admin says it is done. */
   const [told, setTold] = useState<Told | null>(null);
+  /** What went out by itself on WhatsApp, so the admin does not send it twice. */
+  const [sentMessages, setSentMessages] = useState<SentMessage[]>([]);
   const [now, setNow] = useState(() => Date.now());
   const knownPending = useRef<Set<string> | null>(null);
 
@@ -230,6 +245,8 @@ const AdminReservations = () => {
       }
       knownPending.current = pending;
       setRows(list);
+      // What went out by itself on WhatsApp; nothing, before the database knows messages.
+      void listSentMessages(venueId).then(setSentMessages);
     } catch (error) {
       setLoadError(error instanceof Error ? error.message : 'Could not load the reservations');
     }
@@ -367,7 +384,8 @@ const AdminReservations = () => {
       {loadError && <p role="alert" className="rounded-xl bg-destructive/10 px-4 py-3 text-sm font-sans text-destructive">Could not load: {loadError}</p>}
 
       {told && (
-        <TellGuest told={told} venueName={venueName ?? venue?.name ?? ''} phone={rules?.reservations_phone ?? (venue?.phone || null)} onDone={() => setTold(null)} />
+        <TellGuest told={told} venueName={venueName ?? venue?.name ?? ''} phone={rules?.reservations_phone ?? (venue?.phone || null)}
+          auto={sentMessages.find((m) => m.reservation_id === told.r.id && m.kind === `guest_${told.kind}`)} onDone={() => setTold(null)} />
       )}
 
       {/* Waiting for an answer: first, because a guest is looking at their phone. */}
@@ -487,6 +505,7 @@ const AdminReservations = () => {
               </p>
 
               <AlertThisPhone venueId={venueId} />
+              {venueSlug && <ReservationWhatsApp venueSlug={venueSlug} />}
 
               <form onSubmit={saveDraft} className="space-y-4">
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">

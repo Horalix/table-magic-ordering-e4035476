@@ -40,3 +40,11 @@ verify_jwt = false
 # inside.
 [functions.notify-staff]
 verify_jwt = false
+
+# reservation-messages (WhatsApp messages about a reservation) is called by
+# the database through pg_net, which sends no Supabase JWT. The call names a
+# reservation and nothing else: the function reads it itself and sends each
+# message once (20261114090000_reservation_messages.sql). An admin's own
+# calls (status, set up, test) are checked for that restaurant's admin inside.
+[functions.reservation-messages]
+verify_jwt = false

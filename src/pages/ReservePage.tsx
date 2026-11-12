@@ -275,6 +275,8 @@ const ReservePage = () => {
                 <Input id="reserve-phone" type="tel" inputMode="tel" dir="ltr" value={phone} onChange={(e) => setPhone(e.target.value)}
                   autoComplete="tel" maxLength={30} aria-invalid={refusal === 'phone'} aria-describedby="reserve-phone-hint" className="mt-1.5 h-12 text-base" />
                 <p id="reserve-phone-hint" className="text-xs text-muted-foreground font-sans mt-1">{rc('phone_hint')}</p>
+                {/* Said before the request is sent: that is what the guest agrees to. */}
+                {options.whatsapp && <p data-testid="whatsapp-notice" className="text-xs text-foreground font-sans mt-1">{rc('whatsapp_notice')}</p>}
               </div>
 
               <div>

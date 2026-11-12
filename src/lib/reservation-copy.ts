@@ -184,6 +184,12 @@ const COPY = {
   },
   faq_cost_q: { en: 'Does a reservation cost anything?', bs: 'Košta li rezervacija?', ar: 'هل الحجز بمقابل؟' },
   faq_cost_a: { en: 'No. Reserving a table is free.', bs: 'Ne. Rezervacija stola je besplatna.', ar: 'لا. حجز الطاولة مجاني.' },
+  // Said under the phone number while the restaurant messages guests on WhatsApp (20261114090000_reservation_messages.sql).
+  whatsapp_notice: {
+    en: 'We will message you on WhatsApp when we have your request and when we answer.',
+    bs: 'Javit ćemo vam se na WhatsApp kada primimo zahtjev i kada odgovorimo.',
+    ar: 'سنراسلك على واتساب عند استلام طلبك وعند الرد عليه.',
+  },
   // The booking page: the parts of the day, the facts under the title, what is being asked for.
   part_midday: { en: 'Midday', bs: 'Podne', ar: 'الظهيرة' },
   part_afternoon: { en: 'Afternoon', bs: 'Poslijepodne', ar: 'بعد الظهر' },

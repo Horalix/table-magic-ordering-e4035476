@@ -36,6 +36,8 @@ export interface ReservationOptions {
   leadMinutes: number;
   phone: string | null;
   note: string | null;
+  /** The restaurant messages guests on WhatsApp. Absent before 20261114090000_reservation_messages.sql. */
+  whatsapp?: boolean;
   /** The restaurant's own date and time: a guest's phone may be in another zone. */
   today: string;
   now: string;
@@ -60,6 +62,7 @@ export async function readReservationOptions(venueSlug: string): Promise<Reserva
       leadMinutes: Number.isFinite(Number(o.lead_minutes)) ? Number(o.lead_minutes) : OFF.leadMinutes,
       phone: typeof o.phone === 'string' && o.phone ? o.phone : null,
       note: typeof o.note === 'string' && o.note ? o.note : null,
+      whatsapp: o.whatsapp === true,
       today: typeof o.today === 'string' ? o.today : '',
       now: typeof o.now === 'string' ? o.now : '00:00',
     };
@@ -330,6 +333,20 @@ export interface AdminReservation {
   cancelled_by: 'guest' | 'restaurant' | null;
   created_at: string;
   decided_at: string | null;
+}
+
+/** A message sent by itself about a reservation (public.reservation_messages), as the admin reads it. */
+export interface SentMessage { reservation_id: string; kind: string; status: 'sending' | 'sent' | 'failed'; detail: string | null }
+
+/** What was sent by itself for this restaurant's recent reservations; nothing before the database knows messages. */
+export async function listSentMessages(venueId: string): Promise<SentMessage[]> {
+  try {
+    const { data, error } = await untyped.from('reservation_messages').select('reservation_id, kind, status, detail')
+      .eq('venue_id', venueId).order('created_at', { ascending: false }).limit(400);
+    return error || !Array.isArray(data) ? [] : (data as SentMessage[]);
+  } catch {
+    return [];
+  }
 }
 
 const ADMIN_COLUMNS = 'id, code, status, guest_name, guest_phone, party_size, reserved_for, note, reply, cancelled_by, created_at, decided_at, locale';

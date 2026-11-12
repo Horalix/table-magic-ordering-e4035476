@@ -169,6 +169,17 @@ test.describe('a guest asks for a table', () => {
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
   });
 
+  test('a guest is told before asking that the restaurant will message them on WhatsApp, where it does', async ({ page }) => {
+    await guestStubs(page);
+    await page.goto('/reserve');
+    await expect(page.getByRole('button', { name: 'Ask for this table' })).toBeVisible();
+    await expect(page.getByTestId('whatsapp-notice')).toHaveCount(0);
+
+    await guestStubs(page, { options: { ...OPTIONS, whatsapp: true } });
+    await page.goto('/reserve');
+    await expect(page.getByTestId('whatsapp-notice')).toHaveText('We will message you on WhatsApp when we have your request and when we answer.');
+  });
+
   test('fits a phone: nothing to scroll sideways', async ({ page }) => {
     await guestStubs(page);
     await page.goto('/reserve');
@@ -454,6 +465,76 @@ test.describe('Admin → Reservations', () => {
     await expect(page.getByTestId('tell-guest-text')).toContainText('La Soul: žao nam je, ne možemo primiti vašu rezervaciju');
     // The day is named in words, whatever this browser knows of Bosnian (never "M11 14, Sat").
     expect(await page.getByTestId('tell-guest-text').textContent()).not.toMatch(/M[0-9][0-9]/);
+  });
+
+  test.describe('WhatsApp messages', () => {
+    const TEMPLATES = Array.from({ length: 14 }, (_, i) => ({ name: `reservation_${i}`, language: 'en', status: 'APPROVED' }));
+    /** The database knows the two choices, and the function answers as it would with the number connected. */
+    async function whatsapp(page: Page, staff: { settings: Record<string, unknown> }, report: Record<string, unknown>) {
+      const admin = await adminStubs(page, staff, [aRequest()]);
+      Object.assign(staff.settings, { reservations_whatsapp_guest: false, reservations_whatsapp_admin: null });
+      const calls: Record<string, unknown>[] = [];
+      await page.route('**/functions/v1/reservation-messages', (route) => {
+        const body = route.request().postDataJSON() as Record<string, unknown>;
+        calls.push(body);
+        return json(route, body.action === 'test' ? { sent: true } : report);
+      });
+      return { admin, calls };
+    }
+
+    test('before the database knows them, nothing about them is shown', async ({ page, staff }) => {
+      await adminStubs(page, staff, []);
+      await page.goto('/admin/reservations');
+      await expect(page.getByRole('button', { name: 'Save the rules' })).toBeVisible();
+      await expect(page.getByTestId('reservation-whatsapp')).toHaveCount(0);
+    });
+
+    test('not connected yet: it says so, and guests cannot be switched on', async ({ page, staff }) => {
+      await whatsapp(page, staff, { configured: false, number: false, ready: false, templates: [] });
+      await page.goto('/admin/reservations');
+      const card = page.getByTestId('reservation-whatsapp');
+      await expect(card.getByTestId('whatsapp-state')).toHaveText('Not connected yet');
+      await expect(card.getByRole('switch', { name: /Message guests on WhatsApp/ })).toBeDisabled();
+      await expect(card.getByRole('button', { name: 'Send a test' })).toBeDisabled();
+    });
+
+    test('connected, messages not sent for approval yet: one button does it', async ({ page, staff }) => {
+      const { calls } = await whatsapp(page, staff, {
+        configured: true, number: true, ready: false, templates: TEMPLATES.map((t) => ({ ...t, status: 'MISSING' })), refused: [],
+      });
+      await page.goto('/admin/reservations');
+      const card = page.getByTestId('reservation-whatsapp');
+      await expect(card.getByTestId('whatsapp-state')).toHaveText('0 of 14 messages approved');
+      await card.getByRole('button', { name: 'Set up the messages' }).click();
+      await expect.poll(() => calls.map((c) => c.action)).toEqual(['status', 'setup']);
+      expect(calls[1]).toEqual({ action: 'setup', venue: 'lasoul' });
+    });
+
+    test('ready: the restaurant chooses to message guests, and a number to be told, and tries it', async ({ page, staff }) => {
+      const { admin, calls } = await whatsapp(page, staff, { configured: true, number: true, ready: true, templates: TEMPLATES });
+      await page.goto('/admin/reservations');
+      const card = page.getByTestId('reservation-whatsapp');
+      await expect(card.getByTestId('whatsapp-state')).toHaveText('Ready');
+      await card.getByRole('switch', { name: /Message guests on WhatsApp/ }).click();
+      await expect.poll(() => admin.settingsWrites).toEqual([{ reservations_whatsapp_guest: true }]);
+      await expect(card).toContainText('On: “we have your request”');
+
+      await card.getByLabel(/Also tell this WhatsApp number/).fill('+387 62 555 000');
+      await card.getByRole('button', { name: 'Save' }).click();
+      await expect.poll(() => admin.settingsWrites.length).toBe(2);
+      expect(admin.settingsWrites[1]).toEqual({ reservations_whatsapp_admin: '+387 62 555 000' });
+      await card.getByRole('button', { name: 'Send a test' }).click();
+      await expect.poll(() => calls.at(-1)).toEqual({ action: 'test', venue: 'lasoul', to: '+387 62 555 000' });
+    });
+
+    test('an answer that already went out by itself is said, so the admin does not send it twice', async ({ page, staff }) => {
+      await whatsapp(page, staff, { configured: true, number: true, ready: true, templates: TEMPLATES });
+      await page.route('**/rest/v1/reservation_messages**', (route) =>
+        json(route, [{ reservation_id: 'r-1', kind: 'guest_confirmed', status: 'sent', detail: 'wamid.1' }]));
+      await page.goto('/admin/reservations');
+      await page.getByTestId('pending-reservation').getByRole('button', { name: 'Confirm' }).click();
+      await expect(page.getByTestId('tell-guest-auto')).toHaveText('Already sent by itself on WhatsApp. Send it yourself as well only if you want to.');
+    });
   });
 
   test('the same switch is on Ordering & service, among the other things a restaurant turns on and off', async ({ page, staff }) => {
