@@ -2,7 +2,145 @@
 
 Copy everything between the rules into Lovable. Nothing else needs to be said.
 
-## Next: alerts that ring with the screen off, for the waiter apps (one migration, one function)
+## Next: table reservations, and the Manager app's alerts (one migration, one function redeployed)
+
+Send this once `main` has `feature/reservations` merged (the runner is pinned
+to its commit 8ff2bb5). No new keys: the alerts use the three already set.
+
+- **The migration** (`20261113090000_reservations.sql`): the restaurant's
+  rules for reservations on `restaurant_settings` (off at both restaurants
+  until an admin switches them on); `reservations`, one row per request, which
+  guests reach only through their own request's token and only the
+  restaurant's admins read; `reservation_alert_phones`, the phones of admins
+  who asked to be alerted; two triggers that tell `notify-staff` about a new
+  request and about a confirmed table its guest cancels; and a job every
+  minute that reminds once about a request nobody has answered and marks one
+  nobody answered as expired once its time has passed. No menu, order,
+  payment, staff or analytics data changes. Nothing in it references the
+  `auth` schema. Safe to run again.
+- **One Edge Function redeployed:** `notify-staff`, which now also takes a
+  request for a table and rings that restaurant's admins. Same settings
+  (`verify_jwt = false`), same keys.
+- Netlify publishes the app itself from `main`. Until this is applied,
+  `/reserve` says online reservations are not open and Admin → Reservations
+  says they are not switched on yet; everything else works as before. After
+  it, reservations are still **off** until an admin turns them on
+  (docs/reservations.md, "Turning it on").
+
+---
+
+> **Task: apply one migration with `docs/migration-runner.sql`, then redeploy
+> one Edge Function. Do not retype the migration file and do not write any
+> other SQL that changes data, schema or permissions.**
+>
+> Make sure your checkout is the latest `main`.
+>
+> Nothing in the migration references the `auth` schema: user ids are plain
+> uuids. If your schema rules object to anything in the file, stop before
+> Step 1 and quote the line.
+>
+> 1. Run `docs/migration-runner.sql` step by step, each step as its own query:
+>    Step 0 (pg_net installed), Step 1 (queue the download, expect 1 row),
+>    Step 2 (expect 1 row, `arrived_exactly = true`), then Step 3, its one
+>    block (1 of 1). If it fails, stop and report the exact error; a failed
+>    block changes nothing.
+> 2. Check, read-only, each as its own query, and paste the raw output of
+>    each. None of them calls a function of the migration:
+>    ```sql
+>    SELECT to_regclass('public.reservations') IS NOT NULL AS reservations,
+>           to_regclass('public.reservation_alert_phones') IS NOT NULL AS alert_phones,
+>           to_regprocedure('public.guest_request_reservation(text,text,text,integer,date,time,text,text,text)') IS NOT NULL AS ask,
+>           to_regprocedure('public.staff_decide_reservation(uuid,text,text)') IS NOT NULL AS answer;
+>    SELECT v.slug, rs.reservations_enabled, rs.reservations_open, rs.reservations_close, rs.reservations_max_party
+>      FROM public.restaurant_settings rs JOIN public.venues v ON v.id = rs.venue_id ORDER BY v.slug;
+>    SELECT tgrelid::regclass::text AS on_table, tgname FROM pg_trigger
+>     WHERE tgname LIKE 'staff_push_on_%' ORDER BY 1, 2;
+>    SELECT tablename, cmd, roles FROM pg_policies
+>     WHERE tablename IN ('reservations', 'reservation_alert_phones') ORDER BY 1, 2;
+>    SELECT pg_get_constraintdef(oid) AS sources FROM pg_constraint WHERE conname = 'staff_push_sent_source_check';
+>    SELECT has_function_privilege('anon', 'public.guest_request_reservation(text,text,text,integer,date,time,text,text,text)', 'EXECUTE') AS guests_can_ask,
+>           has_function_privilege('anon', 'public.staff_decide_reservation(uuid,text,text)', 'EXECUTE') AS guests_can_answer,
+>           has_function_privilege('authenticated', 'public.reservations_sweep()', 'EXECUTE') AS users_can_sweep,
+>           has_table_privilege('anon', 'public.reservations', 'SELECT') AS guests_can_read_the_list,
+>           has_table_privilege('authenticated', 'public.reservations', 'UPDATE') AS users_can_write_the_list;
+>    SELECT count(*) AS requests FROM public.reservations;
+>    SELECT jobname, schedule, active FROM cron.job WHERE jobname = 'lasoul-reservations';
+>    ```
+>    Expected, in order: `true`, `true`, `true`, `true`. Two rows, `lasoul`
+>    and `veraitalia`, each `false`, `11:00:00`, `21:00:00`, `10`. Six
+>    triggers: `bill_requests` `staff_push_on_bill_request`; `orders`
+>    `staff_push_on_order` and `staff_push_on_order_paid`; `reservations`
+>    `staff_push_on_reservation` and `staff_push_on_reservation_cancelled`;
+>    `waiter_calls` `staff_push_on_waiter_call`. Three policies:
+>    `reservation_alert_phones` `DELETE` and `SELECT`, `reservations`
+>    `SELECT`, each for `{authenticated}`. One row naming six sources:
+>    `orders`, `waiter_calls`, `bill_requests`, `reservations`,
+>    `reservation_reminders`, `reservation_cancellations`. `true`, `false`,
+>    `false`, `false`, `false`. `0`. One row: `lasoul-reservations`,
+>    `* * * * *`, `true`. If the last query alone is refused (no leave to read
+>    `cron.job`), say so and go on. If anything else differs, stop and paste
+>    what you got; do not fix it yourself.
+> 3. Redeploy the Edge Function `notify-staff` from `supabase/functions/`
+>    exactly as it is in `main`, with the settings in `supabase/config.toml`
+>    (`verify_jwt = false`). It imports `supabase/functions/_shared/http.ts`,
+>    `notify-staff.ts`, `staff-push.ts` and `web-push.ts`. Deploy no other
+>    function. Paste the deploy result.
+> 4. Call `GET https://jgxnvrrphxnmzongtmzs.supabase.co/functions/v1/notify-staff`
+>    (no sign-in) and say whether the answer has `"configured":true`. Do not
+>    paste the key.
+> 5. Call `POST` on the same address (no sign-in) with the JSON body
+>    `{"table":"reservations","id":"00000000-0000-4000-8000-000000000000"}`
+>    and paste the status and the answer. Expected: `404` and
+>    `{"skipped":"not_found"}`, which is the new code answering (the old code
+>    answers `400`). It names a request that does not exist and changes
+>    nothing.
+>
+> Do not call `guest_request_reservation`, `guest_cancel_reservation`,
+> `staff_decide_reservation`, `reservation_alerts_subscribe`,
+> `reservations_sweep` or `run_scheduled_reservation_sweep`: each writes. Do
+> not switch reservations on for either restaurant: that is its admin's to
+> do. Do not grant anything.
+>
+> Files your schema-change tool writes by itself are fine (its own migration
+> record, a regenerated `src/integrations/supabase/types.ts`, `.lovable`
+> notes). Edit no other file by hand. Do not create or change any user
+> account, password or credential, do not place an order, call a waiter or ask
+> for a bill, and do not enable online card payments.
+
+---
+
+### After it applies: turn it on and try it
+
+Wait until Netlify has published `main`. All of it with your own phone; no
+guest is involved.
+
+1. **Admin → Reservations.** Set the first and last time, the largest group
+   and the phone guests can call, and **Save the rules**.
+2. **The manager's iPhone:** in Safari open `lasoul.net/admin`, **Share → Add
+   to Home Screen** (it is called **Manager**), open Manager from the Home
+   Screen and sign in. On **Reservations** turn on **Alert this phone**,
+   **Allow**, then **Send a test** and lock the phone: it arrives within
+   about ten seconds. (Android: the same from Chrome's **Install app**.)
+3. Switch **Take reservation requests on the website** on.
+4. From another phone open `lasoul.net/reserve`, ask for a table tomorrow,
+   and watch: the manager's phone rings, Admin → Reservations shows it under
+   **Waiting for your answer**, **Confirm** it with a line, and the other
+   phone's page changes to **Your table is confirmed** by itself.
+5. Cancel it from the guest's page: the manager's phone rings again
+   (*Cancelled by the guest*).
+
+More in docs/reservations.md.
+
+---
+
+## Done: alerts that ring with the screen off, for the waiter apps (12 November 2026)
+
+Applied by Lovable on 12 November 2026, on the second sending (pinned to
+721d4b0): the migration, then `notify-staff` deployed; every check matched
+and its `GET` answers `configured: true`. One check as first written called
+`staff_push_url()`, which only the server may call, and Lovable rightly
+stopped there: a check reads `pg_proc.prosrc` instead of calling it. What was
+sent:
 
 Send this once `main` has `fix/staff-push-plain-user-id` merged (the runner
 is pinned to its commit 721d4b0), and **after you have set the three keys
