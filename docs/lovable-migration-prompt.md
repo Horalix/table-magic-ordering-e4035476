@@ -2,7 +2,130 @@
 
 Copy everything between the rules into Lovable. Nothing else needs to be said.
 
-## Next: tables closed at the end of the work day (one migration, no function)
+## Next: alerts that ring with the screen off, for the waiter apps (one migration, one function)
+
+Send this once `main` has `feature/waiter-android-app` merged (the runner is
+pinned to its commit a80180d), and **after you have set the three keys
+yourself** (just below). Lovable never sees, makes or types a key.
+
+- **The migration** (`20261112090000_staff_push.sql`): where each waiter's
+  phone or tablet can be reached (`staff_push_subscriptions`; a waiter sees
+  and manages only their own, and only at a restaurant they wait tables at),
+  and triggers on orders, waiter calls and bill requests that tell the new
+  function about each one through pg_net. No menu, order, payment, staff or
+  analytics data changes. A trigger never stops an order: without pg_net, or
+  if queuing the call fails, the order goes in as before, without an alert.
+  Safe to run again.
+- **One new Edge Function:** `notify-staff`, with `verify_jwt = false`
+  (already in `supabase/config.toml`), because the database calls it without a
+  sign-in. It reads the row itself and sends each alert once, to the table's
+  waiter, or to the waiters on shift at that restaurant when the table has
+  nobody. Never to the other restaurant's waiters.
+- Netlify publishes the app itself from `main`. Until the function and its
+  keys are live, the waiter screen (and the Android app, android/README.md)
+  says *Lock-screen alerts are not switched on … yet* and everything else
+  works as before.
+
+### First, the keys (you, not Lovable)
+
+1. On your computer, in the repository: `npm run vapid:keys`. It prints three
+   lines and writes nothing.
+2. In Lovable, add three **Edge Function secrets** (Cloud → Secrets; if you
+   cannot find it, ask Lovable for its "add secret" form and type the values
+   into that form, never into the chat):
+   - `VAPID_PUBLIC_KEY`: the key on the first line;
+   - `VAPID_PRIVATE_KEY`: the key on the second line;
+   - `VAPID_SUBJECT`: `mailto:` and an address you read, for example
+     `mailto:you@example.com` (the push services write there if something is
+     wrong).
+3. Close the terminal. The private key lives in that secret and nowhere else:
+   not in a chat, a document or the repository. The two keys stay a pair: a
+   new pair later means every waiter turns alerts on again.
+
+---
+
+> **Task: apply one migration with `docs/migration-runner.sql`, then deploy
+> one new Edge Function. Do not retype the migration file and do not write
+> any other SQL that changes data or schema.**
+>
+> Make sure your checkout is the latest `main`.
+>
+> 1. Confirm that the Edge Function secrets `VAPID_PUBLIC_KEY`,
+>    `VAPID_PRIVATE_KEY` and `VAPID_SUBJECT` exist. Report their names only:
+>    never print, log, copy or store their values anywhere. If one is missing,
+>    stop and show me the form to add it. Do not ask me to paste a key into
+>    the chat, and do not make keys yourself.
+> 2. Run `docs/migration-runner.sql` step by step, each step as its own query:
+>    Step 0 (pg_net installed), Step 1 (queue the download, expect 1 row),
+>    Step 2 (expect 1 row, `arrived_exactly = true`), then Step 3, its one
+>    block (1 of 1). If it fails, stop and report the exact error; a failed
+>    block changes nothing.
+> 3. Check, read-only, and paste the raw output of each:
+>    ```sql
+>    SELECT to_regclass('public.staff_push_subscriptions') IS NOT NULL AS phones,
+>           to_regclass('public.staff_push_sent') IS NOT NULL AS sent,
+>           to_regprocedure('public.staff_push_subscribe(text,jsonb,uuid)') IS NOT NULL AS subscribe,
+>           public.staff_push_url() AS url;
+>    SELECT tgrelid::regclass::text AS on_table, tgname FROM pg_trigger
+>     WHERE tgname LIKE 'staff_push_on_%' ORDER BY 1, 2;
+>    SELECT cmd, roles FROM pg_policies WHERE tablename = 'staff_push_subscriptions' ORDER BY cmd;
+>    SELECT count(*) AS phones FROM public.staff_push_subscriptions;
+>    ```
+>    Expected: `true`, `true`, `true` and
+>    `https://jgxnvrrphxnmzongtmzs.supabase.co/functions/v1/notify-staff`
+>    (if that is not this project's Edge Functions address, stop and say so);
+>    four triggers: `bill_requests` `staff_push_on_bill_request`, `orders`
+>    `staff_push_on_order` and `staff_push_on_order_paid`, `waiter_calls`
+>    `staff_push_on_waiter_call`; four policies, `DELETE`, `INSERT`, `SELECT`
+>    and `UPDATE`, each for `{authenticated}`; `0` phones.
+> 4. Deploy the new Edge Function `notify-staff` from `supabase/functions/`
+>    exactly as it is in `main`, with the settings in `supabase/config.toml`
+>    (`verify_jwt = false`). It imports `supabase/functions/_shared/http.ts`,
+>    `notify-staff.ts`, `staff-push.ts` and `web-push.ts`. Deploy no other
+>    function. Paste the deploy result.
+> 5. Call `GET https://jgxnvrrphxnmzongtmzs.supabase.co/functions/v1/notify-staff`
+>    (no sign-in) and paste the answer. Expected:
+>    `{"configured":true,"publicKey":"B…"}`; the public key is not a secret.
+>    `{"configured":false}` means a secret is missing or the two keys are not
+>    one pair: say which of the three names exist, nothing more.
+>
+> Files your schema-change tool writes by itself are fine (its own migration
+> record, a regenerated `src/integrations/supabase/types.ts`, `.lovable`
+> notes). Edit no other file by hand. Do not create or change any user
+> account, password or credential, do not place an order, call a waiter or ask
+> for a bill, and do not enable online card payments.
+
+---
+
+### After it applies: test it on a tablet
+
+Wait until Netlify has published `main`. Use a waiter account of your own.
+No order is needed: **Send a test** rings exactly the way an order does.
+
+1. On the tablet, in Chrome, open `lasoul.net/waiter-app/` (Vera Italia:
+   `veraitalia.net/waiter-app/`), download and install the app
+   (android/README.md, "Setting up a tablet").
+2. Open the app: the waiter sign-in, with **no address bar**. Sign in.
+3. Tap the **Alerts on lock screen** switch, then **Allow** on Android's own
+   prompt. It says **On**.
+4. Tap **Send a test** and lock the tablet at once. Within about ten seconds
+   it rings with the app's chime and shows **Test alert** on the lock screen.
+   Tap it: the waiter screen opens.
+5. A real one: scan a table's code on a second phone, take the table on the
+   tablet, lock the tablet, and tap **Call Waiter** on the phone. **Calling
+   you · Table N** rings within a couple of seconds. Clear it and free the
+   table.
+
+No sound: the tablet's notification volume, Do Not Disturb, and Settings →
+Apps → the app → Notifications → **Orders, calls and bills**. More in
+docs/operations-runbook.md, "Lock-screen alerts don't arrive".
+
+---
+
+## Done: tables closed at the end of the work day (10 November 2026)
+
+Applied by Lovable on 10 November 2026: 3 functions, the setting, and the
+`lasoul-close-tables` job. What was sent:
 
 Send this once `main` has `feature/close-all-tables` merged (the runner is
 pinned to its commit e959ede).
@@ -43,9 +166,9 @@ pinned to its commit e959ede).
 >    stop there: the rest is still correct.
 > 3. Change no file. No Edge Function needs redeploying.
 >
-> Do not call `staff_close_all_tables`, `staff_open_tables`,
-> `close_tables_overnight` or `run_scheduled_table_close`. The first closes
-> the open tables of a restaurant, and the others close them too. Do not
+> Do not call `staff_close_all_tables`, `close_tables_overnight` or
+> `run_scheduled_table_close`: each closes live tables. `staff_open_tables`
+> only reads them, and the app calls it; leave it too. Do not
 > insert, change or delete any row. Do not create or change any user account,
 > password or credential, do not change any Auth setting, and do not enable
 > online card payments.
