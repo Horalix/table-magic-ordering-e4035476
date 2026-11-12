@@ -5,6 +5,14 @@
 /manifest.webmanifest
   Content-Type: application/manifest+json
 
+# The waiter's Home Screen app (src/hooks/useVenue.ts): on iPhone, lock-screen
+# alerts work only from one.
+/manifest-waiter.webmanifest
+  Content-Type: application/manifest+json
+
+/manifest-waiter-veraitalia.webmanifest
+  Content-Type: application/manifest+json
+
 # How long a browser keeps a file. Netlify's default is "max-age=0,
 # must-revalidate": ask again every time. That stays for everything that
 # names other files or must change the moment a deploy does — index.html and
@@ -54,3 +62,14 @@
   X-Robots-Tag: noindex, nofollow
 /tv/*
   X-Robots-Tag: noindex, nofollow
+
+# The Android waiter apps and the page a tablet gets them from
+# (public/waiter-app/, android/README.md). Asked for again each time, so a
+# tablet never installs yesterday's build; nobody's search result.
+/waiter-app/*
+  Cache-Control: no-cache
+  X-Robots-Tag: noindex, nofollow
+# What vouches for the apps (Digital Asset Links); Chrome reads it when an app opens.
+/.well-known/assetlinks.json
+  Content-Type: application/json
+  Cache-Control: public, max-age=300

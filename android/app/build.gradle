@@ -1,0 +1,108 @@
+/*
+ * The waiter apps: one project, one app per restaurant (README.md).
+ *
+ * Each app opens its restaurant's own waiter screen (https://<site>/waiter)
+ * full screen in Chrome, as a Trusted Web Activity: it is the same web app
+ * the phone's browser shows, so a new version of the app reaches every
+ * tablet by itself, with nothing to reinstall. What the APK adds is what a
+ * browser tab cannot do: the alerts for orders, calls and bills ring on the
+ * tablet's own loud channel with the screen off (TableAlertService).
+ */
+plugins {
+    id 'com.android.application'
+}
+
+// The signing key lives outside the repository (README.md → "The signing key").
+// WAITER_KEYSTORE_PROPERTIES names the file; without it the release is unsigned.
+def keystoreProps = new Properties()
+def keystorePropsPath = System.getenv('WAITER_KEYSTORE_PROPERTIES')
+def keystorePropsFile = keystorePropsPath ? file(keystorePropsPath) : rootProject.file('keystore.properties')
+if (keystorePropsFile.exists()) {
+    keystorePropsFile.withInputStream { keystoreProps.load(it) }
+}
+
+/** The page of the site that proves this app may show it without an address bar (public/.well-known/assetlinks.json). */
+def assetStatements = { String host ->
+    '[{ \\"relation\\": [\\"delegate_permission/common.handle_all_urls\\"], ' +
+        '\\"target\\": { \\"namespace\\": \\"web\\", \\"site\\": \\"https://' + host + '\\" } }]'
+}
+
+/*
+ * For testing only: -PpreviewHost=deploy-preview-NN--lasoulapp.netlify.app builds La Soul's
+ * app against a pull request's preview site, which serves the same assetlinks.json, so the
+ * whole hand-off (full screen, alerts as the app's own) can be tried before a merge
+ * (README.md, "Testing before a release"). Never hand such a build to a waiter.
+ */
+def previewHost = project.findProperty('previewHost')
+def laSoulHost = previewHost ?: 'lasoul.net'
+
+android {
+    namespace 'net.lasoul.waiterapp'
+    compileSdk 36
+
+    defaultConfig {
+        minSdk 24
+        targetSdk 36
+        // Raise both for every APK handed out: Android refuses to install a lower versionCode over a higher one.
+        versionCode 1
+        versionName '1.0.0'
+    }
+
+    flavorDimensions 'venue'
+    productFlavors {
+        lasoul {
+            dimension 'venue'
+            applicationId 'net.lasoul.waiter'
+            resValue 'string', 'launcherName', 'La Soul Waiter'
+            resValue 'string', 'hostName', laSoulHost
+            resValue 'string', 'launchUrl', 'https://' + laSoulHost + '/waiter'
+            resValue 'string', 'providerAuthority', 'net.lasoul.waiter.fileprovider'
+            resValue 'string', 'assetStatements', assetStatements(laSoulHost)
+        }
+        veraitalia {
+            dimension 'venue'
+            applicationId 'net.veraitalia.waiter'
+            resValue 'string', 'launcherName', 'Vera Italia Waiter'
+            resValue 'string', 'hostName', 'veraitalia.net'
+            resValue 'string', 'launchUrl', 'https://veraitalia.net/waiter'
+            resValue 'string', 'providerAuthority', 'net.veraitalia.waiter.fileprovider'
+            resValue 'string', 'assetStatements', assetStatements('veraitalia.net')
+        }
+    }
+
+    signingConfigs {
+        release {
+            if (keystoreProps['storeFile']) {
+                storeFile file(keystoreProps['storeFile'])
+                storePassword keystoreProps['storePassword']
+                keyAlias keystoreProps['keyAlias']
+                keyPassword keystoreProps['keyPassword']
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            // Almost no code of its own: nothing worth shrinking, and nothing to break by shrinking.
+            minifyEnabled false
+            if (keystoreProps['storeFile']) {
+                signingConfig signingConfigs.release
+            }
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    lint {
+        // A release build must not stop on a lint opinion; `gradlew lint` still reports them.
+        checkReleaseBuilds false
+    }
+}
+
+dependencies {
+    // Trusted Web Activity launcher, notification delegation and the permission prompt.
+    implementation 'com.google.androidbrowserhelper:androidbrowserhelper:2.7.4'
+}

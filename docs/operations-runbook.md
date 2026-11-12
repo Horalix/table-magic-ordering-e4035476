@@ -205,6 +205,28 @@ Designed for, and what actually happens.
 - If it stays red, reload. If it stays red after a reload, the problem is the
   network or Supabase.
 
+### Lock-screen alerts don't arrive
+Waiters' phones get a notification for each new order, waiter call and bill
+request at their tables (`notify-staff`, `20261112090000_staff_push.sql`).
+The table's waiter gets it; a table nobody has goes to the waiters on today's
+rota and anyone who opened `/waiter` since 05:00. Never to the other
+restaurant's waiters. Check, in order:
+- **The phone:** the card on `/waiter` says **On**, and **Send a test** arrives
+  with the phone locked. On iPhone it must be the Home Screen app (iOS 16.4+).
+  Phone on silent or Do Not Disturb: the alert arrives without sound.
+- **The card says "not switched on yet":** the function is not deployed or its
+  secrets `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` are missing
+  or not one pair. `GET …/functions/v1/notify-staff` answers
+  `{"configured":true,…}` once they are right.
+- **The test arrives but orders don't:** the function's logs show one line per
+  event, e.g. `notify-staff orders <id>: assigned, 1 waiter(s), sent 1`.
+  - `0 waiter(s)`: the table is nobody's and nobody is on today's rota or has
+    opened `/waiter` today.
+  - No line at all: the database didn't call. Check `pg_net` is installed and
+    look at the newest rows of `net._http_response`.
+- **Changing the keys** stops every phone's alerts: each waiter turns them on
+  again with one tap.
+
 ### Kitchen device crashes
 - Reload. State is in the database, not the device.
 - Already-printed tickets will **not** reprint (the claim is in the database,

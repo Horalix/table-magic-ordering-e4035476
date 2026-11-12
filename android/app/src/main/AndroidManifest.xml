@@ -1,0 +1,138 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  One manifest for both waiter apps; what differs between La Soul's and Vera
+  Italia's (name, site, colours, icon) comes from the flavour (app/build.gradle,
+  src/<flavour>/res).
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- Android 13 and later ask the waiter once; without it no alert can be shown. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.VIBRATE" />
+
+    <application
+        android:allowBackup="true"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:label="@string/launcherName"
+        android:supportsRtl="true"
+        android:theme="@android:style/Theme.Translucent.NoTitleBar">
+
+        <!-- The site this app is allowed to show without an address bar; the site names the app back
+             in /.well-known/assetlinks.json (public/.well-known/assetlinks.json in this repository). -->
+        <meta-data
+            android:name="asset_statements"
+            android:resource="@string/assetStatements" />
+
+        <!-- "Site settings" under a long press of the icon: Chrome's settings for the restaurant's
+             site (notifications, storage). The launcher switches it on and off by name, so it
+             must be declared: without it the app stops as it opens. -->
+        <activity
+            android:name="com.google.androidbrowserhelper.trusted.ManageDataLauncherActivity"
+            android:enabled="true"
+            android:excludeFromRecents="true"
+            android:exported="false">
+            <meta-data
+                android:name="android.support.customtabs.trusted.MANAGE_SPACE_URL"
+                android:value="@string/launchUrl" />
+            <intent-filter>
+                <action android:name="android.intent.action.APPLICATION_PREFERENCES" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+
+        <activity
+            android:name="com.google.androidbrowserhelper.trusted.LauncherActivity"
+            android:label="@string/launcherName"
+            android:alwaysRetainTaskState="true"
+            android:exported="true">
+
+            <meta-data
+                android:name="android.support.customtabs.trusted.DEFAULT_URL"
+                android:value="@string/launchUrl" />
+
+            <meta-data
+                android:name="android.support.customtabs.trusted.STATUS_BAR_COLOR"
+                android:resource="@color/colorPrimary" />
+            <meta-data
+                android:name="android.support.customtabs.trusted.STATUS_BAR_COLOR_DARK"
+                android:resource="@color/colorPrimary" />
+            <meta-data
+                android:name="android.support.customtabs.trusted.NAVIGATION_BAR_COLOR"
+                android:resource="@color/navigationColor" />
+            <meta-data
+                android:name="android.support.customtabs.trusted.NAVIGATION_BAR_COLOR_DARK"
+                android:resource="@color/navigationColor" />
+
+            <!-- What shows while Chrome opens the waiter screen. -->
+            <meta-data
+                android:name="android.support.customtabs.trusted.SPLASH_IMAGE_DRAWABLE"
+                android:resource="@drawable/splash" />
+            <meta-data
+                android:name="android.support.customtabs.trusted.SPLASH_SCREEN_BACKGROUND_COLOR"
+                android:resource="@color/backgroundColor" />
+            <meta-data
+                android:name="android.support.customtabs.trusted.SPLASH_SCREEN_FADE_OUT_DURATION"
+                android:value="300" />
+            <meta-data
+                android:name="android.support.customtabs.trusted.FILE_PROVIDER_AUTHORITY"
+                android:value="@string/providerAuthority" />
+
+            <!-- A tablet whose browser cannot run the app full screen still opens the waiter
+                 screen, in a browser tab with its address bar. -->
+            <meta-data
+                android:name="android.support.customtabs.trusted.FALLBACK_STRATEGY"
+                android:value="customtabs" />
+
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+            <!-- The whole site, not only /waiter: Chrome finds this app's alert service by asking
+                 Android who opens the site's root address (the scope of its service worker). Limited
+                 to /waiter and /kitchen, Chrome found no one, asked for notifications itself and
+                 showed every alert as Chrome's own, on Chrome's quiet channel. -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:host="@string/hostName"
+                    android:scheme="https" />
+            </intent-filter>
+        </activity>
+
+        <activity android:name="com.google.androidbrowserhelper.trusted.FocusActivity" />
+
+        <!-- Asks for Android's notification permission when the waiter turns alerts on. -->
+        <activity android:name="com.google.androidbrowserhelper.trusted.NotificationPermissionRequestActivity" />
+
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="@string/providerAuthority"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/filepaths" />
+        </provider>
+
+        <!-- Chrome hands every alert of the waiter screen to this service, which shows it as
+             this app's own, on its own loud channel (TableAlertService.java). -->
+        <service
+            android:name=".TableAlertService"
+            android:enabled="true"
+            android:exported="true">
+
+            <meta-data
+                android:name="android.support.customtabs.trusted.SMALL_ICON"
+                android:resource="@drawable/ic_notification" />
+
+            <intent-filter>
+                <action android:name="android.support.customtabs.trusted.TRUSTED_WEB_ACTIVITY_SERVICE" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </service>
+    </application>
+</manifest>

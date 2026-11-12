@@ -1,0 +1,11 @@
+# Machine-specific and generated. The signing key is never kept in this folder
+# (README.md → "The signing key").
+.gradle/
+build/
+app/build/
+local.properties
+keystore.properties
+*.jks
+*.keystore
+*.apk
+*.aab

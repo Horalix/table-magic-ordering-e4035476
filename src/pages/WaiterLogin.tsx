@@ -9,6 +9,7 @@ import { User, Lock, Loader2, Eye, EyeOff } from 'lucide-react';
 import { useStaffDocument } from '@/components/staff/useStaffDocument';
 import { HOME, STAFF_BRAND } from '@/components/staff/staff-brand';
 import { afterWaiterSignIn, normalizeUsername } from '@/lib/staff-accounts';
+import { inWaiterApp } from '@/lib/waiter-app';
 
 const synthEmail = (u: string) => `${u}@waiter.lasoul.local`;
 
@@ -116,6 +117,12 @@ const WaiterLogin = () => {
       // Staff with no waiter's row is a kitchen screen's account
       // (manage-admins); it belongs on the kitchen screen, not signed out.
       const { data: isStaff } = await supabase.rpc('has_role', { _user_id: userId, _role: 'staff' });
+      // The Android waiter app is the waiter screen only (src/lib/waiter-app.ts).
+      if (isStaff && inWaiterApp()) {
+        await supabase.auth.signOut();
+        toast.error('This app is for waiters. Open the kitchen screen in the browser.');
+        return null;
+      }
       if (isStaff) return '/kitchen';
       await supabase.auth.signOut();
       toast.error('No waiter profile linked to this account');
@@ -237,9 +244,17 @@ const WaiterLogin = () => {
           <p className="text-xs text-center text-muted-foreground font-sans">
             Forgot your password? Your manager gives you a new one in Admin → Waiters.
           </p>
-          <p className="text-xs text-center text-muted-foreground font-sans">
-            Manager? <button type="button" onClick={() => navigate('/admin/login')} className="underline">Admin login</button>
-          </p>
+          {!inWaiterApp() && (
+            <>
+              <p className="text-xs text-center text-muted-foreground font-sans">
+                Manager? <button type="button" onClick={() => navigate('/admin/login')} className="underline">Admin login</button>
+              </p>
+              {/* A page of its own, outside the app (public/waiter-app/index.html): a plain link, not a route. */}
+              <p className="text-xs text-center text-muted-foreground font-sans">
+                Android tablet or phone? <a href="/waiter-app/" className="underline">Get the waiter app</a>
+              </p>
+            </>
+          )}
         </form>
       </div>
     </div>

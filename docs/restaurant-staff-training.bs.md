@@ -73,19 +73,39 @@ Na telefonu su dole kartice **Dashboard**, **Menu**, **QR Codes** i
   Svaki dan (kad se uključe narudžbe). Ako se to ne uradi, svaki sto se pojavljuje pod *No waiter yet*.
 
 **Konobari**
-- Prijavite se, otvorite `/waiter` i **ostavite ga otvorenog**. Telefon zvoni
-  i vibrira samo dok je ovaj ekran otvoren — kad je zatvoren ili je telefon
-  zaključan, obavještenja ne stižu.
-- Podesite da ekran ostane upaljen što duže.
-- Zvuk i vibracija su **uključeni sami od sebe**. Kad otvorite ekran, dodirnite ga
-  jednom: telefoni drže zvuk (a Android telefoni i vibraciju) ugašenim do prvog
-  dodira. Ako piše **Alerts are silent — tap once to turn on sound**, dodirnite to.
+- **Android tablet ili telefon: koristite aplikaciju.** U Chromeu otvorite
+  `lasoul.net/waiter-app/` (Vera Italia: `veraitalia.net/waiter-app/`),
+  dodirnite **Preuzmi aplikaciju**, pa **Otvori → Instaliraj**. Aplikacija je
+  ekran za konobare i ništa drugo, a obavještenja zvone na svom glasnom kanalu
+  (**Orders, calls and bills**) i kad je ekran ugašen. Prijavite se, odradite
+  smjenu, odjavite se.
+- Prijavite se i otvorite `/waiter` (aplikacija ga sama otvara). Jednom na svom telefonu uključite
+  **Alerts on lock screen** (dodirnite prekidač, pa **Allow** / **Dozvoli**).
+  Nove narudžbe, pozivi konobara i zahtjevi za račun sa vaših stolova tada
+  zvone i vibriraju i kad je telefon zaključan ili je aplikacija u pozadini.
+  **Send a test** to provjerava: dodirnite ga, zaključajte telefon, i
+  obavještenje stiže za najviše 10 sekundi.
+  - **iPhone:** samo iz aplikacije na početnom ekranu (iOS 16.4 ili noviji).
+    U Safariju dodirnite **Dijeli → Dodaj na početni ekran** (Share → Add to
+    Home Screen), otvorite aplikaciju odatle, prijavite se, pa uključite
+    obavještenja.
+  - Zvuk i vibracija prate postavke obavještenja telefona za aplikaciju:
+    tokom smjene telefon ne smije biti na nečujnom ni na „Ne uznemiravaj“.
+  - Ako kartica piše *not switched on yet*, telefon zvoni samo dok je
+    `/waiter` otvoren: ostavite ga otvorenog i podesite da ekran ostane
+    upaljen što duže.
+- Dok je ekran otvoren, zvuk i vibracija su **uključeni sami od sebe**. Kad
+  otvorite ekran, dodirnite ga jednom: telefoni drže zvuk (a Android telefoni i
+  vibraciju) ugašenim do prvog dodira. Ako piše **Alerts are silent — tap once
+  to turn on sound**, dodirnite to.
 - Dugme sa zvučnikom gasi samo zvuk; telefon i dalje vibrira. Utišavanje se samo
   ugasi nakon 4 sata, tako da svaka sljedeća smjena počinje sa zvukom. Dok je
   utišan, ekran piše **Sound is off until** i vrijeme — dodirnite to da vratite zvuk.
 - **iPhone:** web stranica ne može vibrirati iPhone, zato držite jačinu zvuka gore.
   Obavještenja zvone i kad je uključen prekidač za tihi način rada (iOS 16.4 i noviji).
 - **Sign out** prvo pita. Dodirnite **Stay signed in** osim ako vam je smjena gotova.
+  Na telefonu koji dijelite, na kraju smjene se odjavite: ko se sljedeći prijavi
+  ne dobija vaša obavještenja.
 
 **Kuhinja i šank**
 - Tablet na punjaču, podešen da se ekran nikad ne gasi (ako piše **Screen may
