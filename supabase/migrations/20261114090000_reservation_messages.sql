@@ -8,8 +8,10 @@
 -- by the Edge Function `reservation-messages` (Meta's WhatsApp Cloud API);
 -- this migration is the database's part:
 --
---   * each restaurant's two choices on restaurant_settings, both off:
---     message guests, and the WhatsApp number to tell about new requests;
+--   * each restaurant's choices on restaurant_settings, off until its admin
+--     turns them on: message guests about the answer to their request,
+--     whether to tell them too when the request arrives, and the WhatsApp
+--     number to tell about new requests;
 --   * reservation_messages, one row per reservation and kind of message, so
 --     each is sent once and the admin sees whether it went;
 --   * two triggers that call the function when a guest asks and when a
@@ -29,10 +31,13 @@
 
 ALTER TABLE public.restaurant_settings
   ADD COLUMN IF NOT EXISTS reservations_whatsapp_guest boolean NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS reservations_whatsapp_received boolean NOT NULL DEFAULT true,
   ADD COLUMN IF NOT EXISTS reservations_whatsapp_admin text;
 
 COMMENT ON COLUMN public.restaurant_settings.reservations_whatsapp_guest IS
-  'Message a guest on WhatsApp when their request for a table arrives and when it is answered.';
+  'Message a guest on WhatsApp when their request for a table is confirmed, declined or cancelled.';
+COMMENT ON COLUMN public.restaurant_settings.reservations_whatsapp_received IS
+  'While guests are messaged: also when their request arrives, before it is answered.';
 COMMENT ON COLUMN public.restaurant_settings.reservations_whatsapp_admin IS
   'The WhatsApp number told about new requests for a table, or NULL for none.';
 

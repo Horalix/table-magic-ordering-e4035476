@@ -33,8 +33,10 @@ export interface MessageReservation {
 export interface MessageSettings {
   venueSlug: string;
   venueName: string;
-  /** Message guests about their reservation. */
+  /** Message guests the answer to their request: confirmed, declined, cancelled. */
   guest: boolean;
+  /** And, while that is on, that the request arrived. */
+  received: boolean;
   /** The WhatsApp number told about new requests, or null. */
   adminPhone: string | null;
 }
@@ -83,7 +85,10 @@ export function messagesDue(row: MessageReservation, settings: MessageSettings, 
   const due: Due[] = [];
   const guest = (kind: MessageKind) => { if (settings.guest) due.push({ kind, to: "guest" }); };
   const admin = (kind: MessageKind) => { if (settings.adminPhone) due.push({ kind, to: "admin" }); };
-  if (row.status === "pending" && fresh(row.created_at)) { guest("guest_received"); admin("admin_new"); }
+  if (row.status === "pending" && fresh(row.created_at)) {
+    if (settings.received) guest("guest_received");
+    admin("admin_new");
+  }
   if (row.status === "confirmed" && fresh(row.decided_at ?? row.updated_at)) guest("guest_confirmed");
   if (row.status === "declined" && fresh(row.decided_at ?? row.updated_at)) guest("guest_declined");
   if (row.status === "cancelled" && fresh(row.updated_at)) {

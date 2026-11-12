@@ -61,7 +61,7 @@ beforeEach(async () => {
     UPDATE public.restaurant_settings
        SET reservations_enabled = true, reservations_open = '00:00', reservations_close = '23:45',
            reservations_max_party = 10, reservations_days_ahead = 30, reservations_lead_minutes = 60,
-           reservations_whatsapp_guest = false, reservations_whatsapp_admin = NULL;
+           reservations_whatsapp_guest = false, reservations_whatsapp_received = DEFAULT, reservations_whatsapp_admin = NULL;
   `);
   await actAs(db, null);
 });
@@ -117,10 +117,12 @@ const told = async () => (await db.query<{ body: Record<string, unknown> }>(
 
 describe('each restaurant’s choices', () => {
   it('are both off until its admin turns them on, and the booking page is told which', async () => {
-    const { rows } = await db.query<{ guest: boolean; admin: string | null }>(
-      `SELECT reservations_whatsapp_guest AS guest, reservations_whatsapp_admin AS admin FROM public.restaurant_settings`);
+    const { rows } = await db.query<{ guest: boolean; received: boolean; admin: string | null }>(
+      `SELECT reservations_whatsapp_guest AS guest, reservations_whatsapp_received AS received, reservations_whatsapp_admin AS admin
+         FROM public.restaurant_settings`);
     expect(rows.length).toBeGreaterThanOrEqual(2);
-    for (const row of rows) expect(row).toEqual({ guest: false, admin: null });
+    // "Also when the request arrives" is ready for the day guests are switched on; alone it sends nothing.
+    for (const row of rows) expect(row).toEqual({ guest: false, received: true, admin: null });
     expect((await options('lasoul')).whatsapp).toBe(false);
 
     await turnOn(L, true, null);

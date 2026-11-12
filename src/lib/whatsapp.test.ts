@@ -30,7 +30,7 @@ const reservation = (over: Partial<MessageReservation> = {}): MessageReservation
   ...over,
 });
 const settings = (over: Partial<MessageSettings> = {}): MessageSettings =>
-  ({ venueSlug: 'lasoul', venueName: 'La Soul', guest: true, adminPhone: '+387 62 555 000', ...over });
+  ({ venueSlug: 'lasoul', venueName: 'La Soul', guest: true, received: true, adminPhone: '+387 62 555 000', ...over });
 
 const facts = { venue: 'La Soul', day: 'Saturday 14 November', time: '19:30', party: 4, code: 'R48213', name: 'Amina', phone: '+387 61 123 456' };
 
@@ -118,6 +118,14 @@ describe('who is due what', () => {
     expect(messagesDue(reservation(), settings({ adminPhone: null }), NOW)).toEqual([{ kind: 'guest_received', to: 'guest' }]);
     expect(messagesDue(reservation(), settings({ guest: false }), NOW)).toEqual([{ kind: 'admin_new', to: 'admin' }]);
     expect(messagesDue(reservation(), settings({ guest: false, adminPhone: null }), NOW)).toEqual([]);
+  });
+
+  it('a restaurant may send the answer only: then the guest is not told the request arrived, and the restaurant still is', () => {
+    expect(messagesDue(reservation(), settings({ received: false }), NOW)).toEqual([{ kind: 'admin_new', to: 'admin' }]);
+    const confirmed = reservation({ status: 'confirmed', created_at: ago(120), decided_at: ago(1), updated_at: ago(1) });
+    expect(messagesDue(confirmed, settings({ received: false }), NOW)).toEqual([{ kind: 'guest_confirmed', to: 'guest' }]);
+    // The choice means nothing while guests are not messaged at all.
+    expect(messagesDue(reservation(), settings({ guest: false, received: true, adminPhone: null }), NOW)).toEqual([]);
   });
 
   it('an answer goes to the guest: confirmed, declined, or cancelled by the restaurant', () => {

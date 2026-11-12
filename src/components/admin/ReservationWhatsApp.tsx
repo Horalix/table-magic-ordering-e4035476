@@ -10,8 +10,13 @@ import { Switch } from '@/components/ui/switch';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const untyped = supabase as unknown as { from: (table: string) => any };
 
-/** The restaurant's two choices (20261114090000_reservation_messages.sql). */
-interface Choices { id: number; reservations_whatsapp_guest: boolean; reservations_whatsapp_admin: string | null }
+/** The restaurant's choices (20261114090000_reservation_messages.sql). */
+interface Choices {
+  id: number;
+  reservations_whatsapp_guest: boolean;
+  reservations_whatsapp_received: boolean;
+  reservations_whatsapp_admin: string | null;
+}
 
 /** Where the set-up stands, as the reservation-messages function reports it. */
 interface Report {
@@ -35,11 +40,12 @@ const call = async (body: Record<string, unknown>): Promise<{ data: Report & { s
 const looksLikePhone = (raw: string) => { const digits = raw.replace(/\D/g, ''); return digits.length >= 8 && digits.length <= 15; };
 
 /**
- * WhatsApp messages about reservations, on Admin → Reservations: whether the
- * restaurant's WhatsApp Business number is connected and its messages
- * approved, and the restaurant's two choices: message guests (when their
- * request arrives and when it is answered), and a number to be told about
- * new requests. Not drawn before the database knows the two choices.
+ * WhatsApp messages about reservations, on Admin → Reservations and on
+ * Admin → Ordering & service: whether the restaurant's WhatsApp Business
+ * number is connected and its messages approved, and the restaurant's
+ * choices: send guests a confirmation (the answer to their request), whether
+ * to tell them too when the request arrives, and a number to be told about
+ * new requests. Not drawn before the database knows the choices.
  */
 const ReservationWhatsApp = ({ venueSlug }: { venueSlug: string }) => {
   const [choices, setChoices] = useState<Choices | null | undefined>(undefined);
@@ -49,8 +55,9 @@ const ReservationWhatsApp = ({ venueSlug }: { venueSlug: string }) => {
 
   const load = useCallback(async () => {
     const { data, error } = await untyped.from('restaurant_settings')
-      .select('id, reservations_whatsapp_guest, reservations_whatsapp_admin').maybeSingle();
-    const row = !error && data && typeof data.reservations_whatsapp_guest === 'boolean' ? (data as Choices) : null;
+      .select('id, reservations_whatsapp_guest, reservations_whatsapp_received, reservations_whatsapp_admin').maybeSingle();
+    const row = !error && data && typeof data.reservations_whatsapp_guest === 'boolean'
+      ? ({ ...data, reservations_whatsapp_received: data.reservations_whatsapp_received !== false } as Choices) : null;
     setChoices(row);
     setNumber(row?.reservations_whatsapp_admin ?? '');
     if (!row) return;
@@ -136,16 +143,31 @@ const ReservationWhatsApp = ({ venueSlug }: { venueSlug: string }) => {
 
       <div className="flex items-start gap-4">
         <Switch id="whatsapp-guest" checked={choices.reservations_whatsapp_guest} disabled={busy !== null || (!ready && !choices.reservations_whatsapp_guest)}
-          onCheckedChange={(on) => void save({ reservations_whatsapp_guest: on }, on ? 'Guests will be messaged on WhatsApp' : 'Guests are no longer messaged')} />
+          onCheckedChange={(on) => void save({ reservations_whatsapp_guest: on }, on ? 'Guests will get a WhatsApp confirmation' : 'Guests are no longer messaged')} />
         <Label htmlFor="whatsapp-guest" className="text-sm font-semibold">
-          Message guests on WhatsApp
+          Send guests a WhatsApp confirmation
           <span className="block text-xs font-normal text-muted-foreground">
             {choices.reservations_whatsapp_guest
-              ? 'On: “we have your request”, then “confirmed”, “declined” or “cancelled”.'
+              ? 'On: the guest is told on WhatsApp when you confirm, decline or cancel their table.'
               : ready ? 'Off: nothing is sent to guests.' : 'Can be turned on once the messages are approved.'}
           </span>
         </Label>
       </div>
+
+      {choices.reservations_whatsapp_guest && (
+        <div className="flex items-start gap-4 ps-2">
+          <Switch id="whatsapp-received" checked={choices.reservations_whatsapp_received} disabled={busy !== null}
+            onCheckedChange={(on) => void save({ reservations_whatsapp_received: on }, on ? 'Guests are also told when their request arrives' : 'Guests are told the answer only')} />
+          <Label htmlFor="whatsapp-received" className="text-sm font-semibold">
+            Also when their request arrives
+            <span className="block text-xs font-normal text-muted-foreground">
+              {choices.reservations_whatsapp_received
+                ? 'On: “we have your request”, before you have answered. Two messages for each reservation.'
+                : 'Off: one message for each reservation, your answer.'}
+            </span>
+          </Label>
+        </div>
+      )}
 
       <div>
         <Label htmlFor="whatsapp-admin" className="text-xs">Also tell this WhatsApp number about new requests (optional)</Label>

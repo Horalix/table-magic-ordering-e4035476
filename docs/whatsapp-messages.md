@@ -6,8 +6,9 @@ restaurant's own business number: "we have your request", then "confirmed",
 be told about each new request the same way, on any WhatsApp number it names.
 
 Off until two things are done: the restaurant's number is connected at Meta
-(once, below), and an admin switches it on (Admin → Reservations → WhatsApp
-messages). Until then nothing is sent and nothing fails, and **Tell the
+(once, below), and an admin switches it on (**WhatsApp messages**, on Admin →
+Ordering & service under the reservations switch, and the same card on Admin
+→ Reservations). Until then nothing is sent and nothing fails, and **Tell the
 guest** (one tap from the admin's own WhatsApp, Viber or Messages) works as
 it always did.
 
@@ -81,7 +82,8 @@ reads the secrets whenever it runs.
 
 ## Switching it on
 
-**Admin → Reservations → WhatsApp messages**, at each restaurant:
+**Admin → Ordering & service → Table reservations → WhatsApp messages** (or
+the same card on Admin → Reservations), at each restaurant:
 
 1. The line at the top says where it stands: *Not connected yet*, *No number
    for this restaurant yet*, *n of 14 messages approved*, or *Ready*.
@@ -89,9 +91,15 @@ reads the secrets whenever it runs.
    WhatsApp for approval (six messages; the four for guests in English,
    Bosnian and Arabic). Approval usually takes minutes. Do it once; it serves
    both restaurants.
-3. When it says **Ready**: turn on **Message guests on WhatsApp**, and if you
-   want the restaurant told too, type a number under **Also tell this
-   WhatsApp number about new requests**, **Save**, and **Send a test**.
+3. When it says **Ready**, the restaurant's choices:
+   - **Send guests a WhatsApp confirmation**: the guest is told when you
+     confirm, decline or cancel their table.
+   - **Also when their request arrives** (shown once the first is on, and on
+     to begin with): "we have your request", before you have answered. Off,
+     each reservation costs one message instead of two.
+   - **Also tell this WhatsApp number about new requests**: type a number,
+     **Save**, and **Send a test**. Leave it empty to be told by the app's
+     own alert only.
 
 A WhatsApp message rings an iPhone like any other message, with no app to add
 to the Home Screen.

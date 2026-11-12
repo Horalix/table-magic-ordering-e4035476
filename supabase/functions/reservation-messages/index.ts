@@ -55,13 +55,13 @@ const backend: MessagesBackend = {
   loadSettings: async (venueId) => {
     const [venue, settings] = await Promise.all([
       admin.from("venues").select("slug, name").eq("id", venueId).maybeSingle(),
-      admin.from("restaurant_settings").select("reservations_whatsapp_guest, reservations_whatsapp_admin").eq("venue_id", venueId).maybeSingle(),
+      admin.from("restaurant_settings").select("reservations_whatsapp_guest, reservations_whatsapp_received, reservations_whatsapp_admin").eq("venue_id", venueId).maybeSingle(),
     ]);
     const v = rec(must("venue", venue));
     const s = rec(must("settings", settings));
     if (!v.slug) return null;
     const adminPhone = typeof s.reservations_whatsapp_admin === "string" ? s.reservations_whatsapp_admin.trim() : "";
-    return { venueSlug: String(v.slug), venueName: String(v.name ?? ""), guest: s.reservations_whatsapp_guest === true, adminPhone: adminPhone || null };
+    return { venueSlug: String(v.slug), venueName: String(v.name ?? ""), guest: s.reservations_whatsapp_guest === true, received: s.reservations_whatsapp_received !== false, adminPhone: adminPhone || null };
   },
 
   // One row per reservation and kind: the second insert of the same pair finds it taken.

@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useOutletContext } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -17,6 +17,8 @@ import {
 import { AlertTriangle, BookOpen, CalendarClock, Plus, Trash2, Sparkles, PauseCircle, RefreshCw, ShieldAlert, CheckCircle2, CircleDashed, Copy } from 'lucide-react';
 import { toast } from 'sonner';
 import { cardPaymentStatus, type CardPaymentStatus } from '@/lib/payments';
+import type { AdminOutletContext } from '@/components/admin/AdminLayout';
+import ReservationWhatsApp from '@/components/admin/ReservationWhatsApp';
 
 interface Settings {
   /** This restaurant's row (La Soul's is 1). */
@@ -96,6 +98,7 @@ const RECOMMENDATION_TYPES = [
  * rather than only hiding a button.
  */
 const AdminService = () => {
+  const { venueSlug } = useOutletContext<AdminOutletContext>();
   const [settings, setSettings] = useState<Settings | null>(null);
   const [recos, setRecos] = useState<Reco[]>([]);
   const [items, setItems] = useState<MenuOption[]>([]);
@@ -347,9 +350,13 @@ const AdminService = () => {
               Reservations are not available yet: the database needs an update first. Ask your developer.
             </div>
           ) : (
-            <Button asChild variant="outline" size="sm" className="min-h-[40px]">
-              <Link to="/admin/reservations">Requests, times and alerts</Link>
-            </Button>
+            <>
+              <Button asChild variant="outline" size="sm" className="min-h-[40px]">
+                <Link to="/admin/reservations">Requests, times and alerts</Link>
+              </Button>
+              {/* WhatsApp confirmations: the same choices as on Admin → Reservations. */}
+              {venueSlug && <ReservationWhatsApp venueSlug={venueSlug} />}
+            </>
           )}
         </CardContent>
       </Card>

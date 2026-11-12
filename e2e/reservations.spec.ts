@@ -494,7 +494,7 @@ test.describe('Admin → Reservations', () => {
       await page.goto('/admin/reservations');
       const card = page.getByTestId('reservation-whatsapp');
       await expect(card.getByTestId('whatsapp-state')).toHaveText('Not connected yet');
-      await expect(card.getByRole('switch', { name: /Message guests on WhatsApp/ })).toBeDisabled();
+      await expect(card.getByRole('switch', { name: /Send guests a WhatsApp confirmation/ })).toBeDisabled();
       await expect(card.getByRole('button', { name: 'Send a test' })).toBeDisabled();
     });
 
@@ -515,9 +515,16 @@ test.describe('Admin → Reservations', () => {
       await page.goto('/admin/reservations');
       const card = page.getByTestId('reservation-whatsapp');
       await expect(card.getByTestId('whatsapp-state')).toHaveText('Ready');
-      await card.getByRole('switch', { name: /Message guests on WhatsApp/ }).click();
+      // "Also when their request arrives" is a choice of its own, there once confirmations are on.
+      await expect(card.getByRole('switch', { name: /Also when their request arrives/ })).toHaveCount(0);
+      await card.getByRole('switch', { name: /Send guests a WhatsApp confirmation/ }).click();
       await expect.poll(() => admin.settingsWrites).toEqual([{ reservations_whatsapp_guest: true }]);
-      await expect(card).toContainText('On: “we have your request”');
+      await expect(card).toContainText('On: the guest is told on WhatsApp when you confirm, decline or cancel their table.');
+      await expect(card).toContainText('Two messages for each reservation.');
+      await card.getByRole('switch', { name: /Also when their request arrives/ }).click();
+      await expect.poll(() => admin.settingsWrites.at(-1)).toEqual({ reservations_whatsapp_received: false });
+      await expect(card).toContainText('Off: one message for each reservation, your answer.');
+      admin.settingsWrites.length = 1;
 
       await card.getByLabel(/Also tell this WhatsApp number/).fill('+387 62 555 000');
       await card.getByRole('button', { name: 'Save' }).click();
@@ -525,6 +532,15 @@ test.describe('Admin → Reservations', () => {
       expect(admin.settingsWrites[1]).toEqual({ reservations_whatsapp_admin: '+387 62 555 000' });
       await card.getByRole('button', { name: 'Send a test' }).click();
       await expect.poll(() => calls.at(-1)).toEqual({ action: 'test', venue: 'lasoul', to: '+387 62 555 000' });
+    });
+
+    test('the same choices are on Ordering & service, under the reservations switch', async ({ page, staff }) => {
+      const { admin } = await whatsapp(page, staff, { configured: true, number: true, ready: true, templates: TEMPLATES });
+      await page.goto('/admin/service');
+      const card = page.getByTestId('service-reservations').getByTestId('reservation-whatsapp');
+      await expect(card.getByTestId('whatsapp-state')).toHaveText('Ready');
+      await card.getByRole('switch', { name: /Send guests a WhatsApp confirmation/ }).click();
+      await expect.poll(() => admin.settingsWrites).toEqual([{ reservations_whatsapp_guest: true }]);
     });
 
     test('an answer that already went out by itself is said, so the admin does not send it twice', async ({ page, staff }) => {
