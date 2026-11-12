@@ -78,6 +78,13 @@
       "when": 1794349829197,
       "tag": "0010_apply_verified_close_all_tables_runner",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1794509913406,
+      "tag": "0011_apply_verified_staff_push_runner",
+      "breakpoints": true
     }
   ]
 }
