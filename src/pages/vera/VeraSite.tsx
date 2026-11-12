@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ChevronDown, Clock, MapPin, Phone } from 'lucide-react';
+import { CalendarClock, ChevronDown, Clock, MapPin, Phone } from 'lucide-react';
 import LanguageSelector from '@/components/guest/LanguageSelector';
 import SmartImage from '@/components/ui/SmartImage';
 import Reveal from '@/components/site/Reveal';
@@ -12,6 +12,7 @@ import { usePageMeta } from '@/lib/seo/page-meta';
 import { VERA_OG_IMAGE, veraSeoMenu, veraSiteAlternates, veraSiteGraph, veraSitePath } from '@/lib/seo/vera-seo';
 import { sectionSlug } from '@/lib/menu-sections';
 import { VENUES, menuCategoryPath, menuPath } from '@/lib/venues';
+import ReserveLink from '@/components/site/ReserveLink';
 import menuData from '../../../scripts/vera-italia/menu.json';
 
 /**
@@ -328,6 +329,14 @@ const VeraSite = ({ locale: pathLocale }: { locale?: Locale }) => {
                 <p className="mt-5 font-serif italic text-xl text-muted-foreground">{c(SITE.visitSoon)}</p>
               </>
             )}
+            {/* Only while the restaurant takes requests online (Admin → Reservations). */}
+            <ReserveLink
+              venueSlug={venue.slug}
+              locale={locale}
+              className="mt-8 inline-flex min-h-[48px] items-center gap-2.5 rounded-full border border-foreground/25 px-6 font-sans text-sm font-semibold tracking-[0.08em] uppercase rtl:tracking-normal text-foreground transition-colors hover:bg-foreground/5"
+            >
+              <CalendarClock className="h-4 w-4" aria-hidden />
+            </ReserveLink>
           </Reveal>
         </section>
       </main>

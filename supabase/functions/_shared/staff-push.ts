@@ -125,7 +125,7 @@ export function skipReason(source: StaffPushSource, event: PushEventRow, now = D
   return now - at <= FRESH_MS ? null : "stale";
 }
 
-export type PushKind = "order" | "held" | "call" | "pay" | "bill";
+export type PushKind = "order" | "held" | "call" | "pay" | "bill" | "reservation";
 
 export interface StaffPushMessage {
   kind: PushKind;
@@ -178,4 +178,102 @@ export function describeEvent(
       : { ...base, kind: "call", title: `Calling you · ${table}`, body: withVenue("A guest asked for a waiter") };
   }
   return { ...base, kind: "bill", title: `Wants the bill · ${table}`, body: withVenue("Bring the bill") };
+}
+
+// ---------------------------------------------------------------------
+// Reservations (Admin → Reservations, 20261113090000_reservations.sql)
+// ---------------------------------------------------------------------
+//
+// A guest asked for a table. The alert goes to the phones of that
+// restaurant's admins who turned on "Alert this phone", not to waiters; and
+// once more, five minutes on, if nobody has answered (the database's sweep
+// asks for that with `reminder`).
+
+/** A request for a table (public.reservations), as notify-staff reads it. */
+export interface ReservationRow {
+  id: string;
+  venue_id: string;
+  status: string;
+  guest_name: string;
+  party_size: number;
+  reserved_for: string;
+  created_at: string;
+  updated_at?: string | null;
+  cancelled_by?: string | null;
+}
+
+export type ReservationSkip = "answered" | "stale";
+
+/** What there is to tell: a new request, the same one still waiting, or a confirmed table its guest gave back. */
+export type ReservationNews = "new" | "reminder" | "cancelled";
+
+/** A reminder is still news for an hour; the first alert, and a cancellation, for FRESH_MS. */
+export const REMINDER_FRESH_MS = 60 * 60_000;
+
+/**
+ * What this call is about, or why nobody needs waking for it. The row is
+ * what decides: a call about a request the guest has since cancelled is the
+ * cancellation, whatever the call said.
+ */
+export function reservationNews(row: ReservationRow, reminder: boolean, now = Date.now()): ReservationNews | { skip: ReservationSkip } {
+  if (Date.parse(row.reserved_for) <= now) return { skip: "stale" };
+  if (row.status === "cancelled" && row.cancelled_by === "guest") {
+    const at = Date.parse(row.updated_at ?? "") || 0;
+    return now - at <= FRESH_MS ? "cancelled" : { skip: "stale" };
+  }
+  if (row.status !== "pending") return { skip: "answered" };
+  if (now - Date.parse(row.created_at) > (reminder ? REMINDER_FRESH_MS : FRESH_MS)) return { skip: "stale" };
+  return reminder ? "reminder" : "new";
+}
+
+/**
+ * The phones of this restaurant's admins, once each. A phone registered for
+ * the other restaurant, or whose owner is no longer an admin here, is
+ * dropped, whoever passed it in.
+ */
+export function chooseAdminPhones(input: {
+  venueId: string;
+  adminUserIds: readonly string[];
+  phones: readonly PushSubscriptionRow[];
+}): PushSubscriptionRow[] {
+  const admins = new Set(input.adminUserIds);
+  const seen = new Set<string>();
+  return input.phones.filter((p) => {
+    if (!input.venueId || p.venue_id !== input.venueId || !admins.has(p.user_id) || seen.has(p.endpoint)) return false;
+    seen.add(p.endpoint);
+    return true;
+  });
+}
+
+const WHEN = new Intl.DateTimeFormat("en-GB", {
+  timeZone: "Europe/Sarajevo", weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23",
+});
+
+/** "Sat 15 Nov, 19:30", on the restaurant's own clock. */
+export function reservationWhen(iso: string): string {
+  const part = Object.fromEntries(WHEN.formatToParts(new Date(iso)).map((p) => [p.type, p.value]));
+  return `${part.weekday} ${part.day} ${part.month}, ${part.hour}:${part.minute}`;
+}
+
+/**
+ * What the admin reads on the lock screen: when, who, how many. Not the
+ * guest's phone number: a lock screen is read by whoever picks the phone up.
+ */
+export function describeReservation(
+  row: ReservationRow,
+  ctx: { venueName: string; news?: ReservationNews; now?: number },
+): StaffPushMessage {
+  const when = reservationWhen(row.reserved_for);
+  const who = [row.guest_name, `${row.party_size} ${row.party_size === 1 ? "guest" : "guests"}`, ctx.venueName]
+    .filter(Boolean).join(" · ");
+  const news = ctx.news ?? "new";
+  return {
+    kind: "reservation",
+    title: news === "cancelled" ? `Cancelled by the guest · ${when}` : news === "reminder" ? `Still waiting · ${when}` : `New reservation · ${when}`,
+    body: news === "cancelled" ? `${who} — the table is free again` : news === "reminder" ? `${who} — nobody has answered yet` : who,
+    tag: `reservations:${row.id}`,
+    url: "/admin/reservations",
+    venue: ctx.venueName,
+    at: new Date(ctx.now ?? Date.now()).toISOString(),
+  };
 }

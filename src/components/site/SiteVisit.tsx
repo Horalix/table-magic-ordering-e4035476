@@ -1,9 +1,10 @@
-import { Clock, Facebook, Instagram, MapPin, Navigation, Phone } from 'lucide-react';
+import { CalendarClock, Clock, Facebook, Instagram, MapPin, Navigation, Phone } from 'lucide-react';
 import { useSiteT } from '@/lib/site-i18n';
 import type { Venue } from '@/lib/venues';
 import { hoursDays } from '@/lib/seo/structured-data';
 import Reveal from './Reveal';
 import SiteImage from './SiteImage';
+import ReserveLink from './ReserveLink';
 import { Container, SectionHeading } from './SiteSection';
 
 /**
@@ -80,6 +81,14 @@ const SiteVisit = ({ venue }: { venue: Venue }) => {
               <Phone className="h-4 w-4" aria-hidden />
               {st('visit_call')}
             </a>
+            {/* Only while the restaurant takes requests online (Admin → Reservations). */}
+            <ReserveLink
+              venueSlug={venue.slug}
+              locale={locale}
+              className="inline-flex h-[52px] items-center gap-2.5 rounded-full border border-ls-forest/20 px-6 text-[15px] font-semibold text-ls-forest transition-colors hover:border-ls-forest/40 hover:bg-ls-forest/[0.03] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ls-sage-deep focus-visible:ring-offset-2"
+            >
+              <CalendarClock className="h-4 w-4" aria-hidden />
+            </ReserveLink>
           </Reveal>
 
           {socials.length > 0 && (

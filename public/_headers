@@ -63,6 +63,16 @@
 /tv/*
   X-Robots-Tag: noindex, nofollow
 
+# Nor is the reservation form, or a guest's own reservation, whose address
+# holds the key to it (src/pages/ReservationPage.tsx): never kept by a cache
+# or handed to another site as the page a visitor came from.
+/reserve
+  X-Robots-Tag: noindex, nofollow
+/reserve/*
+  X-Robots-Tag: noindex, nofollow
+  Referrer-Policy: no-referrer
+  Cache-Control: no-store
+
 # The Android waiter and kitchen apps and the pages a tablet gets them from
 # (public/waiter-app/, public/kitchen-app/, android/README.md). Asked for
 # again each time, so a tablet never installs yesterday's build; nobody's

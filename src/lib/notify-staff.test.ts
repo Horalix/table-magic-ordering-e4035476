@@ -8,7 +8,7 @@
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { handleNotifyStaff, type NotifyBackend, type NotifyDeps } from '../../supabase/functions/_shared/notify-staff.ts';
-import type { PushEventRow, PushSubscriptionRow, StaffPushSource } from '../../supabase/functions/_shared/staff-push.ts';
+import type { PushEventRow, PushSubscriptionRow, ReservationRow, StaffPushSource } from '../../supabase/functions/_shared/staff-push.ts';
 import type { Vapid } from '../../supabase/functions/_shared/web-push.ts';
 import { newPhone, p256, phoneReads, type TestPhone } from '@/test/push-phone';
 
@@ -22,10 +22,20 @@ const ORDER = id(1);
 const CALL = id(2);
 const VERA_BILL = id(3);
 const CARD = id(4);
+const TABLE_FOR_FOUR = id(5);
+const VERA_TABLE = id(6);
+const ANSWERED = id(7);
 
-/** La Soul's table 7 is Amar's; Vera Italia's table 4 has nobody. */
+/**
+ * La Soul's table 7 is Amar's; Vera Italia's table 4 has nobody. Sanela is La
+ * Soul's admin, Marco Vera Italia's, and the owner has both; each keeps a
+ * phone for reservation alerts.
+ */
 async function world() {
-  const phones: Record<string, TestPhone> = { amar: await newPhone(), lejla: await newPhone(), giulia: await newPhone() };
+  const phones: Record<string, TestPhone> = {
+    amar: await newPhone(), lejla: await newPhone(), giulia: await newPhone(),
+    sanela: await newPhone(), marco: await newPhone(), owner: await newPhone(), exadmin: await newPhone(),
+  };
   const sub = (who: string, venue: string, n = 1): PushSubscriptionRow => ({
     id: `sub-${who}-${n}`, user_id: `u-${who}`, venue_id: venue, endpoint: `https://fcm.googleapis.com/fcm/send/${who}-${n}`,
     keys: { p256dh: phones[who].publicKey, auth: phones[who].auth }, last_seen_at: just,
@@ -36,11 +46,20 @@ async function world() {
     [VERA_BILL]: { source: 'bill_requests', id: VERA_BILL, venue_id: V, table_session_id: 's-v4', created_at: just, status: 'pending' },
     [CARD]: { source: 'orders', id: CARD, venue_id: L, table_session_id: 's-l7', created_at: just, status: 'awaiting_payment', total: 20 },
   };
+  const soon = new Date(NOW + 26 * 3600_000).toISOString(); // tomorrow evening, 23:00 in Sarajevo
+  const reservations: Record<string, ReservationRow> = {
+    [TABLE_FOR_FOUR]: { id: TABLE_FOR_FOUR, venue_id: L, status: 'pending', guest_name: 'Amina Hadžić', party_size: 4, reserved_for: soon, created_at: just },
+    [VERA_TABLE]: { id: VERA_TABLE, venue_id: V, status: 'pending', guest_name: 'Fahad', party_size: 1, reserved_for: soon, created_at: just },
+    [ANSWERED]: { id: ANSWERED, venue_id: L, status: 'confirmed', guest_name: 'Lamija', party_size: 2, reserved_for: soon, created_at: just },
+  };
   const state = {
-    phones, events,
+    phones, events, reservations,
     subscriptions: [sub('amar', L), sub('lejla', L), sub('giulia', V)],
+    // Someone who was La Soul's admin once still has a phone on the list.
+    adminPhones: [sub('sanela', L), sub('owner', L), sub('owner', V, 2), sub('marco', V), sub('exadmin', L)],
     claimed: new Set<string>(),
     forgotten: [] as string[],
+    forgottenAdminPhones: [] as string[],
     phonesAskedFor: [] as string[],
   };
   const backend: NotifyBackend = {
@@ -53,6 +72,21 @@ async function world() {
       if (state.claimed.has(key)) return false;
       state.claimed.add(key);
       return true;
+    },
+    loadReservation: async (reservationId) => state.reservations[reservationId] ?? null,
+    // Deliberately careless, like loadPhones below: both restaurants' phones.
+    loadReservationAudience: async (venueId) => ({
+      venueName: venueId === L ? 'La Soul' : 'Vera Italia',
+      adminUserIds: venueId === L ? ['u-sanela', 'u-owner'] : ['u-marco', 'u-owner'],
+      phones: state.adminPhones,
+    }),
+    forgetAdminPhones: async (ids) => {
+      state.forgottenAdminPhones.push(...ids);
+      state.adminPhones = state.adminPhones.filter((s) => !ids.includes(s.id));
+    },
+    adminPhoneOf: async (userId, endpoint) => {
+      const s = state.adminPhones.find((p) => p.user_id === userId && p.endpoint === endpoint);
+      return s ? { ...s, venueName: s.venue_id === L ? 'La Soul' : 'Vera Italia' } : null;
     },
     loadContext: async (venueId, sessionId) => ({
       session: sessionId === 's-l7'
@@ -75,7 +109,8 @@ async function world() {
       state.forgotten.push(...ids);
       state.subscriptions = state.subscriptions.filter((s) => !ids.includes(s.id));
     },
-    userOf: async (token) => (token === 'amar-token' ? 'u-amar' : token === 'giulia-token' ? 'u-giulia' : null),
+    userOf: async (token) => (token === 'amar-token' ? 'u-amar' : token === 'giulia-token' ? 'u-giulia'
+      : token === 'sanela-token' ? 'u-sanela' : null),
     phoneOf: async (userId, endpoint) => {
       const s = state.subscriptions.find((p) => p.user_id === userId && p.endpoint === endpoint);
       return s ? { ...s, venueName: s.venue_id === L ? 'La Soul' : 'Vera Italia' } : null;
@@ -169,6 +204,118 @@ describe('the database\'s call', () => {
     const d = { ...(await deps(backend, push.fetcher)), vapid: { publicKey: '', privateKey: '', subject: '' } };
     expect(await handleNotifyStaff(post({ table: 'orders', id: ORDER }), d, NOW)).toEqual({ status: 503, body: { skipped: 'not_configured' } });
     expect(state.claimed.size).toBe(0);
+  });
+});
+
+describe('a guest asks for a table', () => {
+  it('rings the restaurant\'s admins and the owner, with when, who and how many, and no waiter', async () => {
+    const { state, backend } = await world();
+    const push = pushServices(state.phones);
+    const reply = await handleNotifyStaff(post({ table: 'reservations', id: TABLE_FOR_FOUR }), await deps(backend, push.fetcher), NOW);
+    expect(reply).toEqual({ status: 200, body: { who: 'admins', news: 'new', phones: 2, sent: 2, removed: 0, failed: 0 } });
+    expect(push.delivered.map((d) => d.who).sort()).toEqual(['owner', 'sanela']);
+    expect(push.delivered[0].message).toMatchObject({
+      kind: 'reservation', title: 'New reservation · Wed 4 Nov, 23:00', body: 'Amina Hadžić · 4 guests · La Soul',
+      url: '/admin/reservations', tag: `reservations:${TABLE_FOR_FOUR}`,
+    });
+    // A lock screen is read by whoever picks the phone up: no phone number on it.
+    expect(`${push.delivered[0].message.title} ${push.delivered[0].message.body}`).not.toMatch(/\d{6,}/);
+    expect(push.delivered[0].headers).toMatchObject({ Urgency: 'high' });
+  });
+
+  it('Vera Italia\'s request rings Vera Italia\'s admin and the owner\'s Vera phone, never La Soul\'s', async () => {
+    const { state, backend } = await world();
+    const push = pushServices(state.phones);
+    const reply = await handleNotifyStaff(post({ table: 'reservations', id: VERA_TABLE }), await deps(backend, push.fetcher), NOW);
+    expect(reply.body).toMatchObject({ who: 'admins', phones: 2, sent: 2 });
+    expect(push.delivered.map((d) => d.who).sort()).toEqual(['marco', 'owner']);
+    expect(push.delivered[0].message.body).toBe('Fahad · 1 guest · Vera Italia');
+  });
+
+  it('is sent once, and reminded once when the database asks', async () => {
+    const { state, backend } = await world();
+    const push = pushServices(state.phones);
+    const d = await deps(backend, push.fetcher);
+    await handleNotifyStaff(post({ table: 'reservations', id: TABLE_FOR_FOUR }), d, NOW);
+    expect(await handleNotifyStaff(post({ table: 'reservations', id: TABLE_FOR_FOUR }), d, NOW))
+      .toEqual({ status: 200, body: { skipped: 'already_sent' } });
+
+    const later = NOW + 6 * 60_000;
+    const reminder = await handleNotifyStaff(post({ table: 'reservations', id: TABLE_FOR_FOUR, reminder: true }), d, later);
+    expect(reminder.body).toMatchObject({ who: 'admins', sent: 2 });
+    expect(push.delivered[2].message).toMatchObject({
+      title: 'Still waiting · Wed 4 Nov, 23:00', body: 'Amina Hadžić · 4 guests · La Soul — nobody has answered yet',
+    });
+    expect(await handleNotifyStaff(post({ table: 'reservations', id: TABLE_FOR_FOUR, reminder: true }), d, later))
+      .toEqual({ status: 200, body: { skipped: 'already_sent' } });
+    expect(push.delivered).toHaveLength(4);
+  });
+
+  it('a confirmed table its guest gives back is told once: the table is free again', async () => {
+    const { state, backend } = await world();
+    const push = pushServices(state.phones);
+    const d = await deps(backend, push.fetcher);
+    await handleNotifyStaff(post({ table: 'reservations', id: TABLE_FOR_FOUR }), d, NOW);
+    // Confirmed, then cancelled by the guest two hours later; the database calls again, naming the row.
+    const later = NOW + 2 * 3600_000;
+    state.reservations[TABLE_FOR_FOUR] = {
+      ...state.reservations[TABLE_FOR_FOUR], status: 'cancelled', cancelled_by: 'guest', updated_at: new Date(later - 2_000).toISOString(),
+    };
+    const reply = await handleNotifyStaff(post({ table: 'reservations', id: TABLE_FOR_FOUR }), d, later);
+    expect(reply.body).toMatchObject({ who: 'admins', news: 'cancelled', sent: 2 });
+    expect(push.delivered[2].message).toMatchObject({
+      kind: 'reservation', title: 'Cancelled by the guest · Wed 4 Nov, 23:00',
+      body: 'Amina Hadžić · 4 guests · La Soul — the table is free again', url: '/admin/reservations',
+    });
+    expect(await handleNotifyStaff(post({ table: 'reservations', id: TABLE_FOR_FOUR }), d, later))
+      .toEqual({ status: 200, body: { skipped: 'already_sent' } });
+    expect([...state.claimed].sort()).toEqual([`reservation_cancellations:${TABLE_FOR_FOUR}`, `reservations:${TABLE_FOR_FOUR}`]);
+
+    // A table the restaurant cancelled itself is no news to the restaurant; nor is a cancellation from long ago.
+    state.reservations[VERA_TABLE] = { ...state.reservations[VERA_TABLE], status: 'cancelled', cancelled_by: 'restaurant', updated_at: new Date(later).toISOString() };
+    expect(await handleNotifyStaff(post({ table: 'reservations', id: VERA_TABLE }), d, later)).toEqual({ status: 200, body: { skipped: 'answered' } });
+    state.reservations[VERA_TABLE] = { ...state.reservations[VERA_TABLE], cancelled_by: 'guest', updated_at: new Date(later - 3600_000).toISOString() };
+    expect(await handleNotifyStaff(post({ table: 'reservations', id: VERA_TABLE }), d, later)).toEqual({ status: 200, body: { skipped: 'stale' } });
+    // Two phones for the request, the same two for its cancellation, and nothing since.
+    expect(push.delivered).toHaveLength(4);
+  });
+
+  it('wakes nobody for a request already answered, an old one, or one that is not there', async () => {
+    const { state, backend } = await world();
+    const push = pushServices(state.phones);
+    const d = await deps(backend, push.fetcher);
+    expect(await handleNotifyStaff(post({ table: 'reservations', id: ANSWERED }), d, NOW)).toEqual({ status: 200, body: { skipped: 'answered' } });
+    expect(await handleNotifyStaff(post({ table: 'reservations', id: ANSWERED, reminder: true }), d, NOW)).toEqual({ status: 200, body: { skipped: 'answered' } });
+    expect(await handleNotifyStaff(post({ table: 'reservations', id: TABLE_FOR_FOUR }), d, NOW + 20 * 60_000)).toEqual({ status: 200, body: { skipped: 'stale' } });
+    // A reminder is still news after twenty minutes, not after two hours.
+    expect(await handleNotifyStaff(post({ table: 'reservations', id: TABLE_FOR_FOUR, reminder: true }), d, NOW + 2 * 3600_000)).toEqual({ status: 200, body: { skipped: 'stale' } });
+    expect(await handleNotifyStaff(post({ table: 'reservations', id: id(98) }), d, NOW)).toEqual({ status: 404, body: { skipped: 'not_found' } });
+    expect((await handleNotifyStaff(post({ table: 'reservations', id: 'not-an-id' }), d, NOW)).status).toBe(400);
+    expect(push.delivered).toEqual([]);
+    expect(state.claimed.size).toBe(0);
+  });
+
+  it('forgets an admin\'s phone its push service says is gone, from the admins\' list only', async () => {
+    const { state, backend } = await world();
+    const push = pushServices(state.phones, { sanela: 410 });
+    const reply = await handleNotifyStaff(post({ table: 'reservations', id: TABLE_FOR_FOUR }), await deps(backend, push.fetcher), NOW);
+    expect(reply.body).toMatchObject({ sent: 1, removed: 1 });
+    expect(state.forgottenAdminPhones).toEqual(['sub-sanela-1']);
+    expect(state.forgotten).toEqual([]);
+  });
+
+  it('a test alert reaches the admin\'s own phone, in the words of a reservation', async () => {
+    const { state, backend } = await world();
+    const push = pushServices(state.phones);
+    const d = await deps(backend, push.fetcher);
+    const endpoint = 'https://fcm.googleapis.com/fcm/send/sanela-1';
+    // A waiter's sign-in does not reach an admin's phone, and an admin's phone is not on the waiters' list.
+    expect((await handleNotifyStaff(post({ action: 'test', endpoint, audience: 'reservations' }, { Authorization: 'Bearer amar-token' }), d, NOW)).status).toBe(404);
+    expect((await handleNotifyStaff(post({ action: 'test', endpoint }, { Authorization: 'Bearer sanela-token' }), d, NOW)).status).toBe(404);
+    const reply = await handleNotifyStaff(post({ action: 'test', endpoint, audience: 'reservations' }, { Authorization: 'Bearer sanela-token' }), d, NOW);
+    expect(reply).toEqual({ status: 200, body: { sent: 1, removed: 0, failed: 0 } });
+    expect(push.delivered.map((x) => [x.who, x.message.url, x.message.body]))
+      .toEqual([['sanela', '/admin/reservations', 'This is how a new reservation reaches you · La Soul']]);
   });
 });
 

@@ -6,6 +6,7 @@ import { DEFAULT_VENUE, VENUES, activeVenue, type Venue } from '@/lib/venues';
 const GUEST = /^\/(menu|cart|tab|table|start)(\/|$)/;
 const SITE = /^\/(veraitalia)(\/|$)/;
 const WAITER = /^\/waiter(\/|$)/;
+const ADMIN = /^\/admin(\/|$)/;
 
 /**
  * The restaurant whose look a page wears: its website (/veraitalia/), the
@@ -40,18 +41,21 @@ const setHead = (selector: string, attr: 'href' | 'content', value: string) => {
  * From a waiter page it installs the waiter's app, which opens the waiter
  * screen rather than the menu: on iPhone, lock-screen alerts work only from
  * a Home Screen app, and one that opened the menu had no way to /waiter.
+ * From an admin page it installs "Manager", which opens the admin, with an
+ * icon of its own: the manager's phone rings for a reservation from there.
  */
 export function VenueTheme() {
   const { pathname } = useLocation();
   const venue = venueForPage(pathname);
   useLayoutEffect(() => {
     const waiter = WAITER.test(pathname);
+    const manager = ADMIN.test(pathname);
     document.documentElement.dataset.venue = venue.slug;
     setHead('meta[name="theme-color"]', 'content', venue.brand.themeColor);
-    setHead('meta[name="apple-mobile-web-app-title"]', 'content', waiter ? 'Waiter' : venue.name);
-    setHead('link[rel="apple-touch-icon"]', 'href', venue.brand.appleTouchIcon);
+    setHead('meta[name="apple-mobile-web-app-title"]', 'content', waiter ? 'Waiter' : manager ? 'Manager' : venue.name);
+    setHead('link[rel="apple-touch-icon"]', 'href', manager ? venue.brand.managerTouchIcon : venue.brand.appleTouchIcon);
     setHead('link[rel="icon"]', 'href', venue.brand.icon);
-    setHead('link[rel="manifest"]', 'href', waiter ? venue.brand.waiterManifest : venue.brand.manifest);
+    setHead('link[rel="manifest"]', 'href', waiter ? venue.brand.waiterManifest : manager ? venue.brand.managerManifest : venue.brand.manifest);
     // Pages that set no title of their own (the table, the order, the tab)
     // keep the HTML's, which is La Soul's: on another restaurant's pages, its name.
     if (venue.slug !== DEFAULT_VENUE && document.title.includes('La Soul')) {

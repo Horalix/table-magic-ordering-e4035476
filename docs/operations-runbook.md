@@ -227,6 +227,27 @@ restaurant's waiters. Check, in order:
 - **Changing the keys** stops every phone's alerts: each waiter turns them on
   again with one tap.
 
+### A reservation was not answered, or the manager's phone did not ring
+A guest's request rings the phones of the restaurant's admins who turned on
+**Alert this phone** (Admin → Reservations), once, and once more after five
+minutes (`docs/reservations.md`). Check, in order:
+- **Admin → Reservations** shows the request under **Waiting for your
+  answer**. If it does, the request arrived and only the alert is in question.
+  If the page says reservations are not switched on yet, the migration
+  `20261113090000_reservations.sql` has not been applied.
+- **The phone:** the card says **On**, and **Send a test** arrives with the
+  phone locked. On iPhone it must be the **Manager** app on the Home Screen
+  (iOS 16.4+), with notifications allowed in Settings → Notifications →
+  Manager; a Focus mode silences it.
+- **The test arrives but requests don't:** the function's logs have one line
+  per request, e.g. `notify-staff reservations <id> (new): 1 phone(s), sent 1`.
+  `0 phone(s)`: nobody who is an admin of that restaurant has alerts on.
+- **No reminder after five minutes:** the reminder is the scheduled job
+  `lasoul-reservations` (pg_cron, every minute). Without pg_cron a request
+  is announced once.
+- The guest's page shows the restaurant's phone number after eight minutes
+  without an answer, with the code to mention.
+
 ### Kitchen device crashes
 - Reload. State is in the database, not the device.
 - Already-printed tickets will **not** reprint (the claim is in the database,

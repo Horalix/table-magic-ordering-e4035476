@@ -1,0 +1,16 @@
+{
+  "id": "/admin",
+  "name": "La Soul Manager",
+  "short_name": "Manager",
+  "description": "La Soul — the manager's phone: reservations to answer, today's numbers, the menu and orders",
+  "theme_color": "#F7F4EC",
+  "background_color": "#F7F4EC",
+  "display": "standalone",
+  "start_url": "/admin",
+  "scope": "/",
+  "icons": [
+    { "src": "/icons/manager-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icons/manager-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "/icons/manager-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

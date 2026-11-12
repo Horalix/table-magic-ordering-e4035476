@@ -5,9 +5,15 @@
  *   GET                        { configured, publicKey }: the key phones subscribe with.
  *   POST { table, id }         from the database (pg_net): an orders, waiter_calls
  *                              or bill_requests row has just gone in.
- *   POST { action: "test", endpoint, delay_seconds? }
- *                              with the waiter's sign-in: a test alert to one
+ *   POST { table: "reservations", id, reminder? }
+ *                              from the database: a guest has asked for a table
+ *                              (or, with reminder, nobody has answered for five
+ *                              minutes), or has cancelled a confirmed one. Rings
+ *                              the restaurant's admins, not waiters.
+ *   POST { action: "test", endpoint, delay_seconds?, audience? }
+ *                              with the person's sign-in: a test alert to one
  *                              phone of theirs, now or after a few seconds.
+ *                              audience "reservations" is an admin's phone.
  *
  * The event call carries nothing to trust: the row is read here, an alert
  * goes out only for one written in the last 15 minutes, and each only once
@@ -15,9 +21,9 @@
  * src/lib/notify-staff.test.ts drives every path with an in-memory backend.
  */
 import {
-  chooseRecipients, describeEvent, skipReason, STAFF_PUSH_SOURCES,
+  chooseAdminPhones, chooseRecipients, describeEvent, describeReservation, reservationNews, skipReason, STAFF_PUSH_SOURCES,
   type OrderLine, type PushEventRow, type PushSessionRow, type PushSubscriptionRow, type PushWaiterRow,
-  type StaffPushSource,
+  type ReservationRow, type StaffPushSource,
 } from "./staff-push.ts";
 import { sendPush, vapidReady, type Vapid } from "./web-push.ts";
 
@@ -29,11 +35,32 @@ export interface NotifyContext {
   dayStart: string;
 }
 
+/** Who is asked about a request for a table: the restaurant's admins and the phones kept for it. */
+export interface ReservationAudience {
+  venueName: string;
+  /** Admins of this restaurant, and the owner. */
+  adminUserIds: string[];
+  /** The phones registered for reservation alerts at this restaurant only. */
+  phones: PushSubscriptionRow[];
+}
+
+/** What is claimed once: an event of a table, a request for one, that request's one reminder, and its guest's cancellation. */
+export type ClaimSource = StaffPushSource | "reservations" | "reservation_reminders" | "reservation_cancellations";
+
+const RESERVATION_CLAIM = {
+  new: "reservations", reminder: "reservation_reminders", cancelled: "reservation_cancellations",
+} as const;
+
 /** Reads and writes, every one of them limited to what it names. */
 export interface NotifyBackend {
   loadEvent(source: StaffPushSource, id: string): Promise<PushEventRow | null>;
   /** True the first time only (staff_push_claim). */
-  claim(source: StaffPushSource, id: string): Promise<boolean>;
+  claim(source: ClaimSource, id: string): Promise<boolean>;
+  loadReservation(id: string): Promise<ReservationRow | null>;
+  loadReservationAudience(venueId: string): Promise<ReservationAudience>;
+  forgetAdminPhones(ids: string[]): Promise<void>;
+  /** That admin's phone with that endpoint, with its restaurant's name. */
+  adminPhoneOf(userId: string, endpoint: string): Promise<(PushSubscriptionRow & { venueName: string }) | null>;
   /** The table, the restaurant's name, waiters and today's rota — of this restaurant only. */
   loadContext(venueId: string, sessionId: string): Promise<NotifyContext>;
   /** The phones registered at this restaurant only. */
@@ -67,12 +94,15 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 /** The push service's host only: an endpoint is a secret address, not for logs. */
 const hostOf = (endpoint: string) => { try { return new URL(endpoint).host; } catch { return "?"; } };
 
-async function deliver(deps: NotifyDeps, phones: PushSubscriptionRow[], message: unknown) {
+async function deliver(
+  deps: NotifyDeps, phones: PushSubscriptionRow[], message: unknown,
+  forget: (ids: string[]) => Promise<void> = (ids) => deps.backend.forgetPhones(ids),
+) {
   const results = await Promise.all(phones.map((p) =>
     sendPush({ endpoint: p.endpoint, keys: p.keys }, message, deps.vapid, { ttl: TTL_SECONDS, urgency: "high" }, deps.fetcher)));
   // The phone uninstalled the app, cleared the site or turned notifications off.
   const gone = phones.filter((_, i) => results[i].gone).map((p) => p.id);
-  if (gone.length) await deps.backend.forgetPhones(gone);
+  if (gone.length) await forget(gone);
   for (const r of results) {
     if (!r.ok && !r.gone) deps.log?.(`notify-staff: ${hostOf(r.endpoint)} answered ${r.status}: ${r.error ?? ""}`);
   }
@@ -113,23 +143,55 @@ async function onEvent(deps: NotifyDeps, source: StaffPushSource, id: string, no
   return { status: 200, body: { who: recipients.who, waiters: recipients.userIds.length, ...outcome } };
 }
 
+/**
+ * A guest asked for a table: the restaurant's admins who asked to be alerted
+ * are told, once; once more if the database's sweep says nobody has
+ * answered; and once if the guest gives a confirmed table back. Read here,
+ * like every event: the call carries nothing to trust.
+ */
+async function onReservation(deps: NotifyDeps, id: string, reminder: boolean, now: number): Promise<NotifyReply> {
+  const { backend } = deps;
+  const row = await backend.loadReservation(id);
+  if (!row) return { status: 404, body: { skipped: "not_found" } };
+  const news = reservationNews(row, reminder, now);
+  if (typeof news !== "string") return { status: 200, body: { skipped: news.skip } };
+  if (!(await vapidReady(deps.vapid))) return { status: 503, body: { skipped: "not_configured" } };
+  if (!(await backend.claim(RESERVATION_CLAIM[news], id))) {
+    return { status: 200, body: { skipped: "already_sent" } };
+  }
+
+  const audience = await backend.loadReservationAudience(row.venue_id);
+  const phones = chooseAdminPhones({ venueId: row.venue_id, adminUserIds: audience.adminUserIds, phones: audience.phones });
+  const message = describeReservation(row, { venueName: audience.venueName, news, now });
+  const outcome = phones.length
+    ? await deliver(deps, phones, message, (ids) => backend.forgetAdminPhones(ids))
+    : { sent: 0, removed: 0, failed: 0 };
+  deps.log?.(`notify-staff reservations ${id} (${news}): ${phones.length} phone(s), sent ${outcome.sent}, removed ${outcome.removed}, failed ${outcome.failed}`);
+  return { status: 200, body: { who: "admins", news, phones: phones.length, ...outcome } };
+}
+
 async function onTest(deps: NotifyDeps, authorization: string | null, body: Record<string, unknown>, now: number): Promise<NotifyReply> {
   const token = (authorization ?? "").replace(/^Bearer\s+/i, "");
   const userId = token ? await deps.backend.userOf(token) : null;
   if (!userId) return { status: 401, body: { error: "Sign in first" } };
   if (!(await vapidReady(deps.vapid))) return { status: 503, body: { error: "not_configured" } };
-  const phone = typeof body.endpoint === "string" ? await deps.backend.phoneOf(userId, body.endpoint) : null;
+  // An admin's phone for reservation alerts, or a waiter's for their tables: each from its own list.
+  const forAdmin = body.audience === "reservations";
+  const phone = typeof body.endpoint !== "string" ? null
+    : forAdmin ? await deps.backend.adminPhoneOf(userId, body.endpoint)
+    : await deps.backend.phoneOf(userId, body.endpoint);
   if (!phone) return { status: 404, body: { error: "not_subscribed" } };
 
   const message = {
-    kind: "test", title: "Test alert", tag: `test:${now}`, url: "/waiter", venue: phone.venueName,
+    kind: "test", title: "Test alert", tag: `test:${now}`, url: forAdmin ? "/admin/reservations" : "/waiter", venue: phone.venueName,
     at: new Date(now).toISOString(),
-    body: ["This is how a new order reaches you", phone.venueName].filter(Boolean).join(" · "),
+    body: [forAdmin ? "This is how a new reservation reaches you" : "This is how a new order reaches you", phone.venueName]
+      .filter(Boolean).join(" · "),
   };
   const delay = Math.min(Math.max(Math.round(Number(body.delay_seconds) || 0), 0), 30);
   const run = async () => {
     if (delay) await new Promise((resolve) => setTimeout(resolve, delay * 1000));
-    return deliver(deps, [phone], message);
+    return deliver(deps, [phone], message, forAdmin ? (ids) => deps.backend.forgetAdminPhones(ids) : undefined);
   };
   // Answer at once and send later, so the phone can be locked in between.
   if (delay && deps.waitUntil) {
@@ -150,6 +212,11 @@ export async function handleNotifyStaff(req: Request, deps: NotifyDeps, now = Da
   const parsed = await req.json().catch(() => null);
   const body = typeof parsed === "object" && parsed !== null ? (parsed as Record<string, unknown>) : {};
   if (body.action === "test") return onTest(deps, req.headers.get("Authorization"), body, now);
+  if (body.table === "reservations") {
+    return typeof body.id === "string" && UUID.test(body.id)
+      ? onReservation(deps, body.id, body.reminder === true, now)
+      : { status: 400, body: { error: "Expected { table, id }" } };
+  }
   const source = body.table as StaffPushSource;
   if (!STAFF_PUSH_SOURCES.includes(source) || typeof body.id !== "string" || !UUID.test(body.id)) {
     return { status: 400, body: { error: "Expected { table, id }" } };
