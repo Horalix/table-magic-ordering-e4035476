@@ -1,11 +1,12 @@
-// Lock-screen alerts for waiters (Web Push).
+// Lock-screen alerts for waiters, and reservation alerts for admins (Web Push).
 //
 // A locked phone runs no JavaScript, so the waiter screen cannot chime for an
 // order nobody is looking at. The database calls this function the moment a
 // guest orders, calls a waiter or asks for the bill
 // (20261112090000_staff_push.sql), and it pushes a notification to the phones
 // of the waiters concerned: the table's waiter, or the waiters on shift at
-// that restaurant when the table has nobody.
+// that restaurant when the table has nobody. A guest's request for a table
+// (20261113090000_reservations.sql) goes to the restaurant's admins instead.
 //
 // What each call does lives in ../_shared/notify-staff.ts, who is chosen in
 // ../_shared/staff-push.ts and the encryption in ../_shared/web-push.ts — all
@@ -21,7 +22,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { json } from "../_shared/http.ts";
 import { handleNotifyStaff, type NotifyBackend } from "../_shared/notify-staff.ts";
-import type { PushEventRow, PushSubscriptionRow, PushWaiterRow, StaffPushSource } from "../_shared/staff-push.ts";
+import type { PushEventRow, PushSubscriptionRow, PushWaiterRow, ReservationRow, StaffPushSource } from "../_shared/staff-push.ts";
 import type { Vapid } from "../_shared/web-push.ts";
 
 const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, {
@@ -55,6 +56,36 @@ const backend: NotifyBackend = {
 
   claim: async (source, id) =>
     must("claim", await admin.rpc("staff_push_claim", { _source: source, _id: id })) === true,
+
+  loadReservation: async (id) =>
+    must("reservation", await admin.from("reservations")
+      .select("id, venue_id, status, guest_name, party_size, reserved_for, created_at, updated_at, cancelled_by").eq("id", id).maybeSingle()) as ReservationRow | null,
+
+  // The restaurant's own admins and the owner (an admin of no one restaurant), and its phones only.
+  loadReservationAudience: async (venueId) => {
+    const [venue, admins, phones] = await Promise.all([
+      admin.from("venues").select("name").eq("id", venueId).maybeSingle(),
+      admin.from("user_roles").select("user_id").eq("role", "admin").or(`venue_id.eq.${venueId},venue_id.is.null`),
+      admin.from("reservation_alert_phones").select(PHONE_COLUMNS).eq("venue_id", venueId),
+    ]);
+    return {
+      venueName: String(rec(must("venue", venue)).name ?? ""),
+      adminUserIds: ((must("admins", admins) ?? []) as unknown[]).map((row) => String(rec(row).user_id)),
+      phones: (must("admin phones", phones) ?? []) as unknown as PushSubscriptionRow[],
+    };
+  },
+
+  forgetAdminPhones: async (ids) => {
+    must("forget admin phones", await admin.from("reservation_alert_phones").delete().in("id", ids));
+  },
+
+  adminPhoneOf: async (userId, endpoint) => {
+    const rows = (must("admin phone", await admin.from("reservation_alert_phones")
+      .select(`${PHONE_COLUMNS}, venues(name)`).eq("user_id", userId).eq("endpoint", endpoint).limit(1)) ?? []) as unknown[];
+    if (!rows.length) return null;
+    const row = rec(rows[0]);
+    return { ...(row as unknown as PushSubscriptionRow), venueName: String(rec(row.venues).name ?? "") };
+  },
 
   loadContext: async (venueId, sessionId) => {
     const [session, venue, waiters, shift] = await Promise.all([

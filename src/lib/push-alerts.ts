@@ -14,10 +14,24 @@ import { supabase } from '@/integrations/supabase/client';
  * migration and the function are live, everything here says "not set up yet"
  * instead of failing: the table and RPC are not in the generated types, so
  * they are reached untyped, as printers-api.ts does.
+ *
+ * The same switch, for another audience: an admin's "Alert this phone" on
+ * Admin → Reservations (20261113090000_reservations.sql). One phone has one
+ * push subscription; which alerts it gets is which lists it is on, the
+ * waiters' (staff_push_subscriptions) or the admins' (reservation_alert_phones).
  */
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const untyped = supabase as unknown as { from: (table: string) => any; rpc: (fn: string, args?: Record<string, unknown>) => any };
+
+/** Whose alerts: a waiter's tables, or an admin's reservation requests. */
+export type AlertAudience = 'waiter' | 'reservations';
+
+const LISTS: Record<AlertAudience, { table: string; subscribe: string }> = {
+  waiter: { table: 'staff_push_subscriptions', subscribe: 'staff_push_subscribe' },
+  reservations: { table: 'reservation_alert_phones', subscribe: 'reservation_alerts_subscribe' },
+};
+const otherAudience = (audience: AlertAudience): AlertAudience => (audience === 'waiter' ? 'reservations' : 'waiter');
 
 export type AlertsState =
   /** Not known yet. */
@@ -105,9 +119,9 @@ export interface AlertsReading {
   setup: AlertsSetup | null;
 }
 
-const save = async (subscription: PushSubscription, venueId: string) => {
+const save = async (subscription: PushSubscription, venueId: string, audience: AlertAudience = 'waiter') => {
   const { endpoint, keys } = subscription.toJSON() as { endpoint: string; keys?: { p256dh?: string; auth?: string } };
-  const { error } = await untyped.rpc('staff_push_subscribe', {
+  const { error } = await untyped.rpc(LISTS[audience].subscribe, {
     _endpoint: endpoint, _keys: { p256dh: keys?.p256dh, auth: keys?.auth }, _venue: venueId,
   });
   if (error) throw new Error(error.message);
@@ -118,7 +132,7 @@ const save = async (subscription: PushSubscription, venueId: string) => {
  * has alerts on is noted as opened again, which keeps its waiter "on shift"
  * for tables nobody has.
  */
-export async function readAlerts(venueId: string): Promise<AlertsReading> {
+export async function readAlerts(venueId: string, audience: AlertAudience = 'waiter'): Promise<AlertsReading> {
   const support = pushSupport();
   if (support !== 'ok') return { state: support, setup: null };
   const [reg, key] = await Promise.all([registration(), serverKey()]);
@@ -129,11 +143,11 @@ export async function readAlerts(venueId: string): Promise<AlertsReading> {
 
   const subscription = Notification.permission === 'granted' ? await reg.pushManager.getSubscription() : null;
   if (!subscription || !sameKey(subscription, key)) return { state: 'off', setup };
-  const { data, error } = await untyped.from('staff_push_subscriptions')
+  const { data, error } = await untyped.from(LISTS[audience].table)
     .select('id').eq('endpoint', subscription.endpoint).eq('venue_id', venueId).maybeSingle();
   if (error) return { state: /PGRST205|42P01|does not exist/.test(`${error.code} ${error.message}`) ? 'not-ready' : 'off', setup };
   if (!data) return { state: 'off', setup };
-  save(subscription, venueId).catch(() => undefined);
+  save(subscription, venueId, audience).catch(() => undefined);
   return { state: 'on', setup };
 }
 
@@ -141,7 +155,7 @@ export async function readAlerts(venueId: string): Promise<AlertsReading> {
  * Turn alerts on: ask for permission (only ever from this tap), subscribe and
  * keep the phone. Call it straight from the tap, with the setup read before.
  */
-export async function turnOnAlerts(setup: AlertsSetup, venueId: string): Promise<AlertsState> {
+export async function turnOnAlerts(setup: AlertsSetup, venueId: string, audience: AlertAudience = 'waiter'): Promise<AlertsState> {
   const permission = Notification.permission === 'granted' ? 'granted' : await Notification.requestPermission();
   if (permission !== 'granted') return permission === 'denied' ? 'blocked' : 'off';
   const { pushManager } = setup.registration;
@@ -152,17 +166,35 @@ export async function turnOnAlerts(setup: AlertsSetup, venueId: string): Promise
     subscription = null;
   }
   subscription ??= await pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: fromB64url(setup.key) });
-  await save(subscription, venueId);
+  await save(subscription, venueId, audience);
   return 'on';
 }
 
-/** This phone stops getting alerts, for every restaurant. */
-export async function turnOffAlerts(setup: AlertsSetup): Promise<void> {
+/** Is this phone still on a list? A list that is not there yet has nobody on it. */
+async function listed(audience: AlertAudience, endpoint: string): Promise<boolean> {
+  try {
+    const { data, error } = await untyped.from(LISTS[audience].table).select('id').eq('endpoint', endpoint).limit(1);
+    return !error && Array.isArray(data) && data.length > 0;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * This phone stops getting these alerts: a waiter's for every restaurant, an
+ * admin's reservation alerts for `venueId` only (the owner may keep the other
+ * restaurant's). The phone's one push subscription is given up only when no
+ * list has it any more, so turning one kind off never silences the other.
+ */
+export async function turnOffAlerts(setup: AlertsSetup, audience: AlertAudience = 'waiter', venueId?: string): Promise<void> {
   const subscription = await setup.registration.pushManager.getSubscription();
   if (!subscription) return;
-  const { error } = await untyped.from('staff_push_subscriptions').delete().eq('endpoint', subscription.endpoint);
+  let removal = untyped.from(LISTS[audience].table).delete().eq('endpoint', subscription.endpoint);
+  if (audience === 'reservations' && venueId) removal = removal.eq('venue_id', venueId);
+  const { error } = await removal;
   if (error && !/PGRST205|42P01/.test(`${error.code}`)) throw new Error(error.message);
-  await subscription.unsubscribe();
+  const stillWanted = (await listed(audience, subscription.endpoint)) || (await listed(otherAudience(audience), subscription.endpoint));
+  if (!stillWanted) await subscription.unsubscribe();
 }
 
 /**
@@ -176,17 +208,22 @@ export async function forgetThisPhone(): Promise<void> {
     const subscription = await reg?.pushManager?.getSubscription();
     if (!subscription) return;
     await untyped.from('staff_push_subscriptions').delete().eq('endpoint', subscription.endpoint);
+    // An admin who also waits tables: their reservation alerts go with them too.
+    await untyped.from('reservation_alert_phones').delete().eq('endpoint', subscription.endpoint).then(() => undefined, () => undefined);
     await subscription.unsubscribe();
   })().catch(() => undefined);
   await Promise.race([work, new Promise((resolve) => setTimeout(resolve, 2500))]);
 }
 
 /** A test alert to this phone, in `delaySeconds` — time to lock it. */
-export async function sendTestAlert(setup: AlertsSetup, delaySeconds: number): Promise<void> {
+export async function sendTestAlert(setup: AlertsSetup, delaySeconds: number, audience: AlertAudience = 'waiter'): Promise<void> {
   const subscription = await setup.registration.pushManager.getSubscription();
   if (!subscription) throw new Error('Alerts are not on for this phone');
   const { error } = await supabase.functions.invoke('notify-staff', {
-    body: { action: 'test', endpoint: subscription.endpoint, delay_seconds: delaySeconds },
+    body: {
+      action: 'test', endpoint: subscription.endpoint, delay_seconds: delaySeconds,
+      ...(audience === 'reservations' ? { audience } : {}),
+    },
   });
   if (error) throw new Error(error.message);
 }

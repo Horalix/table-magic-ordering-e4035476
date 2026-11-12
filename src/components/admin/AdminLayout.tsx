@@ -6,7 +6,7 @@ import {
   LayoutDashboard, UtensilsCrossed, TableProperties, ClipboardList,
   BarChart3, QrCode, LogOut, ChefHat, Menu, X, Layers, Users, Star, Monitor,
   CalendarCheck, Printer, Receipt, Sparkles, Brain, ScrollText, TrendingUp, Tag,
-  LayoutGrid, UserCog, KeyRound, Loader2,
+  LayoutGrid, UserCog, KeyRound, Loader2, CalendarClock,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { springPill } from '@/lib/motion';
@@ -22,6 +22,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { VENUES } from '@/lib/venues';
 import EndOfDayTables from '@/components/staff/EndOfDayTables';
 import MenuOnlyNotice from '@/components/staff/MenuOnlyNotice';
+import { countPendingReservations } from '@/lib/reservations';
 import type { User } from '@supabase/supabase-js';
 
 /*
@@ -37,6 +38,10 @@ const ownerGroup = {
   ],
 };
 const OWNER_PATHS = ownerGroup.items.map((i) => i.path);
+
+const RESERVATIONS_PATH = '/admin/reservations';
+/** How often the menu's "waiting" count is asked for: a guest's request also rings the admin's phone. */
+const PENDING_REFRESH_MS = 45_000;
 
 // Grouped so the sidebar reads as a hierarchy, not a flat list. What a
 // manager does every day comes first (the menu, the QR codes, whether guests
@@ -56,6 +61,7 @@ const navGroups = [
     heading: 'During service',
     items: [
       { label: 'Orders', icon: ClipboardList, path: '/admin/orders' },
+      { label: 'Reservations', icon: CalendarClock, path: RESERVATIONS_PATH },
       { label: 'Tonight’s waiters', icon: CalendarCheck, path: '/admin/tonight' },
       { label: 'Tables', icon: TableProperties, path: '/admin/tables' },
       { label: 'Floor Monitor', icon: Monitor, path: '/waiter/monitor' },
@@ -236,6 +242,24 @@ const AdminLayout = () => {
   // must never see the other restaurant's name, not even while loading.
   const venueName = staffVenue?.venue.name ?? null;
   const bothNames = Object.values(VENUES).map((v) => v.name).join(' & ');
+
+  // Guests waiting for an answer about a table, shown on the menu entry
+  // wherever in the admin the manager is. Zero until the database has
+  // reservations at all.
+  const reservationsVenue = staffVenue?.venue.dbId ?? null;
+  const [pendingReservations, setPendingReservations] = useState(0);
+  useEffect(() => {
+    if (!reservationsVenue) return;
+    let cancelled = false;
+    const ask = () => {
+      if (document.visibilityState !== 'visible') return;
+      void countPendingReservations(reservationsVenue).then((n) => { if (!cancelled) setPendingReservations(n); });
+    };
+    ask();
+    const timer = setInterval(ask, PENDING_REFRESH_MS);
+    document.addEventListener('visibilitychange', ask);
+    return () => { cancelled = true; clearInterval(timer); document.removeEventListener('visibilitychange', ask); };
+  }, [reservationsVenue, location.pathname]);
 
   // English, left-to-right, whatever a guest last picked on this device; the
   // tab named after the page and the restaurant.
@@ -429,6 +453,15 @@ const AdminLayout = () => {
                       )}
                       <item.icon className="relative z-10 w-4 h-4" />
                       <span className="relative z-10">{item.label}</span>
+                      {item.path === RESERVATIONS_PATH && pendingReservations > 0 && (
+                        <span
+                          data-testid="reservations-waiting"
+                          aria-label={`${pendingReservations} waiting for an answer`}
+                          className="relative z-10 ml-auto min-w-[22px] h-[22px] px-1.5 rounded-full bg-primary text-primary-foreground text-xs font-semibold grid place-items-center"
+                        >
+                          {pendingReservations}
+                        </span>
+                      )}
                     </Link>
                   );
                 })}
@@ -484,6 +517,22 @@ const AdminLayout = () => {
         <div className="px-4 py-5 pb-24 sm:p-6 sm:pb-24 lg:p-8 max-w-7xl mx-auto w-full">
           {/* Every restaurant page but the switch's own, which says it in place. */}
           {staffVenue && !ownerPage && location.pathname !== '/admin/service' && <MenuOnlyNotice audience="admin" className="mb-5" />}
+          {/* A guest is looking at their phone for an answer about a table: said on every page but the one that answers. */}
+          {staffVenue && !ownerPage && pendingReservations > 0 && location.pathname !== RESERVATIONS_PATH && (
+            <Link
+              to={RESERVATIONS_PATH}
+              data-testid="reservations-waiting-notice"
+              className="mb-5 flex items-center gap-3 rounded-xl border border-primary/40 bg-primary/10 px-4 py-3 font-sans text-sm text-foreground"
+            >
+              <CalendarClock className="w-5 h-5 text-primary shrink-0" aria-hidden />
+              <span className="flex-1 min-w-0">
+                <span className="font-semibold">
+                  {pendingReservations === 1 ? 'A guest is waiting for an answer about a table' : `${pendingReservations} guests are waiting for an answer about a table`}
+                </span>
+              </span>
+              <span className="font-semibold text-primary underline underline-offset-4 whitespace-nowrap">Answer</span>
+            </Link>
+          )}
           {/* After the work day: the tables nobody freed, and Close all tables. */}
           {staffVenue && !ownerPage && <EndOfDayTables hours={staffVenue.venue.hours} outerClassName="mb-5" />}
           {page}

@@ -73,6 +73,8 @@ http://menu.lasoul.net/*              https://lasoul.net/:splat                 
 /start                         /index.html                                 200
 /privacy                       /index.html                                 200
 /tv                            /index.html                                 200
+/reserve                       /index.html                                 200
+/reserve/*                     /index.html                                 200
 /admin                         /index.html                                 200
 /admin/*                       /index.html                                 200
 /kitchen                       /index.html                                 200

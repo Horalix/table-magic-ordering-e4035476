@@ -244,7 +244,8 @@ export function dishBody(venue: Venue, category: SeoMenuCategory, section: SeoMe
 /** Which crawlers may read what: everything public, nothing private. */
 export function robotsTxt(): string {
   // The TV menu board (/tv) shows the menu pages' dishes again, one section at a time: nothing for a search result.
-  const privatePaths = ['/admin', '/kitchen', '/waiter', '/cart', '/tab', '/table/', '/start', '/tv'];
+  // Nor is the reservation form, or a guest's own reservation (/reserve/<id>).
+  const privatePaths = ['/admin', '/kitchen', '/waiter', '/cart', '/tab', '/table/', '/start', '/tv', '/reserve'];
   const disallow = privatePaths.map((p) => `Disallow: ${p}`).join('\n');
   // Search engines and AI answer engines are welcome to everything public:
   // being quoted correctly is the point.
@@ -359,6 +360,7 @@ const rule = (from: string, to: string, status: string) => `${from.padEnd(22)} $
  */
 export const APP_ROUTES = [
   '/bs', '/ar', '/veraitalia', '/menu', '/menu/*', '/cart', '/tab', '/table/*', '/start', '/privacy', '/tv',
+  '/reserve', '/reserve/*',
   '/admin', '/admin/*', '/kitchen', '/waiter', '/waiter/*',
 ];
 

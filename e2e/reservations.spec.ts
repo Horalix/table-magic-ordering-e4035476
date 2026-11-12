@@ -1,0 +1,393 @@
+import { test, expect } from './staff-fixtures';
+import type { Page, Route } from '@playwright/test';
+
+/**
+ * Table reservations: a guest asks on the restaurant's website (/reserve),
+ * the admin answers on Admin → Reservations, and the guest's own page shows
+ * the answer by itself (src/lib/reservations.ts,
+ * supabase/migrations/20261113090000_reservations.sql).
+ *
+ * The database is stubbed: what it would refuse or allow is covered by
+ * supabase/tests/reservations.test.ts. Here: what each person sees and what
+ * the pages ask the database for.
+ */
+
+const json = (route: Route, body: unknown, status = 200, headers: Record<string, string> = {}) => route.fulfill({
+  status, contentType: 'application/json',
+  headers: { 'access-control-allow-origin': '*', 'access-control-expose-headers': 'content-range', ...headers },
+  body: JSON.stringify(body),
+});
+
+const OPTIONS = {
+  enabled: true, venue: 'lasoul', open: '11:00', close: '21:00', max_party: 10, days_ahead: 30, lead_minutes: 60,
+  phone: '+387 33 877 779', note: 'We hold a table for 15 minutes.', today: '2026-11-13', now: '10:00',
+};
+const KEY = { id: '7b1f6a52-0d5e-4d0f-9a43-1c7f3a2e9b10', token: 'a'.repeat(64) };
+
+const mine = (over: Record<string, unknown> = {}) => ({
+  id: KEY.id, code: 'R48213', venue: 'lasoul', status: 'pending', name: 'Amina Hadžić', party_size: 4,
+  day: '2026-11-14', time: '19:30', note: 'By the window', reply: null, cancelled_by: null,
+  asked_at: new Date().toISOString(), waited_seconds: 20, phone: '+387 33 877 779', ...over,
+});
+
+interface Guest {
+  options: Record<string, unknown>;
+  /** What guest_request_reservation was sent, each time. */
+  asked: Record<string, unknown>[];
+  /** What it answers: a key, or a refusal word. */
+  refuse: string | null;
+  reservation: Record<string, unknown> | null;
+}
+
+async function guestStubs(page: Page, over: Partial<Guest> = {}): Promise<Guest> {
+  const guest: Guest = { options: OPTIONS, asked: [], refuse: null, reservation: mine(), ...over };
+  await page.route('**/rest/v1/rpc/guest_reservation_options', (route) => json(route, guest.options));
+  await page.route('**/rest/v1/rpc/guest_request_reservation', (route) => {
+    guest.asked.push(route.request().postDataJSON());
+    return guest.refuse
+      ? json(route, { code: '22023', message: `RESERVATION:${guest.refuse}` }, 400)
+      : json(route, { ...KEY, code: 'R48213', status: 'pending' });
+  });
+  await page.route('**/rest/v1/rpc/guest_reservation', (route) => json(route, guest.reservation));
+  await page.route('**/rest/v1/rpc/guest_cancel_reservation', (route) => {
+    guest.reservation = { ...guest.reservation, status: 'cancelled', cancelled_by: 'guest' };
+    return json(route, guest.reservation);
+  });
+  return guest;
+}
+
+const fill = async (page: Page, name = 'Amina Hadžić', phone = '+387 61 123-456') => {
+  await page.getByLabel('Your name').fill(name);
+  await page.getByLabel('Phone number').fill(phone);
+};
+
+test.describe('a guest asks for a table', () => {
+  test('picks a day, a time and how many, and is taken to their own page', async ({ page }) => {
+    const guest = await guestStubs(page);
+    await page.goto('/reserve');
+    await expect(page.getByRole('heading', { level: 1, name: 'Reserve a table' })).toBeVisible();
+    await expect(page.getByText('We hold a table for 15 minutes.')).toBeVisible();
+
+    // The restaurant's own day first, and dinner time where the day still has it.
+    await expect(page.getByLabel('Day')).toHaveValue('2026-11-13');
+    await expect(page.getByLabel('Time')).toHaveValue('19:00');
+    await page.getByLabel('Day').selectOption('2026-11-14');
+    await page.getByLabel('Time').selectOption('19:30');
+    await page.getByLabel('Guests').selectOption('4');
+    await fill(page);
+    await page.getByLabel(/Anything we should know/).fill('By the window');
+    await page.getByRole('button', { name: 'Ask for this table' }).click();
+
+    await expect(page).toHaveURL(new RegExp(`/reserve/${KEY.id}\\?t=${KEY.token}$`));
+    await expect(page.getByTestId('reservation-status')).toHaveText('We have your request');
+    expect(guest.asked).toEqual([{
+      _venue: 'lasoul', _name: 'Amina Hadžić', _phone: '+387 61 123-456', _party: 4, _day: '2026-11-14', _time: '19:30',
+      _note: 'By the window', _locale: 'en', _trap: null,
+    }]);
+  });
+
+  test('today offers only what is far enough ahead, and a day with nothing left says so', async ({ page }) => {
+    await guestStubs(page, { options: { ...OPTIONS, now: '20:30' } });
+    await page.goto('/reserve');
+    // Nothing left today: the first day with a time is tomorrow.
+    await expect(page.getByLabel('Day')).toHaveValue('2026-11-14');
+    await page.getByLabel('Day').selectOption('2026-11-13');
+    await expect(page.getByText('No more times on this day. Pick another day.')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Ask for this table' })).toBeDisabled();
+  });
+
+  test('a name or number that cannot be right is caught before anything is sent', async ({ page }) => {
+    const guest = await guestStubs(page);
+    await page.goto('/reserve');
+    await fill(page, 'Amina', '12345');
+    await page.getByRole('button', { name: 'Ask for this table' }).click();
+    await expect(page.getByRole('alert')).toContainText('does not look like a phone number');
+    await fill(page, 'A', '+387 61 123-456');
+    await page.getByRole('button', { name: 'Ask for this table' }).click();
+    await expect(page.getByRole('alert')).toContainText('Please tell us your name.');
+    expect(guest.asked).toEqual([]);
+  });
+
+  test('a refusal is said in plain words, with the phone to call', async ({ page }) => {
+    await guestStubs(page, { refuse: 'soon' });
+    await page.goto('/reserve');
+    await fill(page);
+    await page.getByRole('button', { name: 'Ask for this table' }).click();
+    const alert = page.getByRole('alert');
+    await expect(alert).toContainText('That is too soon to reserve online. Please call us.');
+    await expect(alert.getByRole('link', { name: 'Call +387 33 877 779' })).toHaveAttribute('href', 'tel:+38733877779');
+    await expect(page).toHaveURL(/\/reserve$/);
+  });
+
+  test('while the restaurant takes none online, the page says so and gives the phone', async ({ page }) => {
+    await guestStubs(page, { options: { enabled: false } });
+    await page.goto('/reserve');
+    await expect(page.getByRole('heading', { level: 2, name: 'Online reservations are not open yet' })).toBeVisible();
+    // La Soul's own number, from its website, when the admin has set none.
+    await expect(page.getByRole('link', { name: /Call \+387 33 877 779/ })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Ask for this table' })).toHaveCount(0);
+  });
+
+  test('in Arabic the page reads right to left, in Arabic', async ({ page }) => {
+    await guestStubs(page);
+    await page.addInitScript(() => { try { localStorage.setItem('lasoul-lang', 'ar'); } catch { /* fresh anyway */ } });
+    await page.goto('/reserve');
+    await expect(page.getByRole('heading', { level: 1, name: 'احجز طاولة' })).toBeVisible();
+    await expect(page.locator('main').locator('..')).toHaveAttribute('dir', 'rtl');
+    await expect(page.getByRole('button', { name: 'اطلب هذه الطاولة' })).toBeVisible();
+    // A phone number and a time stay left to right.
+    await expect(page.getByLabel('رقم الهاتف')).toHaveAttribute('dir', 'ltr');
+    // Nothing to scroll sideways: in a right-to-left page, "far off to the left" is reachable.
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
+  });
+
+  test('fits a phone: nothing to scroll sideways', async ({ page }) => {
+    await guestStubs(page);
+    await page.goto('/reserve');
+    await expect(page.getByRole('button', { name: 'Ask for this table' })).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
+  });
+});
+
+test.describe('the guest\'s own page', () => {
+  const own = `/reserve/${KEY.id}?t=${KEY.token}`;
+
+  test('shows the answer by itself, the moment the restaurant gives it', async ({ page }) => {
+    const guest = await guestStubs(page);
+    await page.goto(own);
+    const status = page.getByTestId('reservation-status');
+    await expect(status).toHaveText('We have your request');
+    await expect(page.getByText('Saturday 14 November')).toBeVisible();
+    await expect(page.getByText('19:30')).toBeVisible();
+    await expect(page.getByText('Guests: 4')).toBeVisible();
+    await expect(page.getByText('Reservation R48213')).toBeVisible();
+
+    // The admin confirms. Nobody reloads the guest's page.
+    guest.reservation = mine({ status: 'confirmed', reply: 'By the window, as you asked' });
+    await expect(status).toHaveText('Your table is confirmed', { timeout: 12_000 });
+    await expect(status).toHaveAttribute('data-status', 'confirmed');
+    await expect(page.getByText('By the window, as you asked')).toBeVisible();
+  });
+
+  test('a declined request says so, with the restaurant\'s line and a way to ask again', async ({ page }) => {
+    await guestStubs(page, { reservation: mine({ status: 'declined', reply: 'Full at 19:30, 21:00 is free' }) });
+    await page.goto(own);
+    await expect(page.getByTestId('reservation-status')).toHaveText('We cannot take this reservation');
+    await expect(page.getByText('Full at 19:30, 21:00 is free')).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Ask for another table' })).toHaveAttribute('href', '/reserve');
+    await expect(page.getByRole('button', { name: 'Cancel my reservation' })).toHaveCount(0);
+  });
+
+  test('the guest can take it back, after being asked once', async ({ page }) => {
+    await guestStubs(page, { reservation: mine({ status: 'confirmed' }) });
+    await page.goto(own);
+    await page.getByRole('button', { name: 'Cancel my reservation' }).click();
+    await page.getByRole('alertdialog').getByRole('button', { name: 'Yes, cancel it' }).click();
+    await expect(page.getByTestId('reservation-status')).toHaveText('You cancelled this reservation');
+  });
+
+  test('a long wait shows the code to mention on the phone', async ({ page }) => {
+    await guestStubs(page, { reservation: mine({ waited_seconds: 600 }) });
+    await page.goto(own);
+    await expect(page.getByText('Still waiting? Call us and mention R48213.')).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Call +387 33 877 779' })).toBeVisible();
+  });
+
+  test('an address without its key finds nothing', async ({ page }) => {
+    await guestStubs(page, { reservation: null });
+    await page.goto(`/reserve/${KEY.id}?t=wrong`);
+    await expect(page.getByRole('heading', { level: 1, name: 'We could not find this reservation' })).toBeVisible();
+    await page.goto(`/reserve/${KEY.id}`);
+    await expect(page.getByRole('heading', { level: 1, name: 'We could not find this reservation' })).toBeVisible();
+  });
+});
+
+test.describe('the website', () => {
+  test('offers "Reserve a table" only while the restaurant takes requests online', async ({ page }) => {
+    await guestStubs(page, { options: { enabled: false } });
+    await page.goto('/');
+    await expect(page.getByRole('link', { name: /Call/ }).first()).toBeAttached();
+    await expect(page.getByTestId('reserve-link')).toHaveCount(0);
+
+    await guestStubs(page);
+    await page.goto('/');
+    await expect(page.getByTestId('reserve-link')).toHaveAttribute('href', '/reserve');
+    await expect(page.getByTestId('reserve-link')).toContainText('Reserve a table');
+  });
+});
+
+// ---------------------------------------------------------------------
+// The restaurant's side
+// ---------------------------------------------------------------------
+
+const hoursAhead = (h: number) => new Date(Date.now() + h * 3600_000).toISOString();
+const minutesAgo = (m: number) => new Date(Date.now() - m * 60_000).toISOString();
+
+const aRequest = (over: Record<string, unknown> = {}) => ({
+  id: 'r-1', code: 'R48213', status: 'pending', guest_name: 'Amina Hadžić', guest_phone: '+38761123456', party_size: 4,
+  reserved_for: hoursAhead(26), note: 'By the window', reply: null, cancelled_by: null, created_at: minutesAgo(3), decided_at: null, ...over,
+});
+
+interface Admin {
+  rows: Record<string, unknown>[];
+  decisions: Record<string, unknown>[];
+  settingsWrites: Record<string, unknown>[];
+}
+
+async function adminStubs(page: Page, staff: { settings: Record<string, unknown> }, rows = [aRequest()]): Promise<Admin> {
+  const admin: Admin = { rows, decisions: [], settingsWrites: [] };
+  Object.assign(staff.settings, {
+    reservations_enabled: true, reservations_open: '11:00:00', reservations_close: '21:00:00', reservations_max_party: 10,
+    reservations_days_ahead: 30, reservations_lead_minutes: 60, reservations_phone: null, reservations_note: null,
+  });
+  await page.route('**/rest/v1/restaurant_settings**', (route) => {
+    if (route.request().method() === 'PATCH') {
+      const patch = route.request().postDataJSON();
+      admin.settingsWrites.push(patch);
+      Object.assign(staff.settings, patch);
+      return json(route, []);
+    }
+    return json(route, staff.settings);
+  });
+  await page.route('**/rest/v1/reservations**', (route) => {
+    const waiting = admin.rows.filter((r) => r.status === 'pending').length;
+    // The menu's count asks with HEAD; the answer is in the header.
+    if (route.request().method() === 'HEAD') return json(route, null, 200, { 'content-range': `*/${waiting}` });
+    return json(route, admin.rows);
+  });
+  await page.route('**/rest/v1/rpc/staff_decide_reservation', (route) => {
+    const body = route.request().postDataJSON() as { _id: string; _decision: string; _reply: string | null };
+    admin.decisions.push(body);
+    const next = body._decision === 'confirm' ? 'confirmed' : body._decision === 'decline' ? 'declined' : 'cancelled';
+    admin.rows = admin.rows.map((r) => (r.id === body._id
+      ? { ...r, status: next, reply: body._reply, decided_at: new Date().toISOString(), cancelled_by: next === 'cancelled' ? 'restaurant' : null } : r));
+    return json(route, { id: body._id, status: next });
+  });
+  return admin;
+}
+
+test.describe('Admin → Reservations', () => {
+  test('a waiting request is first, with who, when, how many and a number to call', async ({ page, staff }) => {
+    await adminStubs(page, staff);
+    await page.goto('/admin/reservations');
+    await expect(page.getByRole('heading', { level: 1, name: 'Reservations' })).toBeVisible();
+    await expect(page.getByTestId('pending-count')).toHaveText('1 waiting for your answer');
+    const card = page.getByTestId('pending-reservation');
+    await expect(card).toContainText('Amina Hadžić');
+    await expect(card).toContainText('“By the window”');
+    await expect(card).toContainText('R48213');
+    await expect(card.getByRole('link', { name: '+38761123456' })).toHaveAttribute('href', 'tel:+38761123456');
+  });
+
+  test('Confirm, with a line for the guest, moves it to the confirmed tables', async ({ page, staff }) => {
+    const admin = await adminStubs(page, staff);
+    await page.goto('/admin/reservations');
+    const card = page.getByTestId('pending-reservation');
+    await card.getByLabel('A line for the guest (optional)').fill('By the window, as you asked');
+    await card.getByRole('button', { name: 'Confirm' }).click();
+
+    await expect(page.getByTestId('pending-reservation')).toHaveCount(0);
+    await expect(page.getByTestId('confirmed-reservation')).toContainText('Amina Hadžić');
+    await expect(page.getByText('Nobody is waiting. New requests appear here by themselves.')).toBeVisible();
+    expect(admin.decisions).toEqual([{ _id: 'r-1', _decision: 'confirm', _reply: 'By the window, as you asked' }]);
+  });
+
+  test('Decline leaves it among the answered ones, where it can still be confirmed', async ({ page, staff }) => {
+    const admin = await adminStubs(page, staff);
+    await page.goto('/admin/reservations');
+    await page.getByTestId('pending-reservation').getByRole('button', { name: 'Decline' }).click();
+    await expect(page.getByTestId('pending-reservation')).toHaveCount(0);
+    await expect(page.getByRole('heading', { name: 'Declined, cancelled and past' })).toBeVisible();
+    await page.getByRole('button', { name: 'Confirm after all' }).click();
+    await expect(page.getByTestId('confirmed-reservation')).toContainText('Amina Hadžić');
+    expect(admin.decisions.map((d) => d._decision)).toEqual(['decline', 'confirm']);
+  });
+
+  test('a confirmed table is cancelled only after being asked, and the guest is to be called', async ({ page, staff }) => {
+    const admin = await adminStubs(page, staff, [aRequest({ status: 'confirmed', decided_at: minutesAgo(30) })]);
+    await page.goto('/admin/reservations');
+    await page.getByTestId('confirmed-reservation').getByRole('button', { name: 'Cancel' }).click();
+    const dialog = page.getByRole('alertdialog');
+    await expect(dialog).toContainText('Call them too');
+    await dialog.getByLabel('A line for the guest (optional)').fill('Private event that evening');
+    await dialog.getByRole('button', { name: 'Cancel the reservation' }).click();
+    await expect(page.getByTestId('confirmed-reservation')).toHaveCount(0);
+    expect(admin.decisions).toEqual([{ _id: 'r-1', _decision: 'cancel', _reply: 'Private event that evening' }]);
+  });
+
+  test('a new request arrives by itself while the page is open', async ({ page, staff }) => {
+    const admin = await adminStubs(page, staff, []);
+    await page.goto('/admin/reservations');
+    await expect(page.getByText('Nobody is waiting. New requests appear here by themselves.')).toBeVisible();
+    admin.rows = [aRequest({ id: 'r-2', guest_name: 'Fahad', created_at: new Date().toISOString() })];
+    await expect(page.getByTestId('pending-reservation')).toContainText('Fahad', { timeout: 15_000 });
+  });
+
+  test('the switch and the rules are the restaurant\'s to set', async ({ page, staff }) => {
+    const admin = await adminStubs(page, staff, []);
+    await page.goto('/admin/reservations');
+    await expect(page.getByRole('link', { name: /\/reserve$/ })).toBeVisible();
+    await page.getByLabel('Largest group').fill('12');
+    await page.getByLabel('Phone guests can call').fill('+387 33 877 779');
+    await page.getByRole('button', { name: 'Save the rules' }).click();
+    await expect.poll(() => admin.settingsWrites.length).toBe(1);
+    expect(admin.settingsWrites[0]).toMatchObject({
+      reservations_open: '11:00', reservations_close: '21:00', reservations_max_party: 12, reservations_phone: '+387 33 877 779',
+    });
+
+    await page.getByRole('switch', { name: /Take reservation requests on the website/ }).click();
+    await expect.poll(() => admin.settingsWrites.length).toBe(2);
+    expect(admin.settingsWrites[1]).toEqual({ reservations_enabled: false });
+    await expect(page.getByText('Off: the page tells guests to call instead.')).toBeVisible();
+  });
+
+  test('the menu shows how many are waiting, on every admin page', async ({ page, staff }, testInfo) => {
+    test.skip(testInfo.project.name !== 'desktop', 'the sidebar is open on a computer; on a phone it is behind the menu button');
+    await adminStubs(page, staff);
+    await page.goto('/admin/orders');
+    await expect(page.getByTestId('reservations-waiting')).toHaveText('1');
+    await page.getByRole('link', { name: /Reservations/ }).click();
+    await expect(page).toHaveURL(/\/admin\/reservations$/);
+  });
+
+  test('guests waiting are said on every other admin page, one tap from the answer', async ({ page, staff }) => {
+    await adminStubs(page, staff);
+    await page.goto('/admin/orders');
+    const notice = page.getByTestId('reservations-waiting-notice');
+    await expect(notice).toContainText('A guest is waiting for an answer about a table');
+    await notice.click();
+    await expect(page).toHaveURL(/\/admin\/reservations$/);
+    // The page that answers does not also announce.
+    await expect(page.getByTestId('pending-reservation')).toBeVisible();
+    await expect(page.getByTestId('reservations-waiting-notice')).toHaveCount(0);
+  });
+
+  test('added to a phone\'s Home Screen, the admin is the Manager app', async ({ page, staff }) => {
+    await adminStubs(page, staff, []);
+    await page.goto('/admin/reservations');
+    await expect(page.getByRole('heading', { level: 1, name: 'Reservations' })).toBeVisible();
+    await expect(page.locator('link[rel="manifest"]')).toHaveAttribute('href', '/manifest-manager.webmanifest');
+    await expect(page.locator('link[rel="apple-touch-icon"]')).toHaveAttribute('href', '/icons/manager-apple-touch-icon.png');
+    await expect(page.locator('meta[name="apple-mobile-web-app-title"]')).toHaveAttribute('content', 'Manager');
+    const manifest = await (await page.request.get('/manifest-manager.webmanifest')).json();
+    expect(manifest).toMatchObject({ name: 'La Soul Manager', short_name: 'Manager', start_url: '/admin', display: 'standalone', id: '/admin' });
+    for (const icon of manifest.icons as { src: string }[]) expect((await page.request.get(icon.src)).status()).toBe(200);
+    expect((await page.request.get('/icons/manager-apple-touch-icon.png')).status()).toBe(200);
+  });
+
+  test('before the database knows reservations, the page says so instead of failing', async ({ page, staff }) => {
+    await adminStubs(page, staff);
+    await page.route('**/rest/v1/reservations**', (route) =>
+      json(route, { code: 'PGRST205', message: "Could not find the table 'public.reservations' in the schema cache" }, 404));
+    await page.goto('/admin/reservations');
+    await expect(page.getByText(/Reservations are not switched on.*yet\./)).toBeVisible();
+    await expect(page.getByTestId('pending-reservation')).toHaveCount(0);
+  });
+
+  test('fits a phone: nothing to scroll sideways', async ({ page, staff }) => {
+    await adminStubs(page, staff, [aRequest(), aRequest({ id: 'r-3', status: 'confirmed', guest_name: 'Lamija', decided_at: minutesAgo(40) })]);
+    await page.goto('/admin/reservations');
+    await expect(page.getByTestId('pending-reservation')).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
+  });
+});

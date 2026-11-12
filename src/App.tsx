@@ -33,6 +33,8 @@ const TableNumberEntry = lazy(() => import("./pages/TableNumberEntry"));
 const Trust = lazy(() => import("./pages/Trust"));
 // The TV menu board at the entrance.
 const TvMenu = lazy(() => import("./pages/TvMenu"));
+const ReservePage = lazy(() => import("./pages/ReservePage"));
+const ReservationPage = lazy(() => import("./pages/ReservationPage"));
 const PageTransition = lazy(() => import("./components/PageTransition"));
 const TablePresence = lazy(() => import("./components/guest/TablePresence"));
 const FlyToCart = lazy(() => import("./components/guest/FlyToCart"));
@@ -58,6 +60,7 @@ const AdminPromotions = lazy(() => import("./pages/admin/AdminPromotions"));
 // The owner's: both restaurants at once, and who runs them (AdminLayout keeps everyone else out).
 const AdminOverview = lazy(() => import("./pages/admin/AdminOverview"));
 const AdminTeam = lazy(() => import("./pages/admin/AdminTeam"));
+const AdminReservations = lazy(() => import("./pages/admin/AdminReservations"));
 const KitchenDisplay = lazy(() => import("./pages/KitchenDisplay"));
 const WaiterDashboard = lazy(() => import("./pages/WaiterDashboard"));
 const WaiterLogin = lazy(() => import("./pages/WaiterLogin"));
@@ -177,6 +180,9 @@ const App = () => (
             <Route path="/privacy" element={<PageTransition><Trust /></PageTransition>} />
             {/* The menu board on the TV at the entrance: this site's restaurant, unattended. */}
             <Route path="/tv" element={<TvMenu />} />
+            {/* A table at this site's restaurant: the request, and the guest's own page with the answer. */}
+            <Route path="/reserve" element={<ReservePage />} />
+            <Route path="/reserve/:id" element={<ReservationPage />} />
 
             {/* Admin Routes */}
             <Route path="/admin/login" element={<AdminLogin />} />
@@ -200,6 +206,7 @@ const App = () => (
               <Route path="impact" element={<AdminImpact />} />
               <Route path="overview" element={<AdminOverview />} />
               <Route path="team" element={<AdminTeam />} />
+              <Route path="reservations" element={<AdminReservations />} />
             </Route>
 
             {/* Kitchen & Waiter. Wrapped in ClockProvider so every elapsed-time
