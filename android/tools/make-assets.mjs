@@ -7,6 +7,7 @@
  *     and can never be cut by a circle or a squircle);
  *   - the splash image shown while Chrome opens the waiter screen;
  *   - each restaurant's colours (res/values/colors.xml);
+ *   - the bell in the status bar of an alert (res/drawable-*dpi/ic_notification.png);
  *   - the alert chime (res/raw/table_alert.wav): three rising notes, twice.
  *     A tablet's own notification sound is a soft blip made for a pocket;
  *     this one is made to be heard across a dining room, and to be told
@@ -86,6 +87,26 @@ async function icons(flavor, venue) {
   return hex(ground);
 }
 
+/**
+ * The status-bar icon of an alert: a service bell, white on nothing, as
+ * Android requires. Images, not a vector: Chrome asks the app for this icon
+ * as a bitmap, the library decodes it with BitmapFactory, and a vector comes
+ * back empty, which leaves Chrome's own icon on every alert.
+ */
+async function bell() {
+  const svg = Buffer.from(
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="#FFFFFF" d="'
+    + 'M12,3.2a1.3,1.3 0,0 1,1.3 1.3v0.9a7.2,7.2 0,0 1,5.9 7.1v3.1h-14.4v-3.1a7.2,7.2 0,0 1,5.9 -7.1v-0.9a1.3,1.3 0,0 1,1.3 -1.3z'
+    + 'M3.2,17.4h17.6a1,1 0,0 1,1 1v0.6a1,1 0,0 1,-1 1h-17.6a1,1 0,0 1,-1 -1v-0.6a1,1 0,0 1,1 -1z'
+    + '"/></svg>',
+  );
+  // 24dp in each density.
+  for (const [density, px] of Object.entries({ mdpi: 24, hdpi: 36, xhdpi: 48, xxhdpi: 72, xxxhdpi: 96 })) {
+    await sharp(svg, { density: 72 * (px / 24) * 4 }).resize(px, px).png()
+      .toFile(out('main', 'res', `drawable-${density}`, 'ic_notification.png'));
+  }
+}
+
 /** The chime, as 16-bit mono PCM in a WAV file: no codec for a tablet to lack. */
 function chime() {
   const RATE = 44100;
@@ -136,4 +157,6 @@ function chime() {
 for (const [flavor, venue] of Object.entries(VENUES)) {
   console.log(`${flavor}: icons on ${await icons(flavor, venue)}`);
 }
+await bell();
+console.log('bell: 5 densities');
 console.log(`chime: ${chime().toFixed(2)} s`);

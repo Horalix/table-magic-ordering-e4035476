@@ -3,6 +3,7 @@ package net.lasoul.waiterapp;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
+import android.graphics.drawable.Icon;
 import android.media.AudioAttributes;
 import android.net.Uri;
 import android.os.Build;
@@ -65,6 +66,10 @@ public class TableAlertService extends DelegationService {
 
         Notification.Builder builder = Notification.Builder.recoverBuilder(this, notification);
         builder.setChannelId(channelId);
+        // The app's bell in the status bar, whatever icon Chrome sent along. Named with this
+        // app's package: the recovered builder still looks resources up in Chrome's, where
+        // this id is some other picture.
+        builder.setSmallIcon(Icon.createWithResource(this, R.drawable.ic_notification));
         // The table and what it wants are for the waiter to read without unlocking.
         builder.setVisibility(Notification.VISIBILITY_PUBLIC);
         if (!quiet) builder.setGroupAlertBehavior(Notification.GROUP_ALERT_ALL);

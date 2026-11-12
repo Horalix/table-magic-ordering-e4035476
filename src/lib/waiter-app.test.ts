@@ -84,6 +84,18 @@ describe('the Android waiter apps', () => {
     expect(existsSync(root('android', 'app', 'src', 'main', 'res', 'raw', 'table_alert.wav'))).toBe(true);
   });
 
+  it("has its bell as images: a vector reaches Chrome empty and the alert wears Chrome's icon", () => {
+    expect(manifest).toContain('android:resource="@drawable/ic_notification"');
+    for (const density of ['mdpi', 'hdpi', 'xhdpi', 'xxhdpi', 'xxxhdpi']) {
+      const png = readFileSync(root('android', 'app', 'src', 'main', 'res', `drawable-${density}`, 'ic_notification.png'));
+      expect(png.subarray(1, 4).toString(), density).toBe('PNG');
+    }
+    expect(existsSync(root('android', 'app', 'src', 'main', 'res', 'drawable', 'ic_notification.xml'))).toBe(false);
+    const service = readFileSync(root('android', 'app', 'src', 'main', 'java', 'net', 'lasoul', 'waiterapp', 'TableAlertService.java'), 'utf8');
+    // With the app's own package: by bare id the icon is looked up in Chrome's resources.
+    expect(service).toContain('builder.setSmallIcon(Icon.createWithResource(this, R.drawable.ic_notification))');
+  });
+
   it('answers for the whole site, so Chrome can find its alert service', () => {
     // Chrome looks the service up by the scope of the site's service worker, "/". An app that
     // opens only /waiter is not found, and every alert is then Chrome's own, on Chrome's channel.
