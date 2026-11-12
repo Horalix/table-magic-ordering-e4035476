@@ -115,10 +115,19 @@ describe('the Android staff apps', () => {
     expect(service).toContain('builder.setSmallIcon(Icon.createWithResource(this, R.drawable.ic_notification))');
   });
 
-  it("the kitchen apps have no alert service, so a waiter's alerts are always the waiter app's", () => {
-    // On a tablet with both of a restaurant's apps, Chrome hands the site's alerts to an app
-    // that answers for the site and has the service. Only the waiter app may be that app.
+  it("the kitchen apps do not answer for the site, so a waiter's alerts are always the waiter app's", () => {
+    // On a tablet with both of a restaurant's apps, Chrome takes ONE app that opens the site's
+    // root address and looks for the alert service in that one only. Seen on the emulator: it
+    // took a kitchen app that still had the link filter, found no service, and showed Chrome's
+    // own prompt and alerts. So the kitchen apps take the main manifest's link filter out.
     const kitchen = readFileSync(root('android', 'app', 'src', 'kitchen', 'AndroidManifest.xml'), 'utf8');
+    const removedFilter = kitchen.slice(kitchen.indexOf('<intent-filter'), kitchen.indexOf('</intent-filter>'));
+    expect(removedFilter).toContain('tools:node="remove"');
+    // It must be the main manifest's filter exactly, or nothing is taken out.
+    for (const part of ['android:autoVerify="true"', 'android.intent.action.VIEW', 'android.intent.category.DEFAULT', 'android.intent.category.BROWSABLE', 'android:host="@string/hostName"', 'android:scheme="https"']) {
+      expect(removedFilter, part).toContain(part);
+      expect(manifest, part).toContain(part);
+    }
     for (const name of [
       'android.permission.POST_NOTIFICATIONS',
       'net.lasoul.waiterapp.TableAlertService',

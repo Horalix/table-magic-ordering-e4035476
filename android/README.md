@@ -50,10 +50,15 @@ The kitchen app:
   volume, not the notification volume.
 - **Only the kitchen screen.** Inside the app every sign-in goes on to the
   kitchen screen, and the manager's links are hidden (`src/lib/waiter-app.ts`).
-- **No notifications.** The kitchen apps leave out the alert service and the
-  notification permission (`app/src/kitchen/AndroidManifest.xml`). So on a
-  tablet that has both of a restaurant's apps, a waiter's alerts are always
-  shown by the waiter app.
+- **No notifications, and no claim on the site's links.** The kitchen apps
+  leave out the alert service, the notification permission and the link
+  filter (`app/src/kitchen/AndroidManifest.xml`). To show an alert, Chrome
+  takes one installed app that opens the site's root address and looks for
+  the alert service in that one only; on the emulator, a kitchen app that
+  still had the link filter was the one taken, and the waiter's alerts became
+  Chrome's own. Without the filter the kitchen app is never taken, so on a
+  tablet with both of a restaurant's apps a waiter's alerts are always the
+  waiter app's (tried in both orders of opening).
 
 The site and the app name each other, or the app shows an address bar and its
 alerts are Chrome's:
@@ -70,9 +75,17 @@ alerts are Chrome's:
 2. Open the site's `/waiter-app/` page in Chrome, tap **Download the app**,
    then **Open**. The first time, allow Chrome to install apps (**Settings →
    Allow from this source**), go back and tap **Install**.
-3. Open the app, sign in as the waiter.
+3. **Wait a minute with the tablet online**, then open the app and sign in
+   as the waiter. Android checks the app's link to the site in that minute
+   (Settings → Apps → the app → **Open by default** then says *1 verified
+   link*), and Chrome hands alerts to the app only once it has.
 4. Turn on **Alerts on lock screen**, tap **Allow**, then **Send a test** and
-   lock the screen: it rings within 10 seconds.
+   lock the screen: it rings within 10 seconds. The question must be
+   Android's own, *Allow La Soul Waiter to send you notifications?* If it is
+   the site asking instead (*lasoul.net wants to send you notifications*),
+   press Back, close the app, check **Open by default** (if it says no
+   verified links, tap **Add link** and tick the site), and open the app
+   again.
 5. Settings → Apps → the app → **Battery → Unrestricted**. The same for
    Chrome. On Samsung also add both to **Never sleeping apps**.
 6. Notification volume up; Do Not Disturb off during service. A tablet that
@@ -157,3 +170,8 @@ What to check on a tablet or an emulator with Chrome:
   `channel=table_alerts`);
 - `adb shell dumpsys deviceidle force-idle`, then a waiter call: it still
   rings.
+
+After installing a test build, run `adb shell pm verify-app-links --re-verify
+<package>` and wait until `adb shell pm get-app-links <package>` says
+`verified` before opening the app: opened sooner, Chrome does not find the
+app's alert service and asks for notifications itself.

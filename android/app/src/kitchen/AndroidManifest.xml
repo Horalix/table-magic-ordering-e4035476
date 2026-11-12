@@ -4,11 +4,18 @@
   points both kitchen flavours here).
 
   The kitchen screen rings by itself and keeps the tablet's screen on; it sends
-  no notifications, so the kitchen app asks for no leave to show any. And on a
-  tablet that has both of a restaurant's apps, Chrome hands the site's alerts
-  to an app that answers for the site and has an alert service: with none
-  here, that is always the waiter app, under the waiter app's name, sound and
-  permission.
+  no notifications. So the kitchen app has no alert service, asks for no leave
+  to show notifications, and does not answer for the site's addresses.
+
+  That last one is what keeps a waiter's alerts working on a tablet that has
+  both of a restaurant's apps. To show an alert, Chrome asks Android which
+  installed app opens the site's root address, takes ONE of those the site
+  vouches for, and looks for the alert service in that one only. Found on the
+  emulator with both apps installed: Chrome took the kitchen app, found no
+  service in it, and showed its own permission prompt and its own alerts. An
+  app that does not open the site's addresses is never taken. Opening full
+  screen needs none of this: for that Chrome reads the site's assetlinks.json
+  itself.
 -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
@@ -18,6 +25,20 @@
         tools:node="remove" />
 
     <application>
+        <activity android:name="com.google.androidbrowserhelper.trusted.LauncherActivity">
+            <!-- The same filter as the main manifest's, to take exactly that one out. -->
+            <intent-filter
+                android:autoVerify="true"
+                tools:node="remove">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:host="@string/hostName"
+                    android:scheme="https" />
+            </intent-filter>
+        </activity>
+
         <service
             android:name="net.lasoul.waiterapp.TableAlertService"
             tools:node="remove" />
