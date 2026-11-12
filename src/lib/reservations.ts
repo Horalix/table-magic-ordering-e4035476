@@ -338,11 +338,16 @@ export interface AdminReservation {
 /** A message sent by itself about a reservation (public.reservation_messages), as the admin reads it. */
 export interface SentMessage { reservation_id: string; kind: string; status: 'sending' | 'sent' | 'failed'; detail: string | null }
 
+/** A database from before 20261114090000_reservation_messages.sql is asked once, not every time the page refreshes. */
+let messagesUnknown = false;
+
 /** What was sent by itself for this restaurant's recent reservations; nothing before the database knows messages. */
 export async function listSentMessages(venueId: string): Promise<SentMessage[]> {
+  if (messagesUnknown) return [];
   try {
     const { data, error } = await untyped.from('reservation_messages').select('reservation_id, kind, status, detail')
       .eq('venue_id', venueId).order('created_at', { ascending: false }).limit(400);
+    if (missing(error)) messagesUnknown = true;
     return error || !Array.isArray(data) ? [] : (data as SentMessage[]);
   } catch {
     return [];
