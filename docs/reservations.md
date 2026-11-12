@@ -167,9 +167,11 @@ for each way to send it:
 - **Text message**: opens the phone's Messages with the number and the text.
 - **Copy**, for anything else.
 
-It comes from the restaurant's own number, so the guest can answer it.
-Nothing is sent by the system and nothing costs anything beyond the phone's
-own plan. **Message** on a confirmed table brings the same panel back later.
+It comes from the restaurant's own number, so the guest can answer it. This
+part sends nothing by itself and costs nothing beyond the phone's own plan.
+Where the restaurant has **WhatsApp messages** on (docs/whatsapp-messages.md),
+the same answers go out by themselves, and the panel says when one already
+went or could not be delivered. **Message** on a confirmed table brings the same panel back later.
 The words are in `src/lib/reservation-copy.ts` (`msg_…`).
 
 ## The rules that keep the list honest
@@ -186,11 +188,11 @@ The words are in `src/lib/reservation-copy.ts` (`msg_…`).
 
 ## What it does not do (yet)
 
-- **No message sent by the system itself.** The admin sends it with one tap
-  ("Telling the guest"). Automatic texts through a provider were priced on 12
-  November 2026: Twilio charges $0.51 for each text to a Bosnian number.
-  Automatic WhatsApp messages from the restaurant's own business number cost
-  a few cents at most and are the way to add it.
+- **No text message (SMS).** Priced on 12 November 2026: Twilio charges
+  $0.51 for each text to a Bosnian number. Messages go by WhatsApp instead,
+  by themselves once the restaurant's number is connected
+  (docs/whatsapp-messages.md), and by one tap from the admin's own phone
+  either way ("Telling the guest").
 - **No table plan.** The admin decides whether there is room; the system does
   not count seats or assign tables.
 - **No deposit.**
@@ -207,6 +209,7 @@ The words are in `src/lib/reservation-copy.ts` (`msg_…`).
 | The Manager app | `public/manifest-manager*.webmanifest`, `scripts/manager-icons.mjs`, `src/hooks/useVenue.ts` |
 | Days, times, wording | `src/lib/reservations.ts`, `src/lib/reservation-copy.ts` |
 | Messages to the guest, the calendar entry | `src/lib/reservation-messages.ts` |
+| WhatsApp messages sent by themselves | docs/whatsapp-messages.md |
 | Publishing again after a switch | `.github/workflows/republish.yml`, `scripts/republish-check.mjs`, `siteState` in `scripts/seo-prerender.ts` |
 | Tests | `supabase/tests/reservations.test.ts`, `src/lib/reservations.test.ts`, `src/lib/seo/reservations.test.ts`, `e2e/reservations.spec.ts` |
 
