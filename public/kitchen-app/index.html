@@ -1,0 +1,130 @@
+<!doctype html>
+<!--
+  Where the kitchen's tablet gets the kitchen app: https://lasoul.net/kitchen-app/
+  and https://veraitalia.net/kitchen-app/ (android/README.md).
+
+  A page of its own, not part of the app, like public/waiter-app/index.html:
+  it has to open on a tablet that has never seen the site, on any browser, and
+  the address must not be answered by the app's service worker (which leaves
+  every address starting /kitchen to the network). The same file is on both
+  sites and shows the restaurant whose site it is on.
+-->
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>Kitchen app for Android</title>
+    <style>
+      :root { --bg: #f7f4ec; --ink: #1f2925; --muted: #5d6b64; --brand: #1f2925; --brand-ink: #ffffff; --card: #ffffff; --line: #e3ded2; }
+      :root[data-venue='veraitalia'] { --bg: #f4efe6; --ink: #231a15; --muted: #6b5d52; --brand: #231a15; --brand-ink: #f4efe6; --card: #fbf8f2; --line: #e2d9c9; }
+      * { box-sizing: border-box; }
+      body { margin: 0; background: var(--bg); color: var(--ink); font: 17px/1.5 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; }
+      main { max-width: 560px; margin: 0 auto; padding: 28px 16px 48px; }
+      .lang { display: flex; justify-content: flex-end; gap: 4px; }
+      .lang button { min-height: 44px; min-width: 52px; border: 1px solid var(--line); background: transparent; color: var(--muted); border-radius: 999px; font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; }
+      .lang button[aria-pressed='true'] { background: var(--card); color: var(--ink); border-color: var(--ink); }
+      header { text-align: center; margin: 12px 0 24px; }
+      header img { width: 96px; height: 96px; border-radius: 22px; box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12); }
+      h1 { font: 700 28px/1.2 Georgia, 'Times New Roman', serif; margin: 16px 0 6px; }
+      header p { margin: 0; color: var(--muted); }
+      .get { display: flex; align-items: center; justify-content: center; gap: 10px; min-height: 60px; margin: 0 0 8px; border-radius: 16px; background: var(--brand); color: var(--brand-ink); font-weight: 700; font-size: 19px; text-decoration: none; }
+      .get:active { opacity: 0.85; }
+      .size { margin: 0 0 24px; text-align: center; color: var(--muted); font-size: 14px; }
+      section { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 16px 18px; margin: 0 0 14px; }
+      h2 { font-size: 17px; margin: 0 0 8px; }
+      ol, ul { margin: 0; padding-inline-start: 22px; }
+      li { margin: 6px 0; }
+      .note { color: var(--muted); font-size: 15px; }
+      [data-lang] { display: none; }
+      :root[data-show='en'] [data-lang='en'], :root[data-show='bs'] [data-lang='bs'] { display: revert; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div class="lang" role="group" aria-label="Language">
+        <button type="button" data-set="bs">BS</button>
+        <button type="button" data-set="en">EN</button>
+      </div>
+
+      <header>
+        <img id="icon" src="/kitchen-app/la-soul-kitchen.png" alt="" width="96" height="96" />
+        <h1 id="name">La Soul Kitchen</h1>
+        <p data-lang="en">The kitchen screen as an app for the kitchen's Android tablet. Full screen, the screen stays on, and every new order rings.</p>
+        <p data-lang="bs">Ekran za kuhinju kao aplikacija za Android tablet u kuhinji. Preko cijelog ekrana, ekran ostaje upaljen, i svaka nova narudžba zazvoni.</p>
+      </header>
+
+      <a class="get" id="get" href="/kitchen-app/la-soul-kitchen.apk" download>
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12" /><path d="m7 10 5 5 5-5" /><path d="M5 21h14" /></svg>
+        <span data-lang="en">Download the app</span>
+        <span data-lang="bs">Preuzmi aplikaciju</span>
+      </a>
+      <p class="size"><span data-lang="en">Android 7 or newer · about 4 MB · version 1.0.0</span><span data-lang="bs">Android 7 ili noviji · oko 4 MB · verzija 1.0.0</span></p>
+
+      <section>
+        <h2 data-lang="en">Install it</h2>
+        <h2 data-lang="bs">Instalacija</h2>
+        <ol data-lang="en">
+          <li>Open this page in <b>Chrome</b> on the tablet and tap <b>Download the app</b>. If Chrome warns that the file may be harmful, tap <b>Download anyway</b>.</li>
+          <li>Tap <b>Open</b> when the download finishes. The first time, Android asks to allow Chrome to install apps: tap <b>Settings</b>, turn on <b>Allow from this source</b>, go back and tap <b>Install</b>.</li>
+          <li>Open the app from its icon and sign in with the kitchen's username and password.</li>
+          <li>Pick the station (<b>All</b>, <b>Kitchen</b> or <b>Bar</b>) and tap <b>Test sound</b>. If it says <b>Sound blocked — tap to enable</b>, tap it.</li>
+        </ol>
+        <ol data-lang="bs">
+          <li>Otvorite ovu stranicu u <b>Chromeu</b> na tabletu i dodirnite <b>Preuzmi aplikaciju</b>. Ako Chrome upozori da fajl može biti štetan, dodirnite <b>Ipak preuzmi</b>.</li>
+          <li>Kad se preuzme, dodirnite <b>Otvori</b>. Prvi put Android pita smije li Chrome instalirati aplikacije: dodirnite <b>Postavke</b>, uključite <b>Dozvoli iz ovog izvora</b>, vratite se i dodirnite <b>Instaliraj</b>.</li>
+          <li>Otvorite aplikaciju sa njene ikone i prijavite se korisničkim imenom i lozinkom kuhinje.</li>
+          <li>Izaberite stanicu (<b>All</b>, <b>Kitchen</b> ili <b>Bar</b>) i dodirnite <b>Test sound</b>. Ako piše <b>Sound blocked — tap to enable</b>, dodirnite to.</li>
+        </ol>
+      </section>
+
+      <section>
+        <h2 data-lang="en">So no order is missed</h2>
+        <h2 data-lang="bs">Da nijedna narudžba ne promakne</h2>
+        <ul data-lang="en">
+          <li>Keep the tablet <b>on its charger</b>, with the app open. The screen stays on by itself while the kitchen screen is showing.</li>
+          <li>Turn the tablet's <b>media volume</b> all the way up: the kitchen's chime is played by the screen itself.</li>
+          <li>Keep <b>Chrome</b> installed, up to date and set as the default browser: the app runs on it.</li>
+          <li>In <b>Settings → Apps → the app → Battery</b>, choose <b>Unrestricted</b>. Do the same for Chrome.</li>
+        </ul>
+        <ul data-lang="bs">
+          <li>Tablet držite <b>na punjaču</b>, s otvorenom aplikacijom. Ekran sam ostaje upaljen dok je kuhinjski ekran prikazan.</li>
+          <li>Pojačajte <b>zvuk medija</b> na tabletu do kraja: zvono kuhinje pušta sam ekran.</li>
+          <li><b>Chrome</b> mora biti instaliran, ažuriran i postavljen kao zadani preglednik: aplikacija radi na njemu.</li>
+          <li>U <b>Postavke → Aplikacije → aplikacija → Baterija</b> izaberite <b>Bez ograničenja</b>. Isto i za Chrome.</li>
+        </ul>
+      </section>
+
+      <p class="note" data-lang="en">The app is the same kitchen screen as in the browser, so it updates by itself. The waiters' app is on <a href="/waiter-app/">its own page</a>.</p>
+      <p class="note" data-lang="bs">Aplikacija je isti kuhinjski ekran kao u pregledniku, pa se sama ažurira. Aplikacija za konobare je na <a href="/waiter-app/">svojoj stranici</a>.</p>
+    </main>
+
+    <script>
+      (function () {
+        var root = document.documentElement;
+        // The restaurant whose site this is.
+        if (/veraitalia/i.test(location.hostname)) {
+          root.setAttribute('data-venue', 'veraitalia');
+          document.getElementById('name').textContent = 'Vera Italia Kitchen';
+          document.getElementById('icon').src = '/kitchen-app/vera-italia-kitchen.png';
+          document.getElementById('get').href = '/kitchen-app/vera-italia-kitchen.apk';
+        }
+        document.title = document.getElementById('name').textContent + ' for Android';
+
+        function show(lang) {
+          root.setAttribute('data-show', lang);
+          root.lang = lang;
+          var buttons = document.querySelectorAll('[data-set]');
+          for (var i = 0; i < buttons.length; i++) {
+            buttons[i].setAttribute('aria-pressed', String(buttons[i].getAttribute('data-set') === lang));
+          }
+        }
+        var buttons = document.querySelectorAll('[data-set]');
+        for (var i = 0; i < buttons.length; i++) {
+          buttons[i].addEventListener('click', function () { show(this.getAttribute('data-set')); });
+        }
+        show(/^(bs|hr|sr|sh)\b/i.test(navigator.language || '') ? 'bs' : 'en');
+      })();
+    </script>
+  </body>
+</html>

@@ -102,6 +102,11 @@ On a phone the tabs at the bottom are **Dashboard**, **Menu**, **QR Codes** and
   not get your alerts.
 
 **Kitchen and bar**
+- **Android tablet: use the kitchen app.** In Chrome open
+  `lasoul.net/kitchen-app/` (Vera Italia: `veraitalia.net/kitchen-app/`), tap
+  **Download the app**, then **Open → Install**. The app is the kitchen screen
+  and nothing else, full screen. Its chime follows the tablet's **media**
+  volume: turn that all the way up.
 - Tablet charging, set to never sleep (if it says **Screen may sleep — set the
   tablet to never sleep**, change that in the tablet's settings), volume up.
 - Pick the station: **All**, **Kitchen** or **Bar**.

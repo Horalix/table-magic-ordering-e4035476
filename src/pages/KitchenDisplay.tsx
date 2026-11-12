@@ -18,6 +18,7 @@ import {
   vibrate,
 } from '@/lib/kitchen-sounds';
 import { useWakeLock } from '@/lib/wake-lock';
+import { inKitchenApp } from '@/lib/waiter-app';
 import { boardSequence, keyCommand, keysBelongToBoard, nextBump, SHORTCUTS, type KeyCommand } from '@/lib/kds-actions';
 import {
   buildKitchenTicketBytes, downloadKitchenTicketCsv, downloadKitchenTicketJson, partItemIds, printKitchenTicket, ticketHasLines,
@@ -1466,7 +1467,8 @@ const KitchenDisplay = () => {
             >
               <Printer className="w-5 h-5" /> Print here
             </Button>
-            {isAdmin && (
+            {/* The Android kitchen app is this screen and nothing else (src/lib/waiter-app.ts). */}
+            {isAdmin && !inKitchenApp() && (
               <Button asChild variant="ghost" size="icon" className="rounded-full min-h-[44px] min-w-[44px]" title="Printing settings">
                 <Link to="/admin/printing" aria-label="Printing settings"><Settings className="w-5 h-5" /></Link>
               </Button>

@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  What the two kitchen apps leave out of the main manifest (app/build.gradle
+  points both kitchen flavours here).
+
+  The kitchen screen rings by itself and keeps the tablet's screen on; it sends
+  no notifications, so the kitchen app asks for no leave to show any. And on a
+  tablet that has both of a restaurant's apps, Chrome hands the site's alerts
+  to an app that answers for the site and has an alert service: with none
+  here, that is always the waiter app, under the waiter app's name, sound and
+  permission.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <uses-permission
+        android:name="android.permission.POST_NOTIFICATIONS"
+        tools:node="remove" />
+
+    <application>
+        <service
+            android:name="net.lasoul.waiterapp.TableAlertService"
+            tools:node="remove" />
+        <activity
+            android:name="com.google.androidbrowserhelper.trusted.NotificationPermissionRequestActivity"
+            tools:node="remove" />
+    </application>
+</manifest>

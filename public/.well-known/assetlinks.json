@@ -14,5 +14,21 @@
       "package_name": "net.veraitalia.waiter",
       "sha256_cert_fingerprints": ["85:26:C7:0C:4E:58:33:D3:C4:D4:1D:F1:03:47:F8:44:9E:5D:61:5A:EA:04:5D:7D:BF:91:F6:B6:8E:78:B1:C7"]
     }
+  },
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "net.lasoul.kitchen",
+      "sha256_cert_fingerprints": ["85:26:C7:0C:4E:58:33:D3:C4:D4:1D:F1:03:47:F8:44:9E:5D:61:5A:EA:04:5D:7D:BF:91:F6:B6:8E:78:B1:C7"]
+    }
+  },
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "net.veraitalia.kitchen",
+      "sha256_cert_fingerprints": ["85:26:C7:0C:4E:58:33:D3:C4:D4:1D:F1:03:47:F8:44:9E:5D:61:5A:EA:04:5D:7D:BF:91:F6:B6:8E:78:B1:C7"]
+    }
   }
 ]

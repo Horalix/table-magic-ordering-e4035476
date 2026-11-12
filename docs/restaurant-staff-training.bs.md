@@ -108,6 +108,11 @@ Na telefonu su dole kartice **Dashboard**, **Menu**, **QR Codes** i
   ne dobija vaša obavještenja.
 
 **Kuhinja i šank**
+- **Android tablet: koristite aplikaciju za kuhinju.** U Chromeu otvorite
+  `lasoul.net/kitchen-app/` (Vera Italia: `veraitalia.net/kitchen-app/`),
+  dodirnite **Preuzmi aplikaciju**, pa **Otvori → Instaliraj**. Aplikacija je
+  kuhinjski ekran i ništa drugo, preko cijelog ekrana. Zvono prati **zvuk
+  medija** na tabletu: pojačajte ga do kraja.
 - Tablet na punjaču, podešen da se ekran nikad ne gasi (ako piše **Screen may
   sleep — set the tablet to never sleep**, promijenite to u postavkama
   tableta), zvuk pojačan.
