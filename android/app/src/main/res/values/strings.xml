@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The names a waiter sees under Settings → Apps → the app → Notifications. -->
+    <string name="channel_alerts">Orders, calls and bills</string>
+    <string name="channel_alerts_description">A new order, a guest calling you, a table asking for the bill. Rings and shows on the lock screen.</string>
+    <string name="channel_quiet">While the waiter screen is open</string>
+    <string name="channel_quiet_description">The same alerts while you are looking at the waiter screen, which already rings. No sound.</string>
+</resources>

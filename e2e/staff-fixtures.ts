@@ -489,6 +489,8 @@ export async function installStaffStubs(page: Page, state: StaffState) {
   // Monri readiness (GET): not connected, as in production until Monri issues the account.
   await page.route('**/functions/v1/monri-create-payment', (route) =>
     json(route, { configured: false, environment: 'test', currency: 'BAM' }));
+  // Lock-screen alerts' key (GET): not set up, as before the function's secrets are (e2e/lock-screen-alerts.spec.ts).
+  await page.route('**/functions/v1/notify-staff', (route) => json(route, { configured: false }));
   await page.route('**/rest/v1/tables**', (route) => json(route, []));
   await page.route('**/rest/v1/table_sessions**', (route) => json(route, []));
   await page.route('**/rest/v1/order_ticket_events**', (route) => json(route, []));

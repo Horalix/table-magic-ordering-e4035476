@@ -1,0 +1,4 @@
+// The waiter apps for Android: La Soul Waiter and Vera Italia Waiter (see README.md).
+plugins {
+    id 'com.android.application' version '8.13.0' apply false
+}

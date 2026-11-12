@@ -1,0 +1,16 @@
+{
+  "id": "/waiter",
+  "name": "La Soul Waiter",
+  "short_name": "Waiter",
+  "description": "La Soul — the waiter's phone: tables, calls, bills and lock-screen alerts",
+  "theme_color": "#7E9B79",
+  "background_color": "#F7F4EC",
+  "display": "standalone",
+  "start_url": "/waiter",
+  "scope": "/",
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "/icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

@@ -69,20 +69,37 @@ On a phone the tabs at the bottom are **Dashboard**, **Menu**, **QR Codes** and
   every day (once ordering is on). If it is not done, every table shows up under *No waiter yet*.
 
 **Waiters**
-- Sign in, open `/waiter`, and **leave it open**. Your phone only beeps and
-  buzzes while this screen is open — there are no notifications when it is
-  closed or the screen is locked.
-- Set the screen to stay on as long as possible.
-- Sound and vibration are **on by default**. After opening the screen, tap it
-  once: phones keep sound (and Android phones keep vibration) off until the
-  first tap. If it says **Alerts are silent — tap once to turn on sound**, tap it.
+- **Android tablet or phone: use the app.** In Chrome open
+  `lasoul.net/waiter-app/` (Vera Italia: `veraitalia.net/waiter-app/`), tap
+  **Download the app**, then **Open → Install**. The app is the waiter screen
+  and nothing else, and its alerts ring on their own loud channel (**Orders,
+  calls and bills**) with the screen off. Sign in, work the shift, sign out.
+- Sign in and open `/waiter` (the app opens it for you). Once on your phone, turn on **Alerts on lock
+  screen** (tap the switch, then **Allow**). New orders, waiter calls and bill
+  requests at your tables then ring and buzz the phone even when it is locked
+  or the app is in the background. **Send a test** checks it: tap it, lock the
+  phone, and an alert arrives within 10 seconds.
+  - **iPhone:** only from the app on the Home Screen (iOS 16.4 or later). In
+    Safari tap **Share → Add to Home Screen**, open the app from there, sign
+    in, then turn alerts on.
+  - Sound and vibration follow the phone's notification settings for the app:
+    keep the phone off silent and Do Not Disturb during service.
+  - If the card says *not switched on yet*, the phone only beeps while
+    `/waiter` is open: leave it open and set the screen to stay on as long as
+    possible.
+- While the screen is open, sound and vibration are **on by default**. After
+  opening the screen, tap it once: phones keep sound (and Android phones keep
+  vibration) off until the first tap. If it says **Alerts are silent — tap once
+  to turn on sound**, tap it.
 - The speaker button mutes the sound only; the phone still buzzes. A mute ends by
   itself after 4 hours, so the next shift always starts with sound on. While it is
   muted the screen says **Sound is off until** and the time — tap it to turn
   sound back on.
 - **iPhone:** web pages cannot vibrate an iPhone, so keep the volume up. Alerts ring
   even with the silent switch on (iOS 16.4 and newer).
-- **Sign out** asks first. Tap **Stay signed in** unless your shift is over.
+- **Sign out** asks first. Tap **Stay signed in** unless your shift is over. On a
+  phone you share, sign out at the end of your shift: whoever signs in next does
+  not get your alerts.
 
 **Kitchen and bar**
 - Tablet charging, set to never sleep (if it says **Screen may sleep — set the

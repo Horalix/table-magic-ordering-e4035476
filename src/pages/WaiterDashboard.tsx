@@ -55,12 +55,16 @@ import { isHeld, isInKitchen, kitchenStart, orderStatusLabel } from '@/component
 import { attentionSummary as summarize, plural } from '@/components/staff/floor-words';
 import HeldOrdersCard from '@/components/staff/HeldOrdersCard';
 import EndOfDayTables from '@/components/staff/EndOfDayTables';
+import LockScreenAlerts from '@/components/staff/LockScreenAlerts';
 import MenuOnlyNotice from '@/components/staff/MenuOnlyNotice';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import { useLockScreenAlerts } from '@/hooks/useLockScreenAlerts';
 import { useStaffVenue } from '@/hooks/useStaffVenue';
+import { forgetThisPhone, STAFF_PUSH_MESSAGE } from '@/lib/push-alerts';
+import { inWaiterApp } from '@/lib/waiter-app';
 import type { Database } from '@/integrations/supabase/types';
 
 type OrderStatus = Database['public']['Enums']['order_status'];
@@ -302,6 +306,22 @@ const WaiterDashboard = () => {
   }, [refetch]));
   useStaffRefresh(useCallback(() => { refetch(); }, [refetch]));
 
+  /* "Alerts on lock screen": this phone, for this waiter's restaurant. */
+  const alerts = useLockScreenAlerts(staffVenue?.venue.dbId ?? null);
+  /*
+   * A lock-screen alert reached this phone while the screen is open
+   * (public/sw-push.js): the same news, so load it now rather than at the
+   * next tick. The usual new-order chime then plays from the refresh.
+   */
+  useEffect(() => {
+    if (!('serviceWorker' in navigator)) return;
+    const onMessage = (event: MessageEvent) => {
+      if ((event.data as { type?: unknown } | null)?.type === STAFF_PUSH_MESSAGE) refetch();
+    };
+    navigator.serviceWorker.addEventListener('message', onMessage);
+    return () => navigator.serviceWorker.removeEventListener('message', onMessage);
+  }, [refetch]);
+
   /*
    * In-flight taps. The ref is the gate — two taps inside one frame both see
    * the same render, so state alone lets the second through — and the state
@@ -441,6 +461,8 @@ const WaiterDashboard = () => {
   });
 
   const logout = async () => {
+    // Whoever signs in next on this phone does not get this waiter's alerts.
+    await forgetThisPhone();
     await supabase.auth.signOut();
     navigate('/waiter/login');
   };
@@ -704,9 +726,12 @@ const WaiterDashboard = () => {
             </div>
           </div>
           <div className="flex items-center gap-1 shrink-0">
-            <Button variant="ghost" asChild className="tap-sm min-h-[44px] min-w-[44px] px-2">
-              <Link to="/waiter/monitor" aria-label="Floor monitor"><Monitor className="w-5 h-5 sm:mr-1" /><span className="hidden sm:inline text-sm">Floor</span></Link>
-            </Button>
+            {/* The Android waiter app is this screen and nothing else (src/lib/waiter-app.ts). */}
+            {!inWaiterApp() && (
+              <Button variant="ghost" asChild className="tap-sm min-h-[44px] min-w-[44px] px-2">
+                <Link to="/waiter/monitor" aria-label="Floor monitor"><Monitor className="w-5 h-5 sm:mr-1" /><span className="hidden sm:inline text-sm">Floor</span></Link>
+              </Button>
+            )}
             <Button
               variant="ghost"
               onClick={() => { void toggleSound(); }}
@@ -813,6 +838,10 @@ const WaiterDashboard = () => {
       </header>
 
       <main className="max-w-6xl mx-auto px-4 sm:px-6 py-5 space-y-7">
+        {/* On top while there is something to do about it (turn it on, add the
+            app to the Home Screen, unblock notifications); below the tables
+            once it is on, or put off with "Not now". */}
+        {alerts.wantsAttention && <LockScreenAlerts alerts={alerts} venueName={venueName} />}
         {/* Every held order in the venue, not just this waiter's tables: whoever
             is nearest the table is the one who can tell if anyone is there. */}
         <HeldOrdersCard soundEnabled={soundOn} onChanged={refetch} />
@@ -1000,6 +1029,7 @@ const WaiterDashboard = () => {
         )}
         </>
         )}
+        {!alerts.wantsAttention && <LockScreenAlerts alerts={alerts} venueName={venueName} />}
       </main>
 
       <FreeTableDialog
