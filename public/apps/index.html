@@ -1,0 +1,135 @@
+<!doctype html>
+<!--
+  One page for every app and every link a restaurant's team needs:
+  https://lasoul.net/apps/ and https://veraitalia.net/apps/. Send this one
+  address to a new waiter, cook or manager.
+
+  Like /waiter-app/, /kitchen-app/ and /manager-app/ it is a page of its own,
+  not part of the app, and the same file on both sites; it shows the
+  restaurant whose site it is on.
+-->
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>Apps</title>
+    <style>
+      :root { --bg: #f7f4ec; --ink: #1f2925; --muted: #5d6b64; --brand: #5d7a5c; --brand-ink: #ffffff; --card: #ffffff; --line: #e3ded2; }
+      :root[data-venue='veraitalia'] { --bg: #f4efe6; --ink: #231a15; --muted: #6b5d52; --brand: #231a15; --brand-ink: #f4efe6; --card: #fbf8f2; --line: #e2d9c9; }
+      * { box-sizing: border-box; }
+      body { margin: 0; background: var(--bg); color: var(--ink); font: 17px/1.5 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; }
+      main { max-width: 560px; margin: 0 auto; padding: 28px 16px 48px; }
+      .lang { display: flex; justify-content: flex-end; gap: 4px; }
+      .lang button { min-height: 44px; min-width: 52px; border: 1px solid var(--line); background: transparent; color: var(--muted); border-radius: 999px; font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; }
+      .lang button[aria-pressed='true'] { background: var(--card); color: var(--ink); border-color: var(--ink); }
+      header { text-align: center; margin: 12px 0 22px; }
+      h1 { font: 700 28px/1.2 Georgia, 'Times New Roman', serif; margin: 0 0 6px; }
+      header p { margin: 0; color: var(--muted); }
+      h2 { font: 700 13px/1.2 system-ui, sans-serif; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin: 26px 4px 10px; }
+      .card { display: flex; align-items: center; gap: 14px; background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 14px 16px; margin: 0 0 10px; color: inherit; text-decoration: none; min-height: 76px; }
+      .card:active { opacity: 0.85; }
+      .card img { width: 56px; height: 56px; border-radius: 13px; flex: none; box-shadow: 0 3px 10px rgba(0, 0, 0, 0.1); }
+      .card b { display: block; font-size: 18px; }
+      .card .desc { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.35; }
+      .card .go { margin-inline-start: auto; font-size: 22px; color: var(--muted); flex: none; }
+      ul.quick { list-style: none; margin: 0; padding: 0; background: var(--card); border: 1px solid var(--line); border-radius: 16px; }
+      ul.quick li + li { border-top: 1px solid var(--line); }
+      ul.quick a { display: flex; justify-content: space-between; gap: 12px; padding: 13px 16px; min-height: 48px; color: inherit; text-decoration: none; }
+      ul.quick small { color: var(--muted); font-size: 14px; text-align: end; }
+      .note { color: var(--muted); font-size: 15px; margin: 18px 4px 0; }
+      [data-lang] { display: none; }
+      :root[data-show='en'] [data-lang='en'], :root[data-show='bs'] [data-lang='bs'] { display: revert; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div class="lang" role="group" aria-label="Language">
+        <button type="button" data-set="bs">BS</button>
+        <button type="button" data-set="en">EN</button>
+      </div>
+
+      <header>
+        <h1 id="name">La Soul apps</h1>
+        <p data-lang="en">Everything the team installs or opens, in one place.</p>
+        <p data-lang="bs">Sve što tim instalira ili otvara, na jednom mjestu.</p>
+      </header>
+
+      <h2 data-lang="en">Install</h2>
+      <h2 data-lang="bs">Instalacija</h2>
+
+      <a class="card" href="/manager-app/">
+        <img id="manager-icon" src="/icons/manager-192.png" alt="" width="56" height="56" />
+        <div>
+          <b>Manager</b>
+          <p class="desc" data-lang="en">For the manager and the owner. iPhone and Android. Rings for every reservation.</p>
+          <p class="desc" data-lang="bs">Za menadžera i vlasnika. iPhone i Android. Zvoni za svaku rezervaciju.</p>
+        </div>
+        <span class="go" aria-hidden="true">›</span>
+      </a>
+
+      <a class="card" href="/waiter-app/">
+        <img id="waiter-icon" src="/icons/icon-192.png" alt="" width="56" height="56" />
+        <div>
+          <b>Waiter</b>
+          <p class="desc" data-lang="en">For waiters. Android tablets and phones. Orders, calls and bills ring with the screen off.</p>
+          <p class="desc" data-lang="bs">Za konobare. Android tableti i telefoni. Narudžbe, pozivi i računi zvone i kad je ekran ugašen.</p>
+        </div>
+        <span class="go" aria-hidden="true">›</span>
+      </a>
+
+      <a class="card" href="/kitchen-app/">
+        <img id="kitchen-icon" src="/kitchen-app/la-soul-kitchen.png" alt="" width="56" height="56" />
+        <div>
+          <b>Kitchen</b>
+          <p class="desc" data-lang="en">For the kitchen and the bar. Android tablets. A new order rings and stays on the screen.</p>
+          <p class="desc" data-lang="bs">Za kuhinju i šank. Android tableti. Nova narudžba zazvoni i ostaje na ekranu.</p>
+        </div>
+        <span class="go" aria-hidden="true">›</span>
+      </a>
+
+      <p class="note" data-lang="en">iPhone or iPad for the waiter or the kitchen: open the screen below in Safari and use Share → Add to Home Screen.</p>
+      <p class="note" data-lang="bs">iPhone ili iPad za konobara ili kuhinju: otvorite ekran ispod u Safariju i izaberite Dijeli → Dodaj na početni ekran.</p>
+
+      <h2 data-lang="en">Open in the browser</h2>
+      <h2 data-lang="bs">Otvori u pregledniku</h2>
+      <ul class="quick">
+        <li><a href="/admin"><span>Admin</span><small data-lang="en">manager, owner</small><small data-lang="bs">menadžer, vlasnik</small></a></li>
+        <li><a href="/waiter/login"><span data-lang="en">Waiter sign-in</span><span data-lang="bs">Prijava konobara</span><small data-lang="en">orders, tables</small><small data-lang="bs">narudžbe, stolovi</small></a></li>
+        <li><a href="/kitchen"><span data-lang="en">Kitchen board</span><span data-lang="bs">Kuhinjski ekran</span><small data-lang="en">kitchen, bar</small><small data-lang="bs">kuhinja, šank</small></a></li>
+        <li><a href="/tv"><span data-lang="en">Menu on the TV</span><span data-lang="bs">Meni na TV-u</span><small data-lang="en">entrance screen</small><small data-lang="bs">ekran na ulazu</small></a></li>
+        <li><a href="/reserve/"><span data-lang="en">Book a table</span><span data-lang="bs">Rezervacija stola</span><small data-lang="en">what guests use</small><small data-lang="bs">što koriste gosti</small></a></li>
+        <li><a href="/menu/"><span data-lang="en">Menu</span><span data-lang="bs">Meni</span><small data-lang="en">for guests</small><small data-lang="bs">za goste</small></a></li>
+      </ul>
+    </main>
+
+    <script>
+      (function () {
+        var root = document.documentElement;
+        // The restaurant whose site this is.
+        if (/veraitalia/i.test(location.hostname)) {
+          root.setAttribute('data-venue', 'veraitalia');
+          document.getElementById('name').textContent = 'Vera Italia apps';
+          document.getElementById('manager-icon').src = '/brand/vera/manager-192.png';
+          document.getElementById('waiter-icon').src = '/brand/vera/icon-192.png';
+          document.getElementById('kitchen-icon').src = '/kitchen-app/vera-italia-kitchen.png';
+        }
+        document.title = document.getElementById('name').textContent;
+
+        function show(lang) {
+          root.setAttribute('data-show', lang);
+          root.lang = lang;
+          var buttons = document.querySelectorAll('[data-set]');
+          for (var i = 0; i < buttons.length; i++) {
+            buttons[i].setAttribute('aria-pressed', String(buttons[i].getAttribute('data-set') === lang));
+          }
+        }
+        var buttons = document.querySelectorAll('[data-set]');
+        for (var i = 0; i < buttons.length; i++) {
+          buttons[i].addEventListener('click', function () { show(this.getAttribute('data-set')); });
+        }
+        show(/^(bs|hr|sr|sh)\b/i.test(navigator.language || '') ? 'bs' : 'en');
+      })();
+    </script>
+  </body>
+</html>
