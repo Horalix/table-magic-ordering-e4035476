@@ -1784,6 +1784,54 @@ export type Database = {
           },
         ]
       }
+      reservation_messages: {
+        Row: {
+          created_at: string
+          detail: string | null
+          id: string
+          kind: string
+          reservation_id: string
+          status: string
+          updated_at: string
+          venue_id: string
+        }
+        Insert: {
+          created_at?: string
+          detail?: string | null
+          id?: string
+          kind: string
+          reservation_id: string
+          status?: string
+          updated_at?: string
+          venue_id: string
+        }
+        Update: {
+          created_at?: string
+          detail?: string | null
+          id?: string
+          kind?: string
+          reservation_id?: string
+          status?: string
+          updated_at?: string
+          venue_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reservation_messages_reservation_id_fkey"
+            columns: ["reservation_id"]
+            isOneToOne: false
+            referencedRelation: "reservations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reservation_messages_venue_id_fkey"
+            columns: ["venue_id"]
+            isOneToOne: false
+            referencedRelation: "venues"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       reservations: {
         Row: {
           cancelled_by: string | null
@@ -1902,6 +1950,9 @@ export type Database = {
           reservations_note: string | null
           reservations_open: string
           reservations_phone: string | null
+          reservations_whatsapp_admin: string | null
+          reservations_whatsapp_guest: boolean
+          reservations_whatsapp_received: boolean
           service_close: string | null
           service_open: string | null
           session_idle_timeout_minutes: number
@@ -1958,6 +2009,9 @@ export type Database = {
           reservations_note?: string | null
           reservations_open?: string
           reservations_phone?: string | null
+          reservations_whatsapp_admin?: string | null
+          reservations_whatsapp_guest?: boolean
+          reservations_whatsapp_received?: boolean
           service_close?: string | null
           service_open?: string | null
           session_idle_timeout_minutes?: number
@@ -2014,6 +2068,9 @@ export type Database = {
           reservations_note?: string | null
           reservations_open?: string
           reservations_phone?: string | null
+          reservations_whatsapp_admin?: string | null
+          reservations_whatsapp_guest?: boolean
+          reservations_whatsapp_received?: boolean
           service_close?: string | null
           service_open?: string | null
           session_idle_timeout_minutes?: number
@@ -4210,6 +4267,7 @@ export type Database = {
         Args: { _endpoint: string; _keys: Json; _venue: string }
         Returns: Json
       }
+      reservation_messages_url: { Args: never; Returns: string }
       reservation_phone: { Args: { _raw: string }; Returns: string }
       reservations_sweep: { Args: never; Returns: Json }
       resolve_table_for_token: {
