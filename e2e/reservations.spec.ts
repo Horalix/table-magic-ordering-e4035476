@@ -665,3 +665,19 @@ test.describe('Admin → Reservations', () => {
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
   });
 });
+
+test.describe('Admin → Reservations on an iPhone in Safari', () => {
+  test.use({ userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1' });
+
+  test('says to add the Manager app to the Home Screen first, and points to the page that shows how', async ({ page, staff }) => {
+    await adminStubs(page, staff, []);
+    await page.goto('/admin/reservations');
+    const alerts = page.getByTestId('reservation-alerts');
+    await expect(alerts).toContainText('Add to Home Screen');
+    await expect(alerts.getByTestId('manager-app-link')).toHaveAttribute('href', '/manager-app/');
+    // Where it leads is a page of its own, never the app's.
+    const target = await page.request.get('/manager-app/');
+    expect(target.status()).toBe(200);
+    expect(await target.text()).toContain('Add to Home Screen');
+  });
+});

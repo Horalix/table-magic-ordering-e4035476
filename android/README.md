@@ -18,6 +18,11 @@ Tablets get them from the restaurant's own site:
 - https://lasoul.net/waiter-app/ and https://lasoul.net/kitchen-app/
 - https://veraitalia.net/waiter-app/ and https://veraitalia.net/kitchen-app/
 
+The manager's phone has no app file: the admin added to the Home Screen is its
+app, and https://lasoul.net/manager-app/ (https://veraitalia.net/manager-app/)
+says how. https://lasoul.net/apps/ (https://veraitalia.net/apps/) lists all
+three and every link.
+
 ## What the app is
 
 A Trusted Web Activity: the app opens `https://<site>/waiter` (or `/kitchen`)

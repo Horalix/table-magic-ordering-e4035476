@@ -1,0 +1,192 @@
+<!doctype html>
+<!--
+  Where a manager gets the Manager app: https://lasoul.net/manager-app/ and
+  https://veraitalia.net/manager-app/ (docs/reservations.md, "The Manager app").
+
+  The Manager app is the admin added to a phone's Home Screen: there is no
+  file to download, so this page says how, for iPhone and for Android, and
+  opens the admin to start from. Like /waiter-app/ and /kitchen-app/ it is a
+  page of its own, not part of the app: it has to open on a phone that has
+  never seen the site, and the service worker leaves its address to the
+  network (vite.config.ts, navigateFallbackDenylist). The same file is on both
+  sites and shows the restaurant whose site it is on.
+
+  Added to the Home Screen from here, it still opens the admin: a page
+  launched as an app sends itself to /admin.
+-->
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>Manager app</title>
+    <link rel="manifest" id="manifest" href="/manifest-manager.webmanifest" />
+    <link rel="apple-touch-icon" id="touch" href="/icons/manager-apple-touch-icon.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Manager" />
+    <meta name="theme-color" id="theme" content="#f7f4ec" />
+    <script>
+      // Launched from the Home Screen: this page is only the way in, the app is the admin.
+      if (window.navigator.standalone === true || (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches)) {
+        location.replace('/admin');
+      }
+    </script>
+    <style>
+      :root { --bg: #f7f4ec; --ink: #1f2925; --muted: #5d6b64; --brand: #5d7a5c; --brand-ink: #ffffff; --card: #ffffff; --line: #e3ded2; }
+      :root[data-venue='veraitalia'] { --bg: #f4efe6; --ink: #231a15; --muted: #6b5d52; --brand: #231a15; --brand-ink: #f4efe6; --card: #fbf8f2; --line: #e2d9c9; }
+      * { box-sizing: border-box; }
+      body { margin: 0; background: var(--bg); color: var(--ink); font: 17px/1.5 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; }
+      main { max-width: 560px; margin: 0 auto; padding: 28px 16px 48px; }
+      .lang { display: flex; justify-content: flex-end; gap: 4px; }
+      .lang button { min-height: 44px; min-width: 52px; border: 1px solid var(--line); background: transparent; color: var(--muted); border-radius: 999px; font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; }
+      .lang button[aria-pressed='true'] { background: var(--card); color: var(--ink); border-color: var(--ink); }
+      header { text-align: center; margin: 12px 0 24px; }
+      header img { width: 96px; height: 96px; border-radius: 22px; box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12); }
+      h1 { font: 700 28px/1.2 Georgia, 'Times New Roman', serif; margin: 16px 0 6px; }
+      header p { margin: 0; color: var(--muted); }
+      .get { display: flex; align-items: center; justify-content: center; gap: 10px; min-height: 60px; margin: 0 0 10px; border-radius: 16px; background: var(--brand); color: var(--brand-ink); font-weight: 700; font-size: 18px; text-decoration: none; border: 0; width: 100%; font-family: inherit; cursor: pointer; }
+      .get:active { opacity: 0.85; }
+      .get.second { background: transparent; color: var(--ink); border: 1px solid var(--line); font-weight: 600; font-size: 16px; min-height: 52px; }
+      .hint { margin: 0 0 24px; text-align: center; color: var(--muted); font-size: 14px; }
+      section { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 16px 18px; margin: 0 0 14px; }
+      h2 { font-size: 17px; margin: 0 0 8px; }
+      ol, ul { margin: 0; padding-inline-start: 22px; }
+      li { margin: 6px 0; }
+      .note { color: var(--muted); font-size: 15px; }
+      .links { text-align: center; margin: 18px 0 0; font-size: 15px; }
+      .links a { color: var(--ink); }
+      [data-lang] { display: none; }
+      :root[data-show='en'] [data-lang='en'], :root[data-show='bs'] [data-lang='bs'] { display: revert; }
+      #install[hidden] { display: none; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div class="lang" role="group" aria-label="Language">
+        <button type="button" data-set="bs">BS</button>
+        <button type="button" data-set="en">EN</button>
+      </div>
+
+      <header>
+        <img id="icon" src="/icons/manager-192.png" alt="" width="96" height="96" />
+        <h1 id="name">La Soul Manager</h1>
+        <p data-lang="en">Reservations to answer, today's numbers, the menu and orders, on your phone. It rings when a guest asks for a table, even when the phone is locked.</p>
+        <p data-lang="bs">Rezervacije za odgovoriti, današnji brojevi, meni i narudžbe, na vašem telefonu. Zazvoni kad gost zatraži sto, čak i kad je telefon zaključan.</p>
+      </header>
+
+      <button class="get" id="install" type="button" hidden>
+        <span data-lang="en">Install the app</span>
+        <span data-lang="bs">Instaliraj aplikaciju</span>
+      </button>
+      <a class="get" id="open" href="/admin">
+        <span data-lang="en">Open the admin</span>
+        <span data-lang="bs">Otvori admin</span>
+      </a>
+      <p class="hint">
+        <span data-lang="en">Start here, then add it to the Home Screen as below. There is nothing to download.</span>
+        <span data-lang="bs">Počnite ovdje, pa je dodajte na početni ekran kako je opisano ispod. Ništa se ne preuzima.</span>
+      </p>
+
+      <section>
+        <h2 data-lang="en">iPhone and iPad</h2>
+        <h2 data-lang="bs">iPhone i iPad</h2>
+        <ol data-lang="en">
+          <li>Open this page in <b>Safari</b> (not in another app's browser), then tap <b>Open the admin</b>.</li>
+          <li>Tap <b>Share</b> (the square with an arrow), scroll down and tap <b>Add to Home Screen</b>. The name is <b>Manager</b>. Tap <b>Add</b>.</li>
+          <li>Open <b>Manager</b> from the Home Screen and sign in. The Home Screen app keeps its own sign-in.</li>
+          <li>Go to <b>Reservations</b>, turn on <b>Alert this phone</b> and tap <b>Allow</b>. Tap <b>Send a test</b> and lock the phone: it rings within about ten seconds.</li>
+        </ol>
+        <ol data-lang="bs">
+          <li>Otvorite ovu stranicu u <b>Safariju</b> (ne u pregledniku druge aplikacije), pa dodirnite <b>Otvori admin</b>.</li>
+          <li>Dodirnite <b>Dijeli</b> (kvadrat sa strelicom), povucite prema dolje i dodirnite <b>Dodaj na početni ekran</b>. Ime je <b>Manager</b>. Dodirnite <b>Dodaj</b>.</li>
+          <li>Otvorite <b>Manager</b> sa početnog ekrana i prijavite se. Aplikacija na početnom ekranu ima svoju prijavu.</li>
+          <li>Idite na <b>Reservations</b>, uključite <b>Alert this phone</b> i dodirnite <b>Dozvoli</b>. Dodirnite <b>Send a test</b> i zaključajte telefon: zazvoni za desetak sekundi.</li>
+        </ol>
+        <p class="note" data-lang="en">Needs iOS 16.4 or newer. On an iPhone this is the only way to get the alerts: Apple rings for web notifications only from a Home Screen app.</p>
+        <p class="note" data-lang="bs">Potreban je iOS 16.4 ili noviji. Na iPhoneu je ovo jedini način da dobijete obavještenja: Apple zvoni za web obavještenja samo iz aplikacije na početnom ekranu.</p>
+      </section>
+
+      <section>
+        <h2 data-lang="en">Android</h2>
+        <h2 data-lang="bs">Android</h2>
+        <ol data-lang="en">
+          <li>Open this page in <b>Chrome</b> and tap <b>Open the admin</b>.</li>
+          <li>Tap the menu <b>⋮</b>, then <b>Install app</b> (or <b>Add to Home screen</b>). Confirm.</li>
+          <li>Open <b>Manager</b> from its icon, sign in, go to <b>Reservations</b> and turn on <b>Alert this phone</b>. Tap <b>Allow</b>, then <b>Send a test</b>.</li>
+        </ol>
+        <ol data-lang="bs">
+          <li>Otvorite ovu stranicu u <b>Chromeu</b> i dodirnite <b>Otvori admin</b>.</li>
+          <li>Dodirnite meni <b>⋮</b>, pa <b>Instaliraj aplikaciju</b> (ili <b>Dodaj na početni ekran</b>). Potvrdite.</li>
+          <li>Otvorite <b>Manager</b> sa njegove ikone, prijavite se, idite na <b>Reservations</b> i uključite <b>Alert this phone</b>. Dodirnite <b>Dozvoli</b>, pa <b>Send a test</b>.</li>
+        </ol>
+      </section>
+
+      <section>
+        <h2 data-lang="en">So it always rings</h2>
+        <h2 data-lang="bs">Da uvijek zazvoni</h2>
+        <ul data-lang="en">
+          <li>iPhone: <b>Settings → Notifications → Manager</b>: allow notifications, sounds and the lock screen.</li>
+          <li>A Focus mode or Do Not Disturb silences it like any other app: allow <b>Manager</b> in the ones you use.</li>
+          <li>Android: in <b>Settings → Apps → Manager → Battery</b> choose <b>Unrestricted</b>.</li>
+          <li>Keep the notification volume up, and do not remove the app from the Home Screen.</li>
+        </ul>
+        <ul data-lang="bs">
+          <li>iPhone: <b>Postavke → Obavještenja → Manager</b>: dozvolite obavještenja, zvukove i zaključani ekran.</li>
+          <li>Fokus ili „Ne uznemiravaj“ ga utišava kao i svaku drugu aplikaciju: dozvolite <b>Manager</b> u onima koje koristite.</li>
+          <li>Android: u <b>Postavke → Aplikacije → Manager → Baterija</b> izaberite <b>Bez ograničenja</b>.</li>
+          <li>Držite zvuk obavještenja pojačan i ne uklanjajte aplikaciju sa početnog ekrana.</li>
+        </ul>
+      </section>
+
+      <p class="note" data-lang="en">The Manager app is the same admin as in the browser, so it updates by itself. On a computer there is nothing to install: open the admin in Chrome.</p>
+      <p class="note" data-lang="bs">Manager je isti admin kao u pregledniku, pa se sam ažurira. Na računaru nema šta da se instalira: otvorite admin u Chromeu.</p>
+      <p class="links"><a href="/apps/"><span data-lang="en">All the apps and links</span><span data-lang="bs">Sve aplikacije i linkovi</span></a></p>
+    </main>
+
+    <script>
+      (function () {
+        var root = document.documentElement;
+        // The restaurant whose site this is.
+        if (/veraitalia/i.test(location.hostname)) {
+          root.setAttribute('data-venue', 'veraitalia');
+          document.getElementById('name').textContent = 'Vera Italia Manager';
+          document.getElementById('icon').src = '/brand/vera/manager-192.png';
+          document.getElementById('manifest').href = '/manifest-manager-veraitalia.webmanifest';
+          document.getElementById('touch').href = '/brand/vera/manager-apple-touch-icon.png';
+          document.getElementById('theme').content = '#f4efe6';
+        }
+        document.title = document.getElementById('name').textContent + ' app';
+
+        // Where the browser offers to install it (Chrome on Android, a computer): one tap instead of the menu.
+        var offered = null;
+        window.addEventListener('beforeinstallprompt', function (event) {
+          event.preventDefault();
+          offered = event;
+          document.getElementById('install').hidden = false;
+          document.getElementById('open').classList.add('second');
+        });
+        document.getElementById('install').addEventListener('click', function () {
+          if (!offered) return;
+          offered.prompt();
+          offered = null;
+          document.getElementById('install').hidden = true;
+          document.getElementById('open').classList.remove('second');
+        });
+
+        function show(lang) {
+          root.setAttribute('data-show', lang);
+          root.lang = lang;
+          var buttons = document.querySelectorAll('[data-set]');
+          for (var i = 0; i < buttons.length; i++) {
+            buttons[i].setAttribute('aria-pressed', String(buttons[i].getAttribute('data-set') === lang));
+          }
+        }
+        var buttons = document.querySelectorAll('[data-set]');
+        for (var i = 0; i < buttons.length; i++) {
+          buttons[i].addEventListener('click', function () { show(this.getAttribute('data-set')); });
+        }
+        show(/^(bs|hr|sr|sh)\b/i.test(navigator.language || '') ? 'bs' : 'en');
+      })();
+    </script>
+  </body>
+</html>

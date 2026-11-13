@@ -90,6 +90,14 @@
 /kitchen-app/*
   Cache-Control: no-cache
   X-Robots-Tag: noindex, nofollow
+# The page that says how to add the Manager app to a phone's Home Screen, and
+# the one page that lists every app and link (public/manager-app/, public/apps/).
+/manager-app/*
+  Cache-Control: no-cache
+  X-Robots-Tag: noindex, nofollow
+/apps/*
+  Cache-Control: no-cache
+  X-Robots-Tag: noindex, nofollow
 # What vouches for the apps (Digital Asset Links); Chrome reads it when an app opens.
 /.well-known/assetlinks.json
   Content-Type: application/json
