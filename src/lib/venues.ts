@@ -11,7 +11,8 @@
  * is not known yet is null and its part of the site stays hidden.
  */
 import { guestVenue } from './current-venue';
-import { HOME_VENUE } from './home-venue';
+import { DEMO_BUILD, DEMO_VENUE, HOME_VENUE } from './home-venue';
+import { DEMO_ICON, RESTAURANT, RESTAURANT_THEME_COLOR } from '../demo/brand';
 import { OWN_SITE_LIVE, VENUE_URLS } from './seo/site-url';
 
 export type Weekday = 'Monday' | 'Tuesday' | 'Wednesday' | 'Thursday' | 'Friday' | 'Saturday' | 'Sunday';
@@ -76,7 +77,7 @@ export interface Venue {
  * Instagram @lasoul.bih, the pin below. Change them here and the website,
  * its structured data, the sitemap and llms.txt all follow.
  */
-export const VENUES: Record<string, Venue> = {
+const REAL_VENUES: Record<string, Venue> = {
   lasoul: {
     slug: 'lasoul',
     dbId: 'a5000000-0000-4000-8000-000000000001',
@@ -134,6 +135,39 @@ export const VENUES: Record<string, Venue> = {
 };
 
 /**
+ * The offline demo (docs/demo-mode.md) is one fictional restaurant; its names
+ * are in src/demo/brand.ts. It has no listing to review and no social pages,
+ * and its icon is drawn in the page, so nothing here points at a real venue.
+ */
+const DEMO_VENUES: Record<string, Venue> = {
+  [DEMO_VENUE]: {
+    slug: RESTAURANT.slug,
+    dbId: RESTAURANT.dbId,
+    name: RESTAURANT.name,
+    alternateNames: [],
+    tagline: RESTAURANT.tagline,
+    phone: RESTAURANT.phone,
+    phoneHref: RESTAURANT.phoneHref,
+    address: RESTAURANT.address,
+    city: RESTAURANT.city,
+    country: RESTAURANT.country,
+    geo: null,
+    mapsUrl: '',
+    hours: [{ days: EVERY_DAY, opens: '08:00', closes: '23:00' }],
+    instagram: null,
+    facebook: null,
+    reviewUrl: null,
+    live: true,
+    brand: {
+      themeColor: RESTAURANT_THEME_COLOR, manifest: '', waiterManifest: '', managerManifest: '', managerTouchIcon: DEMO_ICON,
+      icon: DEMO_ICON, appleTouchIcon: DEMO_ICON, headingFont: '/fonts/lora.woff2',
+    },
+  },
+};
+
+export const VENUES: Record<string, Venue> = DEMO_BUILD ? DEMO_VENUES : REAL_VENUES;
+
+/**
  * A restaurant shown in place on this build (VITE_PREVIEW_VENUES, a comma
  * list): the browser tests show Vera Italia's pages on La Soul's site rather
  * than forwarding them to veraitalia.net; production does not.
@@ -150,7 +184,7 @@ export function venueByDbId(id: string | null | undefined): Venue | null {
 }
 
 /** The venue a table QR code, a bare /menu or an old link belongs to. */
-export const DEFAULT_VENUE = 'lasoul';
+export const DEFAULT_VENUE = DEMO_BUILD ? DEMO_VENUE : 'lasoul';
 
 export function venueBySlug(slug: string | undefined): Venue | null {
   const venue = slug ? VENUES[slug] : undefined;

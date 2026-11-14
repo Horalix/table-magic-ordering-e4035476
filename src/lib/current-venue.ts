@@ -21,7 +21,7 @@
  * that does not know a slug answers for La Soul, so this is safe to ship
  * ahead of it. (No import of src/lib/venues.ts here: it imports this.)
  */
-import { HOME_VENUE } from './home-venue';
+import { DEMO_BUILD, DEMO_VENUE, HOME_VENUE } from './home-venue';
 import { TV_PATH } from './tv-board';
 
 const GUEST_KEY = 'lasoul.guest-venue';
@@ -72,7 +72,7 @@ export function currentVenueSlug(): string | null {
 }
 
 /** What the database answers when a request names no restaurant: default_venue(), La Soul. */
-const DATABASE_DEFAULT_SLUG = 'lasoul';
+const DATABASE_DEFAULT_SLUG = DEMO_BUILD ? DEMO_VENUE : 'lasoul';
 
 /**
  * The restaurant the database answers this page's requests for, for someone

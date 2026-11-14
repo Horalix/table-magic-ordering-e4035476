@@ -13,6 +13,8 @@ import { HOME_VENUE } from '../home-venue';
 export const VENUE_URLS: Record<string, string> = {
   lasoul: 'https://lasoul.net',
   veraitalia: 'https://veraitalia.net',
+  // The offline demo's fictional restaurant (src/demo/brand.ts): it has no site of its own.
+  casademo: 'https://casademo.example',
 };
 
 /**

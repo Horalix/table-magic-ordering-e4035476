@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from './types';
 import { venueFetch } from '@/lib/current-venue';
+import { DEMO_MODE } from '@/lib/demo-mode';
 
 // Import the supabase client like this:
 // import { supabase } from "@/integrations/supabase/client";
@@ -47,13 +48,23 @@ export const supabaseHost = (() => {
   catch { return 'invalid-url'; }
 })();
 
+/**
+ * The offline demo (docs/demo-mode.md) keeps one signed-in account per staff
+ * area of the app, so the kitchen display, a waiter and the owner can be open
+ * side by side in one browser (src/demo/session.ts). Never set in a normal
+ * build, where this whole expression is the constant `undefined`.
+ */
+const demoAuthStorage = DEMO_MODE && typeof window !== 'undefined'
+  ? (window as { __TABLEFLOW_DEMO__?: { authStorage?: Pick<Storage, 'getItem' | 'setItem' | 'removeItem'> } }).__TABLEFLOW_DEMO__?.authStorage
+  : undefined;
+
 export const supabase = createClient<Database>(
   SUPABASE_URL || MISSING_CONFIG_URL,
   SUPABASE_PUBLISHABLE_KEY || 'not-configured',
   {
     auth: {
       // localStorage is unavailable in the node test environment.
-      storage: typeof localStorage !== 'undefined' ? localStorage : undefined,
+      storage: demoAuthStorage ?? (typeof localStorage !== 'undefined' ? localStorage : undefined),
       persistSession: typeof localStorage !== 'undefined',
       autoRefreshToken: typeof localStorage !== 'undefined',
     },
