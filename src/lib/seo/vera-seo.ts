@@ -4,10 +4,13 @@
  *
  * Built only from what is real — its menu (scripts/vera-italia/menu.json),
  * its own words (src/components/vera/copy.ts) and the facts in
- * src/lib/venues.ts. A fact the owner has not given yet (the address, the
- * hours, the phone, its profiles) is left out everywhere, and appears
- * everywhere — structured data, pages, FAQ, llms.txt — the day it is filled
- * in. Nothing of La Soul's is claimed for it (no "halal", no "burgers").
+ * src/lib/venues.ts. A fact the owner has not given yet (the hours, the map
+ * pin, its profiles) is left out everywhere, and appears everywhere —
+ * structured data, pages, FAQ, llms.txt — the day it is filled in. Its
+ * street and phone are the ones on its Google Business Profile, and so are
+ * written the same on every page. Nothing of La Soul's is claimed for it (no
+ * "halal", no "burgers", not La Soul's name or its "16A | 16B" address); it
+ * is next door, and for now answers on the same phone number.
  *
  * The build writes these pages (scripts/seo-prerender.ts); the website
  * (src/pages/vera/VeraSite.tsx) puts the same structured data on the page.
@@ -394,15 +397,20 @@ const courseBlock = (c: SeoMenuCategory, link: boolean) => [
   ...c.sections.map((s) => `<h3>${h(s.names.en)}</h3><ul>${s.items.map((i) => `<li>${dishLine(i)}</li>`).join('')}</ul>`),
 ].join('\n');
 
-/** Where to find it: the street and phone once the owner gives them, until then the city. */
+/**
+ * Where to find it: the street and phone the owner gave, and that the hours
+ * are still to come while it has none; without a street, the city.
+ */
 function visitFacts(locale: Locale): string {
   const v = vera();
   const pick = (c: Record<Locale, string>) => h(c[locale] ?? c.en);
-  return v.address
-    ? `<address>${h(v.name)}<br />${h(v.address)}, ${pick(PLACE.city)}, ${pick(PLACE.country)}${v.phone ? `<br /><a href="tel:${h(v.phoneHref)}">${h(v.phone)}</a>` : ''}</address>`
-    : v.city
+  if (!v.address) {
+    return v.city
       ? `<p>${pick(PLACE.city)}, ${pick(PLACE.country)}. ${pick(SITE.visitSoon)}</p>`
       : `<p>${pick(SITE.openingSoon)}. ${pick(SITE.visitSoon)}</p>`;
+  }
+  return `<address>${h(v.name)}<br />${h(v.address)}, ${pick(PLACE.city)}, ${pick(PLACE.country)}${v.phone ? `<br /><a href="tel:${h(v.phoneHref)}">${h(v.phone)}</a>` : ''}</address>`
+    + (v.hours?.length ? '' : `<p>${pick(SITE.hoursSoon)}</p>`);
 }
 
 /**

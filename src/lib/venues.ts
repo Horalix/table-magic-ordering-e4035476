@@ -103,8 +103,16 @@ export const VENUES: Record<string, Venue> = {
    * photographs arrived on 30 October 2026, and its menu has been in the
    * database since that evening, so it is live: veraitalia.net links to its
    * menu and search engines list it. It is in Sarajevo (the owner, 30 October
-   * 2026); its street address, phone, hours and listings have not arrived, so
-   * they are empty and the website shows none of them.
+   * 2026).
+   *
+   * Its street address and phone are the owner's, given on 13 November 2026,
+   * and the same as on its Google Business Profile (created that day, not yet
+   * verified): Google compares the two, so change them in both places or in
+   * neither. It is next door to La Soul and, for now, answers on La Soul's
+   * phone number (written here as La Soul's is). It has not opened its doors
+   * yet, so it has no hours; its map pin, Maps link, review link and
+   * Instagram are not known yet. Those stay empty and the website shows none
+   * of them.
    *
    * Other businesses share the name (a handbag shop, a travel agency, Italian
    * food shops, restaurants abroad), so its other names carry the city: what
@@ -116,9 +124,9 @@ export const VENUES: Record<string, Venue> = {
     name: 'Vera Italia',
     alternateNames: ['Vera Italia Sarajevo', 'Ristorante Vera Italia', 'Vera Italia Cucina Italiana'],
     tagline: 'Cucina Italiana',
-    phone: '',
-    phoneHref: '',
-    address: '',
+    phone: '+387 33 877 779',
+    phoneHref: '+38733877779',
+    address: 'Butmirska cesta 16B',
     city: 'Sarajevo',
     country: 'BA',
     geo: null,
