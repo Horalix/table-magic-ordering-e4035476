@@ -16,6 +16,7 @@ import {
   CheckCircle2,
   ChefHat,
   ChevronDown,
+  ChevronRight,
   Clock,
   CloudOff,
   CreditCard,
@@ -25,6 +26,7 @@ import {
   Monitor,
   PowerOff,
   RefreshCw,
+  Settings,
   Sparkles,
   UserX,
   Users,
@@ -65,6 +67,16 @@ import { useLockScreenAlerts } from '@/hooks/useLockScreenAlerts';
 import { useStaffVenue } from '@/hooks/useStaffVenue';
 import { forgetThisPhone, STAFF_PUSH_MESSAGE } from '@/lib/push-alerts';
 import { inWaiterApp } from '@/lib/waiter-app';
+import { businessDayISO } from '@/lib/reporting';
+import {
+  NO_SIGNALS, floorSummary, floorTiles, readTablesView, tileLabel, urgentSignal, useTablesView,
+  type FloorTile, type SectionSession, type SectionTable, type TableSignals, type TablesView,
+} from '@/lib/waiter-tables';
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import {
+  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
+} from '@/components/ui/dialog';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import type { Database } from '@/integrations/supabase/types';
 
 type OrderStatus = Database['public']['Enums']['order_status'];
@@ -116,6 +128,40 @@ interface PendingSettle {
 const tableOf = (row: { table_sessions: { tables: { table_number: number } | null } | null }) =>
   row.table_sessions?.tables?.table_number ?? '?';
 
+/** The waiter's sections today, their tables, and who is seated at them ("All my tables"). */
+interface MyFloor {
+  sectionIds: string[];
+  tables: SectionTable[];
+  sessions: SectionSession[];
+}
+
+/**
+ * Only asked for while "All my tables" is chosen, so a phone on the usual view
+ * makes no extra requests. Staff may read their own restaurant's tables and
+ * rota (20261028090000_two_restaurants_foundation.sql), and the rota is the
+ * trading day's, which runs to 05:00.
+ */
+async function loadMyFloor(waiterId: string): Promise<MyFloor | 'failed'> {
+  const assigned = await supabase
+    .from('section_assignments')
+    .select('section_id')
+    .eq('waiter_id', waiterId)
+    .eq('shift_date', businessDayISO());
+  if (assigned.error) return 'failed';
+  const sectionIds = [...new Set((assigned.data ?? []).map((a) => a.section_id))];
+  if (sectionIds.length === 0) return { sectionIds, tables: [], sessions: [] };
+  const [t, s] = await Promise.all([
+    supabase.from('tables').select('id, table_number, section_id').in('section_id', sectionIds).order('table_number'),
+    supabase
+      .from('table_sessions')
+      .select('id, table_id, assigned_waiter_id, tables!inner(section_id)')
+      .eq('is_active', true)
+      .in('tables.section_id', sectionIds),
+  ]);
+  if (t.error || s.error) return 'failed';
+  return { sectionIds, tables: (t.data ?? []) as SectionTable[], sessions: (s.data ?? []) as SectionSession[] };
+}
+
 const WaiterDashboard = () => {
   /** The signed-in account, for which restaurant this phone works at. */
   const [userId, setUserId] = useState<string | null>(null);
@@ -131,6 +177,22 @@ const WaiterDashboard = () => {
   const [waiterCalls, setWaiterCalls] = useState<FloorAlert[]>([]);
   const [billRequests, setBillRequests] = useState<FloorAlert[]>([]);
   const [staffNames, setStaffNames] = useState<Record<string, string>>({});
+  /** waiters.id → name, for a table in my section that a colleague has. */
+  const [waiterNames, setWaiterNames] = useState<Record<string, string>>({});
+  /* "My tables": only the seated ones, or every table in my sections (Settings). */
+  const [tablesView, chooseTablesView] = useTablesView(waiter?.id ?? null);
+  /*
+   * What the next load asks for. Set where the choice is made (the first load
+   * and Settings), not copied from state after a render: the first load runs
+   * before that render, and a phone left on "All my tables" came back from a
+   * reload without its tiles until the next refresh, up to a minute later.
+   */
+  const tablesViewRef = useRef<TablesView>(tablesView);
+  /** Loaded with everything else while "All my tables" is chosen; null otherwise. */
+  const [myFloor, setMyFloor] = useState<MyFloor | null>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  /** "All my tables": the seated table whose details are open, by session id. */
+  const [openTableId, setOpenTableId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   /**
    * The last refresh failed. Persistent, not a toast: a toast is gone in four
@@ -175,6 +237,8 @@ const WaiterDashboard = () => {
     const waiterId = waiterIdRef.current;
     if (!waiterId) return;
     const isLatest = beginFetch();
+    // Alongside the rest, not after it: the floor is two short reads.
+    const floorRequest = tablesViewRef.current === 'all' ? loadMyFloor(waiterId) : Promise.resolve(null);
 
     const [mine, free, names] = await Promise.all([
       supabase
@@ -189,7 +253,7 @@ const WaiterDashboard = () => {
         .select('id, opened_at, guest_name, table_id, tables!inner(table_number, section_id)')
         .eq('is_active', true)
         .is('assigned_waiter_id', null),
-      supabase.from('waiters').select('user_id, display_name'),
+      supabase.from('waiters').select('id, user_id, display_name'),
     ]);
 
     if (mine.error || free.error) {
@@ -236,9 +300,10 @@ const WaiterDashboard = () => {
             .order('created_at', { ascending: true }),
         ])
       : [empty, empty, empty];
+    const floor = await floorRequest;
 
     if (!isLatest()) return;
-    if (ord.error || calls.error || bills.error) {
+    if (ord.error || calls.error || bills.error || floor === 'failed') {
       setStale(true);
       return;
     }
@@ -250,12 +315,16 @@ const WaiterDashboard = () => {
     setOrders((ord.data ?? []) as WaiterOrder[]);
     setWaiterCalls((calls.data ?? []) as FloorAlert[]);
     setBillRequests((bills.data ?? []) as FloorAlert[]);
+    setMyFloor(floor);
     if (Array.isArray(names.data)) {
-      const map: Record<string, string> = {};
-      for (const w of names.data as { user_id: string | null; display_name: string }[]) {
-        if (w.user_id) map[w.user_id] = w.display_name;
+      const byUser: Record<string, string> = {};
+      const byWaiter: Record<string, string> = {};
+      for (const w of names.data as { id: string; user_id: string | null; display_name: string }[]) {
+        if (w.user_id) byUser[w.user_id] = w.display_name;
+        byWaiter[w.id] = w.display_name;
       }
-      setStaffNames(map);
+      setStaffNames(byUser);
+      setWaiterNames(byWaiter);
     }
   }, [beginFetch]);
 
@@ -285,6 +354,7 @@ const WaiterDashboard = () => {
       if (!mounted) return;
       setWaiter(waiterProfile);
       waiterIdRef.current = waiterProfile.id;
+      tablesViewRef.current = readTablesView(waiterProfile.id);
       await fetchAll();
       if (mounted) setLoading(false);
     };
@@ -305,6 +375,14 @@ const WaiterDashboard = () => {
     if (['orders', 'waiter_calls', 'bill_requests', 'table_sessions'].includes(table)) refetch();
   }, [refetch]));
   useStaffRefresh(useCallback(() => { refetch(); }, [refetch]));
+
+  /** Settings → "My tables shows": applied at once, and the floor loaded straight away. */
+  const changeTablesView = (view: TablesView) => {
+    chooseTablesView(view);
+    tablesViewRef.current = view;
+    if (view === 'seated') setMyFloor(null);
+    refetch();
+  };
 
   /* "Alerts on lock screen": this phone, for this waiter's restaurant. */
   const alerts = useLockScreenAlerts(staffVenue?.venue.dbId ?? null);
@@ -517,6 +595,38 @@ const WaiterDashboard = () => {
     return ms > max ? ms : max;
   }, 0);
   const totalOwed = tables.reduce((sum, t) => sum + owedFor(t.id).amount, 0);
+
+  /** Every table in my sections today, by number — only while "All my tables" is chosen. */
+  const tiles = useMemo(() => (tablesView === 'all' && myFloor && waiter
+    ? floorTiles({
+        sectionTables: myFloor.tables,
+        sectionSessions: myFloor.sessions,
+        mine: tables,
+        myWaiterId: waiter.id,
+        waiterNames,
+      })
+    : null), [tablesView, myFloor, waiter, tables, waiterNames]);
+
+  /** What is going on at a seated table, for its tile: the same lists the rest of the screen shows. */
+  const signalsFor = (sessionId: string): TableSignals => ({
+    ready: readyToRun.filter((o) => o.table_session_id === sessionId).length,
+    calling: waiterCalls.some((c) => c.table_session_id === sessionId),
+    bill: billRequests.some((b) => b.table_session_id === sessionId),
+    cooking: cooking.filter((o) => o.table_session_id === sessionId).length,
+    owed: owedFor(sessionId).amount,
+  });
+
+  /*
+   * In "All my tables" a seated table with no waiter is a tile with Take, so
+   * it is not listed a second time under "No waiter yet"; tables outside my
+   * sections still are.
+   */
+  const unassignedListed = tiles
+    ? unassigned.filter((s) => !tiles.some((t) => t.kind === 'nobody' && t.sessionId === s.id))
+    : unassigned;
+
+  /** The table whose details are open from its tile; it closes by itself once the table is freed or moved. */
+  const openTable = openTableId ? tables.find((t) => t.id === openTableId) ?? null : null;
 
   /*
    * A call that came in while the waiter was scrolled down — settling a table
@@ -740,6 +850,9 @@ const WaiterDashboard = () => {
             >
               {soundOn ? <Volume2 className="w-5 h-5" /> : <VolumeX className="w-5 h-5 text-muted-foreground" />}
             </Button>
+            <Button variant="ghost" onClick={() => setSettingsOpen(true)} className="tap-sm min-h-[44px] min-w-[44px] px-2" aria-label="Settings">
+              <Settings className="w-5 h-5" />
+            </Button>
             <Button variant="ghost" onClick={() => setConfirmSignOut(true)} className="tap-sm min-h-[44px] min-w-[44px] px-2" aria-label="Sign out">
               <LogOut className="w-5 h-5 sm:mr-1" /><span className="hidden sm:inline text-sm">Sign out</span>
             </Button>
@@ -930,6 +1043,61 @@ const WaiterDashboard = () => {
           )}
         </section>
 
+        {/* "All my tables" (Settings): the room at a glance, straight under
+            what needs doing now. One tile per table; a tile of mine says what
+            is going on there and opens the table's bill and "Free table". */}
+        {tablesView === 'all' && (
+          <section aria-label="My tables">
+            <div className="flex items-center gap-2 min-h-[44px]">
+              <span className="text-muted-foreground"><Users className="w-4 h-4" /></span>
+              <h2 className="font-serif text-base sm:text-lg font-bold">My tables</h2>
+              {totalOwed > 0 && (
+                <span className="ml-auto text-sm font-sans font-semibold text-amber-700 dark:text-amber-400 tabular-nums">
+                  {km(totalOwed)} owed
+                </span>
+              )}
+            </div>
+            {!tiles ? (
+              <p className="text-sm text-muted-foreground font-sans">Loading your sections…</p>
+            ) : (
+              <>
+                {myFloor?.sectionIds.length === 0 && (
+                  <p className="text-sm text-muted-foreground font-sans mb-2">
+                    No section is yours today, so only your seated tables are here. Your manager sets sections under Tonight&rsquo;s waiters.
+                  </p>
+                )}
+                {tiles.length === 0 ? (
+                  <EmptyState icon={<Users className="w-5 h-5" />} text="No tables yet. They appear here once your manager gives you a section for today." />
+                ) : (
+                  <>
+                    {/* The floor in numbers, each with a tiny tile as its key. */}
+                    <ul aria-label="Floor summary" className="flex flex-wrap gap-x-4 gap-y-1 mb-3 text-xs font-sans text-muted-foreground">
+                      {floorSummary(tiles).map((row) => (
+                        <li key={row.kind} className="inline-flex items-center gap-1.5">
+                          <span className={`w-2 h-2 rounded-full shrink-0 ${SWATCH[row.kind]}`} aria-hidden />
+                          <span><span className="text-foreground tabular-nums">{row.count}</span> {row.text}</span>
+                        </li>
+                      ))}
+                    </ul>
+                    <ul className="grid grid-cols-3 min-[480px]:grid-cols-4 sm:grid-cols-5 lg:grid-cols-8 gap-2" aria-label="All my tables">
+                      {tiles.map((tile) => (
+                        <FloorTileCard
+                          key={tile.kind === 'mine' || tile.kind === 'nobody' ? tile.sessionId : tile.tableId}
+                          tile={tile}
+                          signals={tile.kind === 'mine' || tile.kind === 'nobody' ? signalsFor(tile.sessionId) : undefined}
+                          busy={tile.kind === 'nobody' && busy.has(`take:${tile.sessionId}`)}
+                          onOpen={tile.kind === 'mine' ? () => setOpenTableId(tile.sessionId) : undefined}
+                          onTake={tile.kind === 'nobody' ? () => { void take(tile.sessionId, tile.tableNumber); } : undefined}
+                        />
+                      ))}
+                    </ul>
+                  </>
+                )}
+              </>
+            )}
+          </section>
+        )}
+
         <section>
           <SectionTitle icon={<ChefHat className="w-4 h-4" />} title="In the kitchen" count={cooking.length} />
           {cooking.length === 0 ? (
@@ -968,14 +1136,14 @@ const WaiterDashboard = () => {
           </section>
         )}
 
-        {unassigned.length > 0 && (
+        {unassignedListed.length > 0 && (
           <section>
-            <SectionTitle icon={<UserX className="w-4 h-4" />} title="No waiter yet" count={unassigned.length} />
+            <SectionTitle icon={<UserX className="w-4 h-4" />} title="No waiter yet" count={unassignedListed.length} />
             <p className="text-sm text-muted-foreground font-sans mb-2">
               Seated, but on nobody&rsquo;s section. Their calls and plates show above for everyone — take a table to make it yours.
             </p>
             <ul className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2">
-              {unassigned.map((session) => (
+              {unassignedListed.map((session) => (
                 <UnassignedRow
                   key={session.id}
                   session={session}
@@ -991,7 +1159,7 @@ const WaiterDashboard = () => {
             not a to-do list, and it used to push the alerts off the screen.
             With no tables there is nothing to push away, and the reason there
             are none belonged in view, not behind a chevron. */}
-        {tables.length === 0 ? (
+        {tablesView === 'all' ? null : tables.length === 0 ? (
           <section>
             <SectionTitle icon={<Users className="w-4 h-4" />} title="My tables" count={0} />
             <EmptyState icon={<Users className="w-5 h-5" />} text="No tables yet. Tables appear here once your manager assigns your section for today and a guest sits down." />
@@ -1040,6 +1208,89 @@ const WaiterDashboard = () => {
         knownOwed={freeing ? owedFor(freeing.id).amount : 0}
         onFreed={refetch}
       />
+
+      {/* A seated table of mine, opened from its tile in "All my tables":
+          what is going on there, the money, and "Free table". A sheet from the
+          bottom, where a thumb already is, rather than a second copy of every
+          table as a card under the tiles. */}
+      <Sheet open={openTable !== null} onOpenChange={(open) => { if (!open) setOpenTableId(null); }}>
+        <SheetContent side="bottom" className="rounded-t-2xl max-h-[85vh] overflow-y-auto pb-[max(1.5rem,env(safe-area-inset-bottom))]">
+          {openTable && (() => {
+            const number = openTable.tables?.table_number ?? '?';
+            const s = signalsFor(openTable.id);
+            const goToAttention = () => { setOpenTableId(null); window.setTimeout(showAttention, 250); };
+            return (
+              <>
+                <SheetHeader className="text-left">
+                  <SheetTitle className="font-serif text-2xl">Table {number}</SheetTitle>
+                  <SheetDescription className="font-sans">
+                    {openTable.guest_name ? `${openTable.guest_name} · ` : ''}seated <SeatedFor since={openTable.opened_at} />
+                  </SheetDescription>
+                </SheetHeader>
+                {/* Plain rows, one fact each: what needs doing first, then the kitchen. */}
+                <div className="mt-3 font-sans divide-y divide-border/70 border-y border-border/70">
+                  {s.ready > 0 && (
+                    <TableNeed tone="ready" text={s.ready > 1 ? `${s.ready} orders are up` : 'Food is up'} onGo={goToAttention} />
+                  )}
+                  {s.calling && <TableNeed tone="calling" text="Asking for you" onGo={goToAttention} />}
+                  {s.bill && <TableNeed tone="bill" text="Wants the bill" onGo={goToAttention} />}
+                  <div className="flex items-center justify-between min-h-[48px] text-sm">
+                    <span className="text-muted-foreground">Kitchen</span>
+                    <span className="text-foreground">{s.cooking > 0 ? `${plural(s.cooking, 'order')} cooking` : 'Nothing cooking'}</span>
+                  </div>
+                </div>
+                <div className="mt-4 space-y-2 font-sans">
+                  {settleRow(openTable.id, number)}
+                  <Button
+                    variant="ghost"
+                    className="w-full min-h-[48px] tap text-sm text-muted-foreground hover:bg-destructive/10 hover:text-destructive gap-1.5"
+                    onClick={() => { const session = openTable; setOpenTableId(null); setFreeing(session); }}
+                  >
+                    <PowerOff className="w-4 h-4" /> Free table
+                  </Button>
+                </div>
+              </>
+            );
+          })()}
+        </SheetContent>
+      </Sheet>
+
+      <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Settings</DialogTitle>
+            <DialogDescription>
+              {waiter?.display_name ? `For ${waiter.display_name}, on this phone.` : 'On this phone.'}
+            </DialogDescription>
+          </DialogHeader>
+          <fieldset className="space-y-2">
+            <legend className="text-sm font-sans font-semibold mb-2">My tables shows</legend>
+            <RadioGroup value={tablesView} onValueChange={(value) => changeTablesView(value as TablesView)} aria-label="My tables shows">
+              {([
+                ['seated', 'Only seated tables', 'The tables with guests at them right now.'],
+                ['all', 'All my tables', 'Every table in your sections today, free ones too.'],
+              ] as const).map(([value, title, detail]) => (
+                <label
+                  key={value}
+                  htmlFor={`tables-view-${value}`}
+                  className={`flex items-start gap-3 rounded-xl border p-3 min-h-[56px] cursor-pointer font-sans ${
+                    tablesView === value ? 'border-primary bg-primary/5' : 'border-border'
+                  }`}
+                >
+                  <RadioGroupItem id={`tables-view-${value}`} value={value} className="mt-0.5 shrink-0" />
+                  <span>
+                    <span className="block font-semibold text-foreground">{title}</span>
+                    <span className="block text-sm text-muted-foreground">{detail}</span>
+                  </span>
+                </label>
+              ))}
+            </RadioGroup>
+          </fieldset>
+          <DialogFooter>
+            <Button className="min-h-[44px] w-full sm:w-auto" onClick={() => setSettingsOpen(false)}>Done</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <AlertDialog open={confirmSignOut} onOpenChange={setConfirmSignOut}>
         <AlertDialogContent>
@@ -1262,6 +1513,131 @@ const UnassignedRow = ({ session, busy, onTake }: { session: WaiterSession; busy
       </Button>
     </li>
   );
+};
+
+/** The summary's key: a dot the colour of each kind of tile's number or edge (squares read as checkboxes). */
+const SWATCH: Record<FloorTile['kind'], string> = {
+  mine: 'bg-foreground',
+  colleague: 'bg-muted-foreground/40',
+  nobody: 'bg-amber-500',
+  free: 'border border-muted-foreground/60',
+};
+
+/**
+ * The one thing that needs doing at a table, in the order of "Attention
+ * needed": a thin bar down the tile's edge and a word in the same colour.
+ * Nothing else on the tile is coloured, so the eye goes straight to these.
+ */
+const URGENT: Record<'ready' | 'calling' | 'bill', { text: string; bar: string; ink: string }> = {
+  ready: { text: 'Food up', bar: 'bg-emerald-500', ink: 'text-emerald-700 dark:text-emerald-400' },
+  calling: { text: 'Calling', bar: 'bg-amber-500', ink: 'text-amber-700 dark:text-amber-400' },
+  bill: { text: 'Bill', bar: 'bg-primary', ink: 'text-primary' },
+};
+
+const TILE = 'relative w-full h-[84px] rounded-xl p-2.5 text-left flex flex-col justify-between font-sans overflow-hidden';
+
+/**
+ * One table in "All my tables", drawn like a floor plan: the number, and at
+ * most two quiet facts. Every tile is the same size so the room reads as a
+ * grid.
+ *  - mine: a white tile; how long they have sat, what needs doing (or what is
+ *    cooking) and what they owe. A tap opens the table;
+ *  - seated with nobody: a white tile with an amber edge; a tap takes it;
+ *  - a colleague's: grey, with their name;
+ *  - free: just an outline.
+ */
+const FloorTileCard = ({
+  tile, signals = NO_SIGNALS, busy, onOpen, onTake,
+}: {
+  tile: FloorTile;
+  signals?: TableSignals;
+  busy: boolean;
+  onOpen?: () => void;
+  onTake?: () => void;
+}) => {
+  const label = tileLabel(tile, signals, km);
+  const urgent = urgentSignal(signals);
+  const number = (tone: string) => (
+    <span className={`font-serif text-[1.65rem] font-semibold leading-none tabular-nums ${tone}`}>{tile.tableNumber}</span>
+  );
+  const bar = urgent ? <span aria-hidden className={`absolute left-0 top-2 bottom-2 w-1 rounded-r-full ${URGENT[urgent].bar}`} /> : null;
+
+  if (tile.kind === 'mine') {
+    const note = urgent
+      ? <span className={`font-semibold ${URGENT[urgent].ink}`}>{URGENT[urgent].text}</span>
+      : signals.cooking > 0 ? <span className="text-muted-foreground">{signals.cooking} cooking</span> : null;
+    return (
+      <li>
+        <button
+          type="button"
+          onClick={onOpen}
+          aria-label={label}
+          className={`${TILE} bg-card border border-border shadow-sm hover:border-foreground/30 active:bg-muted/50 transition-colors`}
+        >
+          {bar}
+          <span className="flex items-start justify-between gap-1">
+            {number('text-foreground')}
+            <span className="text-[11px] tabular-nums text-muted-foreground pt-0.5"><SeatedFor since={tile.openedAt} /></span>
+          </span>
+          <span className="flex items-end justify-between gap-1.5 text-xs min-w-0">
+            <span className="truncate min-w-0">{note}</span>
+            {signals.owed > 0 && <span className="shrink-0 tabular-nums text-foreground">{signals.owed.toFixed(2)}</span>}
+          </span>
+        </button>
+      </li>
+    );
+  }
+  if (tile.kind === 'nobody') {
+    return (
+      <li>
+        <button
+          type="button"
+          onClick={onTake}
+          disabled={busy}
+          aria-label={label}
+          className={`${TILE} bg-card border border-amber-500/70 shadow-sm active:bg-amber-500/10 disabled:opacity-60 transition-colors`}
+        >
+          {bar}
+          {number('text-foreground')}
+          <span className="flex items-end justify-between gap-1.5 text-xs min-w-0">
+            <span className={`truncate min-w-0 ${urgent ? `font-semibold ${URGENT[urgent].ink}` : 'text-muted-foreground'}`}>
+              {urgent ? URGENT[urgent].text : 'No waiter'}
+            </span>
+            <span className="shrink-0 font-semibold text-primary">{busy ? '…' : 'Take'}</span>
+          </span>
+        </button>
+      </li>
+    );
+  }
+  if (tile.kind === 'colleague') {
+    return (
+      <li aria-label={label} className={`${TILE} bg-muted/70`}>
+        {number('text-muted-foreground')}
+        <span className="text-xs text-muted-foreground truncate">{tile.waiterName}</span>
+      </li>
+    );
+  }
+  return (
+    <li aria-label={label} className={`${TILE} border border-border`}>
+      {number('text-muted-foreground/60')}
+    </li>
+  );
+};
+
+/** In a table's sheet: one thing that needs doing there, and the way to the card that does it. */
+const TableNeed = ({ tone, text, onGo }: { tone: 'ready' | 'calling' | 'bill'; text: string; onGo: () => void }) => (
+  <div className="flex items-center gap-3 min-h-[52px] text-sm">
+    <span aria-hidden className={`w-2 h-2 rounded-full shrink-0 ${URGENT[tone].bar}`} />
+    <span className="flex-1 font-semibold text-foreground">{text}</span>
+    <Button variant="ghost" className="tap-sm min-h-[44px] -me-2 px-2 text-sm text-primary gap-0.5" onClick={onGo}>
+      Go to it <ChevronRight className="w-4 h-4" aria-hidden />
+    </Button>
+  </div>
+);
+
+const SeatedFor = ({ since }: { since: string }) => {
+  const ms = useElapsed(since);
+  return <>{formatDuration(ms)}</>;
 };
 
 /** Under an alert from a table nobody has: whose it is, and the tap that makes it yours. */
