@@ -1,3 +1,5 @@
+import { DEMO_BUILD } from './home-venue';
+import { RESTAURANT } from '../demo/brand';
 import type { PrintOutcome } from '@/lib/print-outcome';
 import {
   buildTicket, foldToAscii, paperColumns, partItemIds, ticketIsEmpty, ticketToEscPos, ticketToText, withPartAllergens,
@@ -95,7 +97,7 @@ const BROWSER_PRINT_TIMEOUT_MS = 60_000;
 
 const DEFAULT_SETTINGS: KitchenPrintSettings = {
   paperWidth: 80,
-  header: 'La Soul',
+  header: DEMO_BUILD ? RESTAURANT.name : 'La Soul',
   footer: '',
   showPrices: true,
   copies: 1,

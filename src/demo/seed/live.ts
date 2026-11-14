@@ -161,27 +161,25 @@ export async function seedLiveFloor(backend: DemoBackend, now: Date): Promise<vo
   const name = () => names.splice(rng.int(0, names.length - 1), 1)[0];
   const plans: TablePlan[] = [
     { table: 1, guest: name(), covers: 2, orders: [{ ago: 41, stage: 'served' }], bill: 3 },
-    { table: 3, guest: name(), covers: 4, orders: [{ ago: 17, stage: 'ready' }] },
+    { table: 2, guest: name(), covers: 2, orders: [{ ago: 7, stage: 'preparing' }] },
+    { table: 3, guest: name(), covers: 3, orders: [{ ago: 15, stage: 'ready' }] },
     { table: 4, guest: name(), covers: 2, orders: [{ ago: 26, stage: 'served' }], call: 2 },
-    { table: 7, guest: name(), covers: 3, orders: [{ ago: 9, stage: 'preparing' }] },
+    { table: 7, guest: name(), covers: 3, orders: [{ ago: 10, stage: 'preparing' }] },
     { table: 8, guest: name(), covers: 2, orders: [{ ago: 52, stage: 'served' }, { ago: 2, stage: 'pending' }] },
     { table: 9, guest: name(), covers: 2, orders: [{ ago: 1, stage: 'pending' }] },
     { table: 11, guest: name(), covers: 3, orders: [{ ago: 16, stage: 'preparing' }] },
     { table: 12, guest: name(), covers: 2, orders: [{ ago: 58, stage: 'paid' }] },
-    // A first order this large waits for a waiter to confirm it (Admin → Service, "hold").
-    {
-      table: 13, guest: name(), covers: 6, orders: [{
-        ago: 3, stage: 'held',
-        items: [
-          { id: ITEM.truffleRisotto, quantity: 4 }, { id: ITEM.casaBurger, quantity: 3 }, { id: ITEM.sliderTrio, quantity: 2 },
-          { id: ITEM.chickenCaesar, quantity: 2 }, { id: ITEM.lemonMint, quantity: 6 }, { id: ITEM.cheesecake, quantity: 2 },
-        ],
-      }],
-    },
   ];
   for (const plan of plans) {
     try { await seatTable(backend, plan, rng, now); } catch (error) { console.warn('[demo] could not seat table', plan.table, error); }
   }
+  // Orders already cooked had their tickets printed long ago; only the new ones are still to print.
+  await backend.db.query(
+    `UPDATE public.order_ticket_events e SET status = 'printed', attempts = 1, print_verified = true,
+            printed_at = e.created_at + interval '8 seconds', original_printed_at = e.created_at + interval '8 seconds',
+            claimed_by_device = CASE WHEN e.ticket_type = 'bar' THEN 'printer:Bar' ELSE 'printer:Kitchen pass' END
+       FROM public.orders o
+      WHERE o.id = e.order_id AND e.status = 'queued' AND o.status IN ('preparing', 'ready', 'served')`);
   // Who has which table: the waiter whose section it is in, as the floor plan says.
   await backend.db.query(
     `UPDATE public.table_sessions s SET assigned_waiter_id = (
@@ -204,6 +202,35 @@ export async function simulateArrival(backend: DemoBackend, now = new Date()): P
   const table = rng.pick(rows).table_number;
   const guest = rng.pick(LIVE_NAMES);
   await seatTable(backend, { table, guest, covers: rng.int(1, 4), orders: [{ ago: 0, stage: 'pending' }] }, rng, now);
+  return { table, guest };
+}
+
+/**
+ * A party sits down and orders for the whole table at once. A first order
+ * this large is held for a waiter to confirm before the kitchen sees it
+ * (Admin → Service → "hold"): the demo control's "large first order" button.
+ */
+export async function simulateLargeOrder(backend: DemoBackend, now = new Date()): Promise<{ table: number; guest: string } | null> {
+  const rng = new Random(`casa-demo:large:${now.getTime()}`);
+  const { rows } = await backend.db.query<{ table_number: number }>(
+    `SELECT t.table_number FROM public.tables t
+      WHERE t.venue_id = $1::text::uuid AND t.table_number <> $2::int
+        AND NOT EXISTS (SELECT 1 FROM public.table_sessions s WHERE s.table_id = t.id AND s.is_active)
+      ORDER BY t.table_number DESC`,
+    [RESTAURANT.dbId, RESTAURANT.guestTable],
+  );
+  if (!rows.length) return null;
+  const table = rows[0].table_number;
+  const guest = rng.pick(LIVE_NAMES);
+  await seatTable(backend, {
+    table, guest, covers: 8, orders: [{
+      ago: 0, stage: 'held',
+      items: [
+        { id: ITEM.truffleRisotto, quantity: 4 }, { id: ITEM.casaBurger, quantity: 4 },
+        { id: ITEM.chickenCaesar, quantity: 2 }, { id: ITEM.lemonMint, quantity: 8 },
+      ],
+    }],
+  }, rng, now);
   return { table, guest };
 }
 

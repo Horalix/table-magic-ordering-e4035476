@@ -1,3 +1,4 @@
+import { DEMO_MODE } from '@/lib/demo-mode';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
@@ -63,7 +64,7 @@ const SAMPLE: KitchenTicketOrder = {
   guest_name: 'Amina', section_name: 'Terasa', waiter_name: 'Marko',
   items: [
     {
-      quantity: 2, notes: 'no onions, well done', menu_item_name: 'La Soul Burger', unit_price: 18,
+      quantity: 2, notes: 'no onions, well done', menu_item_name: DEMO_MODE ? 'Casa Burger' : 'La Soul Burger', unit_price: 18,
       station: 'kitchen', allergens: ['gluten', 'sesame'],
       components: [{ slot_label: 'Side', name: 'Pomfrit', station: 'kitchen' }, { slot_label: 'Drink', name: 'Coca-Cola', station: 'bar' }],
     },

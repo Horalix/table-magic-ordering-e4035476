@@ -1,3 +1,4 @@
+import { DEMO_MODE } from '@/lib/demo-mode';
 import React, { useEffect, useState } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -28,7 +29,7 @@ const sampleOrder = {
   id: 'test-0000-0000', status: 'pending', total: 27.5, tip_amount: 2.5, payment_method: 'card' as const,
   notes: 'Allergy: nuts', created_at: new Date().toISOString(), table_number: 5, guest_name: 'Test', section_name: 'Terrace',
   items: [
-    { quantity: 1, notes: 'no onions', menu_item_name: 'La Soul Burger', unit_price: 18 },
+    { quantity: 1, notes: 'no onions', menu_item_name: DEMO_MODE ? 'Casa Burger' : 'La Soul Burger', unit_price: 18 },
     { quantity: 2, notes: null, menu_item_name: 'Espresso', unit_price: 3.5 },
   ],
 };

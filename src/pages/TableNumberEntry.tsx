@@ -1,3 +1,5 @@
+import { DEMO_MODE } from '@/lib/demo-mode';
+import { DemoLockup } from '@/demo/ui/Brand';
 import React, { useEffect, useState } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
@@ -125,7 +127,9 @@ const TableNumberEntry = () => {
       >
         {vera
           ? <img src="/brand/vera/lockup-cream.webp" alt="Vera Italia" width={1158} height={806} className="w-60 max-w-[70vw] h-auto mx-auto mb-9" />
-          : <img src="/brand/lockup-white.webp" alt="La Soul" width={645} height={960} className="h-40 w-auto mx-auto mb-7" />}
+          : DEMO_MODE
+            ? <DemoLockup className="mb-8" />
+            : <img src="/brand/lockup-white.webp" alt="La Soul" width={645} height={960} className="h-40 w-auto mx-auto mb-7" />}
         <h1 className="font-serif text-2xl font-bold text-white">{t('which_table')}</h1>
         <p className="text-white/70 font-sans text-sm mt-2 leading-relaxed">{t('which_table_sub')}</p>
 

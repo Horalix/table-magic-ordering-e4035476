@@ -1,3 +1,5 @@
+import { DEMO_MODE } from './demo-mode';
+import { DEMO_STRINGS } from '../demo/strings';
 import { create } from 'zustand';
 import { useCallback, useMemo } from 'react';
 
@@ -507,6 +509,9 @@ const translations: Record<string, Record<Locale, string>> = {
 };
 
 /** Read-only view of the table, for the completeness tests. */
+// The offline demo's fictional restaurant says its own things (docs/demo-mode.md).
+if (DEMO_MODE) Object.assign(translations, DEMO_STRINGS);
+
 export const translationTable: Readonly<typeof translations> = translations;
 
 export type Vars = Record<string, string | number>;

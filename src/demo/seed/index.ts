@@ -29,14 +29,21 @@ const VENUE = RESTAURANT.dbId;
 export const HISTORY_DAYS = 70;
 /** Phone events and suggestion records are kept for the recent weeks only. */
 const DETAIL_DAYS = 30;
-/** A table that sat down less than this long ago may still be sitting: it is the live floor's, not history's. */
-const SETTLE_MINUTES = 100;
+/** History is written up to this long ago; what is newer is the live floor (seed/live.ts). */
+const SETTLE_MINUTES = 4;
+/** The finished experiment that measured what suggestions earn (Admin → What the app earned). */
+const EXPERIMENT_ID = 'e4be0000-0000-4000-8000-000000000001';
+const EXPERIMENT_DAYS = 28;
+const EXPERIMENT_HOLDOUT_PCT = 25;
+
 /** Reopened after longer than this, the floor is brought up to date. */
 const STALE_AFTER_MINUTES = 25;
 
 interface Meta {
   /** When the database was first seeded. */
   at: string;
+  /** When the suggestions experiment ran. */
+  experiment: { from: string; until: string };
   /** The first business day of the history. */
   historyStart: string;
   /** History is complete up to here. */
@@ -66,11 +73,11 @@ export async function markAlive(db: SqlDb, now: Date): Promise<void> {
   );
 }
 
-function dayOptions(meta: Pick<Meta, 'historyStart'>, day: string, now: Date, until: Date, from?: Date): DayOptions {
+function dayOptions(meta: Pick<Meta, 'historyStart' | 'experiment'>, day: string, now: Date, until: Date, from?: Date): DayOptions {
   const today = businessDay(now);
   const age = Math.round((Date.parse(today) - Date.parse(day)) / 86_400_000);
   return {
-    from, until,
+    from, until, today,
     historyStart: meta.historyStart, historyDays: HISTORY_DAYS,
     detail: age <= DETAIL_DAYS, tickets: age <= 1, policyVersion: 'demo',
     soldOut: { item: ITEM.raspberryMojito, since: atLocal(addDays(today, -1), 16) },
@@ -79,11 +86,12 @@ function dayOptions(meta: Pick<Meta, 'historyStart'>, day: string, now: Date, un
       { item: ITEM.lemonMint, price: 5.5, since: atLocal(addDays(today, -2), 8) },
     ],
     slowDay: addDays(today, -9),
+    experiment: { id: EXPERIMENT_ID, from: new Date(meta.experiment.from), until: new Date(meta.experiment.until), holdoutPct: EXPERIMENT_HOLDOUT_PCT },
   };
 }
 
 /** Writes the finished visits between two moments. */
-async function writeHistory(db: SqlDb, meta: Pick<Meta, 'historyStart'>, from: Date | undefined, until: Date, now: Date, policyVersion: string): Promise<void> {
+async function writeHistory(db: SqlDb, meta: Pick<Meta, 'historyStart' | 'experiment'>, from: Date | undefined, until: Date, now: Date, policyVersion: string): Promise<void> {
   const firstDay = from ? businessDay(from) : meta.historyStart;
   const lastDay = businessDay(until);
   const all: HistoryRows = emptyHistory();
@@ -226,15 +234,27 @@ async function policyVersion(db: SqlDb): Promise<string> {
 
 export async function seedDemo(db: SqlDb, now: Date): Promise<void> {
   const today = businessDay(now);
-  const meta: Meta = { at: now.toISOString(), historyStart: addDays(today, -HISTORY_DAYS), historyUntil: now.toISOString(), aliveAt: now.toISOString() };
+  const meta: Meta = {
+    at: now.toISOString(), historyStart: addDays(today, -HISTORY_DAYS), historyUntil: now.toISOString(), aliveAt: now.toISOString(),
+    // It ended this morning, so every guest of the demo is shown suggestions.
+    experiment: { from: atLocal(addDays(today, -EXPERIMENT_DAYS), 8).toISOString(), until: plus(now, -minutes(120)).toISOString() },
+  };
+  const version = await policyVersion(db);
   await asRestore(db, () => seedRestaurant(db, now));
-  await writeHistory(db, meta, undefined, plus(now, -minutes(SETTLE_MINUTES)), now, await policyVersion(db));
+  await asRestore(db, () => insertRows(db, 'experiments', [{
+    id: EXPERIMENT_ID, name: 'Suggestions on vs. off', policy_version: version, holdout_pct: EXPERIMENT_HOLDOUT_PCT,
+    started_at: meta.experiment.from, ended_at: meta.experiment.until, venue_id: VENUE, created_at: meta.experiment.from,
+    notes: 'One table in four was shown no suggestions for four weeks.',
+  }]));
+  await writeHistory(db, meta, undefined, plus(now, -minutes(SETTLE_MINUTES)), now, version);
   await seedReservations(db, now);
   await seedBackOffice(db, now);
   await continueOrderCodes(db);
   await refreshDerived(db);
   await seedLiveFloor(new DemoBackend(db), now);
-  await writeMeta(db, meta);
+  await writeMeta(db, { ...meta, historyUntil: plus(now, -minutes(SETTLE_MINUTES)).toISOString() });
+  // Fresh statistics: without them the analytics queries plan as if the tables were empty.
+  await db.exec('ANALYZE');
 }
 
 /**
@@ -314,4 +334,5 @@ export async function keepAlive(db: SqlDb, now: Date): Promise<void> {
   await refreshDerived(db);
   await seedLiveFloor(new DemoBackend(db), now);
   await writeMeta(db, { ...meta, historyUntil: until > start ? until.toISOString() : meta.historyUntil, aliveAt: now.toISOString() });
+  await db.exec('ANALYZE');
 }

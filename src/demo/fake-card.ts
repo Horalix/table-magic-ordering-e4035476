@@ -19,21 +19,20 @@ interface FakeCard {
 
 const SUPABASE_URL = ((import.meta.env.VITE_SUPABASE_URL as string | undefined) || 'https://supabase-not-configured.invalid').replace(/\/$/, '');
 
-const FIELD = 'border:0;background:transparent;font:500 15px/1.4 Inter,system-ui,sans-serif;color:#2b2a26;outline:none;min-width:0;';
+const FIELD = 'border:0;background:transparent;font:500 14px/1.4 Inter,system-ui,sans-serif;color:#2b2a26;outline:none;min-width:0;padding:0;';
 
 function cardMarkup(): string {
   return `
-    <div data-demo-card style="display:flex;flex-direction:column;gap:8px">
-      <div style="display:flex;align-items:center;gap:10px">
+    <div data-demo-card>
+      <div style="display:flex;align-items:center;gap:8px">
         <svg width="30" height="20" viewBox="0 0 30 20" aria-hidden="true" style="flex:none">
           <rect width="30" height="20" rx="4" fill="#33473B"/><rect x="4" y="6" width="7" height="5" rx="1.2" fill="#E8C98A"/>
           <rect x="4" y="14" width="10" height="2" rx="1" fill="#fff" opacity=".6"/><rect x="17" y="14" width="9" height="2" rx="1" fill="#fff" opacity=".6"/>
         </svg>
-        <input aria-label="Card number" inputmode="numeric" value="4242 4242 4242 4242" style="${FIELD}flex:1;letter-spacing:.04em" />
-        <input aria-label="Expiry" value="12 / 29" style="${FIELD}width:64px;text-align:center" />
-        <input aria-label="CVC" value="123" style="${FIELD}width:40px;text-align:center" />
+        <input aria-label="Card number" inputmode="numeric" value="4242 4242 4242 4242" style="${FIELD}flex:1 1 150px" />
+        <input aria-label="Expiry" value="12/29" style="${FIELD}flex:0 0 44px;text-align:center" />
+        <input aria-label="CVC" value="123" style="${FIELD}flex:0 0 30px;text-align:center" />
       </div>
-      <div style="font:500 11px/1.3 Inter,system-ui,sans-serif;color:#7a786f">Demo card — nothing is charged.</div>
     </div>`;
 }
 

@@ -13,6 +13,20 @@ import { empty, json } from './types';
 /** Request headers the SQL reads (current_venue(), menu_deleted_asked()). */
 const FORWARDED_HEADERS = ['x-venue', 'x-menu-deleted'];
 
+/**
+ * A photo "uploaded" in the menu editor goes nowhere in the demo (there is no
+ * storage to hold it), so its address would show a broken picture. The dish
+ * or category keeps the photo it has instead.
+ */
+function keepPhoto(req: BackendRequest): BackendRequest {
+  const body = req.body;
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return req;
+  const url = (body as { image_url?: unknown }).image_url;
+  if (typeof url !== 'string' || !url.includes('/storage/v1/')) return req;
+  const { image_url: _dropped, ...rest } = body as Record<string, unknown>;
+  return { ...req, body: rest };
+}
+
 export class DemoBackend {
   private schema: Promise<SchemaCache> | null = null;
 
@@ -77,7 +91,7 @@ export class DemoBackend {
         if (rest === '') return json({});
         const compiled = rest.startsWith('rpc/')
           ? compileRpc(schema, decodeURIComponent(rest.slice(4)), req)
-          : compileTable(schema, decodeURIComponent(rest), req);
+          : compileTable(schema, decodeURIComponent(rest), keepPhoto(req));
         return await this.run(compiled, who, req.headers);
       }
       if (req.path.startsWith('/auth/v1')) return await handleAuth(this.db, req);

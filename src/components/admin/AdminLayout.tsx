@@ -1,3 +1,4 @@
+import { DEMO_MODE } from '@/lib/demo-mode';
 import React, { useEffect, useState } from 'react';
 import { useNavigate, Outlet, Link, Navigate, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
@@ -33,7 +34,8 @@ import type { User } from '@supabase/supabase-js';
 const ownerGroup = {
   heading: 'Owner',
   items: [
-    { label: 'Overview', icon: LayoutGrid, path: '/admin/overview' },
+    // The offline demo has one restaurant (docs/demo-mode.md): nothing to compare side by side.
+    ...(DEMO_MODE ? [] : [{ label: 'Overview', icon: LayoutGrid, path: '/admin/overview' }]),
     { label: 'Team', icon: UserCog, path: '/admin/team' },
   ],
 };
@@ -362,7 +364,7 @@ const AdminLayout = () => {
   }
 
   // Which page, now that it is known whose admin this is.
-  const firstScreen = location.pathname === '/admin' && !overviewSeen();
+  const firstScreen = !DEMO_MODE && location.pathname === '/admin' && !overviewSeen();
   let page: React.ReactNode;
   if (!staffVenue && (ownerPage || firstScreen)) {
     page = <Spinner />;

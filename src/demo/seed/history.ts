@@ -36,19 +36,20 @@ export interface HistoryRows {
   recommendation_decisions: Row[];
   recommendation_impressions: Row[];
   suggestion_conversions: Row[];
+  session_experiment_assignment: Row[];
 }
 
 export const emptyHistory = (): HistoryRows => ({
   table_sessions: [], orders: [], order_items: [], order_ticket_events: [], payment_transactions: [], order_refunds: [],
   ratings: [], server_ratings: [], waiter_calls: [], bill_requests: [], analytics_events: [],
-  recommendation_decisions: [], recommendation_impressions: [], suggestion_conversions: [],
+  recommendation_decisions: [], recommendation_impressions: [], suggestion_conversions: [], session_experiment_assignment: [],
 });
 
 /** The order they are inserted in: a row's parents first. */
 export const HISTORY_TABLES: (keyof HistoryRows)[] = [
   'table_sessions', 'orders', 'order_items', 'order_ticket_events', 'payment_transactions', 'order_refunds',
   'ratings', 'server_ratings', 'waiter_calls', 'bill_requests', 'analytics_events',
-  'recommendation_decisions', 'recommendation_impressions', 'suggestion_conversions',
+  'recommendation_decisions', 'recommendation_impressions', 'suggestion_conversions', 'session_experiment_assignment',
 ];
 
 const GUEST_NAMES = [
@@ -84,11 +85,20 @@ const HOT = ITEMS.filter((i) => i.role === 'hot_drink');
 const COLD = ITEMS.filter((i) => i.role === 'cold_drink');
 const BURGERS: string[] = COMBO.slots[0].options.map(([id]) => id);
 
+/** A visit is history once its first order has had this long to be cooked and served. */
+const SERVED_AFTER_MINUTES = 25;
+
 export interface DayOptions {
-  /** Only visits that begin at or after this moment. */
+  /** Only visits that became history after this moment (see `until`). */
   from?: Date;
-  /** Only visits that are over by this moment (a table still sitting belongs to the live floor, not to history). */
+  /**
+   * History is written up to this moment. A visit counts once its first order
+   * was placed 25 minutes before it; one still at the table then is closed
+   * there, with only the orders it had already placed.
+   */
   until: Date;
+  /** The business day the demo is being shown on: a slightly better day than usual. */
+  today?: string;
   /** The first day of the whole history, for the slow growth across it. */
   historyStart: string;
   historyDays: number;
@@ -104,6 +114,11 @@ export interface DayOptions {
   sales?: { item: string; price: number; since: Date }[];
   /** A day when trade was unusually slow (the dashboard's alert has something to say). */
   slowDay?: string;
+  /**
+   * Suggestions were measured for a while: some tables, chosen at random,
+   * were shown none (Admin → What the app earned compares the two groups).
+   */
+  experiment?: { id: string; from: Date; until: Date; holdoutPct: number };
 }
 
 export interface Line {
@@ -125,7 +140,7 @@ export function generateDay(day: string, options: DayOptions): { rows: HistoryRo
   const weekday = localTime(atLocal(day, 12)).weekday;
   const progress = Math.min(1, Math.max(0, (dayNumber(day) - dayNumber(options.historyStart)) / Math.max(1, options.historyDays)));
   // Trade grows a little over the weeks, wobbles day to day, and has one bad day.
-  const scale = (0.84 + 0.2 * progress) * rng.between(0.92, 1.08) * (day === options.slowDay ? 0.5 : 1);
+  const scale = (0.84 + 0.2 * progress) * rng.between(0.92, 1.08) * (day === options.slowDay ? 0.5 : 1) * (day === options.today ? 1.14 : 1);
   const visitCount = Math.round(VISITS_BY_WEEKDAY[weekday] * scale);
 
   const hours = Object.keys(HOURLY).map(Number);
@@ -152,13 +167,13 @@ export function generateDay(day: string, options: DayOptions): { rows: HistoryRo
     const ordersBefore = orderSeq;
     const made = buildVisit(visit, day, start, end, tableNumber, ordersBefore, returning, options);
     orderSeq += made.orderCount;
-    if (start < (options.from ?? new Date(0)) || end > options.until) continue;
+    if (!made.historyAt || made.historyAt > options.until || (options.from && made.historyAt <= options.from)) continue;
     for (const key of HISTORY_TABLES) rows[key].push(...made.rows[key]);
   }
   return { rows, orderCount: orderSeq };
 }
 
-export function chooseLines(rng: Random, at: Date, covers: number, round: number, options: DayOptions): Line[] {
+export function chooseLines(rng: Random, at: Date, covers: number, round: number, options: DayOptions, addOns = 0.75): Line[] {
   const { hour, minute } = localTime(at);
   const clock = hour + minute / 60;
   const picks = new Map<string, number>();
@@ -192,7 +207,7 @@ export function chooseLines(rng: Random, at: Date, covers: number, round: number
   // What usually goes with what: fries with the burger, coffee with the cheesecake.
   for (const [id, quantity] of [...picks]) {
     for (const [companion, chance] of COMPANIONS[id] ?? []) {
-      for (let i = 0; i < quantity; i += 1) if (rng.chance(chance * 0.75)) add(itemById.get(companion));
+      for (let i = 0; i < quantity; i += 1) if (rng.chance(chance * addOns)) add(itemById.get(companion));
     }
   }
 
@@ -231,9 +246,10 @@ export function chooseLines(rng: Random, at: Date, covers: number, round: number
 }
 
 function buildVisit(
-  rng: Random, day: string, start: Date, end: Date, tableNumber: number, ordersBefore: number, returning: string[], options: DayOptions,
-): { rows: HistoryRows; orderCount: number } {
+  rng: Random, day: string, start: Date, endsAt: Date, tableNumber: number, ordersBefore: number, returning: string[], options: DayOptions,
+): { rows: HistoryRows; orderCount: number; historyAt: Date | null } {
   const rows = emptyHistory();
+  let end = endsAt;
   const sessionId = rng.uuid();
   const covers = rng.weighted([1, 2, 3, 4, 5, 6], (n) => [0, 14, 42, 16, 20, 4, 4][n]);
   const waiter = waiterForTable(tableNumber, rng.int(0, 1));
@@ -244,10 +260,22 @@ function buildVisit(
   // The kitchen is slower when the room is full.
   const load = hour === 13 || hour === 19 || hour === 20 ? rng.between(1.05, 1.5) : rng.between(0.8, 1.15);
 
+  // Which group of the suggestions experiment this table fell in, if it was running.
+  const measured = options.experiment && start >= options.experiment.from && start < options.experiment.until ? options.experiment : null;
+  const armDraw = rng.next();
+  const holdout = !!measured && armDraw * 100 < measured.holdoutPct;
+  // The after-meal prompt ("something sweet?") is a suggestion too: tables that see it order a second round more often.
+  const secondRound = holdout ? 0.2 : 0.5;
+
   const orderTimes = [plus(start, minutes(rng.between(3, 9)))];
-  if (rng.chance(0.36)) orderTimes.push(plus(orderTimes[0], minutes(rng.between(22, 45))));
+  if (rng.chance(secondRound)) orderTimes.push(plus(orderTimes[0], minutes(rng.between(22, 45))));
   if (rng.chance(0.08)) orderTimes.push(plus(orderTimes[orderTimes.length - 1], minutes(rng.between(15, 25))));
-  const placed = orderTimes.filter((at) => at.getTime() < end.getTime() - minutes(12));
+  // The moment this visit becomes history, and where it is cut off if it is still sitting then.
+  const historyAt = plus(orderTimes[0], minutes(SERVED_AFTER_MINUTES));
+  const cut = end > options.until;
+  if (cut) end = plus(options.until, -minutes(1));
+  const placed = orderTimes.filter((at) => at.getTime() < end.getTime() - minutes(12)
+    && (!cut || at.getTime() <= options.until.getTime() - minutes(SERVED_AFTER_MINUTES)));
 
   let firstOrderAt: Date | null = null;
   let lastServedAt: Date | null = null;
@@ -257,14 +285,15 @@ function buildVisit(
   let orderCount = 0;
 
   placed.forEach((createdAt, round) => {
-    const lines = chooseLines(rng, createdAt, covers, round, options);
+    // "Goes well with": tables that are shown pairings add the side or the drink more often.
+    const lines = chooseLines(rng, createdAt, covers, round, options, holdout ? 0.45 : 0.8);
     const orderId = rng.uuid();
     orderCount += 1;
     const code = String(((ordersBefore + orderCount - 1) % 999) + 1).padStart(3, '0');
     const cancelled = rng.chance(0.015);
 
     // A suggestion shown in the cart, and whether it was taken.
-    if (options.detail && !cancelled && rng.chance(0.72)) {
+    if (options.detail && !cancelled && !holdout && rng.chance(0.78)) {
       const sources = lines.map((l) => l.item.id);
       const offers = PAIRINGS.filter(([source, recommended]) => sources.includes(source) && !sources.includes(recommended));
       const fallback = itemById.get(rng.pick([ITEM.fries, ITEM.lemonMint, ITEM.cheesecake, ITEM.cappuccino]))!;
@@ -277,6 +306,7 @@ function buildVisit(
         const others = rng.chance(0.5) ? [itemById.get(rng.pick([ITEM.water, ITEM.orangeJuice, ITEM.churros]))!] : [];
         rows.recommendation_decisions.push({
           id: decisionId, session_id: sessionId, placement, policy_version: options.policyVersion,
+          experiment_id: measured?.id ?? null, arm: measured ? 'treatment' : null,
           candidates: [chosen, ...others].map((c) => ({ item_id: c.id })), chosen_item_id: chosen.id,
           source_item_id: offer ? offer[0] : null, recommendation_type: offer ? offer[2] : 'frequently_bought_together',
           action_probability: 1, created_at: iso(shownAt), cart_value: money(lines.reduce((s, l) => s + l.quantity * l.unitPrice, 0)),
@@ -284,17 +314,19 @@ function buildVisit(
         });
         if (rng.chance(0.84)) {
           rows.recommendation_impressions.push({ decision_id: decisionId, seen_at: iso(plus(shownAt, 4000)) });
-          const acceptance = placement === 'cart' ? 0.2 : 0.11;
+          const acceptance = placement === 'cart' ? 0.3 : 0.16;
           if (rng.chance(acceptance)) {
             rows.analytics_events.push({
               visit_id: `v-${sessionId.slice(0, 13)}`, event: 'suggestion_accepted', venue_id: VENUE,
               props: { decision_id: decisionId, item_id: chosen.id, placement }, occurred_at: iso(plus(shownAt, 9000)), created_at: iso(plus(shownAt, 9000)),
             });
-            if (rng.chance(0.78)) {
-              lines.push({ item: chosen, quantity: 1, unitPrice: chosen.price, regularPrice: null, notes: null, components: null, fromDecision: decisionId });
+            if (rng.chance(0.82)) {
+              // "One for everyone?": a suggested side or drink is often taken for the table.
+              const quantity = covers >= 3 && rng.chance(0.45) ? 2 : 1;
+              lines.push({ item: chosen, quantity, unitPrice: chosen.price, regularPrice: null, notes: null, components: null, fromDecision: decisionId });
               rows.suggestion_conversions.push({
                 order_id: orderId, source_item_id: offer ? offer[0] : null, recommended_item_id: chosen.id, placement,
-                quantity: 1, line_total: chosen.price, created_at: iso(createdAt), decision_id: decisionId,
+                quantity, line_total: money(chosen.price * quantity), created_at: iso(createdAt), decision_id: decisionId,
               });
             }
           }
@@ -334,6 +366,7 @@ function buildVisit(
       cancel_reason: cancelled ? rng.pick(CANCEL_REASONS) : null, refunded_amount: refunded,
       fiscalized: !cancelled, fiscalized_at: cancelled ? null : iso(paidAt), fiscalization_status: cancelled ? 'not_fiscalized' : 'fiscalized',
       fiscal_receipt_number: cancelled ? null : `CD-${day.replace(/-/g, '').slice(2)}-${code}`,
+      reco_holdout: measured ? holdout : null,
     });
 
     for (const line of lines) {
@@ -379,7 +412,7 @@ function buildVisit(
     }
   });
 
-  if (!firstOrderAt && !options.detail) return { rows, orderCount };
+  if (!firstOrderAt && !options.detail) return { rows, orderCount, historyAt: null };
 
   if (firstOrderAt) {
     rows.table_sessions.push({
@@ -388,6 +421,9 @@ function buildVisit(
       first_order_at: iso(firstOrderAt), last_served_at: iso(lastServedAt), last_heartbeat_at: iso(end),
       host_client_id: clientId, covers: rng.chance(0.72) ? covers : null, staff_seen_at: iso(plus(start, minutes(rng.between(0.5, 3)))),
     });
+    if (measured) {
+      rows.session_experiment_assignment.push({ session_id: sessionId, experiment_id: measured.id, arm: holdout ? 'holdout' : 'treatment', assigned_at: iso(start) });
+    }
     if (rng.chance(0.3)) {
       rows.ratings.push({ table_session_id: sessionId, rating: rng.weighted([5, 4, 3, 2], (r) => ({ 5: 62, 4: 27, 3: 8, 2: 3 })[r]), created_at: iso(plus(end, -minutes(2))), venue_id: VENUE });
     }
@@ -426,9 +462,13 @@ function buildVisit(
     event('menu_viewed', { has_session: true, entry: 'home' });
     for (let i = 0; i < rng.int(1, 3); i += 1) event('category_viewed', { category: rng.pick(['Mains', 'Starters & Salads', 'Cold Drinks', 'Desserts', 'Coffee & Tea', 'Brunch']) });
     // Dishes people open and then do not order: the photo sells, the price does not.
-    for (const looked of [ITEM.chocolateDome, ITEM.mezzeForTwo]) if (rng.chance(0.34)) viewed.add(looked);
-    // People look at two or three dishes for each one they order.
-    for (let i = 0; i < rng.int(2, 5); i += 1) viewed.add(rng.weighted(ITEMS, (item) => item.weight).id);
+    for (const looked of [ITEM.chocolateDome, ITEM.mezzeForTwo]) if (rng.chance(0.16)) viewed.add(looked);
+    // People look at three or four dishes for each one they order.
+    // People open two or three dishes for each one they order, and what they open
+    // is what a table like theirs orders at that hour: so every dish converts about alike.
+    for (let i = 0; i < rng.int(2, 3); i += 1) {
+      for (const line of chooseLines(rng, plus(start, minutes(5)), covers, i === 2 ? 1 : 0, options)) viewed.add(line.item.id);
+    }
     for (const id of viewed) event('item_viewed', { item_id: id });
     if (firstOrderAt) {
       for (const id of added) event('item_added', { item_id: id });
@@ -437,7 +477,7 @@ function buildVisit(
       event('order_placed', { payment_method: method });
     }
   }
-  return { rows, orderCount };
+  return { rows, orderCount, historyAt };
 }
 
 /** Phones that opened the menu and ordered nothing: the top of the funnel. */
@@ -459,7 +499,7 @@ export function generateBrowsers(day: string, until: Date): Record<string, unkno
     if (!rng.chance(0.78)) continue;
     push('category_viewed', { category: rng.pick(['Mains', 'Desserts', 'Brunch', 'Cold Drinks']) });
     if (!rng.chance(0.74)) continue;
-    const looked = rng.chance(0.3) ? rng.pick([ITEM.chocolateDome, ITEM.mezzeForTwo]) : rng.weighted(ITEMS, (item) => item.weight).id;
+    const looked = rng.chance(0.12) ? rng.pick([ITEM.chocolateDome, ITEM.mezzeForTwo]) : rng.weighted(ITEMS, (item) => item.weight).id;
     push('item_viewed', { item_id: looked });
     if (rng.chance(0.5)) push('item_viewed', { item_id: rng.weighted(ITEMS, (item) => item.weight).id });
     if (!rng.chance(0.42)) continue;

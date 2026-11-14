@@ -11,6 +11,7 @@ import LocaleShell from "./components/LocaleShell";
 import { menuCategoryPath, menuHome, ownSiteElsewhere, venueBySlug } from "./lib/venues";
 import { currentVenueSlug } from "./lib/current-venue";
 import { HOME_VENUE } from "./lib/home-venue";
+import { DEMO_PATHS } from "./demo/brand";
 
 const VERA_HOME = HOME_VENUE === "veraitalia";
 /** Vera Italia's own site, when its pages are not this site's to show. */
@@ -20,9 +21,11 @@ import { AppUpdater } from "./lib/app-update";
 
 // Code-split route bundles so guests, staff, and admin screens load only when needed.
 // The website at / is a chunk of its own: a guest scanning a table code never downloads it.
-const SiteHome = lazy(() => import("./pages/site/SiteHome"));
+// Neither website is part of a demo build (their routes show the demo's own pages, below).
+const notInDemo = () => Promise.reject(new Error("Not part of the demo"));
+const SiteHome = lazy(() => (__TABLEFLOW_DEMO_BUILD__ ? notInDemo() : import("./pages/site/SiteHome")));
 // Vera Italia's website (docs/two-restaurants.md).
-const VeraSite = lazy(() => import("./pages/vera/VeraSite"));
+const VeraSite = lazy(() => (__TABLEFLOW_DEMO_BUILD__ ? notInDemo() : import("./pages/vera/VeraSite")));
 const DishLink = lazy(() => import("./pages/DishLink"));
 const GuestMenu = lazy(() => import("./pages/GuestMenu"));
 const CategoryPage = lazy(() => import("./pages/CategoryPage"));
@@ -66,6 +69,20 @@ const WaiterDashboard = lazy(() => import("./pages/WaiterDashboard"));
 const WaiterLogin = lazy(() => import("./pages/WaiterLogin"));
 const WaiterMonitor = lazy(() => import("./pages/WaiterMonitor"));
 const NotFound = lazy(() => import("./pages/NotFound"));
+
+/*
+ * The offline demo (docs/demo-mode.md). __TABLEFLOW_DEMO_BUILD__ is replaced
+ * by a literal when the app is built (vite.config.ts): `false` in the normal
+ * build, where these are null and nothing of src/demo is loaded or bundled.
+ * It has to be the literal itself, here: an imported constant is only known
+ * after the bundler has already followed every import().
+ * In the demo: "/" is the list of screens to open, the sign-in pages offer
+ * each demo account as one tap, and a small control sits on every screen.
+ */
+const DemoHub = __TABLEFLOW_DEMO_BUILD__ ? lazy(() => import("./demo/ui/DemoHub")) : null;
+const DemoStage = __TABLEFLOW_DEMO_BUILD__ ? lazy(() => import("./demo/ui/DemoStage")) : null;
+const DemoLogin = __TABLEFLOW_DEMO_BUILD__ ? lazy(() => import("./demo/ui/DemoLogin")) : null;
+const DemoControl = __TABLEFLOW_DEMO_BUILD__ ? lazy(() => import("./demo/ui/DemoControl")) : null;
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -158,16 +175,19 @@ const App = () => (
               in an active table session. No-op for staff/admin (no sessionId). */}
           <TablePresence />
         </Suspense>
+        {DemoControl && <Suspense fallback={null}><DemoControl /></Suspense>}
         <Suspense fallback={<RouteFallback />}>
           <Routes>
             {/* The website (lasoul.net). No page transition: its hero is the
                 page's largest paint and should not wait for a fade. On
                 Vera Italia's own site (veraitalia.net, src/lib/home-venue.ts)
                 "/", /bs and /ar are Vera Italia's website in each language. */}
-            <Route path="/" element={VERA_HOME ? <VeraSite /> : <SiteHome />} />
-            <Route path="/bs" element={VERA_HOME ? <VeraSite locale="bs" /> : <SiteHome locale="bs" />} />
-            <Route path="/ar" element={VERA_HOME ? <VeraSite locale="ar" /> : <SiteHome locale="ar" />} />
-            <Route path="/veraitalia" element={VERA_HOME ? <Navigate to="/" replace /> : VERA_ELSEWHERE ? <ForwardTo to={`${VERA_ELSEWHERE}/`} /> : <VeraSite />} />
+            <Route path="/" element={DemoHub ? <DemoHub /> : VERA_HOME ? <VeraSite /> : <SiteHome />} />
+            <Route path="/bs" element={DemoHub ? <Navigate to="/" replace /> : VERA_HOME ? <VeraSite locale="bs" /> : <SiteHome locale="bs" />} />
+            <Route path="/ar" element={DemoHub ? <Navigate to="/" replace /> : VERA_HOME ? <VeraSite locale="ar" /> : <SiteHome locale="ar" />} />
+            <Route path="/veraitalia" element={DemoHub || VERA_HOME ? <Navigate to="/" replace /> : VERA_ELSEWHERE ? <ForwardTo to={`${VERA_ELSEWHERE}/`} /> : <VeraSite />} />
+            {DemoHub && <Route path={DEMO_PATHS.hub} element={<DemoHub />} />}
+            {DemoStage && <Route path={DEMO_PATHS.stage} element={<DemoStage />} />}
             {/* Guest routes wrapped in soft page transition. */}
             <Route path="/menu" element={<MenuRedirect />} />
             <Route path="/menu/:venue" element={<OnItsOwnSite><VenueMenu /></OnItsOwnSite>} />
@@ -185,7 +205,7 @@ const App = () => (
             <Route path="/reservation/:id" element={<ReservationPage />} />
 
             {/* Admin Routes */}
-            <Route path="/admin/login" element={<AdminLogin />} />
+            <Route path="/admin/login" element={DemoLogin ? <DemoLogin /> : <AdminLogin />} />
             <Route path="/admin" element={<ClockProvider><AdminLayout /></ClockProvider>}>
               <Route index element={<AdminDashboard />} />
               <Route path="menu" element={<AdminMenu />} />
@@ -213,7 +233,7 @@ const App = () => (
                 card on these screens shares one interval instead of owning its
                 own — forty table cards used to mean forty timers. */}
             <Route path="/kitchen" element={<StaffGate redirectTo="/waiter/login?to=kitchen"><ClockProvider><KitchenDisplay /></ClockProvider></StaffGate>} />
-            <Route path="/waiter/login" element={<WaiterLogin />} />
+            <Route path="/waiter/login" element={DemoLogin ? <DemoLogin /> : <WaiterLogin />} />
             <Route path="/waiter/monitor" element={<StaffGate redirectTo="/waiter/login"><ClockProvider><WaiterMonitor /></ClockProvider></StaffGate>} />
             <Route path="/waiter" element={<StaffGate redirectTo="/waiter/login"><ClockProvider><WaiterDashboard /></ClockProvider></StaffGate>} />
 

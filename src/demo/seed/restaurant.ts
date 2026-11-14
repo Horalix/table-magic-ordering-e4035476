@@ -54,15 +54,27 @@ export async function seedRestaurant(db: SqlDb, now: Date): Promise<void> {
 
   // ---- the restaurant
   await db.query(`UPDATE public.venues SET slug = $2, name = $3, is_live = true WHERE id = $1::text::uuid`, [VENUE, RESTAURANT.slug, RESTAURANT.name]);
-  await db.query(`UPDATE public.venues SET slug = $2, name = $3, is_live = false WHERE id = $1::text::uuid`, [SPARE_VENUE.dbId, SPARE_VENUE.slug, SPARE_VENUE.name]);
+  // The schema ships a second restaurant with a menu of its own. The demo is one restaurant: it goes, with everything of its.
+  await db.query(
+    `DO $$
+     DECLARE r record;
+     BEGIN
+       FOR r IN SELECT c.table_name FROM information_schema.columns c JOIN information_schema.tables t
+                  ON t.table_schema = c.table_schema AND t.table_name = c.table_name AND t.table_type = 'BASE TABLE'
+                 WHERE c.table_schema = 'public' AND c.column_name = 'venue_id' LOOP
+         EXECUTE format('DELETE FROM public.%I WHERE venue_id = %L', r.table_name, '${SPARE_VENUE.dbId}');
+       END LOOP;
+       DELETE FROM public.venues WHERE id = '${SPARE_VENUE.dbId}';
+     END $$`);
   await db.query(
     `UPDATE public.restaurant_settings SET
        print_header = $2, print_footer = 'Hvala / Thank you', print_enabled = true, print_auto = true,
        ordering_enabled = true, pay_at_table_enabled = true, online_card_enabled = true, recommendations_enabled = true,
-       venue_qr_token = $3, kitchen_capacity_minutes = 180,
+       venue_qr_token = $3, kitchen_capacity_minutes = 240,
        -- A first order has to be large before it waits for a waiter to confirm it (one such order is seeded).
        hold_first_order_km = 150, hold_first_order_items = 16, hold_unpaid_km = 400, hold_burst_sessions = NULL,
-       service_open = '08:00', service_close = '23:00',
+       -- No service hours: the demo takes orders whenever it is shown, at midnight too.
+       service_open = NULL, service_close = NULL,
        reservations_enabled = true, reservations_open = '11:00', reservations_close = '22:00',
        reservations_max_party = 12, reservations_days_ahead = 30, reservations_lead_minutes = 60,
        reservations_phone = $4, reservations_note = 'Tables are held for 15 minutes.'

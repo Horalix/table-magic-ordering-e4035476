@@ -48,12 +48,22 @@ export const DEMO_ICON = svg(
   + "<circle cx='45' cy='32' r='3.4' fill='#D98A5F'/></svg>",
 );
 
+/** The same monogram for dark backgrounds (the staff sign-in screens' mark). */
+export const DEMO_MARK_ON_DARK = svg(
+  "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='15' fill='#F4ECDD'/>"
+  + "<path d='M42 21.5a14 14 0 1 0 0 21' fill='none' stroke='#33473B' stroke-width='6' stroke-linecap='round'/>"
+  + "<circle cx='45' cy='32' r='3.4' fill='#D98A5F'/></svg>",
+);
+
 /** The second venue row the schema ships with stays in the database, switched off and unnamed. */
 export const SPARE_VENUE = {
   dbId: 'a5000000-0000-4000-8000-000000000002',
   slug: 'casademo-spare',
   name: 'Casa Demo (second location)',
 } as const;
+
+/** The demo's own pages. Named here, not in src/App.tsx, whose route list the real sites' hosting rules are checked against. */
+export const DEMO_PATHS = { hub: '/demo', stage: '/demo/stage' } as const;
 
 export type DemoArea = 'admin' | 'kitchen' | 'waiter' | 'monitor';
 

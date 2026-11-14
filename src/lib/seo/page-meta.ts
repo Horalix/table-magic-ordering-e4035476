@@ -1,5 +1,7 @@
 import { useEffect } from 'react';
 import type { Locale } from '../i18n';
+import { DEMO_BUILD } from '../home-venue';
+import { PRODUCT, RESTAURANT } from '../../demo/brand';
 import { absoluteUrl } from './site-url';
 import { OG_IMAGE_PATH } from './structured-data';
 import { jsonForScript } from './static-pages';
@@ -55,6 +57,11 @@ export function usePageMeta(meta: PageMeta, enabled = true) {
   const jsonLdKey = jsonLd === undefined ? '' : JSON.stringify(jsonLd);
   useEffect(() => {
     if (!enabled) return;
+    // The offline demo is nobody's public page: it names its restaurant in the tab and nothing else.
+    if (DEMO_BUILD) {
+      document.title = `${RESTAURANT.name} — ${PRODUCT.name} demo`;
+      return;
+    }
     const url = absoluteUrl(path);
     const img = absoluteUrl(image || OG_IMAGE_PATH);
     document.title = title;

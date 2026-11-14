@@ -82,3 +82,28 @@ BEGIN
       r.tablename);
   END LOOP;
 END $$;
+
+/**
+ * Seeded orders are drawn at random, so nearly every pair of dishes ends up
+ * "ordered together more often than chance" simply because bigger tables
+ * order more of everything. Left alone, Admin → Menu intelligence would list
+ * hundreds of pairings to act on. A real restaurant's data has a few strong
+ * ones; the demo keeps the forty strongest each time the pairings are rebuilt.
+ */
+CREATE OR REPLACE FUNCTION demo.keep_strongest_pairings()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  IF pg_trigger_depth() > 1 THEN RETURN NULL; END IF;
+  DELETE FROM public.menu_item_affinity a
+   WHERE (a.item_a, a.item_b) NOT IN (
+     SELECT k.item_a, k.item_b FROM public.menu_item_affinity k
+      ORDER BY k.lift * sqrt(k.pair_orders) DESC LIMIT 40);
+  RETURN NULL;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS demo_keep_strongest_pairings ON public.menu_item_affinity;
+CREATE TRIGGER demo_keep_strongest_pairings AFTER INSERT ON public.menu_item_affinity
+  FOR EACH STATEMENT EXECUTE FUNCTION demo.keep_strongest_pairings();

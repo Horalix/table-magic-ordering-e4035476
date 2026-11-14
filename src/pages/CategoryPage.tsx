@@ -118,15 +118,22 @@ const CategoryTabs = ({ categories, current, locale, label, onSelect, printed = 
         })}
       </div>
     ) : (
-    <div className="grid gap-0.5 p-1 rounded-full bg-muted/70" style={{ gridTemplateColumns: `repeat(${categories.length}, minmax(0, 1fr))` }}>
+    /* Up to four categories share the width equally. More than that cannot
+        be read at a fifth of a phone's width each ("B…", "S…"), so they keep
+        their own width and the row scrolls, with the open one brought into view. */
+    <div
+      className={`gap-0.5 p-1 rounded-full bg-muted/70 ${categories.length > 4 ? 'flex overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden' : 'grid'}`}
+      style={categories.length > 4 ? undefined : { gridTemplateColumns: `repeat(${categories.length}, minmax(0, 1fr))` }}
+    >
       {categories.map((c) => {
         const active = c.name === current;
         return (
           <button
             key={c.id}
+            ref={active && categories.length > 4 ? (el) => el?.scrollIntoView({ block: 'nearest', inline: 'center' }) : undefined}
             onClick={() => { if (!active) onSelect(c); }}
             aria-current={active ? 'page' : undefined}
-            className={`relative h-11 px-1.5 rounded-full text-[13px] font-sans font-semibold transition-colors tap-sm ${active ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+            className={`relative h-11 rounded-full text-[13px] font-sans font-semibold transition-colors tap-sm ${categories.length > 4 ? 'shrink-0 px-3.5 whitespace-nowrap' : 'px-1.5'} ${active ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
           >
             {active && <motion.span layoutId="category-tab" transition={springPill} className="absolute inset-0 rounded-full bg-card shadow-sm" />}
             <span className="relative z-10 block truncate">{getLocalizedName(c, locale)}</span>

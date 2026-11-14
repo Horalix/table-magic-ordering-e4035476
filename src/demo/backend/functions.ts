@@ -120,16 +120,18 @@ async function deleteWaiter(db: SqlDb, req: BackendRequest, who: Identity): Prom
   if (!waiterId) return json({ error: 'waiter_id required' }, 400);
   const { rows } = await db.query<{ user_id: string }>(`SELECT user_id FROM public.waiters WHERE id = $1::text::uuid`, [waiterId]);
   if (!rows[0]) return json({ error: 'Waiter not found' }, 404);
+  if (!/^[0-9a-f-]{36}$/i.test(waiterId)) return json({ error: 'Waiter not found' }, 404);
   await db.query(`DELETE FROM public.section_assignments WHERE waiter_id = $1::text::uuid`, [waiterId]);
-  await db.exec('SET session_replication_role = replica');
-  try {
-    // History keeps its orders and tables; they simply no longer name the waiter.
-    await db.query(`UPDATE public.table_sessions SET assigned_waiter_id = NULL WHERE assigned_waiter_id = $1::text::uuid`, [waiterId]);
-    await db.query(`UPDATE public.orders SET assigned_waiter_id = NULL WHERE assigned_waiter_id = $1::text::uuid`, [waiterId]);
-    await db.query(`UPDATE public.server_ratings SET waiter_id = NULL WHERE waiter_id = $1::text::uuid`, [waiterId]);
-  } finally {
-    await db.exec('SET session_replication_role = origin');
-  }
+  // History keeps its orders and tables; they simply no longer name the waiter.
+  // One statement batch, so the guards on old orders are off for this change
+  // alone and not for whatever another tab does meanwhile. (The id was checked above.)
+  await db.exec(`
+    BEGIN;
+    SET LOCAL session_replication_role = replica;
+    UPDATE public.table_sessions SET assigned_waiter_id = NULL WHERE assigned_waiter_id = '${waiterId}';
+    UPDATE public.orders SET assigned_waiter_id = NULL WHERE assigned_waiter_id = '${waiterId}';
+    UPDATE public.server_ratings SET waiter_id = NULL WHERE waiter_id = '${waiterId}';
+    COMMIT;`);
   await db.query(`DELETE FROM public.waiters WHERE id = $1::text::uuid`, [waiterId]);
   await removeLogin(db, rows[0].user_id);
   return json({ ok: true, login_removed: true });

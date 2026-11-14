@@ -33,6 +33,8 @@ import { rememberPrices } from '@/lib/promotions';
 import type { MenuItemRow } from '@/lib/promotions-api';
 import { track } from '@/lib/analytics';
 import { useVenue } from '@/hooks/useVenue';
+import { DEMO_MODE } from '@/lib/demo-mode';
+import { DemoWordmark } from '@/demo/ui/Brand';
 import { useMenuOnly } from '@/hooks/useMenuOnly';
 import { VeraCourses, VeraMenuFooter, VeraMenuHero } from '@/components/vera/VeraMenu';
 import { VERA, pick } from '@/components/vera/copy';
@@ -73,7 +75,8 @@ const GuestMenu = () => {
   const t = useT();
   const locale = useLanguageStore((s) => s.locale);
   // Vera Italia's menu is the same app in its own room (src/components/vera).
-  const vera = useVenue().slug === 'veraitalia';
+  const venue = useVenue();
+  const vera = venue.slug === 'veraitalia';
   // Search engines: the same title and description the prerendered page for
   // this address carries (scripts/seo-prerender.ts), in the guest's language.
   usePageMeta({
@@ -219,6 +222,7 @@ const GuestMenu = () => {
       >
         {/* The olive branch from the logo, as the band's artwork. Decorative,
             and faint enough that the buttons over it stay the thing you see. */}
+        {!DEMO_MODE && (
         <img
           src="/brand/branch-white.webp"
           alt=""
@@ -227,11 +231,13 @@ const GuestMenu = () => {
           height={670}
           className="pointer-events-none select-none absolute -top-10 -end-20 w-64 opacity-[0.18] rtl:-scale-x-100"
         />
+        )}
         {/* Row one is the brand and the language, nothing else, so the
             wordmark can be big enough to read across a table. */}
         <div className="relative z-10 flex items-center justify-between gap-3">
           {/* The page's heading — "La Soul Menu" to a screen reader. */}
           <h1 dir="ltr" className="min-w-0">
+            {DEMO_MODE ? <DemoWordmark className="block text-[28px]" /> : (
             <img
               src="/brand/wordmark-white.webp"
               alt="La Soul"
@@ -240,6 +246,7 @@ const GuestMenu = () => {
               {...{ fetchpriority: 'high' }}
               className="h-7 w-auto drop-shadow-[0_1px_2px_rgba(0,0,0,0.15)]"
             />
+            )}
             <span className="block text-[10px] font-sans text-white/85 tracking-[0.34em] uppercase font-semibold mt-2.5 ps-0.5 rtl:tracking-normal rtl:text-xs">{t('menu')}</span>
           </h1>
           <LanguageSelector variant="hero" />
@@ -315,7 +322,7 @@ const GuestMenu = () => {
           {/* Each category as its own picture of several of its dishes, with its name under it. */}
           {!vera && categories.map((cat, i) => {
             const localizedName = getLocalizedName(cat as CategoryRow, locale);
-            const picture = PICTURE[cat.name];
+            const picture = DEMO_MODE ? undefined : PICTURE[cat.name];
             return (
               <motion.button
                 key={cat.id}
@@ -386,14 +393,14 @@ const GuestMenu = () => {
 
         {vera ? <VeraMenuFooter /> : (
         <motion.footer variants={fadeUp} className="pt-4 border-t border-border/60 space-y-1">
-          <a href={PHONE_HREF} className="flex items-center gap-3 py-2.5 text-sm font-sans text-foreground hover:text-primary transition-colors">
+          <a href={DEMO_MODE ? `tel:${venue.phoneHref}` : PHONE_HREF} className="flex items-center gap-3 py-2.5 text-sm font-sans text-foreground hover:text-primary transition-colors">
             <span className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center shrink-0"><Phone className="w-4 h-4 text-primary" /></span>
             <span className="min-w-0">
               <span className="block text-[11px] text-muted-foreground">{t('call_us')}</span>
-              <span dir="ltr" className="block">+387 33 877 779</span>
+              <span dir="ltr" className="block">{DEMO_MODE ? venue.phone : '+387 33 877 779'}</span>
             </span>
           </a>
-          <a href={MAPS_HREF} target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 py-2.5 text-sm font-sans text-foreground hover:text-primary transition-colors">
+          <a href={DEMO_MODE ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${venue.address}, ${venue.city}`)}` : MAPS_HREF} target="_blank" rel="noopener noreferrer" className="flex items-center gap-3 py-2.5 text-sm font-sans text-foreground hover:text-primary transition-colors">
             <span className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center shrink-0"><MapPin className="w-4 h-4 text-primary" /></span>
             <span className="min-w-0">
               <span className="block text-[11px] text-muted-foreground">{t('find_us')}</span>
