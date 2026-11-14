@@ -4,6 +4,12 @@
  * What search engines and answer engines are told about Vera Italia is true
  * to its menu, complete in three languages, claims nothing of La Soul's, and
  * says nothing the owner has not given yet.
+ *
+ * Its street address and phone are the owner's (13 November 2026), written
+ * as on its Google Business Profile: Butmirska cesta 16B, next door to La
+ * Soul (16A | 16B), and for now La Soul's phone number. So the street name
+ * and that number are Vera Italia's own to say; La Soul's name and La Soul's
+ * address are not. It has not opened its doors yet, so it has no hours.
  */
 import { afterEach, describe, expect, it } from 'vitest';
 import VERA_MENU from '../../../scripts/vera-italia/menu.json';
@@ -60,25 +66,52 @@ describe('Vera Italia’s questions and answers', () => {
       ...veraPages(menu).flatMap((p) => [p.body, JSON.stringify(p.head)]),
       veraLlms(menu).full,
     ].join('\n');
-    expect(everything).not.toMatch(/halal|burger|La Soul|Butmirska/i);
+    // Not its name, not what it serves, and not its address: Vera Italia is
+    // next door at 16B, so the street is its own, and "16A" is only La Soul's.
+    expect(everything).not.toMatch(/halal|burger|La Soul|16A/i);
+    expect(everything).not.toContain(VENUES.lasoul.address);
+    expect(VENUES.veraitalia.address).not.toBe(VENUES.lasoul.address);
   });
 
-  it('say where by the city until the street is given, and when and how to call only once the owner has said', () => {
+  it('say its street and its phone, as on its Google Business Profile, and no hours before it opens', () => {
     const faq = veraFaq(menu, 'en');
-    expect(faq.find(({ q }) => q === 'Where is Vera Italia?')?.a).toBe('In Sarajevo, Bosnia and Herzegovina.');
-    expect(veraFaq(menu, 'bs').find(({ q }) => q === 'Gdje se nalazi Vera Italia?')?.a).toBe('U Sarajevu, Bosna i Hercegovina.');
+    expect(faq.find(({ q }) => q === 'Where is Vera Italia?')?.a).toBe('Butmirska cesta 16B, Sarajevo, Bosnia and Herzegovina.');
+    expect(veraFaq(menu, 'bs').find(({ q }) => q === 'Gdje se nalazi Vera Italia?')?.a).toBe('Butmirska cesta 16B, Sarajevo, Bosna i Hercegovina.');
+    expect(veraFaq(menu, 'ar').find(({ q }) => q === 'أين يقع Vera Italia؟')?.a).toBe('Butmirska cesta 16B، سراييفو، البوسنة والهرسك.');
+    expect(faq.find(({ q }) => q === 'How do I contact Vera Italia?')?.a).toBe('By phone: +387 33 877 779.');
     expect(faq.map(({ q }) => q)).not.toContain('When is Vera Italia open?');
-    const restaurant = typed(veraSiteGraph(menu, 'en'), 'Restaurant');
-    expect(restaurant.address).toEqual({ '@type': 'PostalAddress', addressLocality: 'Sarajevo', addressCountry: 'BA' });
-    expect(restaurant).not.toHaveProperty('telephone');
-    expect(restaurant).not.toHaveProperty('openingHoursSpecification');
+    for (const locale of LOCALES) {
+      const restaurant = typed(veraSiteGraph(menu, locale), 'Restaurant');
+      expect(restaurant.name).toBe('Vera Italia');
+      expect(restaurant.address).toEqual({ '@type': 'PostalAddress', streetAddress: 'Butmirska cesta 16B', addressLocality: 'Sarajevo', addressCountry: 'BA' });
+      expect(restaurant.telephone).toBe('+38733877779');
+      // Not open yet, and its pin and profiles are not known: none of them is said.
+      for (const unknown of ['openingHoursSpecification', 'geo', 'hasMap', 'sameAs']) expect(restaurant).not.toHaveProperty(unknown);
+    }
   });
 });
 
-describe('Vera Italia’s facts, once given', () => {
+describe('Vera Italia’s facts, as they change', () => {
   const v = VENUES.veraitalia;
   const before = { ...v };
   afterEach(() => { Object.assign(v, before); });
+
+  it('are left out where they are not known: the city alone without a street, no phone without a number', () => {
+    Object.assign(v, { address: '', phone: '', phoneHref: '' });
+    const faq = veraFaq(menu, 'en');
+    expect(faq.find(({ q }) => q === 'Where is Vera Italia?')?.a).toBe('In Sarajevo, Bosnia and Herzegovina.');
+    expect(veraFaq(menu, 'bs').find(({ q }) => q === 'Gdje se nalazi Vera Italia?')?.a).toBe('U Sarajevu, Bosna i Hercegovina.');
+    expect(faq.map(({ q }) => q)).not.toContain('How do I contact Vera Italia?');
+    const restaurant = typed(veraSiteGraph(menu, 'en'), 'Restaurant');
+    expect(restaurant.address).toEqual({ '@type': 'PostalAddress', addressLocality: 'Sarajevo', addressCountry: 'BA' });
+    expect(restaurant).not.toHaveProperty('telephone');
+    const site = veraPages(menu).find((p) => p.path === '/veraitalia/')!;
+    expect(site.body).toContain('Sarajevo, Bosnia and Herzegovina. Our street address and opening hours will be here very soon.');
+    expect(site.body).not.toContain('<address>');
+    const { short } = veraLlms(menu);
+    expect(short).toContain('- Where: Sarajevo, Bosnia and Herzegovina (street address to be announced)');
+    expect(short).not.toContain('- Phone:');
+  });
 
   it('appear in the answers and the structured data', () => {
     Object.assign(v, {
@@ -92,6 +125,9 @@ describe('Vera Italia’s facts, once given', () => {
     const restaurant = typed(veraSiteGraph(menu, 'en'), 'Restaurant');
     expect(restaurant).toMatchObject({ telephone: '+38733000000', address: { streetAddress: 'Ulica 1', addressLocality: 'Sarajevo', addressCountry: 'BA' } });
     expect(restaurant.openingHoursSpecification).toHaveLength(1);
+    // With hours, the pages stop promising them.
+    expect(veraPages(menu).map((p) => p.body).join('\n')).not.toContain('very soon');
+    expect(veraLlms(menu).short).toContain('- Hours: Monday, Tuesday, Wednesday, Thursday, Friday, Saturday, Sunday 12:00–23:00');
   });
 });
 
@@ -210,10 +246,23 @@ describe('Vera Italia’s pages', () => {
     const site = pages.find((p) => p.path === '/veraitalia/')!;
     expect(site.head.title).toBe('Vera Italia — Italian Restaurant & Pizza in Sarajevo');
     expect(site.body).toContain('<p>Italian restaurant · Sarajevo</p>');
-    expect(site.body).toContain('Sarajevo, Bosnia and Herzegovina. Our street address and opening hours will be here very soon.');
     expect(site.body).not.toContain('Opening soon');
     expect(pages.find((p) => p.path === '/menu/veraitalia/')?.head.title).toBe('Menu — Vera Italia, Italian Restaurant in Sarajevo');
     expect(pages.find((p) => p.path === '/menu/veraitalia/pizza-napoletana/')?.head.title).toBe('Pizza Napoletana in Sarajevo — Vera Italia');
+  });
+
+  it('say where to find it and how to call, on its website and beside every dish, and that its hours are still to come', () => {
+    const where = '<address>Vera Italia<br />Butmirska cesta 16B, Sarajevo, Bosnia and Herzegovina<br /><a href="tel:+38733877779">+387 33 877 779</a></address>';
+    const site = pages.find((p) => p.path === '/veraitalia/')!;
+    expect(site.body).toContain(`${where}<p>Our opening hours will be here very soon.</p>`);
+    expect(site.body).toContain('<h3>Where is Vera Italia?</h3><p>Butmirska cesta 16B, Sarajevo, Bosnia and Herzegovina.</p>');
+    expect(site.body).toContain('<h3>How do I contact Vera Italia?</h3><p>By phone: +387 33 877 779.</p>');
+    // The promise is for the hours alone now: the street is there.
+    expect(site.body).not.toContain('street address');
+    expect(site.body).not.toMatch(/\d\d:\d\d/);
+    const dish = pages.find((p) => p.path === '/menu/veraitalia/dish/truffle-pizza/')!;
+    expect(dish.body).toContain(`${where}<p>Our opening hours will be here very soon.</p>`);
+    expect(typed(dish.head.jsonLd, 'Restaurant')).toMatchObject({ telephone: '+38733877779', address: { streetAddress: 'Butmirska cesta 16B' } });
   });
 
   it('give answer engines every dish, with its price and page', () => {
@@ -221,7 +270,8 @@ describe('Vera Italia’s pages', () => {
     expect(short).toMatch(/^# Vera Italia\n/);
     expect(short.includes('- Status: opening soon')).toBe(!VENUES.veraitalia.live);
     expect(short).toContain('- What: an Italian restaurant in Sarajevo, Bosnia and Herzegovina — ');
-    expect(short).toContain('- Where: Sarajevo, Bosnia and Herzegovina (street address to be announced)');
+    expect(short).toContain('- Address: Butmirska cesta 16B, Sarajevo, Bosnia and Herzegovina\n- Hours: to be announced\n- Phone: +387 33 877 779\n');
+    expect(short).not.toContain('street address to be announced');
     expect(short).toContain('### What sets Vera Italia apart from other Italian restaurants in Sarajevo?');
     for (const r of rows) expect(full).toContain(`[${r.name}](`);
     expect(full).toContain('Truffle Pizza](https://');

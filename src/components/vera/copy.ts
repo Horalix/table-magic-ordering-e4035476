@@ -107,7 +107,7 @@ export const COURSES: Record<string, { picture: string; cover: string; line: Cop
   },
 };
 
-/** The website, /veraitalia/. Facts not yet known (address, hours, phone) are not written here: the page leaves them out. */
+/** The website, /veraitalia/. Its facts (address, phone, hours) are not written here but in src/lib/venues.ts: one not known yet, the page leaves out. */
 export const SITE = {
   seoTitle: {
     en: 'Vera Italia — Italian Restaurant & Pizza in Sarajevo',
@@ -176,9 +176,16 @@ export const SITE = {
     ar: 'القاعة الطويلة: مرايا مقوّسة محاطة بالضوء، طاولات من الجوز وكراسٍ بلون التراكوتا',
   },
   visit: { en: 'Vieni a trovarci', bs: 'Vieni a trovarci', ar: 'زورونا' },
+  /** While neither the street nor the hours are known. */
   visitSoon: {
     en: 'Our street address and opening hours will be here very soon.',
     bs: 'Tačna adresa i radno vrijeme bit će ovdje vrlo brzo.',
     ar: 'سنضيف عنواننا الكامل ومواعيد العمل هنا قريبًا جدًا.',
+  },
+  /** Under the address while there are no hours yet (it has not opened its doors): the same promise, for the hours alone. */
+  hoursSoon: {
+    en: 'Our opening hours will be here very soon.',
+    bs: 'Radno vrijeme bit će ovdje vrlo brzo.',
+    ar: 'سنضيف مواعيد العمل هنا قريبًا جدًا.',
   },
 } satisfies Record<string, Copy>;

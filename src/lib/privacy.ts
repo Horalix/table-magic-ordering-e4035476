@@ -40,8 +40,8 @@ export interface PrivacyCopy {
 
 export function privacyCopy(venue: Venue): PrivacyCopy {
   const name = venue.name;
-  // Where to reach it, once the owner has given it (Vera Italia's has not
-  // arrived). In Arabic the number is marked left-to-right, or it reads backwards.
+  // Where to reach it, once the owner has given it. In Arabic the number is
+  // marked left-to-right, or it reads backwards.
   const reach = (phone: string) => [venue.address, venue.phone ? phone : ''].filter(Boolean).join(' · ');
   const en = reach(venue.phone);
   const ar = reach(`‎${venue.phone}`);

@@ -64,8 +64,10 @@ describe('while the restaurant takes no requests online', () => {
     expect(html).toContain('<h1>Online reservations are not open yet</h1>');
     expect(html).toContain(`<a href="tel:${venue.phoneHref}">${venue.phone}</a>`);
     expect(html).not.toMatch(/ReserveAction|acceptsReservations/);
-    // A restaurant with no number yet sends guests to ask there.
-    expect(reserveClosedMeta(VENUES.veraitalia, 'en').description).toMatch(VENUES.veraitalia.phone ? /Call us/ : /ask at the restaurant/);
+    // A restaurant with no number sends guests to ask there; Vera Italia has had one since 13 November 2026.
+    expect(reserveClosedMeta({ ...VENUES.veraitalia, phone: '', phoneHref: '' }, 'en').description).toMatch(/ask at the restaurant/);
+    expect(reserveClosedMeta(VENUES.veraitalia, 'en').description).toMatch(/Call us/);
+    expect(reserveClosedBody(VENUES.veraitalia)).toContain('<a href="tel:+38733877779">+387 33 877 779</a>');
   });
 
   it('robots.txt never keeps crawlers from the booking page: the page itself says whether it is listed', () => {
@@ -324,10 +326,14 @@ describe('Vera Italia on its own site (veraitalia.net)', () => {
     expect(llms.short).toContain(`- [Reserve a table](${address}): ask online, the restaurant confirms`);
     expect(llms.short).toContain(`- Reservations: ask for a table online at ${address}`);
     expect(llms.full).toContain('### Can I reserve a table?');
-    // Its booking page is its own: its name, its city, its address.
+    // Its booking page is its own: its name, its city, its address (next door
+    // to La Soul, at 16B) and the phone it answers on, and none of La Soul's.
     const graph = reservations.reserveGraph(VENUES.veraitalia, 'en', own.veraRestaurantNode(menu, 'en'));
     expect(typed(graph, 'WebPage').url).toBe(address);
+    expect(typed(graph, 'Restaurant')).toMatchObject({ name: 'Vera Italia', telephone: '+38733877779', address: { streetAddress: 'Butmirska cesta 16B' } });
     expect(reservations.reserveMeta(VENUES.veraitalia, 'en').title).toBe('Reserve a table at Vera Italia, Sarajevo');
-    expect(reservations.reserveBody(VENUES.veraitalia)).not.toMatch(/La Soul|Butmirska/);
+    const body = reservations.reserveBody(VENUES.veraitalia);
+    expect(body).toContain('<address>Vera Italia<br />Butmirska cesta 16B, Sarajevo<br /><a href="tel:+38733877779">+387 33 877 779</a></address>');
+    expect(body).not.toMatch(/La Soul|16A/);
   });
 });

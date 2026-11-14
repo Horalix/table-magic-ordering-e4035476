@@ -188,6 +188,11 @@ claim like that is worth nothing to Google, and the reviews say it far better.
    link and Instagram. They go in `src/lib/venues.ts`, and the website, its
    structured data, its FAQ ("Where is Vera Italia?", "When is it open?") and
    llms.txt all say them at once — written exactly as on the Google profile.
+   **The address and phone arrived on 13 November 2026** and are there:
+   Butmirska cesta 16B, Sarajevo, and for now La Soul's phone number, the
+   same as on the Google Business Profile created that day (not yet
+   verified). Still to come: the hours (it has not opened its doors yet, so
+   the website says they are coming), the Maps link and Instagram.
 4. **Google Search Console** — add a *Domain* property `veraitalia.net` (a
    DNS TXT record), submit `https://veraitalia.net/sitemap.xml`, and request
    indexing of `/`, `/bs/` and `/ar/`. **Bing Webmaster Tools** — *Import from
@@ -209,8 +214,9 @@ claim like that is worth nothing to Google, and the reviews say it far better.
 
 It is open (`live: true`, step 4 of the table above, 30 October 2026): its
 menu, four courses and 25 dish pages are in the sitemap and open to search.
-Nothing in any of it is La Soul's, and nothing the owner has not given is
-said.
+Nothing in any of it is La Soul's — except, for now, the phone number the
+two share (the owner, 13 November 2026; Vera Italia is next door, at 16B) —
+and nothing the owner has not given is said.
 
 ## Vera Italia — what is ready
 
@@ -246,9 +252,13 @@ said.
 - **Allergens confirmed by the kitchen.** They are read from the recipes in
   `menu.json`; the pesto dishes are marked as containing nuts (pine nuts are
   usual in pesto), and the steak platter's Caesar dressing as eggs.
-- **Address, phone, opening hours, Google Maps link, Instagram** — they go in
+- **Opening hours, Google Maps link, Instagram** — they go in
   `src/lib/venues.ts`; the website's "Visit" section and the menu's footer
-  show them as soon as they are there.
+  show them as soon as they are there. The address (Butmirska cesta 16B) and
+  the phone (La Soul's number, for now) have been there since 13 November
+  2026, the same as on its Google Business Profile.
+- **Its own phone number**, when it has one: on the Google profile and in
+  `src/lib/venues.ts` together, so the two never disagree.
 - **Its Google review link** (`reviewUrl` in `src/lib/venues.ts`) — until then
   Vera Italia's guests are thanked for a rating without being sent to La
   Soul's listing.

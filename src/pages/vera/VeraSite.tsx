@@ -20,10 +20,11 @@ import menuData from '../../../scripts/vera-italia/menu.json';
  * Vera Italia's website, /veraitalia/ (docs/two-restaurants.md).
  *
  * Built from what is real: the owner's photographs of the room, the dishes as
- * the kitchen plates them, the menu as sent. Facts that are not known yet —
- * the address, the hours, the phone — are simply not on the page; when they
- * are filled in src/lib/venues.ts, the "visit" section shows them. Until the
- * restaurant is live its menu links read "Opening soon" instead.
+ * the kitchen plates them, the menu as sent. Its address and phone are in
+ * the "visit" section (src/lib/venues.ts). Facts that are not known yet —
+ * the hours, the map link — are simply not on the page; when they are filled
+ * in there, that section shows them. Until the restaurant is live its menu
+ * links read "Opening soon" instead.
  */
 
 type Room = keyof typeof roomImages;
@@ -317,6 +318,8 @@ const VeraSite = ({ locale: pathLocale }: { locale?: Locale }) => {
             {venue.address ? (
               <>
                 <h2 className="mt-5 font-serif italic text-4xl font-light">{venue.address}</h2>
+                {/* The city under the street: the address whole, as its Google profile has it. */}
+                {venue.city && <p className="mt-2 font-serif italic text-xl text-muted-foreground">{c(PLACE.city)}{locale === 'ar' ? '، ' : ', '}{c(PLACE.country)}</p>}
                 <div className="mt-8 flex flex-col items-center gap-3 font-sans text-sm">
                   {venue.hours?.map((h) => (
                     <span key={h.days.join()} className="inline-flex items-center gap-2"><Clock className="h-4 w-4 text-primary" aria-hidden />{h.opens}–{h.closes}</span>
@@ -324,6 +327,8 @@ const VeraSite = ({ locale: pathLocale }: { locale?: Locale }) => {
                   {venue.phone && <a href={`tel:${venue.phoneHref}`} className="inline-flex items-center gap-2"><Phone className="h-4 w-4 text-primary" aria-hidden /><span dir="ltr">{venue.phone}</span></a>}
                   {venue.mapsUrl && <a href={venue.mapsUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2"><MapPin className="h-4 w-4 text-primary" aria-hidden />{t('find_us')}</a>}
                 </div>
+                {/* No hours yet (it has not opened its doors): say they are coming, as the page did before it had an address. */}
+                {!venue.hours?.length && <p className="mt-6 font-sans text-sm text-muted-foreground">{c(SITE.hoursSoon)}</p>}
               </>
             ) : (
               <>

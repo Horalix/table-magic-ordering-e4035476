@@ -163,11 +163,14 @@ describe('the prerendered pages', () => {
     });
   });
 
-  it('give Vera Italia its own privacy notice: its name, and no address until the owner gives one', () => {
+  it('give Vera Italia its own privacy notice: its name, its own address and the phone it answers on', () => {
+    // Next door to La Soul and, for now, on the same phone number (the owner, 13 November 2026).
     const body = privacyBody(VENUES.veraitalia);
     expect(body).toContain('Vera Italia respects your privacy');
-    expect(body).toContain('contact Vera Italia directly.');
-    expect(body).not.toMatch(/La Soul|Butmirska|877 779/);
+    expect(body).toContain('contact Vera Italia directly (Butmirska cesta 16B · +387 33 877 779).');
+    expect(body).not.toMatch(/La Soul|16A/);
+    // A restaurant with neither is named and nothing more.
+    expect(privacyBody({ ...VENUES.veraitalia, address: '', phone: '', phoneHref: '' })).toContain('contact Vera Italia directly.');
   });
 
   it('come with robots.txt, a sitemap, and llms.txt for answer engines', () => {

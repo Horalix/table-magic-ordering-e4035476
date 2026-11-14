@@ -17,10 +17,18 @@ test.describe('Vera Italia’s own site', () => {
     await installVeraStubs(page);
     await page.goto('/');
     await expect(page.getByRole('heading', { level: 1, name: 'Vera Italia' })).toBeVisible();
-    // Where it is, on the photograph and in the visit section; "Opening soon" no longer.
+    // Where it is, on the photograph and in the visit section: its street and
+    // the phone it answers on, as on its Google Business Profile (next door to
+    // La Soul, and for now on the same number). "Opening soon" no longer.
     await expect(page.getByText('Italian restaurant · Sarajevo')).toBeVisible();
-    await expect(page.getByRole('heading', { level: 2, name: 'Sarajevo' })).toBeAttached();
+    await expect(page.getByRole('heading', { level: 2, name: 'Butmirska cesta 16B' })).toBeAttached();
+    await expect(page.getByText('Sarajevo, Bosnia and Herzegovina', { exact: true })).toBeAttached();
+    await expect(page.getByRole('link', { name: '+387 33 877 779' })).toHaveAttribute('href', 'tel:+38733877779');
+    // It has not opened its doors yet: no hours, only that they are coming.
+    await expect(page.getByText('Our opening hours will be here very soon.')).toBeAttached();
+    await expect(page.getByText(/\d\d:\d\d/)).toHaveCount(0);
     await expect(page.getByText('Opening soon')).toHaveCount(0);
+    await expect(page.getByText(/La Soul|16A/)).toHaveCount(0);
     await expect(page.locator('html')).toHaveAttribute('data-venue', 'veraitalia');
     await expect(page.getByRole('img', { name: 'La Soul' })).toHaveCount(0);
     await expect(page.locator('link[rel="manifest"]')).toHaveAttribute('href', '/manifest-veraitalia.webmanifest');
@@ -87,13 +95,41 @@ test.describe('Vera Italia’s own site', () => {
     expect(await (await page.request.get('/llms-full.txt')).text()).toContain('[Truffle Pizza](https://veraitalia.net/menu/veraitalia/dish/truffle-pizza/) / ');
   });
 
+  test('says the same name, address and phone as its Google Business Profile, and no hours before it opens', async ({ page }) => {
+    // What a crawler reads: the HTML as served, before any code runs.
+    const home = await (await page.request.get('/')).text();
+    const ld = JSON.parse(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/.exec(home)![1]) as { '@graph': ({ '@type': string } & Record<string, unknown>)[] };
+    const restaurant = ld['@graph'].find((n) => n['@type'] === 'Restaurant')!;
+    expect(restaurant).toMatchObject({
+      name: 'Vera Italia', telephone: '+38733877779',
+      address: { streetAddress: 'Butmirska cesta 16B', addressLocality: 'Sarajevo', addressCountry: 'BA' },
+    });
+    expect(restaurant).not.toHaveProperty('openingHoursSpecification');
+    expect(home).toContain('<address>Vera Italia<br />Butmirska cesta 16B, Sarajevo, Bosnia and Herzegovina<br /><a href="tel:+38733877779">+387 33 877 779</a></address>');
+    expect(home).toContain('<h3>Where is Vera Italia?</h3><p>Butmirska cesta 16B, Sarajevo, Bosnia and Herzegovina.</p>');
+    expect(home).not.toContain('When is Vera Italia open?');
+    // Next door to La Soul, and for now on its phone number; never its name or its "16A | 16B".
+    expect(home).not.toMatch(/La Soul|16A/);
+
+    const llms = await (await page.request.get('/llms.txt')).text();
+    expect(llms).toContain('- Address: Butmirska cesta 16B, Sarajevo, Bosnia and Herzegovina\n- Hours: to be announced\n- Phone: +387 33 877 779\n');
+    expect(llms).not.toMatch(/La Soul|16A/);
+
+    // A dish's own page says where it is served, too.
+    const dish = await (await page.request.get('/menu/veraitalia/dish/truffle-pizza/')).text();
+    expect(dish).toContain('"streetAddress":"Butmirska cesta 16B"');
+    expect(dish).toContain('"telephone":"+38733877779"');
+  });
+
   test('its privacy notice is its own, and a page of its own', async ({ page }) => {
     const html = await (await page.request.get('/privacy/')).text();
     expect(html).toContain('<title>Trust, Privacy &amp; Terms — Vera Italia</title>');
     expect(html).toContain('<link rel="canonical" href="https://veraitalia.net/privacy/" />');
     expect(html).toContain('Vera Italia respects your privacy');
     expect(html).toContain('href="/manifest-veraitalia.webmanifest"');
-    expect(html).not.toMatch(/La Soul|Butmirska/);
+    // How to reach it is its own: its address, and the phone it answers on.
+    expect(html).toContain('contact Vera Italia directly (Butmirska cesta 16B · +387 33 877 779).');
+    expect(html).not.toMatch(/La Soul|16A/);
     expect(await (await page.request.get('/sitemap.xml')).text()).toContain('<loc>https://veraitalia.net/privacy/</loc>');
 
     await installVeraStubs(page);
@@ -135,6 +171,8 @@ test.describe('Vera Italia’s own site', () => {
     expect(built).toContain('<title>Reserve a table · Vera Italia</title>');
     expect(built).toContain('<meta name="robots" content="noindex, follow" />');
     expect(built).toContain('<meta property="og:site_name" content="Vera Italia" />');
+    // Not open online: it says to call, on the number Vera Italia answers on.
+    expect(built).toContain('<a href="tel:+38733877779">+387 33 877 779</a>');
 
     await options(false);
     await page.goto('/');
