@@ -61,29 +61,51 @@ async function guestStubs(page: Page, over: Partial<Guest> = {}): Promise<Guest>
 const group = (page: Page, name: string) => page.getByRole('radiogroup', { name });
 const chosen = (page: Page, name: string) => group(page, name).locator('[aria-checked="true"]');
 const pick = (page: Page, name: string, value: string) => group(page, name).locator(`[data-value="${value}"]`).click();
+/** The booking card's own question: which of its three steps the guest is on. */
+const step = (page: Page) => page.locator('#reserve-step-title');
+
+/** Through the first two steps: a time (which moves on by itself), then how many (which does too). */
+const toDetails = async (page: Page, time = '19:00', party = '2') => {
+  await pick(page, 'Time', time);
+  await expect(step(page)).toHaveText('How many of you?');
+  await pick(page, 'Guests', party);
+  await expect(step(page)).toHaveText('Who is the table for?');
+};
 
 const fill = async (page: Page, name = 'Amina Hadžić', phone = '+387 61 123-456') => {
   await page.getByLabel('Your name').fill(name);
   await page.getByLabel('Phone number').fill(phone);
 };
 
+/** Nothing on the page runs off its side. */
+const fitsSideways = (page: Page) => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1);
+
 test.describe('a guest asks for a table', () => {
-  test('picks a day, a time and how many, and is taken to their own page', async ({ page }) => {
+  test('when, how many, who: three short steps, and on to their own page', async ({ page }) => {
     const guest = await guestStubs(page);
     await page.goto('/reserve');
     await expect(page.getByRole('heading', { level: 1, name: 'Reserve a table' })).toBeVisible();
     await expect(page.getByText('We hold a table for 15 minutes.')).toBeVisible();
 
-    // The restaurant's own day first, and dinner time where the day still has it.
+    // 1. When: the restaurant's own day first, and no time until the guest taps one.
+    await expect(step(page)).toHaveText('When would you like to come?');
+    await expect(page.getByText('Step 1 of 3')).toBeVisible();
     await expect(chosen(page, 'Day')).toHaveAttribute('data-value', '2026-11-13');
-    await expect(chosen(page, 'Time')).toHaveAttribute('data-value', '19:00');
-    await expect(chosen(page, 'Guests')).toHaveAttribute('data-value', '2');
+    await expect(chosen(page, 'Time')).toHaveCount(0);
     await pick(page, 'Day', '2026-11-14');
+    // Tapping a time is the answer to this step: the next one comes by itself.
     await pick(page, 'Time', '19:30');
+
+    // 2. How many: one tap, and on.
+    await expect(step(page)).toHaveText('How many of you?');
+    await expect(page.getByTestId('reserve-summary')).toContainText('Saturday 14 November · 19:30');
     await pick(page, 'Guests', '4');
-    // What is being asked for, in one line, before it is sent.
+
+    // 3. Who: what is being asked for stays at the top, in one line.
+    await expect(step(page)).toHaveText('Who is the table for?');
     await expect(page.getByTestId('reserve-summary')).toContainText('Saturday 14 November · 19:30 · Guests: 4');
     await fill(page);
+    await page.getByRole('button', { name: 'Add a note' }).click();
     await page.getByLabel(/Anything we should know/).fill('By the window');
     await page.getByRole('button', { name: 'Ask for this table' }).click();
 
@@ -95,6 +117,49 @@ test.describe('a guest asks for a table', () => {
     }]);
   });
 
+  test('each choice made is a tap back to where it was made, and is kept', async ({ page }) => {
+    await guestStubs(page);
+    await page.goto('/reserve');
+    await toDetails(page, '19:30', '4');
+    await fill(page);
+
+    // The guests, from the line at the top: still four, and on again with Continue.
+    await page.getByTestId('reserve-summary').getByRole('button', { name: 'Guests: 4' }).click();
+    await expect(step(page)).toHaveText('How many of you?');
+    await expect(chosen(page, 'Guests')).toHaveAttribute('data-value', '4');
+    // Back, to the time: still 19:30.
+    await page.getByRole('button', { name: 'Back', exact: true }).click();
+    await expect(step(page)).toHaveText('When would you like to come?');
+    await expect(chosen(page, 'Time')).toHaveAttribute('data-value', '19:30');
+    // Another day keeps the same time where that day has it.
+    await pick(page, 'Day', '2026-11-15');
+    await expect(chosen(page, 'Time')).toHaveAttribute('data-value', '19:30');
+    await page.getByRole('button', { name: 'Continue' }).click();
+    await expect(step(page)).toHaveText('How many of you?');
+    await page.getByRole('button', { name: 'Continue' }).click();
+    await expect(step(page)).toHaveText('Who is the table for?');
+    await expect(page.getByTestId('reserve-summary')).toContainText('Sunday 15 November · 19:30 · Guests: 4');
+    // What was typed is still there.
+    await expect(page.getByLabel('Your name')).toHaveValue('Amina Hadžić');
+  });
+
+  test('five days at a time, the next five one tap away', async ({ page }) => {
+    await guestStubs(page);
+    await page.goto('/reserve');
+    await expect(group(page, 'Day').getByRole('radio')).toHaveCount(5);
+    await expect(page.getByRole('button', { name: 'Earlier days' })).toBeDisabled();
+    await expect(group(page, 'Day').getByRole('radio').first()).toHaveAccessibleName('Today · Friday 13 November');
+    await page.getByRole('button', { name: 'Later days' }).click();
+    await expect(group(page, 'Day').getByRole('radio').first()).toHaveAttribute('data-value', '2026-11-18');
+    await expect(page.getByRole('button', { name: 'Earlier days' })).toBeEnabled();
+    // The day chosen stays chosen while other days are looked at.
+    await pick(page, 'Day', '2026-11-20');
+    await page.getByRole('button', { name: 'Earlier days' }).click();
+    await expect(chosen(page, 'Day')).toHaveCount(0);
+    await page.getByRole('button', { name: 'Later days' }).click();
+    await expect(chosen(page, 'Day')).toHaveAttribute('data-value', '2026-11-20');
+  });
+
   test('today offers only what is far enough ahead, and a day with nothing left says so', async ({ page }) => {
     await guestStubs(page, { options: { ...OPTIONS, now: '20:30' } });
     await page.goto('/reserve');
@@ -102,31 +167,33 @@ test.describe('a guest asks for a table', () => {
     await expect(chosen(page, 'Day')).toHaveAttribute('data-value', '2026-11-14');
     await pick(page, 'Day', '2026-11-13');
     await expect(page.getByText('No more times on this day. Pick another day.')).toBeVisible();
-    await expect(page.getByTestId('reserve-summary')).toHaveCount(0);
-    await expect(page.getByRole('button', { name: 'Ask for this table' })).toBeDisabled();
+    await expect(group(page, 'Time')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Continue' })).toHaveCount(0);
   });
 
-  test('the day is offered in three parts, each a dozen times at most, and the restaurant\'s rules are said up front', async ({ page }) => {
+  test('the day is offered in three parts, and the restaurant\'s rules are said up front', async ({ page }) => {
     await guestStubs(page);
     await page.goto('/reserve');
     await expect(page.getByText('Tables 11:00 to 21:00')).toBeVisible();
     await expect(page.getByText('Up to 10 guests')).toBeVisible();
-    // Evening first, where dinner is; the other parts one tap away, each opening on its usual time.
+    // Evening first, where dinner is; the other parts one tap away.
     await expect(page.getByRole('button', { name: 'Evening' })).toHaveAttribute('aria-pressed', 'true');
     await expect(group(page, 'Time').getByRole('radio')).toHaveCount(13);
     await page.getByRole('button', { name: 'Midday' }).click();
-    await expect(chosen(page, 'Time')).toHaveAttribute('data-value', '13:00');
     await expect(group(page, 'Time').getByRole('radio').first()).toHaveAttribute('data-value', '11:00');
     await page.getByRole('button', { name: 'Afternoon' }).click();
-    await expect(chosen(page, 'Time')).toHaveAttribute('data-value', '16:00');
+    await expect(group(page, 'Time').getByRole('radio')).toHaveCount(12);
+    await pick(page, 'Time', '16:00');
     await expect(page.getByTestId('reserve-summary')).toContainText('16:00');
-    // As many guests as the restaurant takes online, and no more.
+    // As many guests as the restaurant takes online, and no more; more than that is a phone call.
     await expect(group(page, 'Guests').getByRole('radio')).toHaveCount(10);
+    await expect(page.getByRole('link', { name: 'More than 10 of you? Call us.' })).toHaveAttribute('href', 'tel:+38733877779');
   });
 
   test('a name or number that cannot be right is caught before anything is sent', async ({ page }) => {
     const guest = await guestStubs(page);
     await page.goto('/reserve');
+    await toDetails(page);
     await fill(page, 'Amina', '12345');
     await page.getByRole('button', { name: 'Ask for this table' }).click();
     await expect(page.getByRole('alert')).toContainText('does not look like a phone number');
@@ -139,6 +206,7 @@ test.describe('a guest asks for a table', () => {
   test('a refusal is said in plain words, with the phone to call', async ({ page }) => {
     await guestStubs(page, { refuse: 'soon' });
     await page.goto('/reserve');
+    await toDetails(page);
     await fill(page);
     await page.getByRole('button', { name: 'Ask for this table' }).click();
     const alert = page.getByRole('alert');
@@ -153,6 +221,7 @@ test.describe('a guest asks for a table', () => {
     await expect(page.getByRole('heading', { level: 2, name: 'Online reservations are not open yet' })).toBeVisible();
     // La Soul's own number, from its website, when the admin has set none.
     await expect(page.getByRole('link', { name: /Call \+387 33 877 779/ })).toBeVisible();
+    await expect(step(page)).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Ask for this table' })).toHaveCount(0);
   });
 
@@ -162,29 +231,49 @@ test.describe('a guest asks for a table', () => {
     await page.goto('/reserve');
     await expect(page.getByRole('heading', { level: 1, name: 'احجز طاولة' })).toBeVisible();
     await expect(page.locator('main').locator('..')).toHaveAttribute('dir', 'rtl');
+    await expect(step(page)).toHaveText('متى تودّ المجيء؟');
+    // Nothing to scroll sideways: in a right-to-left page, "far off to the left" is reachable.
+    expect(await fitsSideways(page)).toBe(true);
+    await pick(page, 'الوقت', '19:00');
+    await pick(page, 'عدد الأشخاص', '2');
     await expect(page.getByRole('button', { name: 'اطلب هذه الطاولة' })).toBeVisible();
     // A phone number and a time stay left to right.
     await expect(page.getByLabel('رقم الهاتف')).toHaveAttribute('dir', 'ltr');
-    // Nothing to scroll sideways: in a right-to-left page, "far off to the left" is reachable.
-    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
+    expect(await fitsSideways(page)).toBe(true);
   });
 
   test('a guest is told before asking that the restaurant will message them on WhatsApp, where it does', async ({ page }) => {
     await guestStubs(page);
     await page.goto('/reserve');
+    await toDetails(page);
     await expect(page.getByRole('button', { name: 'Ask for this table' })).toBeVisible();
     await expect(page.getByTestId('whatsapp-notice')).toHaveCount(0);
 
     await guestStubs(page, { options: { ...OPTIONS, whatsapp: true } });
     await page.goto('/reserve');
+    await toDetails(page);
     await expect(page.getByTestId('whatsapp-notice')).toHaveText('We will message you on WhatsApp when we have your request and when we answer.');
   });
 
-  test('fits a phone: nothing to scroll sideways', async ({ page }) => {
+  test('fits a phone: each step on one screen, nothing to scroll sideways', async ({ page }) => {
     await guestStubs(page);
     await page.goto('/reserve');
+    const card = page.locator('form').filter({ has: step(page) });
+    const fitsScreen = async () => {
+      const box = (await card.boundingBox())!;
+      const { height, width } = page.viewportSize()!;
+      expect(box.height).toBeLessThanOrEqual(height - 72);
+      expect(box.x >= 0 && box.x + box.width <= width).toBe(true);
+      expect(await fitsSideways(page)).toBe(true);
+    };
+    await expect(step(page)).toHaveText('When would you like to come?');
+    await fitsScreen();
+    await pick(page, 'Time', '19:00');
+    await expect(step(page)).toHaveText('How many of you?');
+    await fitsScreen();
+    await pick(page, 'Guests', '2');
     await expect(page.getByRole('button', { name: 'Ask for this table' })).toBeVisible();
-    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
+    await fitsScreen();
   });
 });
 
@@ -299,7 +388,7 @@ test.describe('what search engines find', () => {
   test('open online: listed, named for what people search, with how it works and its questions on the page', async ({ page }) => {
     await guestStubs(page);
     await page.goto('/reserve/');
-    await expect(page.getByRole('button', { name: 'Ask for this table' })).toBeVisible();
+    await expect(step(page)).toHaveText('When would you like to come?');
     await expect(page).toHaveTitle('Reserve a table at La Soul, Sarajevo');
     await expect(page.locator('link[rel="canonical"]')).toHaveAttribute('href', 'https://lasoul.net/reserve/');
     await expect(page.locator('meta[name="robots"]')).toHaveAttribute('content', 'index, follow, max-image-preview:large');
