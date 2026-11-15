@@ -1,6 +1,8 @@
 import type React from 'react';
-import { Calculator, Coins, LayoutGrid, Lightbulb } from 'lucide-react';
+import { ArrowRight, Calculator, Coins, LayoutGrid, Lightbulb } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
+import CountUp from '@/components/admin/CountUp';
+import { Stagger } from '@/components/admin/AdminCard';
 import type { HoldoutComparison, Insight, MenuEngineeringRow, Quadrant, SuggestionImpact } from '@/lib/menu-intelligence';
 import { quadrantCounts, suggestionsHeadline } from '@/lib/menu-matrix';
 
@@ -25,20 +27,24 @@ const Tile = ({ icon: Icon, label, onOpen, children }: {
   <button
     type="button"
     onClick={onOpen}
-    className="group flex h-full flex-col items-stretch justify-start text-left rounded-2xl border border-border bg-card p-4 sm:p-5 transition-colors hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+    className="group flex h-full w-full flex-col items-stretch justify-start text-left rounded-2xl border border-border/80 bg-card p-4 sm:p-5 shadow-lux transition-[border-color,box-shadow,transform] duration-200 hover:-translate-y-px hover:border-primary/40 hover:shadow-lux-lg motion-reduce:transform-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
   >
-    <span className="flex items-center gap-2 text-xs font-sans font-semibold uppercase tracking-wide text-muted-foreground">
-      <Icon className="w-4 h-4 text-primary shrink-0" aria-hidden /> {label}
+    <span className="flex items-start justify-between gap-2">
+      <span className="text-[13px] font-sans font-medium leading-snug text-muted-foreground">{label}</span>
+      <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-primary/10 text-primary transition-colors group-hover:bg-primary group-hover:text-primary-foreground" aria-hidden>
+        <Icon className="w-4 h-4 group-hover:hidden" />
+        <ArrowRight className="hidden w-4 h-4 group-hover:block" />
+      </span>
     </span>
     {children}
   </button>
 );
 
 const Big = ({ children }: { children: React.ReactNode }) => (
-  <span className="mt-2 block font-sans text-2xl sm:text-[26px] font-semibold leading-tight tracking-tight text-foreground">{children}</span>
+  <span className="mt-1.5 block font-sans text-[22px] sm:text-[26px] font-semibold leading-tight tracking-tight text-foreground">{children}</span>
 );
 const Sub = ({ children }: { children: React.ReactNode }) => (
-  <span className="mt-1 block text-xs font-sans text-muted-foreground leading-snug">{children}</span>
+  <span className="mt-1.5 block text-xs font-sans text-muted-foreground leading-snug">{children}</span>
 );
 
 const SHAPE: { q: Exclude<Quadrant, 'insufficient'>; one: string; many: string; bar: string }[] = [
@@ -66,13 +72,13 @@ const MenuIntelligenceSummary = ({ insights, holdout, impact, rows, onOpen }: {
   const suggestions = suggestionsHeadline(holdout, impact);
 
   return (
-    <section aria-label="Summary" className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-4">
+    <Stagger as="section" aria-label="Summary" className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-4">
       <Tile icon={Lightbulb} label="Worth acting on" onOpen={() => onOpen('actions')}>
         {insights === null ? <Skeleton className="mt-2 h-14 rounded-xl" /> : weekly.length === 0 ? (
           <><Big>Nothing waiting</Big><Sub>No action has passed its test right now.</Sub></>
         ) : (
           <>
-            <Big>~{km0(worth)} a week</Big>
+            <Big><CountUp value={worth} format={(n) => `~${km0(n)} a week`} /></Big>
             <Sub>{weekly.length === 1 ? '1 thing to do' : `${weekly.length} things to do`}, each tested and worth 20 KM a week or more.</Sub>
           </>
         )}
@@ -108,7 +114,7 @@ const MenuIntelligenceSummary = ({ insights, holdout, impact, rows, onOpen }: {
       <Tile icon={Calculator} label="Exact margins" onOpen={() => onOpen('menu', 'costs')}>
         {!rows ? <Skeleton className="mt-2 h-14 rounded-xl" /> : (
           <>
-            <Big>{exact} of {rows.length}</Big>
+            <Big><CountUp value={exact} format={(n) => `${Math.round(n)} of ${rows.length}`} /></Big>
             <Sub>
               {exact === rows.length && rows.length > 0
                 ? 'Every dish that sold has its real ingredient cost.'
@@ -117,7 +123,7 @@ const MenuIntelligenceSummary = ({ insights, holdout, impact, rows, onOpen }: {
           </>
         )}
       </Tile>
-    </section>
+    </Stagger>
   );
 };
 
