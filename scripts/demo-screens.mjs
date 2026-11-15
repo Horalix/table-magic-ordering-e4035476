@@ -33,6 +33,18 @@ const failures = [];
 const wanted = (name) => !opts.only || String(opts.only).split(',').some((prefix) => name.startsWith(prefix));
 
 async function shot(page, name, description, { fullPage = false } = {}) {
+  // Sections that fade in as they scroll into view are only drawn once seen:
+  // scroll the whole page through before a full-page picture.
+  if (fullPage) {
+    await page.evaluate(async () => {
+      for (let y = 0; y < document.documentElement.scrollHeight; y += 500) {
+        window.scrollTo(0, y);
+        await new Promise((resolve) => setTimeout(resolve, 120));
+      }
+      window.scrollTo(0, 0);
+    });
+    await page.waitForTimeout(900);
+  }
   await page.screenshot({ path: path.join(OUT, `${name}.png`), fullPage, animations: 'disabled' });
   index.push([`${name}.png`, description]);
   console.log(`  ${name}.png`);
@@ -69,7 +81,7 @@ if (wanted('demo')) {
   await step('demo-hub', async () => {
     const page = await open('/', DESKTOP);
     await shot(page, 'demo-01-hub', 'The demo’s front page: every screen of the product, one tap away, each already signed in.');
-    await shot(page, 'demo-01-hub-full', 'The demo’s front page, whole page: the screens, a five-minute walkthrough, reset.', { fullPage: true });
+    await shot(page, 'demo-01-hub-full', 'The demo’s front page, whole page: the live hero, every screen, a five-minute walkthrough, contact, reset.', { fullPage: true });
     await page.close();
   });
 }

@@ -13,8 +13,21 @@ export const PRODUCT = {
   /** Placeholder product name. Change it here only. */
   name: 'TableFlow',
   tagline: 'QR ordering, kitchen display and floor service in one system',
+  /** The demo hub's headline and the sentence under it. */
+  headline: 'Every table, every ticket, every sale.',
+  headlineAccent: 'One flow.',
+  pitch: 'Guests order from their phone in their own language. The kitchen sees it the same second. The waiter knows what is ready. You see what sold, what earned and what to change.',
   /** Shown small under the demo hub's title. */
   byline: 'Live product demo',
+} as const;
+
+/** Who a restaurant owner talks to after seeing the demo: on the hub, the stage and the sign-in page. */
+export const CONTACT = {
+  name: 'Kerim',
+  company: 'Horalix',
+  email: 'kerim@horalix.com',
+  phone: '+387 62 340 020',
+  phoneHref: '+38762340020',
 } as const;
 
 export const RESTAURANT = {
