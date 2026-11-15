@@ -122,7 +122,7 @@ const CategoryTabs = ({ categories, current, locale, label, onSelect, printed = 
         be read at a fifth of a phone's width each ("B…", "S…"), so they keep
         their own width and the row scrolls, with the open one brought into view. */
     <div
-      className={`gap-0.5 p-1 rounded-full bg-muted/70 ${categories.length > 4 ? 'flex overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden' : 'grid'}`}
+      className={`gap-0.5 p-1 rounded-full bg-muted/70 ${categories.length > 4 ? 'flex overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [mask-image:linear-gradient(to_right,transparent,#000_18px,#000_calc(100%-18px),transparent)]' : 'grid'}`}
       style={categories.length > 4 ? undefined : { gridTemplateColumns: `repeat(${categories.length}, minmax(0, 1fr))` }}
     >
       {categories.map((c) => {

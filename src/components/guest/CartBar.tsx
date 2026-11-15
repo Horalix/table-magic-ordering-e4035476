@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { motion, AnimatePresence, useAnimate } from 'framer-motion';
+import { motion, AnimatePresence, useAnimate, useReducedMotion } from 'framer-motion';
 import { ShoppingBag, Receipt } from 'lucide-react';
 import { useCartStore } from '@/lib/cart-store';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -75,6 +75,9 @@ const CartBar = () => {
   const [bagScope, animateBag] = useAnimate<HTMLSpanElement>();
   const landed = useCartFx((s) => s.landed);
   const landedAtMount = useRef(landed);
+  // ...and a light passes once across the bar: the dish has arrived.
+  const reduced = useReducedMotion();
+  const sheen = !reduced && landed !== landedAtMount.current;
   useEffect(() => {
     if (landed === landedAtMount.current || !bagScope.current) return;
     let cancelled = false;
@@ -126,8 +129,18 @@ const CartBar = () => {
                   animate={{ y: 0, opacity: 1, scale: 1, transition: springSnappy }}
                   exit={{ y: 100, opacity: 0, scale: 0.95, transition: exitTransition }}
                   onClick={() => navigate(`/cart${buildParams()}`)}
-                  className="pointer-events-auto flex-1 min-w-0 flex items-center justify-between gap-3 px-5 rounded-2xl bg-sage-dark text-white shadow-xl shadow-primary/30 hover:shadow-primary/40 transition-shadow min-h-[56px] tap"
+                  className="relative overflow-hidden pointer-events-auto flex-1 min-w-0 flex items-center justify-between gap-3 px-5 rounded-2xl bg-sage-dark text-white shadow-xl shadow-primary/30 hover:shadow-primary/40 transition-shadow min-h-[56px] tap"
                 >
+                  {sheen && (
+                    <motion.span
+                      key={landed}
+                      aria-hidden
+                      className="pointer-events-none absolute inset-y-0 left-0 w-1/3 -skew-x-12 bg-gradient-to-r from-transparent via-white/20 to-transparent"
+                      initial={{ x: '-120%' }}
+                      animate={{ x: '360%' }}
+                      transition={{ duration: 0.75, ease: easeEnter }}
+                    />
+                  )}
                   <span className="flex items-center gap-3 min-w-0">
                     <span ref={bagScope} data-cart-target className="relative shrink-0 inline-flex">
                       <ShoppingBag className="w-5 h-5" aria-hidden />

@@ -258,7 +258,7 @@ const CartSuggestion = ({ placement, disabled, forItemIds }: Props) => {
         {headline}
       </p>
 
-      <div ref={cardRef} className="card-lux p-3 flex items-center gap-3">
+      <div ref={cardRef} className="card-lux relative p-3 flex items-center gap-3">
         <SmartImage
           src={primary.image_url || undefined}
           id={primary.id}
@@ -325,14 +325,16 @@ const CartSuggestion = ({ placement, disabled, forItemIds }: Props) => {
             </p>
           )}
         </div>
-        <div className="flex items-center gap-1.5 shrink-0">
-          <button
-            onClick={dismiss}
-            aria-label={t('no_thanks')}
-            className="w-11 h-11 rounded-full grid place-items-center text-muted-foreground hover:bg-muted transition-colors tap-sm"
-          >
-            <X className="w-4 h-4" aria-hidden />
-          </button>
+        {/* "No thanks" sits on the card's corner, not in the row: beside the
+            photo and the Add button it left the name a dozen letters wide. */}
+        <button
+          onClick={dismiss}
+          aria-label={t('no_thanks')}
+          className="absolute -top-2 -end-2 z-10 w-7 h-7 rounded-full grid place-items-center bg-card text-muted-foreground shadow-sm ring-1 ring-border/70 hover:text-foreground hover:bg-muted transition-colors tap-sm before:absolute before:-inset-2 before:content-['']"
+        >
+          <X className="w-3.5 h-3.5" aria-hidden />
+        </button>
+        <div className="flex items-center shrink-0">
           <button
             onClick={(e) => accept(offered, e.currentTarget.getBoundingClientRect())}
             aria-label={offered > 1 ? t('reco_add_n_item', { n: offered, name }) : t('add_item_to_order', { name })}

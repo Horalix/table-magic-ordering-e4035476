@@ -449,13 +449,13 @@ const MenuItemDetail = ({ item, onClose, onAdded, canOrder = true, unavailableLa
         {/* Quantity and Add stay on screen while the body scrolls, including
             when the keyboard is open for a note. */}
         {orderable && (
-          <div className="shrink-0 border-t border-border/60 bg-card px-6 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] flex items-center gap-3">
+          <div className="shrink-0 border-t border-border/60 bg-card px-5 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] flex items-center gap-3">
             <div className="flex items-center gap-1 bg-muted rounded-full p-0.5" role="group" aria-label={localizedName}>
               <button
                 onClick={() => { haptic('tick'); setQuantity(Math.max(1, quantity - 1)); }}
                 aria-label={t('decrease_item', { name: localizedName })}
                 disabled={quantity <= 1}
-                className="w-11 h-11 rounded-full flex items-center justify-center hover:bg-card transition-colors tap-sm disabled:opacity-40"
+                className="w-10 h-11 rounded-full flex items-center justify-center hover:bg-card transition-colors tap-sm disabled:opacity-40"
               >
                 <Minus className="w-4 h-4" aria-hidden />
               </button>
@@ -463,7 +463,7 @@ const MenuItemDetail = ({ item, onClose, onAdded, canOrder = true, unavailableLa
               <button
                 onClick={() => { haptic('tick'); setQuantity(Math.min(10, quantity + 1)); }}
                 aria-label={t('increase_item', { name: localizedName })}
-                className="w-11 h-11 rounded-full flex items-center justify-center hover:bg-card transition-colors tap-sm disabled:opacity-40"
+                className="w-10 h-11 rounded-full flex items-center justify-center hover:bg-card transition-colors tap-sm disabled:opacity-40"
                 disabled={quantity >= 10}
               >
                 <Plus className="w-4 h-4" aria-hidden />
@@ -473,20 +473,20 @@ const MenuItemDetail = ({ item, onClose, onAdded, canOrder = true, unavailableLa
             <Button
               ref={addRef}
               onClick={handleAdd}
-              // min-w-0 + wrapping: in Bosnian or Arabic "Add to order · 24.00 KM" is wider than the
-              // bar on a phone. It used to push past the screen edge; cutting it short would hide the
-              // price. Instead the price drops to a second line.
-              className="flex-1 min-w-0 px-4 h-12 rounded-full bg-primary text-primary-foreground font-sans font-semibold text-base hover:bg-sage-dark hover:shadow-lg hover:shadow-primary/30 transition-all duration-200 tap tabular-nums"
+              // The label on one side, the price on the other. In Bosnian or Arabic the two are
+              // wider than the bar on a phone: the label gives way (ellipsis), the price never does.
+              className="flex-1 min-w-0 px-5 h-12 rounded-full bg-primary text-primary-foreground font-sans font-semibold text-[15px] hover:bg-sage-dark hover:shadow-lg hover:shadow-primary/30 transition-all duration-200 tap tabular-nums"
             >
               {combo && missing.length > 0 ? (
                 <span className="truncate min-w-0">{t('combo_choose_slot', { slot: slotLabel(missing[0], locale) })}</span>
               ) : (
                 <>
                   <span className="sr-only">{`${t('add_to_order')} · ${price(Math.round(unit * 100) * quantity / 100)}`}</span>
-                  <span aria-hidden className="flex flex-wrap items-baseline justify-center gap-x-1.5 whitespace-normal leading-tight text-center">
-                    <span>{t('add_to_order')}</span>
-                    {/* The dot travels with the price, never left at the end of the first line. */}
-                    <span className="whitespace-nowrap">· {price(Math.round(unit * 100) * quantity / 100)}</span>
+                  <span aria-hidden className="flex w-full min-w-0 items-center justify-between gap-3">
+                    <span className="truncate">{t('add_to_order')}</span>
+                    <span className="shrink-0 whitespace-nowrap border-s border-primary-foreground/25 ps-3 text-sm opacity-90">
+                      {price(Math.round(unit * 100) * quantity / 100)}
+                    </span>
                   </span>
                 </>
               )}
