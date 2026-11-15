@@ -1,17 +1,19 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Download, Printer, CalendarDays, DollarSign, ShoppingBag, CreditCard, Banknote, Smartphone, Coins, TrendingUp, AlertTriangle, Check, Clock } from 'lucide-react';
-import { useCountUp } from '@/lib/motion';
+import { Download, Printer, CalendarDays, Wallet, ShoppingBag, CreditCard, Banknote, Smartphone, Coins, TrendingUp, AlertTriangle, Check, Clock, BarChart3 } from 'lucide-react';
 import { dayReconciliation, type DayReconciliation } from '@/lib/staff-api';
 import ShiftClosePanel from '@/components/admin/ShiftClosePanel';
 import PrepForecastCard from '@/components/admin/PrepForecastCard';
 import { businessDayISO, businessDayRange } from '@/lib/reporting';
 import { useOutletContext } from 'react-router-dom';
 import type { AdminOutletContext } from '@/components/admin/AdminLayout';
+import { AdminCard, AdminCardContent, AdminCardHeader, EmptyState, KpiCard, Stagger } from '@/components/admin/AdminCard';
+import AdminBarChart from '@/components/admin/AdminBarChart';
+import { compact, moneyKM, money, whole } from '@/components/admin/admin-format';
+import { salesByHour, trimQuietHours } from '@/components/admin/sales-by-hour';
 
 interface DayOrder {
   id: string;
@@ -40,21 +42,6 @@ const NON_SALE_STATUSES = ['awaiting_payment', 'payment_failed', 'cancelled'];
  */
 const todayISO = () => businessDayISO();
 const km = (n: number) => `${n.toFixed(2)} KM`;
-
-const Stat = ({ icon: Icon, label, value, sub, color = 'text-primary' }: { icon: React.ElementType; label: string; value: string; sub?: string; color?: string }) => (
-  <Card className="border-border card-lux-hover">
-    <CardContent className="p-5">
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-sm font-sans text-muted-foreground">{label}</p>
-          <p className="text-2xl font-sans font-semibold text-foreground mt-1 tabular-nums">{value}</p>
-          {sub && <p className="text-xs font-sans text-muted-foreground mt-0.5">{sub}</p>}
-        </div>
-        <div className={`w-10 h-10 rounded-lg bg-muted flex items-center justify-center ${color}`}><Icon className="w-5 h-5" /></div>
-      </div>
-    </CardContent>
-  </Card>
-);
 
 const AdminReports = () => {
   // This restaurant's name on the export, not always La Soul's.
@@ -105,7 +92,11 @@ const AdminReports = () => {
     };
   }, [orders]);
 
-  const grossAnim = useCountUp(s.gross);
+  // The chart's hours run as the trading day did (05:00 first), trimmed to
+  // the service; its highlighted bar is the hour the Orders card names.
+  const hourly = useMemo(() => trimQuietHours(salesByHour(orders)), [orders]);
+  const busiest = hourly.findIndex((h) => h.hour === s.peakHour);
+  const dayName = new Date(`${date}T12:00:00`).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
 
   const exportCsv = () => {
     const rows = [
@@ -144,12 +135,15 @@ const AdminReports = () => {
     document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
   };
 
-  const maxHour = Math.max(...s.byHour, 1);
-
   return (
     <div>
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
-        <h1 className="font-serif text-3xl font-bold text-foreground">Daily Report</h1>
+      <div className="flex flex-wrap items-end justify-between gap-3 mb-6">
+        <div className="min-w-0">
+          <h1 className="font-serif text-3xl font-bold text-foreground">Daily Report</h1>
+          <p className="text-sm text-muted-foreground font-sans mt-1">
+            {dayName} · trading day 05:00 to 05:00, completed sales only.
+          </p>
+        </div>
         <div className="flex items-center gap-2 flex-wrap">
           {date !== todayISO() && <Button variant="outline" size="sm" onClick={() => setDate(todayISO())} className="gap-1.5"><CalendarDays className="w-4 h-4" /> Today</Button>}
           <Input type="date" value={date} max={todayISO()} onChange={(e) => setDate(e.target.value)} className="h-9 w-[150px]" />
@@ -159,101 +153,104 @@ const AdminReports = () => {
       </div>
 
       {loading ? (
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-[92px] rounded-xl" />)}
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+            {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-[118px] rounded-2xl" />)}
+          </div>
+          <Skeleton className="h-[300px] rounded-2xl" />
         </div>
       ) : (
         <>
           {s.count > 0 && (
             s.unfiscalized > 0 ? (
-              <div className="mb-4 flex items-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm font-sans text-amber-700 dark:text-amber-400">
+              <div className="mb-5 flex items-center gap-2.5 rounded-2xl border border-amber-500/25 bg-amber-500/[0.07] px-4 py-3 text-sm font-sans text-amber-800 dark:text-amber-400">
                 <AlertTriangle className="w-4 h-4 shrink-0" />
                 {s.unfiscalized} order{s.unfiscalized === 1 ? '' : 's'} not yet marked fiscalized — ring them into the POS, then mark them under Orders.
               </div>
             ) : (
-              <div className="mb-4 flex items-center gap-2 rounded-xl border border-primary/20 bg-primary/5 px-4 py-3 text-sm font-sans text-primary">
+              <div className="mb-5 flex items-center gap-2.5 rounded-2xl border border-primary/20 bg-primary/5 px-4 py-3 text-sm font-sans text-primary">
                 <Check className="w-4 h-4 shrink-0" /> All orders fiscalized.
               </div>
             )
           )}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-            <Stat icon={DollarSign} label="Gross sales" value={km(grossAnim)} sub={`${s.count} orders`} />
-            <Stat icon={Coins} label="Tips" value={km(s.tips)} color="text-accent" />
-            <Stat icon={TrendingUp} label="Average order" value={km(s.avg)} color="text-accent" />
-            <Stat icon={ShoppingBag} label="Orders" value={String(s.count)} sub={s.peakHour >= 0 ? `Busiest: ${s.peakHour}:00` : undefined} />
-          </div>
+          <Stagger className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-3 sm:mb-4">
+            <KpiCard icon={Wallet} label="Gross sales" value={s.gross} format={money} unit="KM" hint={`${s.count} orders`} />
+            <KpiCard icon={Coins} label="Tips" value={s.tips} format={money} unit="KM" hint="for the staff, on top of sales" />
+            <KpiCard icon={TrendingUp} label="Average order" value={s.avg} format={money} unit="KM" hint="gross, per order" />
+            <KpiCard icon={ShoppingBag} label="Orders" value={s.count} format={whole} hint={s.peakHour >= 0 ? `Busiest: ${s.peakHour}:00` : undefined} />
+          </Stagger>
 
           {/* Three settlement channels, never merged: they reconcile against
               the online gateway, the cash drawer and the POS terminal batch. */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-            <Card className="border-border"><CardContent className="p-5">
-              <div className="flex items-center gap-2 mb-1"><CreditCard className="w-4 h-4 text-primary" /><p className="font-sans font-semibold text-foreground">Card online</p></div>
-              <p className="text-2xl font-sans font-semibold tabular-nums">{km(recon?.paid_online ?? s.cardPaidSum)}</p>
-              <p className="text-xs text-muted-foreground font-sans mt-1">confirmed paid · {s.cardCount} chose card</p>
-            </CardContent></Card>
-            <Card className="border-border"><CardContent className="p-5">
-              <div className="flex items-center gap-2 mb-1"><Banknote className="w-4 h-4 text-muted-foreground" /><p className="font-sans font-semibold text-foreground">Cash</p></div>
-              <p className="text-2xl font-sans font-semibold tabular-nums">{km(recon?.paid_cash ?? 0)}</p>
-              <p className="text-xs text-muted-foreground font-sans mt-1">recorded by staff · match the drawer</p>
-            </CardContent></Card>
-            <Card className="border-border"><CardContent className="p-5">
-              <div className="flex items-center gap-2 mb-1"><Smartphone className="w-4 h-4 text-muted-foreground" /><p className="font-sans font-semibold text-foreground">POS terminal</p></div>
-              <p className="text-2xl font-sans font-semibold tabular-nums">{km(recon?.paid_pos_terminal ?? 0)}</p>
-              <p className="text-xs text-muted-foreground font-sans mt-1">match the terminal batch</p>
-            </CardContent></Card>
-          </div>
+          <Stagger className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 mb-6">
+            <KpiCard size="sm" icon={CreditCard} tone="muted" label="Card online" value={recon?.paid_online ?? s.cardPaidSum} format={money} unit="KM" hint={`confirmed paid · ${s.cardCount} chose card`} />
+            <KpiCard size="sm" icon={Banknote} tone="muted" label="Cash" value={recon?.paid_cash ?? 0} format={money} unit="KM" hint="recorded by staff · match the drawer" />
+            <KpiCard size="sm" icon={Smartphone} tone="muted" label="POS terminal" value={recon?.paid_pos_terminal ?? 0} format={money} unit="KM" hint="match the terminal batch" />
+          </Stagger>
+
+          <AdminCard className="mb-6">
+            <AdminCardHeader
+              icon={BarChart3}
+              title="Sales by hour"
+              description={busiest >= 0
+                ? <>Gross sales in each hour of the day. Busiest {hourly[busiest].label}: {moneyKM(hourly[busiest].sales)} from {hourly[busiest].orders} order{hourly[busiest].orders === 1 ? '' : 's'}.</>
+                : 'Gross sales in each hour of the day.'}
+            />
+            <AdminCardContent>
+              {s.count === 0 ? (
+                <EmptyState
+                  icon={Clock}
+                  title="No orders on this day."
+                  hint="Each hour's sales appear here as orders come in."
+                  className="h-[240px] py-0"
+                />
+              ) : (
+                <AdminBarChart
+                  data={hourly.map((h) => ({ label: h.label, value: h.sales, long: `${h.label} · ${h.orders} order${h.orders === 1 ? '' : 's'}` }))}
+                  name="gross"
+                  format={moneyKM}
+                  axisFormat={compact}
+                  highlight={busiest}
+                  height={240}
+                  summary={`Gross sales by hour on ${dayName}.`}
+                />
+              )}
+            </AdminCardContent>
+          </AdminCard>
 
           {recon && (recon.outstanding > 0 || recon.stuck_payments > 0 || recon.callback_problems > 0 || recon.refunded > 0) && (
-            <Card className="border-border mb-6">
-              <CardHeader><CardTitle className="font-serif text-lg">Needs attention before close</CardTitle></CardHeader>
-              <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm font-sans">
+            <AdminCard className="mb-6">
+              <AdminCardHeader icon={AlertTriangle} tone="accent" title="Needs attention before close" />
+              <AdminCardContent className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm font-sans">
                 {recon.outstanding > 0 && (
-                  <div className="flex items-start gap-2">
+                  <div className="flex items-start gap-2.5 rounded-xl bg-muted/50 px-3.5 py-3">
                     <Clock className="w-4 h-4 text-accent mt-0.5 shrink-0" />
                     <span><strong className="tabular-nums">{km(recon.outstanding)}</strong> still owed across {recon.outstanding_orders} order{recon.outstanding_orders === 1 ? '' : 's'} — collect or write off.</span>
                   </div>
                 )}
                 {recon.stuck_payments > 0 && (
-                  <div className="flex items-start gap-2">
+                  <div className="flex items-start gap-2.5 rounded-xl bg-destructive/5 px-3.5 py-3">
                     <AlertTriangle className="w-4 h-4 text-destructive mt-0.5 shrink-0" />
                     <span><strong>{recon.stuck_payments}</strong> card payment{recon.stuck_payments === 1 ? '' : 's'} started and never resolved ({km(recon.stuck_amount)}). Those orders never reached the kitchen.</span>
                   </div>
                 )}
                 {recon.callback_problems > 0 && (
-                  <div className="flex items-start gap-2">
+                  <div className="flex items-start gap-2.5 rounded-xl bg-destructive/5 px-3.5 py-3">
                     <AlertTriangle className="w-4 h-4 text-destructive mt-0.5 shrink-0" />
                     <span><strong>{recon.callback_problems}</strong> provider callback{recon.callback_problems === 1 ? '' : 's'} rejected for a wrong amount, wrong currency, or unknown order. Raise with Monri.</span>
                   </div>
                 )}
                 {recon.refunded > 0 && (
-                  <div className="flex items-start gap-2">
+                  <div className="flex items-start gap-2.5 rounded-xl bg-muted/50 px-3.5 py-3">
                     <Coins className="w-4 h-4 text-muted-foreground mt-0.5 shrink-0" />
                     <span><strong className="tabular-nums">{km(recon.refunded)}</strong> refunded today.</span>
                   </div>
                 )}
-              </CardContent>
-            </Card>
+              </AdminCardContent>
+            </AdminCard>
           )}
 
           <ShiftClosePanel day={date} recon={recon} />
-
-          <Card className="border-border">
-            <CardHeader><CardTitle className="font-serif text-lg">Sales by hour</CardTitle></CardHeader>
-            <CardContent>
-              {s.count === 0 ? (
-                <p className="text-sm text-muted-foreground font-sans py-6 text-center">No orders on this day.</p>
-              ) : (
-                <div className="flex items-end gap-1 h-32">
-                  {s.byHour.map((v, h) => (
-                    <div key={h} className="flex-1 flex flex-col items-center justify-end gap-1" title={`${h}:00 — ${km(v)}`}>
-                      <div className="w-full rounded-t bg-primary/70" style={{ height: `${(v / maxHour) * 100}%`, minHeight: v > 0 ? 2 : 0 }} />
-                      {h % 3 === 0 && <span className="text-[9px] text-muted-foreground tabular-nums">{h}</span>}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
 
           {/* Tomorrow's prep, withheld unless it beats "same as last week". */}
           <PrepForecastCard />

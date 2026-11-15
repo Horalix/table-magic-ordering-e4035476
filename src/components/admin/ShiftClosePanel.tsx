@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { AlertTriangle, CheckCircle2, Lock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { AdminCard, AdminCardContent, AdminCardHeader } from '@/components/admin/AdminCard';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -122,18 +122,15 @@ const ShiftClosePanel = ({ day, recon }: Props) => {
   };
 
   return (
-    <Card className={`mb-6 ${existing ? 'border-primary/40' : 'border-border'}`}>
-      <CardHeader className="pb-3">
-        <CardTitle className="font-serif text-lg flex items-center gap-2">
-          <Lock className="w-4 h-4" /> Close the day
-          {existing && (
-            <span className="text-xs font-sans font-normal text-primary">
-              closed at {formatClock(existing.closed_at)}
-            </span>
-          )}
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
+    <AdminCard className={`mb-6 ${existing ? 'border-primary/40' : ''}`}>
+      <AdminCardHeader
+        icon={existing ? CheckCircle2 : Lock}
+        title="Close the day"
+        description={existing
+          ? <span className="text-primary">Closed at {formatClock(existing.closed_at)}. You can still correct the count.</span>
+          : 'Count the drawer and read the terminal; what the system expects is beside each box.'}
+      />
+      <AdminCardContent className="space-y-4">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <Label className="text-xs text-muted-foreground">
@@ -171,7 +168,7 @@ const ShiftClosePanel = ({ day, recon }: Props) => {
         </div>
 
         {needsAck && (
-          <div className="rounded-lg border border-accent/40 bg-accent/5 p-3">
+          <div className="rounded-xl border border-accent/30 bg-accent/5 p-3.5">
             <p className="text-sm font-sans font-semibold text-accent mb-1">Closing with these outstanding</p>
             <ul className="text-xs font-sans text-foreground list-disc pl-4 space-y-0.5">
               {issues.map((issue) => <li key={issue}>{issue}</li>)}
@@ -194,8 +191,8 @@ const ShiftClosePanel = ({ day, recon }: Props) => {
             Nothing here changes an order or a payment. A difference is recorded, never corrected.
           </p>
         </div>
-      </CardContent>
-    </Card>
+      </AdminCardContent>
+    </AdminCard>
   );
 };
 
