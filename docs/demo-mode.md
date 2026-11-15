@@ -193,6 +193,25 @@ node scripts/demo-capture.mjs    # the walkthrough as a 1080p video
 Both accept `--url http://localhost:8080` to use a demo that is already
 running instead of serving `dist-demo` themselves.
 
+### Footage for a film
+
+```bash
+node scripts/demo-footage.mjs                      # every clip
+node scripts/demo-footage.mjs --only guest-open     # one clip (names = file names)
+```
+
+`demo-footage.mjs` films short clips of the demo being used (3–14 s, one
+idea each) into `C:\Users\kerim\demo-pitch\footage` (`--out` to change), with
+a README listing every file. Phone clips are 1170×2532, desktop and TV clips
+2560×1440, all H.264 at 60 fps (`--fps`), no audio. Nothing is recorded in
+real time: each frame moves the page's clock (Playwright's fake timers) and
+every CSS animation on by exactly one frame, waits until the demo's database
+has answered, then takes the screenshot — so there are no dropped frames and
+no loading spinners however slow the machine is. The clock, in the page and
+in the database worker, is set to an evening service (`--at 19:20`), so the
+footage looks like dinner whatever the hour. Needs ffmpeg (on PATH or in
+`FFMPEG`).
+
 ## Tests
 
 `src/demo/backend/postgrest.test.ts` checks the request-to-SQL translation;
