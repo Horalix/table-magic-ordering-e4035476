@@ -413,6 +413,18 @@
   }
 }
 
+/* [UX] An indeterminate progress line: a short bar gliding across its
+   track. Used where something loads with nothing yet to show a skeleton of
+   (the table being set up, a page's code arriving). Outside any @layer so
+   the arbitrary animate-[…] utilities that name them always find them. */
+@keyframes progress-indeterminate {
+  0% { transform: translateX(-110%); }
+  100% { transform: translateX(330%); }
+}
+@keyframes progress-appear {
+  to { opacity: 1; }
+}
+
 /* [a11y] Respect reduced motion */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {

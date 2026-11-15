@@ -99,9 +99,17 @@ const queryClient = new QueryClient({
   },
 });
 
+/*
+ * While a page's code arrives: a thin line gliding along the top edge, shown
+ * only if the wait is long enough to notice (the fade-in waits 250 ms), so a
+ * fast load never flashes anything, and nothing spins in the middle of the
+ * screen.
+ */
 const RouteFallback = () => (
-  <div className="min-h-screen bg-background flex items-center justify-center">
-    <div className="w-6 h-6 border-2 border-primary/20 border-t-primary rounded-full animate-spin" />
+  <div className="min-h-screen bg-background" role="status" aria-label="Loading">
+    <div className="fixed inset-x-0 top-0 h-0.5 overflow-hidden opacity-0 animate-[progress-appear_0.3s_ease-out_0.25s_forwards]">
+      <div className="h-full w-1/3 bg-primary/70 animate-[progress-indeterminate_1.1s_ease-in-out_infinite] motion-reduce:animate-none" />
+    </div>
   </div>
 );
 
