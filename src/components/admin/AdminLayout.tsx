@@ -540,7 +540,8 @@ const AdminLayout = () => {
           {page}
         </div>
       </main>
-      <AdminMobileTabs owner={!!owner} onMore={() => setSidebarOpen(true)} />
+      {/* The demo has one restaurant and no Overview in the drawer; the phone tabs match. */}
+      <AdminMobileTabs owner={!!owner && !DEMO_MODE} onMore={() => setSidebarOpen(true)} />
       <ChangePasswordDialog open={passwordOpen} onOpenChange={setPasswordOpen} email={user.email ?? null} />
     </div>
   );
