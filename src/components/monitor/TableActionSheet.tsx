@@ -18,6 +18,7 @@ import FreeTableDialog from '@/components/staff/FreeTableDialog';
 import {
   isHeld, isInKitchen, kitchenStart, orderStatusLabel, paymentStatusLabel,
 } from '@/components/staff/order-status';
+import { TONE, orderTone } from '@/components/staff/status-tone';
 
 /**
  * What a waiter can actually DO about a table.
@@ -173,8 +174,8 @@ const TableActionSheet = ({ table, meId, onClose, onChanged }: Props) => {
         {(table.callId || table.billId) && (
           <div className="space-y-2">
             {table.callId && (
-              <div className="rounded-xl border border-accent/40 bg-accent/5 p-3">
-                <p className="text-sm font-sans font-semibold text-accent flex items-center gap-1.5">
+              <div className={`rounded-xl border p-3 ${TONE.calling.surface}`}>
+                <p className={`text-sm font-sans font-semibold flex items-center gap-1.5 ${TONE.calling.text}`}>
                   <Hand className="w-4 h-4" /> Calling for a waiter
                 </p>
                 {table.callHeldBy && (
@@ -199,8 +200,8 @@ const TableActionSheet = ({ table, meId, onClose, onChanged }: Props) => {
             )}
 
             {table.billId && (
-              <div className="rounded-xl border border-destructive/40 bg-destructive/5 p-3">
-                <p className="text-sm font-sans font-semibold text-destructive flex items-center gap-1.5">
+              <div className={`rounded-xl border p-3 ${TONE.bill.surface}`}>
+                <p className={`text-sm font-sans font-semibold flex items-center gap-1.5 ${TONE.bill.text}`}>
                   <Receipt className="w-4 h-4" /> Asked for the bill
                   {outstanding > 0 && <span className="ml-auto tabular-nums text-foreground">Owes {km(outstanding)}</span>}
                 </p>
@@ -289,7 +290,11 @@ const TableActionSheet = ({ table, meId, onClose, onChanged }: Props) => {
               return (
                 <div key={order.id} className="rounded-xl border border-border p-3">
                   <div className="flex items-center justify-between gap-2">
-                    <span className="font-sans text-sm font-medium">
+                    <span className="font-sans text-sm font-medium inline-flex items-center gap-1.5">
+                      {/* The kitchen's colour for where the order is. */}
+                      {!held && orderTone(order.status) && (
+                        <span className={`w-2 h-2 rounded-full shrink-0 ${TONE[orderTone(order.status)!].dot}`} aria-hidden />
+                      )}
                       {order.order_code ? `#${order.order_code}` : order.id.slice(0, 6)} · {held ? 'Needs confirming' : orderStatusLabel(order.status)}
                     </span>
                     {/* Not on a served order: its age is no longer anyone's wait. */}

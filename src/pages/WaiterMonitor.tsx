@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { LayoutGroup, motion } from 'framer-motion';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -26,6 +27,9 @@ import { isHeld, isInKitchen, kitchenStart } from '@/components/staff/order-stat
 import HeldOrdersCard from '@/components/staff/HeldOrdersCard';
 import EndOfDayTables from '@/components/staff/EndOfDayTables';
 import MenuOnlyNotice from '@/components/staff/MenuOnlyNotice';
+import { TONE, toneGlow, type StaffTone } from '@/components/staff/status-tone';
+import { staffMove } from '@/components/staff/staff-motion';
+import { ArrivalGlow } from '@/components/staff/StaffMotion';
 import type { Database } from '@/integrations/supabase/types';
 import { isKitchenUsername } from '@/lib/staff-accounts';
 
@@ -586,7 +590,7 @@ const RailView = ({
       <button
         type="button"
         onClick={onAllTables}
-        className="min-h-[120px] rounded-2xl border-2 border-dashed border-border bg-card hover:bg-accent/10 active:scale-[0.98] transition-all p-5 text-left"
+        className="min-h-[120px] rounded-2xl border border-dashed border-border bg-card/60 hover:bg-card active:scale-[0.98] transition-all p-5 text-left"
       >
         <div className="flex items-center gap-3 mb-2">
           <Grid3x3 className="w-6 h-6 text-muted-foreground" />
@@ -598,17 +602,17 @@ const RailView = ({
       {waiters.map((waiter) => {
         const stats = waiterStats(waiter.id);
         const urgent = stats.bills + stats.calls;
+        // The most pressing thing on this waiter's floor colours the card, in
+        // the colours every staff screen uses: a call, then a bill, then food.
+        const tone: StaffTone | null = stats.calls > 0 ? 'calling' : stats.bills > 0 ? 'bill' : stats.ready > 0 ? 'ready' : null;
         return (
           <button
             key={waiter.id}
             type="button"
             onClick={() => onSelectWaiter(waiter)}
-            className={`min-h-[120px] rounded-2xl border-2 p-5 text-left active:scale-[0.98] transition-all ${
-              urgent > 0
-                ? 'border-destructive/60 bg-destructive/5 hover:bg-destructive/10 breathe breathe-urgent'
-                : stats.ready > 0
-                  ? 'border-accent/60 bg-accent/5 hover:bg-accent/10'
-                  : 'border-border bg-card hover:bg-accent/10'
+            style={stats.calls > 0 ? toneGlow('calling') : undefined}
+            className={`min-h-[120px] rounded-2xl border bg-card p-5 text-left shadow-lux active:scale-[0.98] transition-[transform,background-color,border-color] hover:bg-muted/40 ${
+              tone ? `${TONE[tone].border} ${stats.calls > 0 ? 'breathe' : ''}` : 'border-border'
             }`}
           >
             <div className="flex items-start justify-between gap-2 mb-2">
@@ -626,14 +630,14 @@ const RailView = ({
               )}
             </div>
             <div className="flex flex-wrap gap-1.5 mt-2">
-              {stats.bills > 0 && (
-                <Chip tone="urgent" icon={<Receipt className="w-3.5 h-3.5" />}>{plural(stats.bills, 'bill')}</Chip>
-              )}
               {stats.calls > 0 && (
-                <Chip tone="urgent" icon={<Bell className="w-3.5 h-3.5" />}>{plural(stats.calls, 'call')}</Chip>
+                <Chip tone="calling" icon={<Bell className="w-3.5 h-3.5" />}>{plural(stats.calls, 'call')}</Chip>
+              )}
+              {stats.bills > 0 && (
+                <Chip tone="bill" icon={<Receipt className="w-3.5 h-3.5" />}>{plural(stats.bills, 'bill')}</Chip>
               )}
               {stats.ready > 0 && (
-                <Chip tone="warn" icon={<CheckCircle2 className="w-3.5 h-3.5" />}>{stats.ready} food up</Chip>
+                <Chip tone="ready" icon={<CheckCircle2 className="w-3.5 h-3.5" />}>{stats.ready} food up</Chip>
               )}
               {urgent === 0 && stats.ready === 0 && (
                 <Chip tone="idle">All quiet</Chip>
@@ -646,11 +650,13 @@ const RailView = ({
   </div>
 );
 
-const Chip = ({ tone, icon, children }: { tone: 'idle' | 'warn' | 'urgent'; icon?: React.ReactNode; children: React.ReactNode }) => {
+const Chip = ({ tone, icon, children }: { tone: 'idle' | 'calling' | 'bill' | 'ready'; icon?: React.ReactNode; children: React.ReactNode }) => {
+  // A guest waiting (call, bill) is solid; food up is tinted; quiet is grey.
   const tones = {
     idle: 'bg-muted text-muted-foreground',
-    warn: 'bg-accent/20 text-accent',
-    urgent: 'bg-destructive text-destructive-foreground',
+    calling: TONE.calling.solid,
+    bill: TONE.bill.solid,
+    ready: TONE.ready.chip,
   } as const;
   return (
     // Read from a step back, across a counter: 13px, not 11.
@@ -699,7 +705,10 @@ const TablesGrid = ({
     ? 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5'
     : 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6';
 
+  // Tables are sorted by urgency, so a table that starts calling moves up:
+  // it slides there rather than jumping (no movement with reduce motion).
   return (
+    <LayoutGroup id="floor-grid">
     <div className={`grid ${cols} gap-3`}>
       {tables.map((table) => {
         const sess = sessions.find((session) => session.table_id === table.id);
@@ -716,8 +725,8 @@ const TablesGrid = ({
         const waiterId = tableWaiter(table);
         const waiterName = waiterId ? waiterById[waiterId]?.display_name : null;
         return (
+          <motion.div key={table.id} layout="position" transition={{ layout: staffMove }} className="min-w-0 flex">
           <TableCard
-            key={table.id}
             table={table}
             session={sess}
             ordersCount={tOrders.length}
@@ -729,9 +738,11 @@ const TablesGrid = ({
             waiterName={waiterName}
             onOpen={() => onOpen(table.id)}
           />
+          </motion.div>
         );
       })}
     </div>
+    </LayoutGroup>
   );
 };
 
@@ -746,11 +757,12 @@ const StatPill = ({
   value: React.ReactNode;
   tone?: 'idle' | 'active' | 'warn' | 'urgent';
 }) => {
+  // Fine is quiet (white, grey words); only what needs a look takes a colour.
   const tones = {
-    idle: 'bg-muted text-muted-foreground border-border',
-    active: 'bg-primary/10 text-primary border-primary/20',
-    warn: 'bg-accent/10 text-accent border-accent/20',
-    urgent: 'bg-destructive/10 text-destructive border-destructive/20',
+    idle: 'bg-card text-muted-foreground border-border',
+    active: 'bg-card text-muted-foreground border-border [&>span:last-child]:text-foreground',
+    warn: `${TONE.preparing.chip} border-transparent`,
+    urgent: `${TONE.late.chip} border-transparent`,
   } as const;
   return (
     // Shown on phones too now: the status row scrolls sideways instead of
@@ -797,19 +809,39 @@ const TableCard = ({
   else if (occupied) state = 'occupied';
 
   /*
-   * A calling table breathes like a bill does, in the accent. It used to
-   * `animate-pulse`, which fades the WHOLE card, text and all, to half
-   * opacity and back — so the tables that most needed a waiter looked
+   * A calling table breathes, in the violet of a call on every staff screen.
+   * A bill waits in ink, with a solid "Wants bill" label: a dark glow read as
+   * a smudge. It used to `animate-pulse`, which fades the WHOLE card, text and all, to
+   * half opacity and back — so the tables that most needed a waiter looked
    * greyed-out and disabled for half of every second.
+   *
+   * Free tables recede (dashed, no fill); a seated table is a plain card; only
+   * a table that needs someone is coloured.
    */
-  const palette: Record<TableState, { ring: string; bg: string; chip: string; label: string }> = {
-    free: { ring: 'border-border', bg: 'bg-card', chip: 'bg-muted text-muted-foreground', label: 'Free' },
-    occupied: { ring: 'border-primary/30', bg: 'bg-primary/5', chip: 'bg-primary/15 text-primary', label: 'Seated' },
-    ready: { ring: 'border-accent/40', bg: 'bg-accent/5', chip: 'bg-accent/20 text-accent', label: 'Food up' },
-    call: { ring: 'border-accent/70 breathe', bg: 'bg-accent/10', chip: 'bg-accent text-accent-foreground', label: 'Calling' },
-    bill: { ring: 'border-destructive/60 breathe breathe-urgent', bg: 'bg-destructive/10', chip: 'bg-destructive text-destructive-foreground', label: 'Wants bill' },
+  const palette: Record<TableState, { ring: string; bg: string; chip: string; label: string; tone?: StaffTone }> = {
+    free: { ring: 'border-dashed border-border', bg: 'bg-card/50 shadow-none', chip: 'bg-transparent text-muted-foreground px-0', label: 'Free' },
+    occupied: { ring: 'border-border', bg: 'bg-card', chip: 'bg-muted text-muted-foreground', label: 'Seated' },
+    ready: { ring: TONE.ready.border, bg: 'bg-[hsl(150_46%_36%/0.06)]', chip: TONE.ready.solid, label: 'Food up', tone: 'ready' },
+    call: { ring: `${TONE.calling.border} breathe`, bg: 'bg-[hsl(266_46%_54%/0.07)]', chip: TONE.calling.solid, label: 'Calling', tone: 'calling' },
+    bill: { ring: TONE.bill.border, bg: 'bg-[hsl(210_16%_26%/0.05)]', chip: TONE.bill.solid, label: 'Wants bill', tone: 'bill' },
   };
   const selectedPalette = palette[state];
+
+  /*
+   * When a table starts needing someone while the screen is open — a call, the
+   * bill, food up — it glows once in that colour (and slides up the grid, see
+   * TablesGrid). What was already so when the screen opened is simply shown.
+   */
+  const lastState = useRef(state);
+  const [flash, setFlash] = useState<{ tone: StaffTone; at: number } | null>(null);
+  useEffect(() => {
+    if (lastState.current === state) return;
+    lastState.current = state;
+    const tone = palette[state].tone;
+    if (tone) setFlash({ tone, at: Date.now() });
+    // `palette` is rebuilt each render from constants; only `state` matters here.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state]);
 
   return (
     <Card
@@ -819,14 +851,15 @@ const TableCard = ({
       onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(); } }}
       aria-label={`Table ${table.table_number} — ${selectedPalette.label}`}
       data-state={state}
-      style={state === 'call' ? ({ '--breathe-color': 'var(--accent)' } as React.CSSProperties) : undefined}
-      className={`border-2 cursor-pointer text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring active:scale-[0.99] ${selectedPalette.ring} ${selectedPalette.bg} transition-all`}
+      style={state === 'call' ? toneGlow('calling') : undefined}
+      className={`relative w-full rounded-2xl border cursor-pointer text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring active:scale-[0.99] ${selectedPalette.ring} ${selectedPalette.bg} transition-[background-color,border-color,transform] duration-300`}
     >
+      {flash && <ArrivalGlow key={flash.at} tone={flash.tone} />}
       <CardContent className="p-3">
         <div className="mb-2">
           <div className="flex items-start justify-between gap-2">
-            <p className="font-serif text-2xl font-bold leading-none">T{table.table_number}</p>
-            <span className={`shrink-0 text-xs px-2 py-0.5 rounded-full font-sans font-semibold uppercase tracking-wide ${selectedPalette.chip}`}>
+            <p className={`font-serif text-[28px] font-bold leading-none tracking-tight ${occupied ? 'text-foreground' : 'text-foreground/45'}`}>T{table.table_number}</p>
+            <span className={`shrink-0 text-[11px] px-2 py-0.5 rounded-full font-sans font-semibold uppercase tracking-[0.08em] transition-colors duration-300 ${selectedPalette.chip}`}>
               {selectedPalette.label}
             </span>
           </div>
@@ -852,23 +885,23 @@ const TableCard = ({
             </p>
             <div className="flex items-center gap-x-2.5 gap-y-1 mt-2 text-sm font-sans flex-wrap">
               {hasBill && (
-                <span className="inline-flex items-center gap-1 text-destructive font-semibold">
+                <span className={`inline-flex items-center gap-1 font-semibold ${TONE.bill.text}`}>
                   <Receipt className="w-3.5 h-3.5" aria-hidden /> Bill
                 </span>
               )}
               {hasCall && (
-                <span className="inline-flex items-center gap-1 text-accent font-semibold">
+                <span className={`inline-flex items-center gap-1 font-semibold ${TONE.calling.text}`}>
                   <Bell className="w-3.5 h-3.5" aria-hidden /> Calling
                 </span>
               )}
               {readyCount > 0 && (
-                <span className="inline-flex items-center gap-1 text-accent font-semibold">
+                <span className={`inline-flex items-center gap-1 font-semibold ${TONE.ready.text}`}>
                   <CheckCircle2 className="w-3.5 h-3.5" aria-hidden /> {readyCount} up
                 </span>
               )}
               {/* Not counting what is already up: "1 up · 1 order" was one plate. */}
               {ordersCount - readyCount > 0 && (
-                <span className="inline-flex items-center gap-1 text-primary">
+                <span className={`inline-flex items-center gap-1 ${TONE.preparing.text}`}>
                   <ChefHat className="w-3.5 h-3.5" aria-hidden /> {ordersCount - readyCount} in kitchen
                 </span>
               )}
@@ -885,11 +918,11 @@ const TableCard = ({
             )}
           </>
         ) : (
-          <p className="text-sm text-muted-foreground font-sans">Available</p>
+          <p className="text-sm text-muted-foreground/80 font-sans">Available</p>
         )}
 
         {waiterName && (
-          <p className="text-xs text-muted-foreground font-sans mt-2 pt-2 border-t border-border/60 truncate">
+          <p className="text-xs text-muted-foreground font-sans mt-2.5 pt-2 border-t border-border/60 truncate">
             Waiter: {waiterName}
           </p>
         )}
