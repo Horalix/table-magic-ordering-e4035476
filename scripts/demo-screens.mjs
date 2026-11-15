@@ -124,9 +124,15 @@ if (wanted('guest')) {
     await guest.waitForTimeout(900);
     await shot(guest, 'guest-07-order-bar', 'After adding two dishes: the running order bar with its total stays at the bottom of the menu.');
     await go(guest, '/cart');
+    // The suggestion is fetched after the page settles; give it a moment.
+    const suggestion = guest.getByRole('button', { name: /^Add .+ to order$/ }).last();
+    await suggestion.waitFor({ timeout: 6000 }).catch(() => undefined);
+    await guest.waitForTimeout(400);
     await shot(guest, 'guest-08-cart', 'The order before it is sent, with a suggestion chosen for what is in it (“often ordered with this”).');
-    await guest.locator('button:has-text("Add")').last().click();
-    await guest.waitForTimeout(900);
+    if (await suggestion.isVisible().catch(() => false)) {
+      await suggestion.click();
+      await guest.waitForTimeout(900);
+    }
     await guest.getByRole('button', { name: /Send order/ }).click();
     await settled(guest, 600);
     await shot(guest, 'guest-09-checkout', 'How to pay: by card now (with an optional tip), or at the table in cash or by terminal.');
