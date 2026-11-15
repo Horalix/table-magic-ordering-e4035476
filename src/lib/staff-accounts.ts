@@ -81,9 +81,14 @@ export const kitchenUsername = (slug: string) => `${slug}-kitchen`;
 /** An account Admin → Waiters made for a kitchen tablet (or one named like it). */
 export const isKitchenUsername = (username: string | null | undefined) => !!username && username.endsWith('-kitchen');
 
-/** The site a restaurant's staff sign in on: its own once that is up, else La Soul's, which serves both. */
+/**
+ * The site a restaurant's staff sign in on: its own once that is up, else La
+ * Soul's, which serves both. A restaurant with no published address at all
+ * (the offline demo's, docs/demo-mode.md) signs in where this page is.
+ */
 export function staffSiteUrl(slug: string): string {
-  return OWN_SITE_LIVE[slug] && VENUE_URLS[slug] ? VENUE_URLS[slug] : VENUE_URLS[DEFAULT_VENUE];
+  if (OWN_SITE_LIVE[slug] && VENUE_URLS[slug]) return VENUE_URLS[slug];
+  return VENUE_URLS[DEFAULT_VENUE] ?? (typeof location === 'undefined' ? '' : location.origin);
 }
 
 /**
