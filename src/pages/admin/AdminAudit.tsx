@@ -115,7 +115,7 @@ const AdminAudit = () => {
   }, [rows, quick, search]);
 
   const filtered = quick !== 'all' || search.trim() !== '';
-  const dateInput = 'h-11 w-[11.5rem] rounded-xl text-base sm:text-sm';
+  const dateInput = 'h-11 w-[9.75rem] rounded-xl px-3 text-base sm:w-[11.5rem] sm:text-sm';
 
   return (
     <div>

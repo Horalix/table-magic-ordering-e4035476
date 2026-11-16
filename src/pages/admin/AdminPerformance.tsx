@@ -116,7 +116,7 @@ const AdminPerformance = () => {
 
   const waiters = data?.waiters ?? [];
   const topNet = waiters[0]?.net_sales ?? 0;
-  const dateInput = 'h-11 w-[11.5rem] rounded-xl text-base sm:text-sm';
+  const dateInput = 'h-11 w-[9.75rem] rounded-xl px-3 text-base sm:w-[11.5rem] sm:text-sm';
 
   return (
     <div>
