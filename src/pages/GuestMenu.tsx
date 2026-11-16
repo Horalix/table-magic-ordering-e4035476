@@ -39,6 +39,7 @@ import { useMenuOnly } from '@/hooks/useMenuOnly';
 import { VeraCourses, VeraMenuFooter, VeraMenuHero } from '@/components/vera/VeraMenu';
 import { VERA, pick } from '@/components/vera/copy';
 import ReserveLink from '@/components/site/ReserveLink';
+import OrderingPausedNotice from '@/components/guest/OrderingPausedNotice';
 import type { Database } from '@/integrations/supabase/types';
 
 type CategoryRow = Database['public']['Tables']['categories']['Row'];
@@ -326,6 +327,8 @@ const GuestMenu = () => {
             <p className="text-sm font-sans text-foreground">{t('browse_scan_banner')}</p>
           </div>
         )}
+
+        {seated && <OrderingPausedNotice />}
 
         <MenuSearch canOrder={seated} onOpenItem={(id) => { void openById(id); }} />
 
