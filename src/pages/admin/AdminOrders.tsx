@@ -2,9 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { formatStamp } from '@/lib/timing';
 import { supabase } from '@/integrations/supabase/client';
 import { SHOW_DELETED } from '@/lib/menu-bin';
-import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -12,7 +10,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
-import { AlertTriangle, Ban, Banknote, CalendarDays, Check, RefreshCw, Search, Smartphone, Undo2, X } from 'lucide-react';
+import {
+  AlertTriangle, Ban, Banknote, CalendarDays, Check, Clock, Loader2, Receipt, ReceiptText, RefreshCw, Search, Smartphone, Undo2, X,
+} from 'lucide-react';
+import { AdminPageHeader } from '@/components/admin/AdminPage';
+import { AdminCard, EmptyState } from '@/components/admin/AdminCard';
+import { TONE, type StaffTone } from '@/components/staff/status-tone';
+import { cn } from '@/lib/utils';
 import PaymentBadge from '@/components/PaymentBadge';
 import RefundDialog from '@/components/admin/RefundDialog';
 import PaymentConfirm from '@/components/staff/PaymentConfirm';
@@ -240,15 +244,16 @@ const AdminOrders = () => {
     });
   };
 
-  const statusColors: Record<OrderStatus, string> = {
-    awaiting_payment: 'bg-accent/10 text-accent',
-    payment_failed: 'bg-destructive/10 text-destructive',
-    pending: 'bg-destructive/10 text-destructive',
-    confirmed: 'bg-accent/10 text-accent',
-    preparing: 'bg-gold/10 text-gold',
-    ready: 'bg-primary/10 text-primary',
-    served: 'bg-muted text-muted-foreground',
-    cancelled: 'bg-muted text-muted-foreground line-through',
+  /** The shared staff colours (status-tone.ts); every state also has its own word. */
+  const statusTone: Record<OrderStatus, StaffTone> = {
+    awaiting_payment: 'bill',
+    payment_failed: 'late',
+    pending: 'new',
+    confirmed: 'new',
+    preparing: 'preparing',
+    ready: 'ready',
+    served: 'served',
+    cancelled: 'served',
   };
 
   const statusLabels: Record<OrderStatus, string> = {
@@ -262,26 +267,57 @@ const AdminOrders = () => {
     cancelled: 'Cancelled',
   };
 
+  /** The one next step for an order in the kitchen's flow: the filled button on its card. */
+  const NEXT_STEP: Partial<Record<OrderStatus, { to: OrderStatus; label: string }>> = {
+    pending: { to: 'confirmed', label: 'Confirm' },
+    confirmed: { to: 'preparing', label: 'Start Preparing' },
+    preparing: { to: 'ready', label: 'Mark Ready' },
+    ready: { to: 'served', label: 'Mark Served' },
+  };
+
+  const dayLabel = day === today ? 'Tonight' : new Date(`${day}T12:00:00`).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
+
   return (
-    <div>
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
-        <h1 className="font-serif text-3xl font-bold text-foreground">Orders</h1>
-        <div className="flex items-center gap-2 flex-wrap">
-          {day !== today && (
-            <Button variant="outline" size="sm" onClick={() => setDay(today)} className="gap-1.5 min-h-[44px]">
-              <CalendarDays className="w-4 h-4" /> Today
-            </Button>
-          )}
+    <div className="mx-auto w-full max-w-6xl">
+      <AdminPageHeader
+        title="Orders"
+        description="One trading day of orders, newest first. Find one by its code, its table, a guest or a dish."
+        actions={day !== today ? (
+          <Button variant="outline" onClick={() => setDay(today)} className="h-11 gap-1.5 sm:h-10">
+            <CalendarDays className="h-4 w-4" aria-hidden /> Back to today
+          </Button>
+        ) : undefined}
+      >
+        <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
+          <div className="relative col-span-2 sm:min-w-[280px] sm:flex-1">
+            <Search className="pointer-events-none absolute start-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
+            <Input
+              type="search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="#047, table 7, a guest or a dish"
+              className="h-11 ps-9 pe-11 [&::-webkit-search-cancel-button]:hidden"
+              aria-label="Find an order"
+            />
+            {query && (
+              <button
+                type="button" onClick={() => setQuery('')} aria-label="Clear search"
+                className="absolute end-0.5 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <X className="h-4 w-4" aria-hidden />
+              </button>
+            )}
+          </div>
           <Input
             type="date"
             value={day}
             max={today}
             onChange={(e) => { if (e.target.value) setDay(e.target.value); }}
-            className="h-11 w-[160px]"
+            className="h-11 tabular-nums sm:w-[170px]"
             aria-label="Trading day"
           />
           <Select value={filter} onValueChange={(value) => setFilter(value as OrderFilter)}>
-            <SelectTrigger className="w-[170px] h-11 font-sans" aria-label="Filter by status"><SelectValue /></SelectTrigger>
+            <SelectTrigger className="h-11 font-sans text-base sm:w-[180px] sm:text-sm" aria-label="Filter by status"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Orders</SelectItem>
               <SelectItem value="awaiting_payment">Awaiting payment</SelectItem>
@@ -295,148 +331,171 @@ const AdminOrders = () => {
             </SelectContent>
           </Select>
         </div>
-      </div>
-
-      <div className="relative mb-4">
-        <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Find an order: #047, table 7, a guest or a dish"
-          className="pl-9 pr-10 h-11"
-          aria-label="Find an order"
-        />
-        {query && (
-          <button
-            type="button" onClick={() => setQuery('')} aria-label="Clear search"
-            className="absolute right-1 top-1/2 -translate-y-1/2 w-9 h-9 flex items-center justify-center text-muted-foreground hover:text-foreground"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        )}
-      </div>
-
-      {/* The trading day runs past midnight; say so, or 00:30 orders look misfiled. */}
-      <p className="text-xs font-sans text-muted-foreground -mt-4 mb-4">
-        {day === today ? 'Tonight' : new Date(`${day}T12:00:00`).toLocaleDateString()} · 05:00 to 05:00, the same day the daily report and close use
-      </p>
+        {/* The trading day runs past midnight; say so, or 00:30 orders look misfiled. */}
+        <p className="mt-2.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-sans text-muted-foreground" aria-live="polite">
+          <span className="font-medium text-foreground">{dayLabel}</span>
+          <span aria-hidden>·</span>
+          <span>trading day 05:00 to 05:00, as in the daily report</span>
+          {!loading && !loadError && !query.trim() && orders.length > 0 && (
+            <>
+              <span aria-hidden>·</span>
+              <span className="tabular-nums">
+                {orders.length}{hasMore ? '+' : ''} {filter === 'all' ? (orders.length === 1 ? 'order' : 'orders') : statusLabels[filter as OrderStatus].toLowerCase()}
+              </span>
+            </>
+          )}
+          {query.trim() && !loading && (
+            <>
+              <span aria-hidden>·</span>
+              <span className="tabular-nums">{shown.length} of {orders.length} loaded orders match{hasMore ? ' — load more below to search the rest of the day' : ''}</span>
+            </>
+          )}
+        </p>
+      </AdminPageHeader>
 
       {loadError && (
-        <div role="alert" className="mb-4 flex flex-wrap items-center gap-3 rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm font-sans text-destructive">
-          <AlertTriangle className="w-4 h-4 shrink-0" />
-          <span className="flex-1 min-w-[200px]">Could not load orders — what you see may be out of date. ({loadError})</span>
-          <Button variant="outline" size="sm" className="min-h-[44px] gap-1.5" onClick={() => { void fetchOrders(); }}>
-            <RefreshCw className="w-4 h-4" /> Try again
+        <div role="alert" className="mb-4 flex flex-wrap items-center gap-3 rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm font-sans text-destructive">
+          <AlertTriangle className="h-4 w-4 shrink-0" aria-hidden />
+          <span className="min-w-[200px] flex-1">Could not load orders — what you see may be out of date. ({loadError})</span>
+          <Button variant="outline" size="sm" className="h-11 gap-1.5 sm:h-9" onClick={() => { void fetchOrders(); }}>
+            <RefreshCw className="h-4 w-4" aria-hidden /> Try again
           </Button>
         </div>
       )}
 
       {loading ? (
-        <div className="space-y-3">
-          {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-28 w-full rounded-xl" />)}
+        <div className="grid gap-3 lg:grid-cols-2" aria-busy="true" aria-label="Loading orders">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <AdminCard key={i} className="space-y-3 p-4 sm:p-5">
+              <div className="flex justify-between"><Skeleton className="h-5 w-32 rounded" /><Skeleton className="h-5 w-20 rounded" /></div>
+              <Skeleton className="h-4 w-48 rounded" />
+              <Skeleton className="h-4 w-full rounded" />
+              <Skeleton className="h-4 w-3/4 rounded" />
+              <Skeleton className="h-11 w-full rounded-lg" />
+            </AdminCard>
+          ))}
         </div>
       ) : (
-      <div className="space-y-3">
-        {query.trim() && (
-          <p className="text-xs font-sans text-muted-foreground" aria-live="polite">
-            {shown.length} of {orders.length} loaded orders match{hasMore ? ' — load more below to search the rest of the day' : ''}
-          </p>
-        )}
+      <div className="space-y-4">
+        {shown.length > 0 && (
+        <div className="grid items-start gap-3 lg:grid-cols-2">
         {shown.map((order) => {
           const refundable = ['paid', 'partially_refunded'].includes(order.payment_status)
             && Number(order.refunded_amount ?? 0) < Number(order.total);
           const isFiscalized = (order.fiscalization_status ?? (order.fiscalized ? 'fiscalized' : 'not_fiscalized')) === 'fiscalized';
+          const held = isHeld(order);
+          const tone: StaffTone = held ? 'new' : statusTone[order.status];
+          const cancelled = order.status === 'cancelled';
+          const live = !['served', 'cancelled'].includes(order.status);
+          const mins = Math.floor((Date.now() - new Date(order.released_to_kitchen_at ?? order.created_at).getTime()) / 60000);
+          const waitLabel = mins < 1 ? 'Just in' : `Wait ${mins < 60 ? `${mins}m` : `${Math.floor(mins / 60)}h ${mins % 60}m`}`;
+          const next = order.status === 'pending' && held ? null : NEXT_STEP[order.status];
+          const flowStep = !['served', 'cancelled', 'awaiting_payment', 'payment_failed'].includes(order.status);
+          const canPay = canTakePayment(order) && paying?.order.id !== order.id;
           return (
-          <Card key={order.id} className="border-border card-lux-hover">
-            <CardContent className="p-4">
-              <div className="flex items-start justify-between gap-2">
+          <AdminCard key={order.id} className={cn('relative overflow-hidden font-sans', !live && 'shadow-none', cancelled && 'bg-muted/20')}>
+            {live && <span className={cn('absolute inset-y-0 start-0 w-1', TONE[tone].bar)} aria-hidden />}
+            <div className="p-4 ps-5 sm:p-5 sm:ps-6">
+              <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-serif font-bold text-foreground">
-                      Table {tableOf(order)}
-                    </span>
+                  <p className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                    <span className="font-serif text-lg font-bold leading-tight text-foreground">Table {tableOf(order)}</span>
                     {order.order_code && (
-                      <span className="text-xs font-sans font-semibold tabular-nums tracking-wider px-2 py-0.5 rounded-full bg-muted text-foreground">
+                      <span className="rounded-md bg-muted px-1.5 py-0.5 text-xs font-semibold tabular-nums tracking-wider text-foreground">
                         #{order.order_code}
                       </span>
                     )}
-                    {order.guest_name && (
-                      <span className="text-sm font-sans text-muted-foreground">{order.guest_name}</span>
-                    )}
-                    {/* A held order is "pending" in the enum but has not
-                        reached the kitchen; calling it New hid it in the list. */}
-                    {isHeld(order)
-                      ? <Badge className="text-xs bg-amber-100 text-amber-900 border-amber-300" title={heldReasonLabel(order.held_reason)}>Needs confirming</Badge>
-                      : <Badge className={`text-xs ${statusColors[order.status]}`}>{statusLabels[order.status]}</Badge>}
-                    <PaymentBadge method={order.payment_method} status={order.payment_status} />
-                    {order.status !== 'cancelled' && (
-                      <button
-                        onClick={() => openFiscal(order)}
-                        disabled={busy.has(`fiscal:${order.id}`)}
-                        title={isFiscalized ? 'Fiscal receipt recorded — tap to correct' : 'Mark as rung into the certified fiscal POS'}
-                        className={`inline-flex items-center gap-1 px-2.5 min-h-[32px] rounded-full text-xs font-sans font-medium transition-colors disabled:opacity-50 ${isFiscalized ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground hover:bg-muted/70 border border-dashed border-border'}`}
-                      >
-                        {isFiscalized
-                          ? <><Check className="w-3 h-3" /> {order.fiscal_receipt_number ? `Fiscal ${order.fiscal_receipt_number}` : 'Fiscalized'}</>
-                          : 'Mark fiscalized'}
-                      </button>
-                    )}
-                    {!['served', 'cancelled'].includes(order.status) && (() => {
-                      const mins = Math.floor((Date.now() - new Date(order.released_to_kitchen_at ?? order.created_at).getTime()) / 60000);
-                      const label = mins < 1 ? 'Just now' : mins < 60 ? `${mins}m` : `${Math.floor(mins / 60)}h ${mins % 60}m`;
-                      return (
-                        <span className={`text-xs font-sans flex items-center gap-1 ${mins >= 10 ? 'text-destructive font-semibold' : 'text-muted-foreground'}`}>
-                          Wait {label}
-                        </span>
-                      );
-                    })()}
-                  </div>
-                  <p className="text-xs text-muted-foreground font-sans mt-1">{formatStamp(order.created_at)}</p>
+                    {order.guest_name && <span className="min-w-0 truncate text-sm text-muted-foreground">{order.guest_name}</span>}
+                  </p>
+                  <p className="mt-0.5 text-xs tabular-nums text-muted-foreground">{formatStamp(order.created_at)}</p>
                 </div>
-                <div className="flex items-start gap-1 shrink-0">
-                  <p className="font-sans font-semibold text-foreground tabular-nums pt-2">{km(order.total)}</p>
-                  {order.status !== 'cancelled' && (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-11 w-11"
-                      disabled={busy.has(`cancel:${order.id}`)}
-                      onClick={() => { setCancelReason(''); setCancelling(order); }}
-                      aria-label={`Cancel order ${order.order_code ?? order.id}`}
-                    >
-                      <Ban className="w-4 h-4 text-destructive" />
-                    </Button>
-                  )}
-                </div>
+                <p className={cn('shrink-0 pt-0.5 text-lg font-semibold tabular-nums text-foreground', cancelled && 'text-muted-foreground line-through')}>{km(order.total)}</p>
               </div>
 
-              <div className="mt-3 space-y-1">
-                {order.order_items?.map((item) => (
-                  <div key={item.id} className="flex justify-between text-sm font-sans">
-                    <span className="text-foreground">{item.quantity}x {item.menu_items?.name}</span>
-                    <span className="text-muted-foreground">{km(item.quantity * Number(item.unit_price))}</span>
-                  </div>
-                ))}
+              <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+                {/* A held order is "pending" in the enum but has not
+                    reached the kitchen; calling it New hid it in the list. */}
+                <span
+                  className={cn('inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-medium leading-4', TONE[tone].chip)}
+                  title={held ? heldReasonLabel(order.held_reason) : undefined}
+                >
+                  <span className={cn('h-1.5 w-1.5 rounded-full', TONE[tone].dot)} aria-hidden />
+                  {held ? 'Needs confirming' : statusLabels[order.status]}
+                </span>
+                <PaymentBadge method={order.payment_method} status={order.payment_status} />
+                {live && (
+                  <span className={cn('inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium leading-4 tabular-nums', mins >= 10 ? TONE.late.chip : 'text-muted-foreground')}>
+                    <Clock className="h-3 w-3" aria-hidden /> {waitLabel}
+                  </span>
+                )}
+                {!cancelled && (
+                  <button
+                    type="button"
+                    onClick={() => openFiscal(order)}
+                    disabled={busy.has(`fiscal:${order.id}`)}
+                    title={isFiscalized ? 'Fiscal receipt recorded — tap to correct' : 'Mark as rung into the certified fiscal POS'}
+                    className={cn(
+                      'relative inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium leading-4 transition-colors disabled:opacity-50',
+                      // A 44 px target around a small chip.
+                      'after:absolute after:-inset-x-1 after:-inset-y-3 after:content-[""] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                      isFiscalized ? 'bg-primary/10 text-primary' : 'border border-dashed border-border text-muted-foreground hover:bg-muted',
+                    )}
+                  >
+                    {isFiscalized
+                      ? <><Check className="h-3 w-3" aria-hidden /> {order.fiscal_receipt_number ? `Fiscal ${order.fiscal_receipt_number}` : 'Fiscalized'}</>
+                      : <><Receipt className="h-3 w-3" aria-hidden /> Mark fiscalized</>}
+                  </button>
+                )}
               </div>
+
+              {(order.order_items?.length ?? 0) > 0 && (
+                <ul className={cn('mt-3 space-y-1 border-t border-border/60 pt-3', cancelled && 'opacity-60')}>
+                  {order.order_items?.map((item) => (
+                    <li key={item.id} className="flex justify-between gap-3 text-sm">
+                      <span className="min-w-0 text-foreground">
+                        <span className="tabular-nums text-muted-foreground">{item.quantity}×</span> {item.menu_items?.name}
+                      </span>
+                      <span className="shrink-0 tabular-nums text-muted-foreground">{km(item.quantity * Number(item.unit_price))}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
 
               {order.status === 'awaiting_payment' && (
-                <p className="mt-3 text-xs font-sans text-accent">
+                <p className={cn('mt-3 rounded-lg px-3 py-2 text-xs leading-relaxed', TONE.bill.surface)}>
                   Held for online payment — not sent to the kitchen. It is released automatically when the
                   payment is confirmed, or when a waiter records payment at the table.
                 </p>
               )}
               {order.status === 'payment_failed' && (
-                <p className="mt-3 text-xs font-sans text-destructive">
+                <p className={cn('mt-3 rounded-lg border px-3 py-2 text-xs leading-relaxed', TONE.late.surface, TONE.late.text)}>
                   The card was not charged and the kitchen has not seen this order.
                 </p>
               )}
+              {Number(order.refunded_amount ?? 0) > 0 && (
+                <p className="mt-3 text-xs tabular-nums text-muted-foreground">{km(order.refunded_amount)} already refunded</p>
+              )}
 
-              {!['served', 'cancelled', 'awaiting_payment', 'payment_failed'].includes(order.status) && (
-                <div className="flex gap-2 mt-3 flex-wrap">
-                  {order.status === 'pending' && isHeld(order) && (
+              {paying?.order.id === order.id && (
+                <div className="mt-3">
+                  <PaymentConfirm
+                    tableNumber={tableOf(order)}
+                    amount={Number(order.total)}
+                    method={paying.method}
+                    busy={busy.has(`pay:${order.id}`)}
+                    detail={order.order_code ? `Order #${order.order_code}` : undefined}
+                    onCancel={() => setPaying(null)}
+                    onConfirm={confirmPaid}
+                  />
+                </div>
+              )}
+
+              {/* One row of actions: the next step filled, money outlined, cancel quiet at the end. */}
+              {(flowStep || canPay || refundable || !cancelled) && (
+                <div className="mt-4 flex flex-wrap items-center gap-2">
+                  {flowStep && order.status === 'pending' && held && (
                     <Button
-                      size="sm"
-                      className="font-sans text-sm min-h-[44px]"
+                      className="h-11 font-semibold sm:h-10"
                       disabled={busy.has(`status:${order.id}`)}
                       onClick={async () => {
                         try {
@@ -451,87 +510,80 @@ const AdminOrders = () => {
                       Confirm &amp; send to kitchen
                     </Button>
                   )}
-                  {order.status === 'pending' && !isHeld(order) && (
-                    <Button size="sm" className="font-sans text-sm min-h-[44px]" disabled={busy.has(`status:${order.id}`)} onClick={() => updateStatus(order.id, 'confirmed')}>Confirm</Button>
+                  {flowStep && next && (
+                    <Button className="h-11 font-semibold sm:h-10" disabled={busy.has(`status:${order.id}`)} onClick={() => updateStatus(order.id, next.to)}>
+                      {next.label}
+                    </Button>
                   )}
-                  {order.status === 'confirmed' && (
-                    <Button size="sm" className="font-sans text-sm min-h-[44px]" disabled={busy.has(`status:${order.id}`)} onClick={() => updateStatus(order.id, 'preparing')}>Start Preparing</Button>
+                  {/* Settling in the room. Two distinct buttons, because the cash
+                      drawer and the POS terminal reconcile against different things.
+                      Never offered on a refunded order: that is how the same money
+                      got recorded twice. */}
+                  {canPay && (
+                    <>
+                      <Button variant="outline" className="h-11 gap-1.5 sm:h-10" onClick={() => setPaying({ order, method: 'cash' })}>
+                        <Banknote className="h-4 w-4" aria-hidden /> Paid cash
+                      </Button>
+                      <Button variant="outline" className="h-11 gap-1.5 sm:h-10" onClick={() => setPaying({ order, method: 'pos_terminal' })}>
+                        <Smartphone className="h-4 w-4" aria-hidden /> Paid on terminal
+                      </Button>
+                    </>
                   )}
-                  {order.status === 'preparing' && (
-                    <Button size="sm" className="font-sans text-sm min-h-[44px]" disabled={busy.has(`status:${order.id}`)} onClick={() => updateStatus(order.id, 'ready')}>Mark Ready</Button>
+                  {/* Money that has been taken can now be given back IN THE BOOKS.
+                      It used to leave the building with no record: the page said
+                      "you will need to refund it separately" and stopped there.
+                      A partly refunded order can still be refunded the rest. */}
+                  {refundable && (
+                    <Button variant="outline" className="h-11 gap-1.5 sm:h-10" onClick={() => setRefunding(order)}>
+                      <Undo2 className="h-4 w-4" aria-hidden /> Refund
+                    </Button>
                   )}
-                  {order.status === 'ready' && (
-                    <Button size="sm" className="font-sans text-sm min-h-[44px]" disabled={busy.has(`status:${order.id}`)} onClick={() => updateStatus(order.id, 'served')}>Mark Served</Button>
-                  )}
-                </div>
-              )}
-
-              {/* Settling in the room. Two distinct buttons, because the cash
-                  drawer and the POS terminal reconcile against different things.
-                  Never offered on a refunded order: that is how the same money
-                  got recorded twice. */}
-              {canTakePayment(order) && paying?.order.id !== order.id && (
-                <div className="flex gap-2 mt-2 flex-wrap">
-                  <Button size="sm" variant="outline" className="font-sans text-sm gap-1.5 min-h-[44px]" onClick={() => setPaying({ order, method: 'cash' })}>
-                    <Banknote className="w-4 h-4" /> Paid cash
-                  </Button>
-                  <Button size="sm" variant="outline" className="font-sans text-sm gap-1.5 min-h-[44px]" onClick={() => setPaying({ order, method: 'pos_terminal' })}>
-                    <Smartphone className="w-4 h-4" /> Paid on terminal
-                  </Button>
-                </div>
-              )}
-
-              {paying?.order.id === order.id && (
-                <div className="mt-2">
-                  <PaymentConfirm
-                    tableNumber={tableOf(order)}
-                    amount={Number(order.total)}
-                    method={paying.method}
-                    busy={busy.has(`pay:${order.id}`)}
-                    detail={order.order_code ? `Order #${order.order_code}` : undefined}
-                    onCancel={() => setPaying(null)}
-                    onConfirm={confirmPaid}
-                  />
-                </div>
-              )}
-
-              {/* Money that has been taken can now be given back IN THE BOOKS.
-                  It used to leave the building with no record: the page said
-                  "you will need to refund it separately" and stopped there.
-                  A partly refunded order can still be refunded the rest. */}
-              {refundable && (
-                <div className="flex gap-2 mt-2 flex-wrap">
-                  <Button size="sm" variant="outline" className="font-sans text-sm gap-1.5 min-h-[44px]" onClick={() => setRefunding(order)}>
-                    <Undo2 className="w-4 h-4" /> Refund
-                  </Button>
-                  {Number(order.refunded_amount ?? 0) > 0 && (
-                    <span className="text-xs font-sans text-muted-foreground self-center tabular-nums">
-                      {km(order.refunded_amount)} already refunded
-                    </span>
+                  {!cancelled && (
+                    <Button
+                      variant="ghost"
+                      className="ms-auto h-11 gap-1.5 px-3 text-muted-foreground hover:bg-destructive/10 hover:text-destructive sm:h-10"
+                      disabled={busy.has(`cancel:${order.id}`)}
+                      onClick={() => { setCancelReason(''); setCancelling(order); }}
+                      aria-label={`Cancel order ${order.order_code ?? order.id}`}
+                    >
+                      <Ban className="h-4 w-4" aria-hidden /> Cancel
+                    </Button>
                   )}
                 </div>
               )}
-            </CardContent>
-          </Card>
+            </div>
+          </AdminCard>
           );
         })}
+        </div>
+        )}
 
-        {orders.length === 0 && !loadError && (
-          <p className="text-center text-muted-foreground font-sans py-10">
-            {filter === 'all'
-              ? (day === today ? 'No orders yet tonight — they’ll appear here as guests order.' : 'No orders on this day.')
-              : `No ${statusLabels[filter as OrderStatus].toLowerCase()} orders on this day.`}
-          </p>
+        {!loadError && (orders.length === 0 || shown.length === 0) && (
+          <AdminCard>
+            {orders.length === 0 ? (
+              <EmptyState
+                icon={ReceiptText}
+                title={filter === 'all'
+                  ? (day === today ? 'No orders yet tonight — they’ll appear here as guests order.' : 'No orders on this day.')
+                  : `No ${statusLabels[filter as OrderStatus].toLowerCase()} orders on this day.`}
+                hint={filter !== 'all' ? 'Choose All Orders to see the rest of the day.' : day === today ? 'This list updates by itself.' : 'Pick another day above.'}
+              />
+            ) : (
+              <EmptyState icon={Search} title={`Nothing loaded matches “${query.trim()}”.`}
+                hint={hasMore ? 'Load more below to search the rest of the day, or try a table number or a dish.' : 'Try the order code without #, a table number or a dish.'} />
+            )}
+          </AdminCard>
         )}
 
         {hasMore && (
           <div className="flex justify-center pt-2">
             <Button
               variant="outline"
-              className="min-h-[44px]"
+              className="h-11 gap-2 sm:h-10"
               disabled={loadingMore}
               onClick={() => { setLoadingMore(true); setPages((p) => p + 1); }}
             >
+              {loadingMore && <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden />}
               {loadingMore ? 'Loading…' : `Load ${PAGE_SIZE} more`}
             </Button>
           </div>
@@ -560,14 +612,14 @@ const AdminOrders = () => {
             aria-label="Reason for cancelling"
           />
           <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => { setCancelling(null); setCancelReason(''); }} className="min-h-[44px]">
+            <Button variant="outline" onClick={() => { setCancelling(null); setCancelReason(''); }} className="h-11 sm:h-10">
               Keep order
             </Button>
             <Button
               variant="destructive"
               disabled={!cancelling || busy.has(`cancel:${cancelling.id}`) || cancelReason.trim().length < 3}
               onClick={confirmCancel}
-              className="min-h-[44px]"
+              className="h-11 sm:h-10"
             >
               {cancelling && busy.has(`cancel:${cancelling.id}`) ? 'Cancelling…' : 'Cancel order'}
             </Button>
@@ -600,14 +652,14 @@ const AdminOrders = () => {
             />
           )}
           <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setFiscal(null)} className="min-h-[44px]">
+            <Button variant="outline" onClick={() => setFiscal(null)} className="h-11 sm:h-10">
               Cancel
             </Button>
             <Button
               variant={fiscal?.mode === 'clear' ? 'destructive' : 'default'}
               disabled={!fiscal || busy.has(`fiscal:${fiscal.order.id}`)}
               onClick={saveFiscal}
-              className="min-h-[44px]"
+              className="h-11 sm:h-10"
             >
               {fiscal?.mode === 'clear' ? 'Clear fiscalization' : receipt.trim() ? 'Record receipt' : 'Mark without a number'}
             </Button>
