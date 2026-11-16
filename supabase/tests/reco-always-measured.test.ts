@@ -127,7 +127,7 @@ describe('the always-on check', () => {
 
   it('a policy change closes the check and the next one runs under the new version; history keeps its arm', async () => {
     const [before] = (await running(L)).rows;
-    await db.exec(`UPDATE public.restaurant_settings SET reco_sampling_enabled = true WHERE venue_id = '${L}'`);
+    await db.exec(`UPDATE public.restaurant_settings SET reco_learner = 'v3' WHERE venue_id = '${L}'`);
     const r = await scheduler();
     expect(r[L].action).toBe('restarted');
     expect(r[V].action).toBe('unchanged');
@@ -138,7 +138,7 @@ describe('the always-on check', () => {
       `SELECT e.ended_at IS NOT NULL AS ended, (SELECT count(*)::int FROM public.session_experiment_assignment a WHERE a.experiment_id = e.id) AS n
          FROM public.experiments e WHERE e.id = $1`, [before.id]);
     expect(old.rows[0]).toMatchObject({ ended: true, n: 600 });
-    await db.exec(`UPDATE public.restaurant_settings SET reco_sampling_enabled = false WHERE venue_id = '${L}'`);
+    await db.exec(`UPDATE public.restaurant_settings SET reco_learner = 'v4' WHERE venue_id = '${L}'`);
     await scheduler();
   });
 
@@ -146,10 +146,10 @@ describe('the always-on check', () => {
     await as(MANAGER, () => db.query(`SELECT public.start_experiment('Four weeks at 50%', public.reco_policy_version(), 50::smallint)`));
     const [mine] = (await running(L)).rows;
     expect(mine).toMatchObject({ auto: false, holdout_pct: 50 });
-    await db.exec(`UPDATE public.restaurant_settings SET reco_sampling_enabled = true WHERE venue_id = '${L}'`);
+    await db.exec(`UPDATE public.restaurant_settings SET reco_learner = 'v3' WHERE venue_id = '${L}'`);
     expect((await scheduler())[L].action).toBe('unchanged');
     expect((await running(L)).rows[0].id).toBe(mine.id);
-    await db.exec(`UPDATE public.restaurant_settings SET reco_sampling_enabled = false WHERE venue_id = '${L}'`);
+    await db.exec(`UPDATE public.restaurant_settings SET reco_learner = 'v4' WHERE venue_id = '${L}'`);
   });
 
   it('a manager\'s Stop stays stopped; switching it on again opens a new check', async () => {

@@ -66,6 +66,8 @@ async function seed() {
     UPDATE public.restaurant_settings
        SET ordering_enabled = true, online_card_enabled = false,
            recommendations_enabled = true, reco_holdout_pct = 0, reco_exploration = 0,
+           -- The v3 ranker this file is about (v4: reco-learner-v4.test.ts).
+           reco_learner = 'v3',
            reco_weight_curated = 40, reco_weight_observed = 25,
            reco_weight_learned = 25, reco_weight_margin = 10,
            reco_min_acceptance = 0.030, reco_retire_after_impressions = 60,

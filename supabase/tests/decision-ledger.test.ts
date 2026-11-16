@@ -45,7 +45,9 @@ async function seed() {
 
     UPDATE public.restaurant_settings
        SET ordering_enabled = true, online_card_enabled = false,
-           recommendations_enabled = true, reco_holdout_pct = 0
+           recommendations_enabled = true, reco_holdout_pct = 0,
+           -- The ledger as the v3 ranker writes it; v4's: reco-learner-v4.test.ts.
+           reco_learner = 'v3'
      WHERE id = 1;
 
     INSERT INTO auth.users(id) VALUES ('${ADMIN}'), ('${STAFF}');

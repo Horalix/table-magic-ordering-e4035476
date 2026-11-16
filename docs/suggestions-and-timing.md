@@ -92,7 +92,7 @@ Score, all normalised to 0–1 before weighting (weights configurable in
 | observed | 25% | lift from real baskets |
 | learned | 25% | smoothed acceptance, **per daypart** |
 | margin | 10% | `margin_score`, internal, never shown |
-| exploration | 15% | decays with impressions, hashed per session |
+| exploration | 15% | v3: decays with impressions, hashed per session. v4 (default since `20261116130000_reco_learner_v4.sql`): no bonus; the dial sets how far P(taken) is drawn from its posterior (15 = a full Thompson draw, 0 = the mean) — see [measuring-upsell.md §14](measuring-upsell.md) |
 
 minus a **capacity penalty** — see below.
 
@@ -179,6 +179,12 @@ Third is a real outcome. An unrelated dish offered as a substitute is worse than
 an honest "sorry, that is off tonight".
 
 ## 7. Is any of it working?
+
+> **Since `20261116120000_reco_always_measured.sql` it is always measured.**
+> 10% of each restaurant's tables see no suggestions (an "Always-on check",
+> opened by itself), and `reco_profit_check()` / the admin card *Are
+> suggestions earning?* reports extra margin per week from the cautious end
+> of a 95% interval. See [measuring-upsell.md §13](measuring-upsell.md).
 
 > **The measurement described below has been substantially rebuilt.** It was
 > assigned per session but analysed per order, counted tips as uplift, and
