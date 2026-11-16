@@ -1,8 +1,8 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent,
@@ -13,7 +13,11 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import { toast } from 'sonner';
-import { Plus, Trash2, ChevronDown, MapPin, Users2, AlertTriangle, CalendarDays } from 'lucide-react';
+import { CalendarDays, Check, ChevronDown, Loader2, MapPin, Plus, Trash2 } from 'lucide-react';
+import { AdminPageHeader, AdminToolbar } from '@/components/admin/AdminPage';
+import { AdminCard, AdminCardContent, AdminCardHeader, EmptyState } from '@/components/admin/AdminCard';
+import { TONE, type StaffTone } from '@/components/staff/status-tone';
+import { cn } from '@/lib/utils';
 import { addSectionWaiter, removeSectionAssignment, todayISO, type SectionAssignment } from '@/lib/assignments';
 
 interface Section { id: string; name: string; color: string; sort_order: number; }
@@ -21,21 +25,46 @@ interface Waiter { id: string; display_name: string; is_active: boolean; }
 interface Table { id: string; table_number: number; section_id: string | null; }
 
 const PRESET_COLORS = ['#8FAE8B', '#D4A574', '#B85C57', '#6B8CAE', '#A87BA0', '#E0B45C', '#5C8A8A', '#C97B63'];
+/** What each preset is called, for a screen reader. */
+const COLOR_NAMES: Record<string, string> = {
+  '#8FAE8B': 'Sage', '#D4A574': 'Sand', '#B85C57': 'Brick', '#6B8CAE': 'Blue',
+  '#A87BA0': 'Mauve', '#E0B45C': 'Mustard', '#5C8A8A': 'Teal', '#C97B63': 'Terracotta',
+};
 
 const initials = (name: string) => name.split(' ').map((s) => s[0]).join('').slice(0, 2).toUpperCase();
+const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+
+/** A state as a word with a dot, in the staff screens' colours. */
+const Pill = ({ tone, children }: { tone: StaffTone; children: React.ReactNode }) => (
+  <span className={cn('inline-flex shrink-0 items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-sans font-medium', TONE[tone].chip)}>
+    <span className={cn('h-1.5 w-1.5 rounded-full', TONE[tone].dot)} aria-hidden />
+    {children}
+  </span>
+);
+
+/** A small heading inside a section card, with a hint after it. */
+const Caption = ({ children, hint }: { children: React.ReactNode; hint?: React.ReactNode }) => (
+  <p className="mb-2 text-[11px] font-sans font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+    {children}
+    {hint && <span className="ms-1.5 font-normal normal-case tracking-normal">{hint}</span>}
+  </p>
+);
 
 const WaiterChip = ({ name, active, color, onClick }: { name: string; active: boolean; color: string; onClick: () => void }) => (
   <button
     type="button"
     onClick={onClick}
-    className={`inline-flex items-center gap-1.5 pl-1 pr-3 py-1 rounded-full border text-sm font-sans transition-all active:scale-95 ${
-      active ? 'text-white border-transparent shadow-sm' : 'bg-card border-border hover:border-primary text-foreground'
-    }`}
+    className={cn(
+      'inline-flex min-h-11 items-center gap-2 rounded-full border py-1 pe-3.5 ps-1 text-sm font-sans transition sm:min-h-9',
+      'active:scale-95 motion-reduce:transition-none motion-reduce:active:scale-100',
+      'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card',
+      active ? 'border-transparent font-medium text-white shadow-sm' : 'border-border bg-card text-foreground hover:border-foreground/30',
+    )}
     style={active ? { background: color } : undefined}
     aria-pressed={active}
   >
-    <span className={`w-5 h-5 rounded-full grid place-items-center text-[10px] font-bold ${active ? 'bg-white/25 text-white' : 'bg-primary/10 text-primary'}`}>
-      {initials(name)}
+    <span className={cn('grid h-7 w-7 place-items-center rounded-full text-[10px] font-bold', active ? 'bg-white/25 text-white' : 'bg-muted text-muted-foreground')} aria-hidden>
+      {active ? <Check className="h-3.5 w-3.5" /> : initials(name)}
     </span>
     {name}
   </button>
@@ -48,9 +77,12 @@ const AdminSections = () => {
   const [tables, setTables] = useState<Table[]>([]);
   const [newName, setNewName] = useState('');
   const [newColor, setNewColor] = useState(PRESET_COLORS[0]);
+  const [adding, setAdding] = useState(false);
   const [date, setDate] = useState(todayISO());
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
+  const nameField = useRef<HTMLInputElement>(null);
+  const formCard = useRef<HTMLDivElement>(null);
 
   const isToday = date === todayISO();
 
@@ -92,7 +124,9 @@ const AdminSections = () => {
 
   const addSection = async () => {
     if (!newName.trim()) { toast.error('Name required'); return; }
+    setAdding(true);
     const { error } = await supabase.from('sections').insert({ name: newName.trim(), color: newColor, sort_order: sections.length });
+    setAdding(false);
     if (error) toast.error(error.message);
     else { setNewName(''); void fetchAll(); toast.success('Section added'); }
   };
@@ -121,122 +155,236 @@ const AdminSections = () => {
     void fetchAll();
   };
 
+  /** On a phone the form is under the sections: take them to it, ready to type. */
+  const goToForm = () => {
+    formCard.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    nameField.current?.focus({ preventScroll: true });
+  };
+
   const TableChip = ({ table }: { table: Table }) => (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <button className="group inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-card border border-border hover:border-primary hover:bg-accent/30 transition-all text-sm font-sans active:scale-95">
-          <span className="font-serif font-bold text-foreground">{table.table_number}</span>
-          <ChevronDown className="w-3 h-3 text-muted-foreground group-hover:text-foreground transition-colors" />
+        <button
+          type="button"
+          aria-label={`Move table ${table.table_number}`}
+          className={cn(
+            'group inline-flex min-h-11 min-w-[3.25rem] items-center justify-center gap-1 rounded-xl border border-border bg-card px-3 text-sm font-sans transition sm:min-h-10',
+            'hover:border-foreground/30 hover:bg-muted/40 active:scale-95 motion-reduce:transition-none motion-reduce:active:scale-100',
+            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring data-[state=open]:border-primary data-[state=open]:bg-primary/5',
+          )}
+        >
+          <span className="font-serif text-base font-bold tabular-nums text-foreground">{table.table_number}</span>
+          <ChevronDown className="h-3.5 w-3.5 text-muted-foreground transition-colors group-hover:text-foreground" aria-hidden />
         </button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="w-52">
+      <DropdownMenuContent align="start" className="w-56">
         <DropdownMenuLabel>Move table {table.table_number} to…</DropdownMenuLabel>
         <DropdownMenuSeparator />
         {sections.map((s) => (
-          <DropdownMenuItem key={s.id} disabled={s.id === table.section_id} onClick={() => setTableSection(table.id, s.id)} className="gap-2">
-            <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: s.color }} />
-            <span className="flex-1">{s.name}</span>
+          <DropdownMenuItem key={s.id} disabled={s.id === table.section_id} onClick={() => setTableSection(table.id, s.id)} className="min-h-11 gap-2 sm:min-h-9">
+            <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: s.color }} aria-hidden />
+            <span className="flex-1 truncate">{s.name}</span>
             {s.id === table.section_id && <span className="text-xs text-muted-foreground">current</span>}
           </DropdownMenuItem>
         ))}
         <DropdownMenuSeparator />
-        <DropdownMenuItem disabled={!table.section_id} onClick={() => setTableSection(table.id, null)} className="text-destructive focus:text-destructive">
+        <DropdownMenuItem disabled={!table.section_id} onClick={() => setTableSection(table.id, null)} className="min-h-11 sm:min-h-9">
           Unassign
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   );
 
-  const unassignedCount = tablesBySection.get('unassigned')?.length || 0;
+  const unassigned = tablesBySection.get('unassigned') ?? [];
+  const unassignedCount = unassigned.length;
+  const ready = !loading && !loadError;
+  const dayWords = isToday
+    ? 'today'
+    : new Date(date + 'T00:00:00').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
 
-  return (
-    <div className="max-w-5xl">
-      <div className="flex flex-wrap items-end justify-between gap-4 mb-8">
-        <div>
-          <h1 className="font-serif text-3xl font-bold text-foreground">Floor sections & waiters</h1>
-          <p className="text-sm font-sans text-muted-foreground mt-1">Group tables into sections, then tap a waiter to assign them. Tables auto-route to the assigned waiter when guests sit down.</p>
-        </div>
-        {/* Shift control — today by default, other days tucked away */}
-        <div className="flex items-center gap-2">
-          {isToday ? (
-            <span className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-primary/10 text-primary text-sm font-sans font-medium">
-              <CalendarDays className="w-4 h-4" /> Today
-            </span>
-          ) : (
-            <Button variant="outline" size="sm" onClick={() => setDate(todayISO())} className="gap-1.5">
-              <CalendarDays className="w-4 h-4" /> Back to today
-            </Button>
-          )}
-          <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="h-9 w-[150px]" aria-label="Shift date" />
-        </div>
-      </div>
+  const facts = ready && sections.length > 0 && (
+    <AdminToolbar className="gap-x-3 gap-y-2 text-sm font-sans text-muted-foreground">
+      <span className="tabular-nums">{plural(sections.length, 'section')} · {plural(tables.length, 'table')}</span>
+      {unassignedCount > 0 ? (
+        <Pill tone="preparing">{unassignedCount === 1 ? '1 table is not in a section' : `${unassignedCount} tables are not in a section`}</Pill>
+      ) : tables.length > 0 ? (
+        <Pill tone="ready">Every table is in a section</Pill>
+      ) : null}
+    </AdminToolbar>
+  );
 
-      {/* Create section */}
-      <Card className="mb-6 border-dashed">
-        <CardContent className="p-4">
-          <div className="flex flex-wrap gap-3 items-center">
-            <Input placeholder="New section name (e.g. Terrace, Bar, Garden)" value={newName} onChange={(e) => setNewName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && addSection()} className="flex-1 min-w-[220px]" />
-            <div className="flex items-center gap-1 p-1 rounded-md border border-border bg-background">
+  const addForm = (
+    <AdminCard ref={formCard} className="scroll-mt-20">
+      <AdminCardHeader icon={Plus} title="Add a section" description="An area of the floor, like Terrace or Bar. Its colour shows on the waiter’s phone and the floor monitor." />
+      <AdminCardContent>
+        <form onSubmit={(e) => { e.preventDefault(); void addSection(); }} className="space-y-4">
+          <div>
+            <Label htmlFor="section-name" className="font-sans text-sm">Name</Label>
+            <div className="relative mt-1.5">
+              <span className="pointer-events-none absolute start-3 top-1/2 h-3 w-3 -translate-y-1/2 rounded-full" style={{ background: newColor }} aria-hidden />
+              <Input
+                id="section-name"
+                ref={nameField}
+                placeholder="e.g. Terrace, Bar, Garden"
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                autoComplete="off"
+                className="h-11 ps-8"
+              />
+            </div>
+          </div>
+          <div>
+            <p id="section-colour" className="font-sans text-sm font-medium">Colour</p>
+            <div role="radiogroup" aria-labelledby="section-colour" className="mt-1.5 grid grid-cols-4 gap-1 sm:grid-cols-8">
               {PRESET_COLORS.map((c) => (
-                <button key={c} onClick={() => setNewColor(c)} className={`w-6 h-6 rounded transition-transform ${newColor === c ? 'ring-2 ring-foreground ring-offset-1 ring-offset-background scale-110' : 'hover:scale-110'}`} style={{ background: c }} aria-label={`Color ${c}`} />
+                <button
+                  key={c}
+                  type="button"
+                  role="radio"
+                  aria-checked={newColor === c}
+                  aria-label={COLOR_NAMES[c] ?? c}
+                  onClick={() => setNewColor(c)}
+                  className={cn(
+                    'grid h-11 w-full place-items-center rounded-xl transition sm:h-10',
+                    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card',
+                    newColor === c ? 'bg-muted' : 'hover:bg-muted/60',
+                  )}
+                >
+                  <span
+                    className={cn('grid h-8 w-8 place-items-center rounded-full text-white sm:h-7 sm:w-7', newColor === c && 'ring-2 ring-foreground/60 ring-offset-2 ring-offset-muted')}
+                    style={{ background: c }}
+                    aria-hidden
+                  >
+                    {newColor === c && <Check className="h-4 w-4" />}
+                  </span>
+                </button>
               ))}
             </div>
-            <Button onClick={addSection}><Plus className="w-4 h-4 mr-1" /> Add section</Button>
           </div>
-        </CardContent>
-      </Card>
+          <Button type="submit" disabled={adding} className="h-11 w-full gap-2 sm:w-auto lg:w-full">
+            {adding ? <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden /> : <Plus className="h-4 w-4" aria-hidden />}
+            Add section
+          </Button>
+        </form>
+      </AdminCardContent>
+    </AdminCard>
+  );
+
+  return (
+    <div className="mx-auto w-full max-w-6xl">
+      <AdminPageHeader
+        title="Floor sections"
+        description="Group your tables into areas of the floor, and choose who covers each one. Tables go to that area’s waiter when guests sit down."
+        actions={(
+          <>
+            {!isToday && (
+              <Button variant="outline" onClick={() => setDate(todayISO())} className="h-11 sm:h-10">
+                Back to today
+              </Button>
+            )}
+            <label className="flex items-center gap-2 text-sm font-sans text-muted-foreground">
+              <CalendarDays className="hidden h-4 w-4 sm:block" aria-hidden />
+              <span className="hidden sm:inline">Waiters for</span>
+              <Input
+                type="date"
+                value={date}
+                onChange={(e) => setDate(e.target.value)}
+                className="h-11 w-auto min-w-[10rem] text-foreground sm:h-10"
+                aria-label="Shift date"
+              />
+            </label>
+            <Button onClick={goToForm} className="h-11 gap-2 lg:hidden">
+              <Plus className="h-4 w-4" aria-hidden /> Add section
+            </Button>
+          </>
+        )}
+      >
+        {facts}
+      </AdminPageHeader>
 
       {loading ? (
-        <div className="space-y-4">{[1, 2].map((i) => <Skeleton key={i} className="h-44 w-full rounded-xl" />)}</div>
+        <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_340px]" aria-busy="true" aria-label="Loading the floor plan">
+          <div className="space-y-4">{[1, 2].map((i) => <Skeleton key={i} className="h-52 w-full rounded-2xl" />)}</div>
+          <Skeleton className="h-72 w-full rounded-2xl" />
+        </div>
       ) : loadError ? (
-        <Card className="border-destructive/40">
-          <CardContent className="py-12 text-center">
-            <p className="font-serif text-lg font-semibold text-foreground">Could not load the floor plan</p>
-            <p className="font-sans text-muted-foreground text-sm mt-1">
-              This is a connection problem, not an empty restaurant — nothing has been deleted.
-            </p>
-            <Button variant="outline" className="mt-4" onClick={() => { setLoading(true); void fetchAll(); }}>
+        <AdminCard>
+          <AdminCardContent className="pt-5 sm:pt-6">
+            <div role="alert" className="rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm font-sans">
+              <p className="font-medium text-destructive">Could not load the floor plan</p>
+              <p className="mt-0.5 text-muted-foreground">
+                This is a connection problem, not an empty restaurant — nothing has been deleted.
+              </p>
+            </div>
+            <Button variant="outline" className="mt-4 h-11 sm:h-10" onClick={() => { setLoading(true); void fetchAll(); }}>
               Try again
             </Button>
-          </CardContent>
-        </Card>
-      ) : sections.length === 0 ? (
-        <Card className="border-dashed">
-          <CardContent className="py-12 text-center">
-            <MapPin className="w-10 h-10 mx-auto text-muted-foreground/40 mb-3" />
-            <p className="font-serif text-lg font-semibold text-foreground">No sections yet</p>
-            <p className="font-sans text-muted-foreground text-sm mt-1">Sections group your tables so each waiter can cover an area. Create one above to get started.</p>
-          </CardContent>
-        </Card>
+          </AdminCardContent>
+        </AdminCard>
       ) : (
-        <div className="space-y-4">
-          {sections.map((s) => {
-            const sectionTables = tablesBySection.get(s.id) || [];
-            const hasWaiter = assignments.some((x) => x.section_id === s.id);
-            const needsWaiter = sectionTables.length > 0 && !hasWaiter;
-            return (
-              <Card key={s.id} className="overflow-hidden card-lux-hover">
-                <div className="h-1.5" style={{ background: s.color }} />
-                <CardContent className="p-5">
-                  <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
-                    <div className="flex items-center gap-3 min-w-0">
-                      <span className="w-9 h-9 rounded-lg shrink-0 grid place-items-center text-white font-serif font-bold" style={{ background: s.color }}>{s.name.charAt(0).toUpperCase()}</span>
-                      <div className="min-w-0">
-                        <h3 className="font-serif text-lg font-bold text-foreground truncate">{s.name}</h3>
-                        <div className="flex items-center gap-3 text-xs font-sans text-muted-foreground">
-                          <span className="flex items-center gap-1"><Users2 className="w-3 h-3" />{sectionTables.length} {sectionTables.length === 1 ? 'table' : 'tables'}</span>
-                          {needsWaiter && <span className="flex items-center gap-1 text-amber-600"><AlertTriangle className="w-3 h-3" />Needs a waiter</span>}
-                        </div>
-                      </div>
+        // auto then 1fr: the sections' height goes to the second row, so the
+        // form sits right under the unassigned tables, not a screen below.
+        <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_340px] lg:grid-rows-[auto_1fr]">
+          {/* Tables in no section: what needs doing, so first on a phone and
+              top right on a laptop. */}
+          {sections.length > 0 && unassignedCount > 0 && (
+            <AdminCard className={cn('min-w-0 lg:col-start-2 lg:row-start-1', TONE.preparing.border)}>
+              <AdminCardHeader
+                title="Unassigned tables"
+                description={`${plural(unassignedCount, 'table')} in no section. Tap one to move it into a section.`}
+              />
+              <AdminCardContent>
+                <div className="flex flex-wrap gap-2">{unassigned.map((t) => <TableChip key={t.id} table={t} />)}</div>
+              </AdminCardContent>
+            </AdminCard>
+          )}
+
+          <div className="min-w-0 space-y-4 lg:col-start-1 lg:row-span-2 lg:row-start-1">
+            {sections.length === 0 ? (
+              <AdminCard>
+                <EmptyState
+                  icon={MapPin}
+                  tone="primary"
+                  title="No sections yet"
+                  hint="Sections group your tables so each waiter can cover an area. Add the first one to get started."
+                />
+              </AdminCard>
+            ) : sections.map((s) => {
+              const sectionTables = tablesBySection.get(s.id) || [];
+              const covering = waiters.filter((w) => assignments.some((x) => x.section_id === s.id && x.waiter_id === w.id));
+              const needsWaiter = sectionTables.length > 0 && covering.length === 0;
+              return (
+                <AdminCard key={s.id} className="relative overflow-hidden">
+                  <span className="absolute inset-y-0 start-0 w-1.5" style={{ background: s.color }} aria-hidden />
+                  <div className="flex items-start gap-3 px-5 pt-4 ps-6 sm:px-6 sm:pt-5 sm:ps-7">
+                    <div className="min-w-0 flex-1 pt-1">
+                      <h2 className="truncate font-serif text-lg font-semibold leading-snug text-foreground">{s.name}</h2>
+                      <p className="mt-0.5 text-xs font-sans text-muted-foreground tabular-nums">
+                        {plural(sectionTables.length, 'table')}
+                        {covering.length > 0 && <> · {covering.map((w) => w.display_name.split(' ')[0]).join(', ')} {dayWords}</>}
+                      </p>
                     </div>
+                    {needsWaiter && <span className="pt-1.5"><Pill tone="preparing">Needs a waiter</Pill></span>}
                     <AlertDialog>
                       <AlertDialogTrigger asChild>
-                        <Button variant="ghost" size="icon" aria-label={`Delete section ${s.name}`}><Trash2 className="w-4 h-4 text-destructive" /></Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          aria-label={`Delete section ${s.name}`}
+                          className="-me-2 h-11 w-11 shrink-0 text-muted-foreground hover:bg-destructive/10 hover:text-destructive sm:h-10 sm:w-10"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
                       </AlertDialogTrigger>
-                      <AlertDialogContent>
+                      <AlertDialogContent className="max-w-[calc(100vw-2rem)] rounded-2xl sm:max-w-md">
                         <AlertDialogHeader>
                           <AlertDialogTitle>Delete “{s.name}”?</AlertDialogTitle>
-                          <AlertDialogDescription>Its tables become unassigned (they are not deleted). This cannot be undone.</AlertDialogDescription>
+                          <AlertDialogDescription>
+                            {sectionTables.length > 0
+                              ? `Its ${plural(sectionTables.length, 'table')} (${sectionTables.map((t) => t.table_number).join(', ')}) become unassigned; they are not deleted.`
+                              : 'Its tables become unassigned (they are not deleted).'}
+                            {' '}This cannot be undone.
+                          </AlertDialogDescription>
                         </AlertDialogHeader>
                         <AlertDialogFooter>
                           <AlertDialogCancel>Cancel</AlertDialogCancel>
@@ -246,47 +394,40 @@ const AdminSections = () => {
                     </AlertDialog>
                   </div>
 
-                  {/* Waiter chips — tap to add/remove (multiple allowed) */}
-                  <div className="mb-4">
-                    <p className="text-[11px] uppercase tracking-wide text-muted-foreground font-sans mb-2">Waiters {isToday ? 'today' : `· ${date}`} <span className="normal-case tracking-normal">— tap to add one or more</span></p>
-                    {waiters.length === 0 ? (
-                      <p className="text-sm text-muted-foreground font-sans">No active waiters. Add them under <span className="font-medium">Waiters</span>.</p>
-                    ) : (
-                      <div className="flex flex-wrap gap-2">
-                        {waiters.map((w) => (
-                          <WaiterChip key={w.id} name={w.display_name} color={s.color} active={assignments.some((x) => x.section_id === s.id && x.waiter_id === w.id)} onClick={() => toggleWaiter(s.id, w.id)} />
-                        ))}
-                      </div>
-                    )}
+                  <div className="space-y-5 px-5 pb-5 pt-4 ps-6 sm:px-6 sm:pb-6 sm:ps-7">
+                    {/* Tables in this section */}
+                    <div>
+                      <Caption hint="tap one to move it">Tables</Caption>
+                      {sectionTables.length === 0 ? (
+                        <p className="rounded-xl bg-muted/50 px-4 py-3 text-sm font-sans text-muted-foreground">No tables here yet — move some from Unassigned tables or another section.</p>
+                      ) : (
+                        <div className="flex flex-wrap gap-2">{sectionTables.map((t) => <TableChip key={t.id} table={t} />)}</div>
+                      )}
+                    </div>
+
+                    {/* Waiter chips — tap to add/remove (multiple allowed) */}
+                    <div>
+                      <Caption hint="tap to add one or more">Waiters {dayWords}</Caption>
+                      {waiters.length === 0 ? (
+                        <p className="text-sm text-muted-foreground font-sans">No active waiters. Add them under <span className="font-medium">Waiters</span>.</p>
+                      ) : (
+                        <div className="flex flex-wrap gap-2">
+                          {waiters.map((w) => (
+                            <WaiterChip key={w.id} name={w.display_name} color={s.color} active={assignments.some((x) => x.section_id === s.id && x.waiter_id === w.id)} onClick={() => toggleWaiter(s.id, w.id)} />
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   </div>
+                </AdminCard>
+              );
+            })}
+          </div>
 
-                  {/* Tables in this section */}
-                  {sectionTables.length === 0 ? (
-                    <div className="rounded-lg border border-dashed border-border px-4 py-6 text-center text-sm text-muted-foreground">No tables here yet — move some from the pool below.</div>
-                  ) : (
-                    <div className="flex flex-wrap gap-2">{sectionTables.map((t) => <TableChip key={t.id} table={t} />)}</div>
-                  )}
-                </CardContent>
-              </Card>
-            );
-          })}
+          <div className={cn('min-w-0 lg:col-start-2', sections.length > 0 && unassignedCount > 0 ? 'lg:row-start-2' : 'lg:row-start-1')}>
+            {addForm}
+          </div>
         </div>
-      )}
-
-      {sections.length > 0 && (
-        <Card className="mt-6 bg-muted/30">
-          <CardContent className="p-5">
-            <div className="flex items-center gap-2 mb-3">
-              <h3 className="font-serif text-base font-bold text-foreground">Unassigned tables</h3>
-              <span className="text-xs font-sans text-muted-foreground">{unassignedCount} {unassignedCount === 1 ? 'table' : 'tables'}</span>
-            </div>
-            {unassignedCount === 0 ? (
-              <p className="text-sm font-sans text-muted-foreground">All tables are assigned to a section.</p>
-            ) : (
-              <div className="flex flex-wrap gap-2">{tablesBySection.get('unassigned')!.map((t) => <TableChip key={t.id} table={t} />)}</div>
-            )}
-          </CardContent>
-        </Card>
       )}
     </div>
   );
