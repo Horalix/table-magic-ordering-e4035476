@@ -1,25 +1,25 @@
 import { DEMO_MODE } from '@/lib/demo-mode';
-import React, { useEffect, useState } from 'react';
-import { useNavigate, Outlet, Link, Navigate, useLocation } from 'react-router-dom';
-import { motion } from 'framer-motion';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useNavigate, Outlet, Link, Navigate, useLocation, useNavigationType } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import {
-  LayoutDashboard, UtensilsCrossed, TableProperties, ClipboardList,
-  BarChart3, QrCode, LogOut, ChefHat, Menu, X, Layers, Users, Star, Monitor,
-  CalendarCheck, Printer, Receipt, Sparkles, Brain, ScrollText, TrendingUp, Tag,
-  LayoutGrid, UserCog, KeyRound, Loader2, CalendarClock,
-} from 'lucide-react';
+import { ArrowRight, CalendarClock, RotateCw, Search } from 'lucide-react';
 import { toast } from 'sonner';
-import { springPill } from '@/lib/motion';
 import { useStaffDocument } from '@/components/staff/useStaffDocument';
 import { useLearningHeartbeat } from '@/hooks/useLearningHeartbeat';
 import { switchStaffVenue, useStaffVenue } from '@/hooks/useStaffVenue';
 import AdminMobileTabs from '@/components/admin/AdminMobileTabs';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Skeleton } from '@/components/ui/skeleton';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import AdminCommandPalette from '@/components/admin/nav/AdminCommandPalette';
+import AdminSidebar from '@/components/admin/nav/AdminSidebar';
+import AreaTabs from '@/components/admin/nav/AreaTabs';
+import ChangePasswordDialog from '@/components/admin/nav/ChangePasswordDialog';
+import InstallHint from '@/components/admin/nav/InstallHint';
+import MoreSheet from '@/components/admin/nav/MoreSheet';
+import ScreenFrame from '@/components/admin/nav/ScreenFrame';
+import { RESERVATIONS_PATH, areaOf, ownerPaths, pageAt, type NavLauncher } from '@/components/admin/nav/admin-nav';
+import { LEAVE_FRAME, inScreenFrame, setIconBadge, useStandalone } from '@/components/admin/nav/manager-app';
+import { rememberVisit } from '@/components/admin/nav/nav-memory';
+import type { AdminShell } from '@/components/admin/nav/shell';
 import { VENUES } from '@/lib/venues';
 import EndOfDayTables from '@/components/staff/EndOfDayTables';
 import MenuOnlyNotice from '@/components/staff/MenuOnlyNotice';
@@ -27,69 +27,28 @@ import { countPendingReservations } from '@/lib/reservations';
 import type { User } from '@supabase/supabase-js';
 
 /*
- * The owner's pages: both restaurants at once, and who runs them. Nobody
+ * The admin's frame: who may be here, which restaurant it is about, and the
+ * navigation around every page.
+ *
+ * Five areas (Home, Service, Menu, Reports, Setup), the same on a laptop and
+ * on a phone; the pages inside an area are tabs at the top of the content.
+ * The map is one list, src/components/admin/nav/admin-nav.ts, and no address
+ * changed when it was drawn: every /admin/… link still opens its page.
+ *
+ *   laptop   sidebar (AdminSidebar): restaurant, search, areas, other screens, account
+ *   phone    top bar + bottom bar (AdminMobileTabs) + More (MoreSheet)
+ *   both     AreaTabs above the page, the search on ⌘K / Ctrl K (AdminCommandPalette)
+ *
+ * Each page renders its own AdminPageHeader first; everything around it is here.
+ *
+ * The owner's pages (both restaurants at once, and who runs them): nobody
  * else sees them in the navigation, and their addresses send anyone else to
  * their own restaurant's dashboard.
  */
-const ownerGroup = {
-  heading: 'Owner',
-  items: [
-    // The offline demo has one restaurant (docs/demo-mode.md): nothing to compare side by side.
-    ...(DEMO_MODE ? [] : [{ label: 'Overview', icon: LayoutGrid, path: '/admin/overview' }]),
-    { label: 'Team', icon: UserCog, path: '/admin/team' },
-  ],
-};
-const OWNER_PATHS = ownerGroup.items.map((i) => i.path);
+const OWNER_PATHS = ownerPaths(DEMO_MODE);
 
-const RESERVATIONS_PATH = '/admin/reservations';
-/** How often the menu's "waiting" count is asked for: a guest's request also rings the admin's phone. */
+/** How often the "waiting" count is asked for: a guest's request also rings the admin's phone. */
 const PENDING_REFRESH_MS = 45_000;
-
-// Grouped so the sidebar reads as a hierarchy, not a flat list. What a
-// manager does every day comes first (the menu, the QR codes, whether guests
-// can order); the service screens next; what is set up once, after.
-const navGroups = [
-  {
-    heading: 'Every day',
-    items: [
-      { label: 'Dashboard', icon: LayoutDashboard, path: '/admin' },
-      { label: 'Menu', icon: UtensilsCrossed, path: '/admin/menu' },
-      { label: 'QR Codes', icon: QrCode, path: '/admin/qr-codes' },
-      { label: 'Ordering & service', icon: Sparkles, path: '/admin/service' },
-      { label: 'Promotions', icon: Tag, path: '/admin/promotions' },
-    ],
-  },
-  {
-    heading: 'During service',
-    items: [
-      { label: 'Orders', icon: ClipboardList, path: '/admin/orders' },
-      { label: 'Reservations', icon: CalendarClock, path: RESERVATIONS_PATH },
-      { label: 'Tonight’s waiters', icon: CalendarCheck, path: '/admin/tonight' },
-      { label: 'Tables', icon: TableProperties, path: '/admin/tables' },
-      { label: 'Floor Monitor', icon: Monitor, path: '/waiter/monitor' },
-      { label: 'Kitchen', icon: ChefHat, path: '/kitchen' },
-    ],
-  },
-  {
-    heading: 'Setup',
-    items: [
-      { label: 'Floor sections', icon: Layers, path: '/admin/sections' },
-      { label: 'Waiters', icon: Users, path: '/admin/waiters' },
-      { label: 'Printing', icon: Printer, path: '/admin/printing' },
-    ],
-  },
-  {
-    heading: 'Insights',
-    items: [
-      { label: 'What the app earned', icon: TrendingUp, path: '/admin/impact' },
-      { label: 'Daily Report', icon: Receipt, path: '/admin/reports' },
-      { label: 'Performance', icon: Star, path: '/admin/performance' },
-      { label: 'Menu intelligence', icon: Brain, path: '/admin/menu-intelligence' },
-      { label: 'Analytics', icon: BarChart3, path: '/admin/analytics' },
-      { label: 'Audit log', icon: ScrollText, path: '/admin/audit' },
-    ],
-  },
-];
 
 /** What every admin page can read with useOutletContext(). */
 export interface AdminOutletContext {
@@ -131,123 +90,42 @@ function rememberOverview(seen: boolean): void {
   }
 }
 
-const MIN_PASSWORD = 10;
-
-/**
- * Any admin changes their own password. An admin the owner appointed signs
- * in with the password the owner typed for them (Admin → Team), and changes
- * it here. The current password is asked for first, so a tablet left signed
- * in cannot be used to lock its admin out.
- */
-const ChangePasswordDialog = ({ open, onOpenChange, email }: { open: boolean; onOpenChange: (open: boolean) => void; email: string | null }) => {
-  const [current, setCurrent] = useState('');
-  const [next, setNext] = useState('');
-  const [repeat, setRepeat] = useState('');
-  const [saving, setSaving] = useState(false);
-  const [problem, setProblem] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (open) return;
-    setCurrent(''); setNext(''); setRepeat(''); setProblem(null);
-  }, [open]);
-
-  const tooShort = next.length > 0 && next.length < MIN_PASSWORD;
-  const mismatch = repeat.length > 0 && repeat !== next;
-  const ready = !!current && next.length >= MIN_PASSWORD && next === repeat && !saving;
-
-  const save = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!ready || !email) return;
-    setSaving(true);
-    setProblem(null);
-    try {
-      const { error: wrong } = await supabase.auth.signInWithPassword({ email, password: current });
-      if (wrong) { setProblem('That is not your current password.'); return; }
-      const { error } = await supabase.auth.updateUser({ password: next });
-      if (error) {
-        // Supabase may ask for a recent sign-in before a password change.
-        setProblem(/reauth/i.test(error.message)
-          ? 'For your safety, sign out, sign in again, and change it straight away.'
-          : error.message);
-        return;
-      }
-      toast.success('Password changed. Use the new one next time you sign in.');
-      onOpenChange(false);
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
-        <form onSubmit={save} className="space-y-4">
-          <DialogHeader>
-            <DialogTitle className="font-serif">Change password</DialogTitle>
-            <DialogDescription>
-              {email ? <>For <span className="font-medium text-foreground">{email}</span>. </> : null}
-              At least {MIN_PASSWORD} characters.
-            </DialogDescription>
-          </DialogHeader>
-          <div>
-            <Label htmlFor="password-current" className="font-sans text-sm">Current password</Label>
-            <Input id="password-current" type="password" autoComplete="current-password" value={current}
-              onChange={(e) => setCurrent(e.target.value)} className="mt-1.5 h-11" required />
-          </div>
-          <div>
-            <Label htmlFor="password-new" className="font-sans text-sm">New password</Label>
-            <Input id="password-new" type="password" autoComplete="new-password" value={next}
-              onChange={(e) => setNext(e.target.value)} className="mt-1.5 h-11" required minLength={MIN_PASSWORD}
-              aria-invalid={tooShort} />
-            {tooShort && <p className="text-xs font-sans text-destructive mt-1">At least {MIN_PASSWORD} characters.</p>}
-          </div>
-          <div>
-            <Label htmlFor="password-repeat" className="font-sans text-sm">New password again</Label>
-            <Input id="password-repeat" type="password" autoComplete="new-password" value={repeat}
-              onChange={(e) => setRepeat(e.target.value)} className="mt-1.5 h-11" required aria-invalid={mismatch} />
-            {mismatch && <p className="text-xs font-sans text-destructive mt-1">The two do not match.</p>}
-          </div>
-          {problem && <p role="alert" className="text-sm font-sans text-destructive">{problem}</p>}
-          <DialogFooter className="gap-2 sm:gap-0">
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-            <Button type="submit" disabled={!ready} className="gap-2">
-              {saving && <Loader2 className="w-4 h-4 animate-spin" />} Change password
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
-  );
-};
-
 const Spinner = () => (
   <div className="py-24 flex items-center justify-center">
     <div className="w-6 h-6 border-2 border-primary/20 border-t-primary rounded-full animate-spin" />
   </div>
 );
 
+const topButton = 'grid h-11 w-11 shrink-0 place-items-center rounded-full text-foreground/80 hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
+
 const AdminLayout = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const navigationType = useNavigationType();
+  const queryClient = useQueryClient();
+  const [moreOpen, setMoreOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
   const [passwordOpen, setPasswordOpen] = useState(false);
+  const [framed, setFramed] = useState<NavLauncher | null>(null);
+  const [refreshed, setRefreshed] = useState(0);
+  const [refreshing, setRefreshing] = useState(false);
   const [user, setUser] = useState<User | null>(null);
   const [authChecked, setAuthChecked] = useState(false);
+  const standalone = useStandalone();
   const staffVenue = useStaffVenue(user?.id ?? null);
   const owner = staffVenue?.owner ?? null;
-  const groups = owner ? [ownerGroup, ...navGroups] : navGroups;
-  const currentLabel = [ownerGroup, ...navGroups].flatMap((g) => g.items)
-    .filter((i) => location.pathname === i.path || (i.path !== '/admin' && location.pathname.startsWith(i.path)))
-    .sort((a, b) => b.path.length - a.path.length)[0]?.label ?? 'Dashboard';
+  const currentPage = pageAt(location.pathname);
+  const currentLabel = currentPage?.label ?? 'Dashboard';
+  const currentArea = currentPage?.area ?? null;
   const ownerPage = OWNER_PATHS.includes(location.pathname);
   // Nothing until the roles say whose admin this is: a restaurant's admin
   // must never see the other restaurant's name, not even while loading.
   const venueName = staffVenue?.venue.name ?? null;
   const bothNames = Object.values(VENUES).map((v) => v.name).join(' & ');
 
-  // Guests waiting for an answer about a table, shown on the menu entry
-  // wherever in the admin the manager is. Zero until the database has
-  // reservations at all.
+  // Guests waiting for an answer about a table, shown on Service and on its
+  // Reservations tab wherever in the admin the manager is. Zero until the
+  // database has reservations at all.
   const reservationsVenue = staffVenue?.venue.dbId ?? null;
   const [pendingReservations, setPendingReservations] = useState(0);
   useEffect(() => {
@@ -261,7 +139,10 @@ const AdminLayout = () => {
     const timer = setInterval(ask, PENDING_REFRESH_MS);
     document.addEventListener('visibilitychange', ask);
     return () => { cancelled = true; clearInterval(timer); document.removeEventListener('visibilitychange', ask); };
-  }, [reservationsVenue, location.pathname]);
+  }, [reservationsVenue, location.pathname, refreshed]);
+
+  // The same number on the Manager app's icon, where the phone has one to put it on.
+  useEffect(() => { setIconBadge(pendingReservations); }, [pendingReservations]);
 
   // English, left-to-right, whatever a guest last picked on this device; the
   // tab named after the page and the restaurant.
@@ -345,15 +226,103 @@ const AdminLayout = () => {
     };
   }, [navigate]);
 
-  const handleLogout = async () => {
+  const handleLogout = useCallback(async () => {
     rememberOverview(false);
     await supabase.auth.signOut();
     navigate('/admin/login');
-  };
+  }, [navigate]);
+
+  // Which page, now that it is known whose admin this is.
+  const firstScreen = !DEMO_MODE && location.pathname === '/admin' && !overviewSeen();
+  const waiting = !staffVenue && (ownerPage || firstScreen);
+  const refused = !waiting && ownerPage && !owner;
+  const toOverview = !waiting && !refused && firstScreen && !!owner;
+  const showing = !!user && !waiting && !refused && !toOverview;
+
+  // The area remembers the page last used in it, and the search lists the last few first.
+  useEffect(() => {
+    if (showing && staffVenue) rememberVisit(location.pathname);
+  }, [showing, staffVenue, location.pathname]);
+
+  // A page opened from the navigation starts at its top; Back returns to where the manager was.
+  useEffect(() => {
+    if (navigationType !== 'POP') window.scrollTo(0, 0);
+  }, [location.pathname, navigationType]);
+
+  // ⌘K on a Mac, Ctrl K anywhere else: the search, from any page.
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && !event.altKey && event.key.toLowerCase() === 'k') {
+        event.preventDefault();
+        setSearchOpen((open) => !open);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
+  /*
+   * The kitchen display and the floor monitor, opened inside the Manager app
+   * (ScreenFrame). The kitchen's gear leads to Admin → Printing: inside the
+   * frame that would be an admin within the admin, so a framed admin page
+   * says where it is and the app around it goes there instead.
+   */
+  useEffect(() => {
+    if (inScreenFrame()) {
+      window.parent.postMessage({ type: LEAVE_FRAME, path: window.location.pathname }, window.location.origin);
+      return;
+    }
+    const onMessage = (event: MessageEvent) => {
+      if (event.origin !== window.location.origin) return;
+      const data = event.data as { type?: string; path?: string } | null;
+      if (data?.type !== LEAVE_FRAME || typeof data.path !== 'string' || !data.path.startsWith('/admin')) return;
+      setFramed(null);
+      navigate(data.path);
+    };
+    window.addEventListener('message', onMessage);
+    return () => window.removeEventListener('message', onMessage);
+  }, [navigate]);
+
+  // How tall the bar that stays at the top is, for a page that pins something
+  // under it: top-[calc(var(--admin-top,0px)+1rem)].
+  const shellRef = useRef<HTMLDivElement>(null);
+  const stickyRef = useRef<HTMLDivElement>(null);
+  const signedIn = !!user;
+  useEffect(() => {
+    const bar = stickyRef.current;
+    const root = shellRef.current;
+    if (!bar || !root || typeof ResizeObserver === 'undefined') return;
+    const measure = () => root.style.setProperty('--admin-top', `${Math.round(bar.getBoundingClientRect().height)}px`);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(bar);
+    return () => observer.disconnect();
+  }, [authChecked, signedIn]);
+
+  /*
+   * A Home Screen app cannot be pulled down to refresh, and has no reload
+   * button. This asks every page for its figures again: what was fetched is
+   * marked stale and the open page starts afresh, as if it had just been
+   * opened. The arrow turns while it does.
+   */
+  const refresh = useCallback(() => {
+    setRefreshing(true);
+    setRefreshed((n) => n + 1);
+    void queryClient.invalidateQueries().finally(() => {
+      window.setTimeout(() => setRefreshing(false), 600);
+    });
+  }, [queryClient]);
+
+  const audience = useMemo(() => ({ owner: !!owner, demo: DEMO_MODE }), [owner]);
+  const choices = useMemo(() => staffVenue?.choices ?? [], [staffVenue]);
+  const launch = useCallback((launcher: NavLauncher) => {
+    if (standalone) setFramed(launcher);
+    else window.open(launcher.path, '_blank', 'noopener');
+  }, [standalone]);
 
   if (!authChecked) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
+      <div className="min-h-[100dvh] bg-background flex items-center justify-center">
         <div className="w-6 h-6 border-2 border-primary/20 border-t-primary rounded-full animate-spin" />
       </div>
     );
@@ -363,14 +332,30 @@ const AdminLayout = () => {
     return null;
   }
 
-  // Which page, now that it is known whose admin this is.
-  const firstScreen = !DEMO_MODE && location.pathname === '/admin' && !overviewSeen();
+  const shell: AdminShell = {
+    audience,
+    pathname: location.pathname,
+    area: currentArea,
+    pending: pendingReservations,
+    venueName,
+    owner,
+    choices,
+    venueSlug: staffVenue?.venue.slug ?? null,
+    email: user.email ?? null,
+    standalone,
+    openSearch: () => setSearchOpen(true),
+    changePassword: () => setPasswordOpen(true),
+    signOut: () => { void handleLogout(); },
+    switchVenue: switchStaffVenue,
+    launch,
+  };
+
   let page: React.ReactNode;
-  if (!staffVenue && (ownerPage || firstScreen)) {
+  if (waiting) {
     page = <Spinner />;
-  } else if (ownerPage && !owner) {
+  } else if (refused) {
     page = <Navigate to="/admin" replace />;
-  } else if (firstScreen && owner) {
+  } else if (toOverview) {
     page = <Navigate to="/admin/overview" replace />;
   } else {
     page = (
@@ -387,162 +372,71 @@ const AdminLayout = () => {
   }
 
   return (
-    <div className="min-h-screen bg-background flex">
-      {/* Sidebar. On a phone it opens between the top bar and the tab bar
-          (56px + its 1px border + the home indicator): drawn over them, the
-          bar hid the restaurant's name and the tab bar hid Sign Out. */}
-      <aside className={`
-        fixed lg:static top-14 bottom-[calc(57px+env(safe-area-inset-bottom))] lg:inset-y-0 left-0 z-40 w-64 bg-sidebar border-r border-sidebar-border
-        transform transition-transform duration-200
-        ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
-      `}>
-        <div className="flex flex-col h-full">
-          <div className="px-6 py-6 border-b border-sidebar-border">
-            {venueName
-              ? <h1 className="font-serif text-xl font-bold text-sidebar-foreground">{venueName}</h1>
-              : <Skeleton aria-label="Loading the restaurant" className="h-7 w-32 rounded bg-sidebar-accent/60" />}
-            <p className="text-xs text-sidebar-foreground/60 font-sans mt-0.5">{owner ? 'Owner · Admin Dashboard' : 'Admin Dashboard'}</p>
-            {/* The owner, or an admin of both, looks at one restaurant at a time; everyone else only ever has theirs. */}
-            {staffVenue && staffVenue.choices.length > 1 && (
-              <div role="group" aria-label="Restaurant" className="mt-3 grid grid-cols-2 gap-1 rounded-lg bg-sidebar-accent/40 p-1">
-                {staffVenue.choices.map((v) => {
-                  const current = v.slug === staffVenue.venue.slug;
-                  return (
-                    <button
-                      key={v.slug}
-                      type="button"
-                      aria-pressed={current}
-                      onClick={() => { if (!current) switchStaffVenue(v.slug); }}
-                      className={`min-h-9 rounded-md px-2 text-xs font-sans transition-colors ${
-                        current
-                          ? 'bg-sidebar text-sidebar-foreground font-semibold shadow-sm'
-                          : 'text-sidebar-foreground/70 hover:text-sidebar-foreground'
-                      }`}
-                    >
-                      {v.name}
-                    </button>
-                  );
-                })}
-              </div>
+    <div ref={shellRef} className="min-h-[100dvh] bg-background lg:flex">
+      <AdminSidebar shell={shell} />
+
+      <div className="flex min-w-0 flex-1 flex-col">
+        {/* What stays put while the page scrolls under it: on a phone the bar
+            that says where you are, and under it the pages of this area. */}
+        <div ref={stickyRef} className="sticky top-0 z-30 border-b border-border/70 bg-background/90 backdrop-blur-md lg:border-0 print:hidden">
+          <header className="box-content flex h-14 items-center gap-1 pl-[calc(env(safe-area-inset-left)+1rem)] pr-[calc(env(safe-area-inset-right)+0.375rem)] pt-[env(safe-area-inset-top)] lg:hidden">
+            <div className="min-w-0 flex-1 leading-tight">
+              <p data-testid="admin-top-venue" className="truncate font-serif text-[17px] font-semibold text-foreground">
+                {ownerPage ? bothNames : venueName ?? 'Admin'}
+              </p>
+              <p className="truncate font-sans text-xs text-muted-foreground">
+                {currentArea ? areaOf(currentArea).label : 'Admin'}
+              </p>
+            </div>
+            {standalone && (
+              <button type="button" onClick={refresh} aria-label="Refresh this page" className={topButton}>
+                <RotateCw className={`h-[18px] w-[18px] ${refreshing ? 'animate-spin motion-reduce:animate-none' : ''}`} aria-hidden />
+              </button>
             )}
-          </div>
-
-          <nav aria-label="Admin menu" className="flex-1 px-3 py-4 overflow-y-auto space-y-4">
-            {groups.map((group) => (
-              <div key={group.heading} className="space-y-1">
-                <p className="px-3 mb-1 text-[10px] font-sans font-semibold uppercase tracking-[0.14em] text-sidebar-foreground/40">
-                  {group.heading}
-                </p>
-                {group.items.map((item) => {
-                  const isActive = location.pathname === item.path;
-                  return (
-                    <Link
-                      key={item.path}
-                      to={item.path}
-                      onClick={() => setSidebarOpen(false)}
-                      className={`relative flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-sans transition-colors ${
-                        isActive
-                          ? 'text-sidebar-accent-foreground font-medium'
-                          : 'text-sidebar-foreground/70 hover:bg-sidebar-accent/40 hover:text-sidebar-foreground'
-                      }`}
-                    >
-                      {isActive && (
-                        <motion.span
-                          layoutId="admin-nav-active"
-                          transition={springPill}
-                          className="absolute inset-0 rounded-lg bg-sidebar-accent"
-                        />
-                      )}
-                      <item.icon className="relative z-10 w-4 h-4" />
-                      <span className="relative z-10">{item.label}</span>
-                      {item.path === RESERVATIONS_PATH && pendingReservations > 0 && (
-                        <span
-                          data-testid="reservations-waiting"
-                          aria-label={`${pendingReservations} waiting for an answer`}
-                          className="relative z-10 ml-auto min-w-[22px] h-[22px] px-1.5 rounded-full bg-primary text-primary-foreground text-xs font-semibold grid place-items-center"
-                        >
-                          {pendingReservations}
-                        </span>
-                      )}
-                    </Link>
-                  );
-                })}
-              </div>
-            ))}
-          </nav>
-
-          <div className="px-3 py-4 border-t border-sidebar-border space-y-1">
-            <button
-              type="button"
-              onClick={() => { setSidebarOpen(false); setPasswordOpen(true); }}
-              className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-sans text-sidebar-foreground/70 hover:bg-sidebar-accent/50 w-full"
-            >
-              <KeyRound className="w-4 h-4" />
-              Change password
+            <button type="button" onClick={() => setSearchOpen(true)} aria-label="Search or jump to a page" className={topButton}>
+              <Search className="h-5 w-5" aria-hidden />
             </button>
-            <button
-              onClick={handleLogout}
-              className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-sans text-sidebar-foreground/70 hover:bg-sidebar-accent/50 w-full"
-            >
-              <LogOut className="w-4 h-4" />
-              Sign Out
-            </button>
-          </div>
+          </header>
+          {currentArea && <AreaTabs area={currentArea} audience={audience} pathname={location.pathname} pending={pendingReservations} />}
         </div>
-      </aside>
 
-      {/* Mobile overlay */}
-      {sidebarOpen && (
-        <div className="lg:hidden fixed inset-0 z-30 bg-charcoal/50" onClick={() => setSidebarOpen(false)} />
-      )}
-
-      {/* Main content */}
-      <main className="flex-1 min-w-0 lg:ml-0">
-        {/* A real top bar on phones instead of a lone floating button: it says
-            where you are and stays put while the page scrolls under it. */}
-        <div className="lg:hidden sticky top-0 z-50 h-14 flex items-center gap-2 px-2 bg-background/90 backdrop-blur border-b border-border/70">
-          <button
-            onClick={() => setSidebarOpen(!sidebarOpen)}
-            aria-label={sidebarOpen ? 'Close admin navigation' : 'Open admin navigation'}
-            aria-expanded={sidebarOpen}
-            className="w-11 h-11 rounded-full flex items-center justify-center hover:bg-muted"
-          >
-            {sidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-          </button>
-          <div className="min-w-0 leading-tight">
-            <p className="font-serif text-base font-semibold truncate">
-              {ownerPage ? bothNames : venueName ? `${venueName} admin` : 'Admin'}
-            </p>
-            <p className="text-xs text-muted-foreground truncate">{currentLabel}</p>
-          </div>
-        </div>
-        <div className="px-4 py-5 pb-24 sm:p-6 sm:pb-24 lg:p-8 max-w-7xl mx-auto w-full">
-          {/* Every restaurant page but the switch's own, which says it in place. */}
-          {staffVenue && !ownerPage && location.pathname !== '/admin/service' && <MenuOnlyNotice audience="admin" className="mb-5" />}
-          {/* A guest is looking at their phone for an answer about a table: said on every page but the one that answers. */}
-          {staffVenue && !ownerPage && pendingReservations > 0 && location.pathname !== RESERVATIONS_PATH && (
-            <Link
-              to={RESERVATIONS_PATH}
-              data-testid="reservations-waiting-notice"
-              className="mb-5 flex items-center gap-3 rounded-xl border border-primary/40 bg-primary/10 px-4 py-3 font-sans text-sm text-foreground"
-            >
-              <CalendarClock className="w-5 h-5 text-primary shrink-0" aria-hidden />
-              <span className="flex-1 min-w-0">
-                <span className="font-semibold">
-                  {pendingReservations === 1 ? 'A guest is waiting for an answer about a table' : `${pendingReservations} guests are waiting for an answer about a table`}
+        <main className="mx-auto w-full max-w-7xl flex-1 pb-[calc(env(safe-area-inset-bottom)+5.5rem)] pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] pt-5 sm:px-6 sm:pt-6 lg:px-8 lg:pb-12 lg:pt-8">
+          {/* What needs saying before the page, as one quiet stack; nothing is drawn when there is nothing to say. */}
+          <div className="mb-6 flex flex-col gap-3 empty:hidden print:hidden">
+            {/* A guest is looking at their phone for an answer about a table: said on every page but the one that answers. */}
+            {staffVenue && !ownerPage && pendingReservations > 0 && location.pathname !== RESERVATIONS_PATH && (
+              <Link
+                to={RESERVATIONS_PATH}
+                data-testid="reservations-waiting-notice"
+                className="group flex min-h-[48px] items-center gap-3 rounded-xl border border-primary/25 bg-primary/[0.08] px-3.5 py-2.5 font-sans text-sm text-foreground transition-colors hover:bg-primary/[0.12] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <CalendarClock className="h-[18px] w-[18px] shrink-0 text-primary" aria-hidden />
+                <span className="min-w-0 flex-1">
+                  <span className="font-semibold">
+                    {pendingReservations === 1 ? 'A guest is waiting for an answer about a table' : `${pendingReservations} guests are waiting for an answer about a table`}
+                  </span>
                 </span>
-              </span>
-              <span className="font-semibold text-primary underline underline-offset-4 whitespace-nowrap">Answer</span>
-            </Link>
-          )}
-          {/* After the work day: the tables nobody freed, and Close all tables. */}
-          {staffVenue && !ownerPage && <EndOfDayTables hours={staffVenue.venue.hours} outerClassName="mb-5" />}
-          {page}
-        </div>
-      </main>
-      {/* The demo has one restaurant and no Overview in the drawer; the phone tabs match. */}
-      <AdminMobileTabs owner={!!owner && !DEMO_MODE} onMore={() => setSidebarOpen(true)} />
+                <span className="inline-flex items-center gap-1 whitespace-nowrap font-semibold text-primary">
+                  Answer <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5 motion-reduce:transition-none" aria-hidden />
+                </span>
+              </Link>
+            )}
+            {/* Every restaurant page but the switch's own, which says it in place. */}
+            {staffVenue && !ownerPage && location.pathname !== '/admin/service' && <MenuOnlyNotice audience="admin" />}
+            {/* After the work day: the tables nobody freed, and Close all tables. */}
+            {staffVenue && !ownerPage && <EndOfDayTables hours={staffVenue.venue.hours} />}
+            {/* Once, in a browser: how to make this the Manager app. */}
+            {staffVenue && <InstallHint standalone={standalone} demo={DEMO_MODE} />}
+          </div>
+          <React.Fragment key={refreshed}>{page}</React.Fragment>
+        </main>
+      </div>
+
+      <AdminMobileTabs shell={shell} moreOpen={moreOpen} onMore={() => setMoreOpen(true)} />
+      <MoreSheet shell={shell} open={moreOpen} onOpenChange={setMoreOpen} />
+      <AdminCommandPalette shell={shell} open={searchOpen} onOpenChange={setSearchOpen} />
       <ChangePasswordDialog open={passwordOpen} onOpenChange={setPasswordOpen} email={user.email ?? null} />
+      <ScreenFrame screen={framed} onClose={() => setFramed(null)} />
     </div>
   );
 };
