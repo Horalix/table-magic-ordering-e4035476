@@ -210,3 +210,35 @@ describe('a new version of the app', () => {
     expect(sw.update).not.toHaveBeenCalled();
   });
 });
+
+/*
+ * Safari cancels a page's unfinished downloads as soon as the next address is
+ * asked for. The failed imports used to reload the page being left, and the
+ * reload replaced the navigation: the guest stayed where they were.
+ */
+describe('a part of the app that fails to load', () => {
+  const preloadError = () => {
+    const event = new Event('vite:preloadError', { cancelable: true });
+    window.dispatchEvent(event);
+    return event;
+  };
+
+  it('reloads the page once, to pick up the new version', async () => {
+    sessionStorage.clear();
+    const reload = vi.fn();
+    vi.spyOn(window, 'location', 'get').mockReturnValue({ ...window.location, reload } as Location);
+    await start();
+    expect(preloadError().defaultPrevented).toBe(true);
+    expect(reload).toHaveBeenCalledTimes(1);
+  });
+
+  it('does nothing while the page is being left', async () => {
+    sessionStorage.clear();
+    const reload = vi.fn();
+    vi.spyOn(window, 'location', 'get').mockReturnValue({ ...window.location, reload } as Location);
+    await start();
+    window.dispatchEvent(new Event('beforeunload'));
+    preloadError();
+    expect(reload).not.toHaveBeenCalled();
+  });
+});

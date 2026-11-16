@@ -81,9 +81,23 @@ export function startAppUpdates(): void {
     }
     controller = navigator.serviceWorker.controller;
   });
+  // A page being left has its unfinished downloads cancelled by the browser;
+  // Safari does it the moment the next address is asked for. Those failures
+  // are not a missing part, and reloading for them put the guest back on the
+  // page they were leaving: the address they had asked for was dropped (seen
+  // on iPhones: e2e guest-ordering and lock-screen-alerts, 2026-11-16).
+  let leaving = false;
+  let stillHere: number | undefined;
+  window.addEventListener('beforeunload', () => {
+    leaving = true;
+    // Still here a second later: the leave did not happen after all.
+    window.clearTimeout(stillHere);
+    stillHere = window.setTimeout(() => { leaving = false; }, 1_000);
+  });
   // A part of the app not opened yet belongs to the version that was replaced
   // and is gone: open the new version instead, once.
   window.addEventListener('vite:preloadError', (event) => {
+    if (leaving) { event.preventDefault(); return; }
     if (reloadedForMissingPart()) return;
     event.preventDefault();
     window.location.reload();
