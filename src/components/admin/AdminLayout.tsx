@@ -240,9 +240,11 @@ const AdminLayout = () => {
   const showing = !!user && !waiting && !refused && !toOverview;
 
   // The area remembers the page last used in it, and the search lists the last few first.
+  // From the moment the page shows, not once the roles have loaded: a quick tap onward
+  // must not lose it. (An owner's page is never "showing" for anyone else.)
   useEffect(() => {
-    if (showing && staffVenue) rememberVisit(location.pathname);
-  }, [showing, staffVenue, location.pathname]);
+    if (showing) rememberVisit(location.pathname);
+  }, [showing, location.pathname]);
 
   // A page opened from the navigation starts at its top; Back returns to where the manager was.
   useEffect(() => {

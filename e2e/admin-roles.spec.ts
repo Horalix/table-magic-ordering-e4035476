@@ -10,6 +10,11 @@ import type { Locator, Page, Route } from '@playwright/test';
  * Overview, no Team, and those addresses send them to their dashboard.
  * Every admin page in the navigation is opened as each of them, with its
  * main dialog or action, and must not throw.
+ *
+ * The navigation is five areas (Home, Service, Menu, Reports, Setup); the
+ * pages of an area are tabs at the top of the content. On a laptop the areas
+ * are the sidebar; on a phone the bottom bar, with Setup behind More
+ * (src/components/admin/nav/admin-nav.ts).
  */
 
 const LA_SOUL = { slug: 'lasoul', name: 'La Soul', id: 'a5000000-0000-4000-8000-000000000001' };
@@ -176,12 +181,11 @@ async function onScreen(page: Page, target: Locator, what: string, { centred = f
   }, { message: what }).toBe('fits');
 }
 
-/** The sidebar: always there on a laptop, behind the menu button on a phone. */
-async function openDrawer(page: Page) {
+/** "More", on a phone: Setup's pages, the other screens, the restaurant switch and the account. A laptop has them in the sidebar. */
+async function openMore(page: Page) {
   if (!isPhone(page)) return;
-  const open = page.getByRole('button', { name: 'Open admin navigation' });
-  await open.click();
-  await expect(page.getByRole('button', { name: 'Close admin navigation' })).toBeVisible();
+  await quickTabs(page).getByRole('button', { name: 'More' }).click();
+  await expect(moreSheet(page)).toBeVisible();
 }
 
 /**
@@ -194,17 +198,51 @@ async function toastSeen(page: Page, text: string) {
   await expect(page.locator('[data-sonner-toast]')).toHaveCount(0, { timeout: 15_000 });
 }
 
+/**
+ * Escape until it has gone. A dialog only listens for Escape a frame after it
+ * opens, and a test presses sooner than a person can.
+ */
+async function escape(page: Page, gone: Locator) {
+  await expect(async () => {
+    await page.keyboard.press('Escape');
+    await expect(gone).toHaveCount(0, { timeout: 1_000 });
+  }).toPass();
+}
+
+/** The areas: the sidebar on a laptop, the bottom bar on a phone. */
 const adminMenu = (page: Page) => page.getByRole('navigation', { name: 'Admin menu' });
 const quickTabs = (page: Page) => page.getByRole('navigation', { name: 'Admin quick navigation' });
+const moreSheet = (page: Page) => page.getByRole('dialog', { name: 'More' });
+/** The pages of the area that is open, across the top of the content. */
+const areaTabs = (page: Page) => page.getByTestId('admin-area-tabs');
 const restaurantSwitch = (page: Page) => page.getByRole('group', { name: 'Restaurant', exact: true });
+/** The restaurant's name in the admin's frame: the sidebar on a laptop, the top bar on a phone. */
+const venueShown = (page: Page) => page.getByTestId(isPhone(page) ? 'admin-top-venue' : 'admin-venue');
 
+type Area = 'Home' | 'Service' | 'Menu' | 'Reports' | 'Setup';
+
+/** Opens a page the way a manager does: its area, then its tab. */
 async function go(page: Page, label: string) {
-  await openDrawer(page);
-  await adminMenu(page).getByRole('link', { name: label, exact: true }).click();
+  const target = [...PAGES, ...OWNER_PAGES].find((p) => p.label === label);
+  if (!target?.area) throw new Error(`"${label}" is not a page of the admin navigation`);
+  const tab = (within: Locator) => within.getByRole('link', { name: new RegExp(`^${label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}( \\d+ waiting| |$)`) }).first();
+  if (isPhone(page) && target.area === 'Setup') {
+    await openMore(page);
+    await tab(moreSheet(page)).click();
+    await expect(moreSheet(page)).toHaveCount(0);
+    return;
+  }
+  const area = (isPhone(page) ? quickTabs(page) : adminMenu(page)).getByRole('link', { name: new RegExp(`^${target.area}`) });
+  await area.click();
+  await expect(area).toHaveAttribute('aria-current', 'location');
+  // An area with one page for this account (Home, for a restaurant's own admin) has no tabs: the area is the page.
+  if (await areaTabs(page).count()) await tab(areaTabs(page)).click();
 }
 
 interface AdminPage {
   label: string;
+  /** Its area in the navigation; none for the two other screens, which are not admin pages. */
+  area?: Area;
   path: string;
   heading: string | RegExp;
   /** The page's main dialog or action, done and undone without writing anything. */
@@ -214,23 +252,22 @@ interface AdminPage {
 /** Every page in the admin navigation, in its order. */
 const PAGES: AdminPage[] = [
   {
-    label: 'Dashboard', path: '/admin', heading: 'Dashboard',
+    label: 'Dashboard', area: 'Home', path: '/admin', heading: 'Dashboard',
     act: async (page) => {
       await page.getByRole('button', { name: 'Dismiss setup guide' }).click();
       await expect(page.getByText('Get your restaurant ready')).toHaveCount(0);
     },
   },
   {
-    label: 'Tonight’s waiters', path: '/admin/tonight', heading: 'Tonight’s waiters',
+    label: 'Tonight’s waiters', area: 'Service', path: '/admin/tonight', heading: 'Tonight’s waiters',
     act: async (page) => {
       await page.getByRole('button', { name: /Terrace/ }).first().click();
       await expect(page.getByRole('dialog', { name: 'Terrace' })).toBeVisible();
-      await page.keyboard.press('Escape');
-      await expect(page.getByRole('dialog')).toHaveCount(0);
+      await escape(page, page.getByRole('dialog'));
     },
   },
   {
-    label: 'Orders', path: '/admin/orders', heading: 'Orders',
+    label: 'Orders', area: 'Service', path: '/admin/orders', heading: 'Orders',
     act: async (page) => {
       await page.getByRole('button', { name: 'Cancel order 047' }).click();
       await expect(page.getByRole('dialog', { name: /Cancel order #047/ })).toBeVisible();
@@ -239,29 +276,31 @@ const PAGES: AdminPage[] = [
     },
   },
   {
-    label: 'Tables', path: '/admin/tables', heading: 'Table Management',
+    label: 'Tables', area: 'Setup', path: '/admin/tables', heading: 'Tables',
     act: async (page) => {
       await page.getByRole('button', { name: 'Generate tables' }).click();
       await toastSeen(page, 'Enter a number between 1 and 100');
     },
   },
-  { label: 'Floor Monitor', path: '/waiter/monitor', heading: '' },
-  { label: 'Kitchen', path: '/kitchen', heading: '' },
+  { label: 'Floor monitor', path: '/waiter/monitor', heading: '' },
+  { label: 'Kitchen display', path: '/kitchen', heading: '' },
   {
-    label: 'Menu', path: '/admin/menu', heading: 'Menu Management',
+    label: 'Dishes', area: 'Menu', path: '/admin/menu', heading: 'Dishes',
     act: async (page) => {
-      await page.getByRole('button', { name: 'Re-translate All' }).click();
+      // Behind the page's "More": the tools used a few times a year.
+      await page.getByRole('button', { name: 'Menu tools' }).click();
+      await page.getByRole('menuitem', { name: /Re-translate everything/ }).click();
       await expect(page.getByRole('alertdialog', { name: 'Re-translate the whole menu?' })).toBeVisible();
       await page.getByRole('button', { name: 'Keep my translations' }).click();
       await expect(page.getByRole('alertdialog')).toHaveCount(0);
     },
   },
   {
-    label: 'Promotions', path: '/admin/promotions', heading: 'Promotions',
+    label: 'Promotions', area: 'Menu', path: '/admin/promotions', heading: 'Promotions',
     act: async (page) => { await page.getByLabel('Find a dish').fill('pizza'); },
   },
   {
-    label: 'Floor sections', path: '/admin/sections', heading: 'Floor sections & waiters',
+    label: 'Floor sections', area: 'Setup', path: '/admin/sections', heading: 'Floor sections',
     act: async (page) => {
       await page.getByRole('button', { name: 'Delete section Terrace' }).click();
       await expect(page.getByRole('alertdialog')).toBeVisible();
@@ -270,7 +309,7 @@ const PAGES: AdminPage[] = [
     },
   },
   {
-    label: 'Waiters', path: '/admin/waiters', heading: 'Waiters',
+    label: 'Waiters', area: 'Setup', path: '/admin/waiters', heading: 'Waiters',
     act: async (page) => {
       // Nothing typed: said next to each field, nothing sent.
       await page.getByRole('button', { name: 'Create', exact: true }).click();
@@ -280,14 +319,14 @@ const PAGES: AdminPage[] = [
     },
   },
   {
-    label: 'QR Codes', path: '/admin/qr-codes', heading: 'QR Codes',
+    label: 'QR codes', area: 'Setup', path: '/admin/qr-codes', heading: 'QR codes',
     act: async (page) => {
       await page.getByRole('button', { name: 'A4 Sheet' }).click();
       await expect(page.getByText('No tables created yet.')).toBeVisible();
     },
   },
   {
-    label: 'Printing', path: '/admin/printing', heading: 'Printing',
+    label: 'Printing', area: 'Setup', path: '/admin/printing', heading: 'Printing',
     act: async (page) => {
       const bar = page.getByRole('group', { name: 'Preview station' }).getByRole('button', { name: 'Bar' });
       await bar.click();
@@ -295,7 +334,7 @@ const PAGES: AdminPage[] = [
     },
   },
   {
-    label: 'Ordering & service', path: '/admin/service', heading: 'Ordering & service',
+    label: 'Ordering & service', area: 'Setup', path: '/admin/service', heading: 'Ordering & service',
     act: async (page) => {
       await page.getByRole('switch', { name: 'Accept orders from guests' }).click();
       await expect(page.getByRole('alertdialog', { name: 'Stop accepting orders?' })).toBeVisible();
@@ -303,16 +342,16 @@ const PAGES: AdminPage[] = [
       await expect(page.getByRole('alertdialog')).toHaveCount(0);
     },
   },
-  { label: 'What the app earned', path: '/admin/impact', heading: 'What the app earned' },
-  { label: 'Daily Report', path: '/admin/reports', heading: 'Daily Report' },
+  { label: 'What the app earned', area: 'Reports', path: '/admin/impact', heading: 'What the app earned' },
+  { label: 'Daily report', area: 'Reports', path: '/admin/reports', heading: 'Daily report' },
   {
-    label: 'Performance', path: '/admin/performance', heading: 'Staff performance',
+    label: 'Performance', area: 'Reports', path: '/admin/performance', heading: 'Performance',
     act: async (page) => { await expect(page.getByLabel('From', { exact: true })).toHaveValue(weekAgo); },
   },
-  { label: 'Menu intelligence', path: '/admin/menu-intelligence', heading: 'Menu intelligence' },
-  { label: 'Analytics', path: '/admin/analytics', heading: /^Analytics/ },
+  { label: 'Menu intelligence', area: 'Menu', path: '/admin/menu-intelligence', heading: 'Menu intelligence' },
+  { label: 'Analytics', area: 'Reports', path: '/admin/analytics', heading: /^Analytics/ },
   {
-    label: 'Audit log', path: '/admin/audit', heading: 'Audit log',
+    label: 'Audit log', area: 'Reports', path: '/admin/audit', heading: 'Audit log',
     act: async (page) => {
       const money = page.getByRole('button', { name: 'Money' });
       await money.click();
@@ -320,6 +359,18 @@ const PAGES: AdminPage[] = [
     },
   },
 ];
+
+/** The owner's own pages; `go` finds them here. */
+const OWNER_PAGES: AdminPage[] = [
+  { label: 'Both restaurants', area: 'Home', path: '/admin/overview', heading: 'Both restaurants' },
+  { label: 'Team', area: 'Setup', path: '/admin/team', heading: 'Team' },
+];
+
+/** The link to one of the two other screens: in the sidebar on a laptop, in More on a phone. */
+async function launcher(page: Page, label: string) {
+  await openMore(page);
+  return (isPhone(page) ? moreSheet(page) : page.locator('aside')).getByRole('link', { name: new RegExp(`^${label}`) });
+}
 
 /** The two staff screens in the admin's navigation, which have no admin chrome of their own. */
 async function staffScreen(page: Page, p: AdminPage, venue: Venue) {
@@ -340,8 +391,12 @@ async function staffScreen(page: Page, p: AdminPage, venue: Venue) {
 async function walkEveryPage(page: Page, venue: Venue, other: Venue, { owner }: { owner: boolean }) {
   for (const p of PAGES) {
     if (p.path === '/waiter/monitor' || p.path === '/kitchen') {
-      await go(page, p.label);
-      await expect(page).toHaveURL(new RegExp(`${p.path}$`));
+      // Not an admin page: in a browser it opens in a tab of its own, so the admin stays where it was.
+      const link = await launcher(page, p.label);
+      await expect(link).toHaveAttribute('href', p.path);
+      await expect(link).toHaveAttribute('target', '_blank');
+      // The same screen, opened here: this account, this restaurant.
+      await page.goto(p.path);
       await staffScreen(page, p, venue);
       await page.goto('/admin/orders');
       continue;
@@ -351,8 +406,9 @@ async function walkEveryPage(page: Page, venue: Venue, other: Venue, { owner }: 
     await expect(page.getByRole('heading', { level: 1, name: p.heading, exact: typeof p.heading === 'string' })).toBeVisible();
     // The restaurant's name, wherever the admin names it.
     await expect(page).toHaveTitle(`${p.label} · ${venue.name} admin`);
-    await expect(page.locator('aside h1')).toHaveText(venue.name);
-    if (isPhone(page)) await expect(page.getByText(`${venue.name} admin`, { exact: true })).toBeVisible();
+    await expect(venueShown(page)).toHaveText(venue.name);
+    // The page's own tab is the lit one, wherever its area has tabs.
+    if (await areaTabs(page).count()) await expect(areaTabs(page).locator('[aria-current="page"]')).toContainText(p.label);
     if (!owner) await expect(page.locator('aside')).not.toContainText(other.name);
     await p.act?.(page);
   }
@@ -366,8 +422,8 @@ test.describe('the owner', () => {
     const { overviewCalls } = await stubOwnerParts(page);
     await page.goto('/admin');
     await expect(page).toHaveURL(/\/admin\/overview$/);
-    await expect(page.getByRole('heading', { level: 1, name: 'Overview' })).toBeVisible();
-    await expect(page).toHaveTitle('Overview · La Soul & Vera Italia');
+    await expect(page.getByRole('heading', { level: 1, name: 'Both restaurants' })).toBeVisible();
+    await expect(page).toHaveTitle('Both restaurants · La Soul & Vera Italia');
 
     const laSoul = page.getByRole('region', { name: 'La Soul', exact: true });
     const vera = page.getByRole('region', { name: 'Vera Italia', exact: true });
@@ -389,14 +445,17 @@ test.describe('the owner', () => {
     await expect(vera).not.toContainText('guest call');
 
     // Side by side on a laptop, one above the other on a phone.
-    const [a, b] = [await laSoul.boundingBox(), await vera.boundingBox()];
-    if (isPhone(page)) expect(b!.y).toBeGreaterThan(a!.y + a!.height - 1);
-    else expect(Math.abs(b!.y - a!.y)).toBeLessThan(2);
+    // (Once the cards have finished arriving: they rise into place one after the other.)
+    await expect.poll(async () => {
+      const [a, b] = [await laSoul.boundingBox(), await vera.boundingBox()];
+      return isPhone(page) ? b!.y > a!.y + a!.height - 1 : Math.abs(b!.y - a!.y) < 2;
+    }).toBe(true);
 
-    // In the navigation for the owner: Overview and Team, and on a phone a tab.
-    await expect(adminMenu(page).getByRole('link', { name: 'Overview', exact: true })).toHaveCount(1);
-    await expect(adminMenu(page).getByRole('link', { name: 'Team', exact: true })).toHaveCount(1);
-    if (isPhone(page)) await expect(quickTabs(page).getByRole('link', { name: 'Overview' })).toBeVisible();
+    // In the navigation for the owner: Home has a second page, Both restaurants, and Setup has Team.
+    await expect(areaTabs(page).getByRole('link', { name: 'Both restaurants', exact: true })).toHaveAttribute('aria-current', 'page');
+    await expect(areaTabs(page).getByRole('link', { name: 'Dashboard', exact: true })).toBeVisible();
+    await go(page, 'Team');
+    await expect(page).toHaveURL(/\/admin\/team$/);
 
     expect(overviewCalls.length).toBeGreaterThan(0);
     expect(errors).toEqual([]);
@@ -419,28 +478,28 @@ test.describe('the owner', () => {
     await page.getByRole('button', { name: 'Open Vera Italia admin' }).click();
     await expect(page).toHaveURL(/\/admin$/);
     await expect(page).toHaveTitle('Dashboard · Vera Italia admin');
-    await expect(page.locator('aside h1')).toHaveText('Vera Italia');
+    await expect(venueShown(page)).toHaveText('Vera Italia');
     expect(await page.evaluate(() => localStorage.getItem('lasoul.staff-venue'))).toBe('veraitalia');
 
     // The setup guide is put away for Vera Italia only.
     await page.getByRole('button', { name: 'Dismiss setup guide' }).click();
     await expect(page.getByText('Get your restaurant ready')).toHaveCount(0);
 
-    await openDrawer(page);
+    await openMore(page);
     await expect(restaurantSwitch(page).getByRole('button', { name: 'Vera Italia' })).toHaveAttribute('aria-pressed', 'true');
     await restaurantSwitch(page).getByRole('button', { name: 'La Soul' }).click();
     await expect(page).toHaveTitle('Dashboard · La Soul admin');
-    await expect(page.locator('aside h1')).toHaveText('La Soul');
+    await expect(venueShown(page)).toHaveText('La Soul');
     await expect(page.getByText('Get your restaurant ready')).toBeVisible();
 
-    await openDrawer(page);
+    await openMore(page);
     await restaurantSwitch(page).getByRole('button', { name: 'Vera Italia' }).click();
     await expect(page).toHaveTitle('Dashboard · Vera Italia admin');
     await expect(page.getByText('Get your restaurant ready')).toHaveCount(0);
 
     // Back to both, and from there into La Soul.
-    await go(page, 'Overview');
-    await expect(page.getByRole('heading', { level: 1, name: 'Overview' })).toBeVisible();
+    await go(page, 'Both restaurants');
+    await expect(page.getByRole('heading', { level: 1, name: 'Both restaurants' })).toBeVisible();
     await page.getByRole('button', { name: 'Open La Soul admin' }).click();
     await expect(page).toHaveTitle('Dashboard · La Soul admin');
     expect(errors).toEqual([]);
@@ -799,7 +858,7 @@ test.describe('the owner', () => {
       return route.fallback();
     });
     await page.goto('/admin/orders');
-    await openDrawer(page);
+    await openMore(page);
     await page.getByRole('button', { name: 'Change password' }).click();
     const dialog = page.getByRole('dialog', { name: 'Change password' });
     await expect(dialog).toBeVisible();
@@ -828,12 +887,26 @@ for (const [venue, other] of [[VERA, LA_SOUL], [LA_SOUL, VERA]] as const) {
       await expect(page).toHaveURL(/\/admin$/);
       await expect(page.getByRole('heading', { level: 1, name: 'Dashboard' })).toBeVisible();
       await expect(page).toHaveTitle(`Dashboard · ${venue.name} admin`);
-      await expect(page.locator('aside h1')).toHaveText(venue.name);
+      await expect(venueShown(page)).toHaveText(venue.name);
       await expect(page.locator('aside')).not.toContainText(other.name);
+      // Home is one page for them, so it has no tabs; Setup has no Team; and there is no switch.
+      await expect(areaTabs(page)).toHaveCount(0);
+      await expect(page.getByRole('link', { name: 'Both restaurants' })).toHaveCount(0);
+      await go(page, 'Tables');
+      await openMore(page);
+      await expect(page.getByRole('link', { name: /^Tables/ }).first()).toBeVisible();
+      await expect(page.getByRole('link', { name: /^Team/ })).toHaveCount(0);
       await expect(restaurantSwitch(page)).toHaveCount(0);
-      await expect(adminMenu(page).getByRole('link', { name: 'Overview' })).toHaveCount(0);
-      await expect(adminMenu(page).getByRole('link', { name: 'Team' })).toHaveCount(0);
-      await expect(quickTabs(page).getByRole('link', { name: 'Overview' })).toHaveCount(0);
+      // Nor does the search offer them.
+      await escape(page, moreSheet(page));
+      await page.keyboard.press('Control+k');
+      const search = page.getByRole('dialog', { name: 'Search the admin' });
+      await search.getByRole('combobox').fill('team');
+      await expect(search.getByRole('option', { name: /^Team/ })).toHaveCount(0);
+      await search.getByRole('combobox').fill('both restaurants');
+      await expect(search.getByRole('option', { name: /Both restaurants/ })).toHaveCount(0);
+      await escape(page, search);
+      await page.goto('/admin');
 
       // The owner's addresses send them to their own dashboard.
       for (const path of ['/admin/overview', '/admin/team']) {
@@ -853,7 +926,7 @@ for (const [venue, other] of [[VERA, LA_SOUL], [LA_SOUL, VERA]] as const) {
       expect(await page.evaluate(() => localStorage.getItem('lasoul.staff-venue'))).not.toBe(other.slug);
 
       // They can change their own password.
-      await openDrawer(page);
+      await openMore(page);
       await page.getByRole('button', { name: 'Change password' }).click();
       await expect(page.getByRole('dialog', { name: 'Change password' })).toBeVisible();
       await page.keyboard.press('Escape');
@@ -884,11 +957,11 @@ test.describe('an admin of both restaurants', () => {
     // Until they pick, the site's own restaurant.
     await expect(page).toHaveTitle(`Dashboard · ${home.name} admin`);
 
-    await openDrawer(page);
+    await openMore(page);
     await expect(restaurantSwitch(page).getByRole('button', { name: home.name })).toHaveAttribute('aria-pressed', 'true');
     await restaurantSwitch(page).getByRole('button', { name: away.name }).click();
     await expect(page).toHaveTitle(`Dashboard · ${away.name} admin`);
-    await expect(page.locator('aside h1')).toHaveText(away.name);
+    await expect(venueShown(page)).toHaveText(away.name);
     expect(await page.evaluate(() => localStorage.getItem('lasoul.staff-venue'))).toBe(away.slug);
 
     // The choice stays on this device, and the database is asked for that restaurant.
@@ -905,9 +978,10 @@ test.describe('an admin of both restaurants', () => {
     await expect(page.getByRole('button', { name: `Add to ${home.name} instead` })).toBeVisible();
 
     // Still a restaurant's admin: no Overview, no Team.
-    await openDrawer(page);
-    await expect(page.getByRole('link', { name: 'Team' })).toHaveCount(0);
-    await expect(page.getByRole('link', { name: 'Overview' })).toHaveCount(0);
+    await openMore(page);
+    await expect(page.getByRole('link', { name: /^Team/ })).toHaveCount(0);
+    await expect(page.getByRole('link', { name: 'Both restaurants' })).toHaveCount(0);
+    await page.keyboard.press('Escape');
     await page.goto('/admin/team');
     await expect(page).toHaveURL(/\/admin$/);
     expect(overviewCalls).toEqual([]);

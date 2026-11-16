@@ -36,8 +36,9 @@ const AreaTabs = ({ area, audience, pathname, pending }: { area: AreaId; audienc
     <nav aria-label={`${areaOf(area).label} pages`} data-testid="admin-area-tabs" className="lg:border-b lg:border-border/70">
       <ul
         ref={list}
-        // On a phone the row fades out at its right edge: there is more to the side.
-        className="scrollbar-hide mx-auto flex w-full max-w-7xl items-center gap-1.5 overflow-x-auto overscroll-x-contain pb-2 pl-3 pr-7 max-lg:[mask-image:linear-gradient(to_right,#000_calc(100%-1.75rem),transparent)] sm:pl-5 lg:gap-7 lg:px-8 lg:pb-0"
+        // On a phone the row fades out at its right edge: there is more to the side. The space after the
+        // last chip (::after; a scrolling row drops its end padding) keeps that one clear of the fade.
+        className="scrollbar-hide mx-auto flex w-full max-w-7xl items-center gap-1.5 overflow-x-auto overscroll-x-contain pb-2 pl-3 after:w-6 after:shrink-0 after:content-[''] max-lg:[mask-image:linear-gradient(to_right,#000_calc(100%-1.75rem),transparent)] sm:pl-5 lg:gap-7 lg:px-8 lg:pb-0 lg:after:hidden"
       >
         {pages.map((page) => {
           const active = page.path === current;

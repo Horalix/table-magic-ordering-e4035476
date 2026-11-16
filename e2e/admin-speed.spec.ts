@@ -96,23 +96,309 @@ test.describe('finding an order', () => {
   });
 });
 
+/** Guests waiting for an answer about a table: the count the admin's frame asks for (HEAD), and the list. */
+async function withWaiting(page: Page, waiting: number) {
+  await page.route('**/rest/v1/reservations**', (route) => (route.request().method() === 'HEAD'
+    ? route.fulfill({ ...json(null), headers: { 'access-control-allow-origin': '*', 'access-control-expose-headers': 'content-range', 'content-range': `*/${waiting}` } })
+    : route.fulfill(json([]))));
+}
+
+const areas = (page: Page) => page.getByRole('navigation', { name: 'Admin quick navigation' });
+const sidebar = (page: Page) => page.getByRole('navigation', { name: 'Admin menu' });
+const tabs = (page: Page) => page.getByTestId('admin-area-tabs');
+const search = (page: Page) => page.getByRole('dialog', { name: 'Search the admin' });
+
 test.describe('admin on a phone', () => {
-  test('Today, Orders, Menu and Printing are one tap away', async ({ page }) => {
-    await page.setViewportSize({ width: 390, height: 844 });
+  test.beforeEach(async ({ page }) => { await page.setViewportSize({ width: 390, height: 844 }); });
+
+  test('the four areas are one tap away, and their pages one more', async ({ page }) => {
     await withMenu(page);
     await page.goto('/admin');
-    const tabs = page.getByRole('navigation', { name: 'Admin quick navigation' });
-    await expect(tabs).toBeVisible();
-    await tabs.getByRole('link', { name: 'Menu' }).click();
+    await expect(areas(page)).toBeVisible();
+    await expect(areas(page).getByRole('link')).toHaveText(['Home', 'Service', 'Menu', 'Reports']);
+    await expect(areas(page).getByRole('link', { name: 'Home' })).toHaveAttribute('aria-current', 'location');
+
+    await areas(page).getByRole('link', { name: 'Menu' }).click();
     await expect(page).toHaveURL(/\/admin\/menu$/);
-    await expect(tabs.getByRole('link', { name: 'Menu' })).toHaveAttribute('aria-current', 'page');
-    await tabs.getByRole('button', { name: 'More' }).click();
-    await expect(page.getByRole('link', { name: 'Audit log' })).toBeVisible();
+    await expect(areas(page).getByRole('link', { name: 'Menu' })).toHaveAttribute('aria-current', 'location');
+    // The area's pages are the chips under the top bar; the one open is marked.
+    await expect(tabs(page).getByRole('link')).toHaveText(['Dishes', 'Promotions', 'Menu intelligence']);
+    await expect(tabs(page).getByRole('link', { name: 'Dishes' })).toHaveAttribute('aria-current', 'page');
+
+    await areas(page).getByRole('link', { name: 'Reports' }).click();
+    await expect(page).toHaveURL(/\/admin\/reports$/);
+    await tabs(page).getByRole('link', { name: 'Audit log' }).click();
+    await expect(page).toHaveURL(/\/admin\/audit$/);
+    // Scrolled into view: the chip row is wider than the phone.
+    await expect(tabs(page).getByRole('link', { name: 'Audit log' })).toBeInViewport({ ratio: 1 });
+  });
+
+  test('Reservations is two taps from anywhere, and Service says how many guests wait', async ({ page }) => {
+    await withMenu(page);
+    await withWaiting(page, 2);
+    await page.goto('/admin/menu');
+    const service = areas(page).getByRole('link', { name: /^Service/ });
+    // Seen as a number on the icon; said after the name.
+    await expect(service).toHaveAccessibleName(/^Service ?, 2 waiting for an answer$/);
+    await service.click();
+    await tabs(page).getByRole('link', { name: /^Reservations/ }).click();
+    await expect(page).toHaveURL(/\/admin\/reservations$/);
+    await expect(page.getByTestId('reservations-waiting')).toHaveText('2');
+  });
+
+  test('an area opens on the page last used in it', async ({ page }) => {
+    await withMenu(page);
+    await page.goto('/admin/analytics');
+    await areas(page).getByRole('link', { name: 'Home' }).click();
+    await expect(page).toHaveURL(/\/admin$/);
+    await areas(page).getByRole('link', { name: 'Reports' }).click();
+    await expect(page).toHaveURL(/\/admin\/analytics$/);
+    // A second tap on the area you are in goes to its first page.
+    await areas(page).getByRole('link', { name: 'Reports' }).click();
+    await expect(page).toHaveURL(/\/admin\/reports$/);
+  });
+
+  test('More has the search, Setup, the other screens and the account', async ({ page }) => {
+    await page.goto('/admin');
+    await areas(page).getByRole('button', { name: 'More' }).click();
+    const more = page.getByRole('dialog', { name: 'More' });
+    await expect(more).toBeVisible();
+    await expect(more.getByRole('button', { name: 'Search or jump to a page' })).toBeVisible();
+    for (const name of [/^Ordering & service/, /^Tables/, /^QR codes/, /^Floor sections/, /^Waiters/, /^Printing/]) {
+      await expect(more.getByRole('link', { name })).toBeVisible();
+    }
+    await expect(more.getByRole('link', { name: /^Kitchen display/ })).toHaveAttribute('href', '/kitchen');
+    await expect(more.getByRole('link', { name: /^Floor monitor/ })).toHaveAttribute('href', '/waiter/monitor');
+    await expect(more.getByRole('button', { name: 'Change password' })).toBeVisible();
+    await expect(more.getByRole('button', { name: 'Sign out' })).toBeVisible();
+    // Nothing wider than the phone, and the sheet fills it.
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
+
+    await more.getByRole('link', { name: /^Printing/ }).click();
+    await expect(page).toHaveURL(/\/admin\/printing$/);
+    await expect(more).toHaveCount(0);
+    // A Setup page is open: More is the lit item.
+    await expect(areas(page).getByRole('button', { name: 'More' })).toHaveClass(/text-primary/);
+  });
+
+  test('the bottom bar never covers the end of a page', async ({ page }) => {
+    await withMenu(page);
+    await page.goto('/admin/menu');
+    await expect(page.getByText('Food').first()).toBeVisible();
+    await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+    const bar = await areas(page).boundingBox();
+    const lastOfPage = await page.locator('main > :last-child').boundingBox();
+    expect(lastOfPage!.y + lastOfPage!.height).toBeLessThanOrEqual(bar!.y);
   });
 
   test('is hidden on a laptop, where the sidebar is', async ({ page }) => {
     await page.setViewportSize({ width: 1366, height: 900 });
     await page.goto('/admin');
-    await expect(page.getByRole('navigation', { name: 'Admin quick navigation' })).toBeHidden();
+    await expect(areas(page)).toBeHidden();
+  });
+});
+
+test.describe('admin on a laptop', () => {
+  test.beforeEach(async ({ page }) => { await page.setViewportSize({ width: 1366, height: 768 }); });
+
+  test('the sidebar is five areas, fits without scrolling, and the pages are tabs', async ({ page, staff }) => {
+    // The owner: the tallest sidebar there is, with the restaurant switch above the search.
+    staff.roles = [{ user_id: 'staff-user-1', role: 'admin', venue_id: null }];
+    await withMenu(page);
+    await page.goto('/admin/orders');
+    await expect(page.getByRole('group', { name: 'Restaurant', exact: true })).toBeVisible();
+    await expect(sidebar(page).getByRole('link')).toHaveText(['Home', 'Service', 'Menu', 'Reports', 'Setup']);
+    await expect(sidebar(page).getByRole('link', { name: 'Service' })).toHaveAttribute('aria-current', 'location');
+    await expect(tabs(page).getByRole('link')).toHaveText(['Orders', 'Reservations', 'Tonight’s waiters']);
+    await expect(tabs(page).getByRole('link', { name: 'Orders' })).toHaveAttribute('aria-current', 'page');
+
+    // Everything in the sidebar is on screen at 1366×768: nothing to scroll to.
+    const aside = page.locator('aside');
+    expect(await aside.evaluate((el) => el.scrollHeight <= el.clientHeight)).toBe(true);
+    // ...with room to spare between the other screens and the account, not a pixel-perfect fit.
+    const lastScreen = await aside.getByRole('link', { name: /^Floor monitor/ }).boundingBox();
+    const account = await aside.getByRole('button', { name: 'Change password' }).boundingBox();
+    expect(account!.y - (lastScreen!.y + lastScreen!.height)).toBeGreaterThan(24);
+    await expect(aside.getByRole('button', { name: 'Sign out' })).toBeInViewport({ ratio: 1 });
+    await expect(aside.getByRole('link', { name: /^Floor monitor/ })).toBeInViewport({ ratio: 1 });
+
+    await sidebar(page).getByRole('link', { name: 'Setup' }).click();
+    await expect(page).toHaveURL(/\/admin\/service$/);
+    await tabs(page).getByRole('link', { name: 'Printing' }).click();
+    await expect(page).toHaveURL(/\/admin\/printing$/);
+    // The tabs stay at the top while the page scrolls under them.
+    await page.evaluate(() => window.scrollTo(0, 400));
+    await expect(tabs(page)).toBeInViewport();
+  });
+
+  test('every part of the navigation is reached with the keyboard', async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== 'desktop', 'a phone has no Tab key; iPhone’s Safari does not tab to links');
+    await page.goto('/admin');
+    await expect(page.getByTestId('admin-venue')).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+    const seen: string[] = [];
+    for (let i = 0; i < 10; i += 1) {
+      await page.keyboard.press('Tab');
+      seen.push(await page.evaluate(() => (document.activeElement?.getAttribute('aria-label') ?? document.activeElement?.textContent ?? '').trim().replace(/\s+/g, ' ')));
+    }
+    for (const stop of ['Search or jump to a page', 'Home', 'Service', 'Menu', 'Reports', 'Setup', 'Change password', 'Sign out']) {
+      expect(seen.some((name) => name.startsWith(stop)), `Tab reaches “${stop}” (${seen.join(' | ')})`).toBe(true);
+    }
+  });
+});
+
+test.describe('the search', () => {
+  test('Ctrl K finds a page by what the manager would type, with the keyboard alone', async ({ page }) => {
+    await withMenu(page);
+    await page.goto('/admin');
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+    await page.keyboard.press('Control+k');
+    await expect(search(page)).toBeVisible();
+    const box = search(page).getByRole('combobox');
+    await expect(box).toBeFocused();
+
+    await box.fill('wifi printer');
+    await expect(search(page).getByRole('option').first()).toContainText('Printing');
+    await box.fill('sold out');
+    await expect(search(page).getByRole('option').first()).toContainText('Dishes');
+    await box.fill('pin');
+    await expect(search(page).getByRole('option', { name: /^Waiters/ })).toBeVisible();
+    await box.fill('close the day');
+    // The first result is the one Enter opens (the list marks it a moment after the last letter).
+    await expect(search(page).getByRole('option', { selected: true })).toContainText('Daily report');
+    await page.keyboard.press('Enter');
+    await expect(page).toHaveURL(/\/admin\/reports$/);
+    await expect(search(page)).toHaveCount(0);
+
+    // Opened again: the page just left comes first, and Escape closes it.
+    await page.keyboard.press('Control+k');
+    await expect(search(page).getByRole('option').first()).toContainText('Dashboard');
+    await page.keyboard.press('ArrowDown');
+    await page.keyboard.press('Escape');
+    await expect(search(page)).toHaveCount(0);
+    await expect(page).toHaveURL(/\/admin\/reports$/);
+  });
+
+  test('says so when nothing matches, and offers the plain actions', async ({ page }) => {
+    await page.goto('/admin');
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+    await page.keyboard.press('Control+k');
+    const box = search(page).getByRole('combobox');
+    await box.fill('zzzz');
+    await expect(search(page).getByText(/Nothing in the admin matches/)).toBeVisible();
+    await box.fill('password');
+    await expect(search(page).getByRole('option', { name: /^Change password/ })).toBeVisible();
+    await box.fill('kitchen');
+    await expect(search(page).getByRole('option', { name: /^Open Kitchen display/ })).toBeVisible();
+    await box.fill('sign out');
+    await expect(search(page).getByRole('option', { name: /^Sign out/ })).toBeVisible();
+  });
+
+  test('opens from the phone’s top bar', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto('/admin');
+    await page.getByRole('banner').getByRole('button', { name: 'Search or jump to a page' }).click();
+    await search(page).getByRole('combobox').fill('qr');
+    await search(page).getByRole('option', { name: /^QR codes/ }).click();
+    await expect(page).toHaveURL(/\/admin\/qr-codes$/);
+    // 16 px or more: an iPhone zooms the page into a smaller field.
+    await page.getByRole('banner').getByRole('button', { name: 'Search or jump to a page' }).click();
+    expect(await search(page).getByRole('combobox').evaluate((el) => parseFloat(getComputedStyle(el).fontSize))).toBeGreaterThanOrEqual(16);
+  });
+});
+
+/**
+ * The Manager app: the admin opened from a phone's Home Screen
+ * (docs/reservations.md). A test browser cannot be put on a Home Screen, so
+ * these tell the page it was (navigator.standalone on iPhone, the
+ * display-mode query elsewhere) and check what the app does differently.
+ */
+test.describe('the Manager app, opened from the Home Screen', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.addInitScript(() => {
+      try { Object.defineProperty(Navigator.prototype, 'standalone', { get: () => true, configurable: true }); } catch { /* not WebKit */ }
+      const real = window.matchMedia.bind(window);
+      window.matchMedia = ((query: string) => (/display-mode:\s*standalone/.test(query)
+        ? { matches: true, media: query, onchange: null, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {}, dispatchEvent: () => false }
+        : real(query))) as typeof window.matchMedia;
+      // What the app puts on its icon.
+      const badges: (number | null)[] = [];
+      (window as unknown as { __badges: (number | null)[] }).__badges = badges;
+      Object.assign(navigator, {
+        setAppBadge: (n?: number) => { badges.push(n ?? 0); return Promise.resolve(); },
+        clearAppBadge: () => { badges.push(null); return Promise.resolve(); },
+      });
+    });
+  });
+
+  test('puts the number of guests waiting on its icon, and clears it at none', async ({ page }) => {
+    let waiting = 3;
+    await page.route('**/rest/v1/reservations**', (route) => (route.request().method() === 'HEAD'
+      ? route.fulfill({ ...json(null), headers: { 'access-control-allow-origin': '*', 'access-control-expose-headers': 'content-range', 'content-range': `*/${waiting}` } })
+      : route.fulfill(json([]))));
+    await page.goto('/admin');
+    await expect.poll(() => page.evaluate(() => (window as unknown as { __badges: (number | null)[] }).__badges.at(-1))).toBe(3);
+    waiting = 0;
+    // The count is asked for again on every page.
+    await areas(page).getByRole('link', { name: /^Service/ }).click();
+    await expect.poll(() => page.evaluate(() => (window as unknown as { __badges: (number | null)[] }).__badges.at(-1))).toBe(null);
+  });
+
+  test('has its own Refresh, no install hint, and nothing wider than the phone', async ({ page }) => {
+    const asked: string[] = [];
+    await withMenu(page);
+    page.on('request', (r) => { if (r.url().includes('/rest/v1/categories')) asked.push(r.url()); });
+    await page.goto('/admin/menu');
+    await expect(page.getByText('Food').first()).toBeVisible();
+    await expect(page.getByTestId('install-hint')).toHaveCount(0);
+    const before = asked.length;
+    await page.getByRole('button', { name: 'Refresh this page' }).click();
+    await expect.poll(() => asked.length).toBeGreaterThan(before);
+    await expect(page.getByText('Food').first()).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
+  });
+
+  test('opens the kitchen display and the floor monitor with a way back to the admin', async ({ page }) => {
+    await page.goto('/admin/orders');
+    for (const [name, title] of [[/^Floor monitor/, 'Floor monitor'], [/^Kitchen display/, 'Kitchen display']] as const) {
+      await areas(page).getByRole('button', { name: 'More' }).click();
+      await page.getByRole('dialog', { name: 'More' }).getByRole('button', { name }).click();
+      const frame = page.getByRole('dialog', { name: title });
+      await expect(frame).toBeVisible();
+      // The screen itself, live, inside; the admin's address has not changed.
+      await expect(frame.locator('iframe')).toHaveAttribute('src', title === 'Floor monitor' ? '/waiter/monitor' : '/kitchen');
+      await expect(page.frameLocator(`iframe[title="${title}"]`).getByRole('heading', { level: 1 }).first()).toBeVisible();
+      await expect(page).toHaveURL(/\/admin\/orders$/);
+      await frame.getByRole('button', { name: 'Admin' }).click();
+      await expect(frame).toHaveCount(0);
+      await expect(page.getByRole('heading', { level: 1, name: 'Orders' })).toBeVisible();
+    }
+  });
+});
+
+test.describe('the admin in Safari on an iPhone', () => {
+  test.use({ userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1' });
+
+  test('says once how to put Manager on the Home Screen, and stays put away', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto('/admin');
+    const hint = page.getByTestId('install-hint');
+    await expect(hint).toContainText('Put Manager on your Home Screen');
+    await expect(hint).toContainText('Add to Home Screen');
+    await expect(hint.getByRole('link')).toHaveAttribute('href', '/manager-app/');
+    // What Share → Add to Home Screen will read: the Manager app, in the admin's own colour.
+    await expect(page.locator('meta[name="apple-mobile-web-app-title"]')).toHaveAttribute('content', 'Manager');
+    await expect(page.locator('meta[name="theme-color"]')).toHaveAttribute('content', '#faf8f5');
+    await expect(page.locator('meta[name="apple-mobile-web-app-status-bar-style"]')).toHaveAttribute('content', 'default');
+    // And the picture it opens on, drawn for this screen: one upright, one on its side.
+    await expect(page.locator('link[rel="apple-touch-startup-image"]')).toHaveCount(2);
+    expect(await page.locator('link[rel="apple-touch-startup-image"]').first().getAttribute('href')).toMatch(/^data:image\/png;base64,/);
+
+    await hint.getByRole('button', { name: 'Dismiss' }).click();
+    await expect(hint).toHaveCount(0);
+    await page.reload();
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+    await expect(page.getByTestId('install-hint')).toHaveCount(0);
   });
 });
