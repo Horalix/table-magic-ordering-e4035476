@@ -244,14 +244,16 @@ const words = (text: string) => text.toLowerCase().split(/[^\p{L}\p{N}]+/u).filt
  * then every typed word starting some word of the name or a keyword.
  */
 export function searchScore(label: string, keywords: readonly string[], query: string): number {
-  const q = query.trim().toLowerCase();
+  // A keyboard types ' where the admin writes ’ (What’s new, Tonight’s waiters): the same letter here.
+  const plain = (text: string) => text.toLowerCase().replace(/[’‘`]/g, "'");
+  const q = plain(query.trim());
   if (!q) return 1;
-  const name = label.toLowerCase();
+  const name = plain(label);
   if (name === q) return 1;
   if (name.startsWith(q)) return 0.95;
   if (words(name).some((w) => w.startsWith(q))) return 0.9;
   if (name.includes(q)) return 0.85;
-  const keys = keywords.map((k) => k.toLowerCase());
+  const keys = keywords.map(plain);
   if (keys.includes(q)) return 0.8;
   if (keys.some((k) => k.startsWith(q))) return 0.7;
   if (keys.some((k) => words(k).some((w) => w.startsWith(q)) || k.includes(q))) return 0.6;

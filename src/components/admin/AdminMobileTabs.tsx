@@ -28,7 +28,7 @@ const AdminMobileTabs = ({ shell, moreOpen, onMore }: { shell: AdminShell; moreO
       aria-label="Admin quick navigation"
       className="fixed inset-x-0 bottom-0 z-40 border-t border-border/80 bg-background/[0.97] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] backdrop-blur-md lg:hidden print:hidden"
     >
-      <ul className="mx-auto grid max-w-xl grid-cols-5">
+      <ul data-tour="areas" className="mx-auto grid max-w-xl grid-cols-5">
         {areas.map((area) => {
           const pages = pagesIn(area.id, shell.audience);
           if (!pages.length) return <li key={area.id} />;
@@ -42,6 +42,7 @@ const AdminMobileTabs = ({ shell, moreOpen, onMore }: { shell: AdminShell; moreO
                 to={to}
                 onClick={tap(area.id, to)}
                 aria-current={active ? 'location' : undefined}
+                data-tour={area.id}
                 className={cn(item, active ? 'font-semibold text-primary' : 'text-muted-foreground')}
               >
                 <span className="relative">
@@ -61,6 +62,7 @@ const AdminMobileTabs = ({ shell, moreOpen, onMore }: { shell: AdminShell; moreO
             onClick={onMore}
             aria-haspopup="dialog"
             aria-expanded={moreOpen}
+            data-tour="more"
             className={cn(item, inMore ? 'font-semibold text-primary' : 'text-muted-foreground')}
           >
             <Ellipsis className="h-[22px] w-[22px]" strokeWidth={inMore ? 2.2 : 1.8} aria-hidden />

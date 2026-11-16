@@ -16,10 +16,12 @@ import ChangePasswordDialog from '@/components/admin/nav/ChangePasswordDialog';
 import InstallHint from '@/components/admin/nav/InstallHint';
 import MoreSheet from '@/components/admin/nav/MoreSheet';
 import ScreenFrame from '@/components/admin/nav/ScreenFrame';
+import WhatsNewTour from '@/components/admin/nav/WhatsNewTour';
 import { RESERVATIONS_PATH, areaOf, ownerPaths, pageAt, type NavLauncher } from '@/components/admin/nav/admin-nav';
 import { LEAVE_FRAME, inScreenFrame, setIconBadge, useStandalone } from '@/components/admin/nav/manager-app';
 import { rememberVisit } from '@/components/admin/nav/nav-memory';
 import type { AdminShell } from '@/components/admin/nav/shell';
+import { markWhatsNewSeen, whatsNewSeen } from '@/components/admin/nav/whats-new';
 import { VENUES } from '@/lib/venues';
 import EndOfDayTables from '@/components/staff/EndOfDayTables';
 import MenuOnlyNotice from '@/components/staff/MenuOnlyNotice';
@@ -246,6 +248,37 @@ const AdminLayout = () => {
     if (showing) rememberVisit(location.pathname);
   }, [showing, location.pathname]);
 
+  /*
+   * "What's new": the walkthrough of this layout (nav/whats-new.ts).
+   *
+   * It opens by itself once for each admin on each device, on the first page
+   * they see after signing in, once it is known whose admin this is (the
+   * owner's has two more things in it). Skip, Done or Escape and it is
+   * remembered; after that it opens only when asked for: the account area,
+   * More on a phone, "tour" in the search, or an address ending ?tour=1,
+   * which the owner can send to a manager.
+   *
+   * Not by itself in the offline demo: its first words are about what moved,
+   * and a prospect never saw the old layout (there it is "Take the tour").
+   * Nor inside the frame the Manager app opens other screens in.
+   */
+  const [tourOpen, setTourOpen] = useState(false);
+  const tourOffered = useRef(false);
+  const tourFrom = useRef<HTMLElement | null>(null);
+  const userId = user?.id ?? null;
+  const rolesKnown = !!staffVenue;
+  useEffect(() => {
+    if (tourOffered.current || !showing || !rolesKnown || !userId) return;
+    tourOffered.current = true;
+    const asked = new URLSearchParams(location.search).get('tour') === '1';
+    if (asked) navigate(location.pathname, { replace: true });
+    if (asked || (!DEMO_MODE && !inScreenFrame() && !whatsNewSeen(userId))) setTourOpen(true);
+  }, [showing, rolesKnown, userId, location.search, location.pathname, navigate]);
+  const closeTour = useCallback(() => {
+    if (userId) markWhatsNewSeen(userId);
+    setTourOpen(false);
+  }, [userId]);
+
   // A page opened from the navigation starts at its top; Back returns to where the manager was.
   useEffect(() => {
     if (navigationType !== 'POP') window.scrollTo(0, 0);
@@ -350,6 +383,7 @@ const AdminLayout = () => {
     signOut: () => { void handleLogout(); },
     switchVenue: switchStaffVenue,
     launch,
+    openTour: (from) => { tourFrom.current = from ?? null; setTourOpen(true); },
   };
 
   let page: React.ReactNode;
@@ -395,7 +429,7 @@ const AdminLayout = () => {
                 <RotateCw className={`h-[18px] w-[18px] ${refreshing ? 'animate-spin motion-reduce:animate-none' : ''}`} aria-hidden />
               </button>
             )}
-            <button type="button" onClick={() => setSearchOpen(true)} aria-label="Search or jump to a page" className={topButton}>
+            <button type="button" onClick={() => setSearchOpen(true)} aria-label="Search or jump to a page" data-tour="search" className={topButton}>
               <Search className="h-5 w-5" aria-hidden />
             </button>
           </header>
@@ -439,6 +473,7 @@ const AdminLayout = () => {
       <AdminCommandPalette shell={shell} open={searchOpen} onOpenChange={setSearchOpen} />
       <ChangePasswordDialog open={passwordOpen} onOpenChange={setPasswordOpen} email={user.email ?? null} />
       <ScreenFrame screen={framed} onClose={() => setFramed(null)} />
+      <WhatsNewTour open={tourOpen} onClose={closeTour} owner={!!owner} demo={DEMO_MODE} standalone={standalone} returnTo={tourFrom} />
     </div>
   );
 };

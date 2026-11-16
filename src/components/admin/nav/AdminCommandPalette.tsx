@@ -2,11 +2,12 @@ import React, { useEffect, useMemo, useState } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { Command } from 'cmdk';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeftRight, CornerDownLeft, History, KeyRound, LogOut, Search, type LucideIcon } from 'lucide-react';
+import { ArrowLeftRight, CornerDownLeft, History, KeyRound, LogOut, Search, Sparkles, type LucideIcon } from 'lucide-react';
 import { AREAS, LAUNCHERS, areaOf, pagesIn, searchScore, type NavPage } from './admin-nav';
 import { recentPages } from './nav-memory';
 import { OpensElsewhere } from './NavParts';
 import type { AdminShell } from './shell';
+import { tourLabel } from './whats-new';
 
 /**
  * Search, or jump: ⌘K / Ctrl K, or the search field.
@@ -150,6 +151,14 @@ const AdminCommandPalette = ({ shell, open, onOpenChange }: { shell: AdminShell;
                     <Row icon={ArrowLeftRight} label={`Switch to ${venue.name}`} />
                   </Command.Item>
                 ))}
+                <Command.Item
+                  value={tourLabel(shell.audience.demo)}
+                  keywords={['tour', 'take the tour', 'whats new', 'what is new', 'new', 'help', 'how to', 'guide', 'walkthrough', 'new layout', 'update', 'where is', 'where did']}
+                  onSelect={() => run(() => shell.openTour())}
+                  className={itemClass}
+                >
+                  <Row icon={Sparkles} label={tourLabel(shell.audience.demo)} about="A one-minute tour of the admin" />
+                </Command.Item>
                 <Command.Item
                   value="Change password"
                   keywords={['password', 'my password', 'new password', 'account', 'security']}

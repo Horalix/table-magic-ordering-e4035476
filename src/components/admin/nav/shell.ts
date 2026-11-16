@@ -29,4 +29,6 @@ export interface AdminShell {
   switchVenue: (slug: string) => void;
   /** Opens the kitchen display or the floor monitor so the admin stays one tap away. */
   launch: (launcher: NavLauncher) => void;
+  /** Opens the walkthrough again (WhatsNewTour.tsx), whether or not it has been seen. `from`: the button to give the keyboard back to. */
+  openTour: (from?: HTMLElement | null) => void;
 }

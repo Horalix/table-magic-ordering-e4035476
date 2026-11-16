@@ -38,6 +38,7 @@ export const SearchField = ({ onOpen, tone, className }: { onOpen: () => void; t
     onClick={onOpen}
     aria-label="Search or jump to a page"
     aria-keyshortcuts="Meta+K Control+K"
+    data-tour="search"
     className={cn(
       'flex w-full items-center gap-2.5 rounded-lg px-3 text-left font-sans transition-colors focus-visible:outline-none focus-visible:ring-2',
       tone === 'sidebar'
@@ -62,18 +63,20 @@ export const SearchField = ({ onOpen, tone, className }: { onOpen: () => void; t
  * it was. The Home Screen app has no tabs and no back button, so there the
  * layout opens it in a frame with "Admin" above it (ScreenFrame.tsx).
  */
-export const LauncherLink = ({ launcher, shell, className, children, onOpened }: {
+export const LauncherLink = ({ launcher, shell, className, children, onOpened, tour }: {
   launcher: NavLauncher;
   shell: Pick<AdminShell, 'standalone' | 'launch'>;
   className?: string;
   children: React.ReactNode;
   onOpened?: () => void;
+  /** The name the walkthrough finds it by (whats-new.ts). */
+  tour?: string;
 }) => (shell.standalone ? (
-  <button type="button" onClick={() => { shell.launch(launcher); onOpened?.(); }} className={className}>
+  <button type="button" data-tour={tour} onClick={() => { shell.launch(launcher); onOpened?.(); }} className={className}>
     {children}
   </button>
 ) : (
-  <a href={launcher.path} target="_blank" rel="noopener" onClick={onOpened} className={className}>
+  <a href={launcher.path} target="_blank" rel="noopener" data-tour={tour} onClick={onOpened} className={className}>
     {children}
     <span className="sr-only"> (opens in a new tab)</span>
   </a>

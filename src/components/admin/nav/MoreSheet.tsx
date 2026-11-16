@@ -1,11 +1,12 @@
 import React from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { Link } from 'react-router-dom';
-import { ChevronRight, KeyRound, LogOut, Smartphone, X } from 'lucide-react';
+import { ChevronRight, KeyRound, LogOut, Smartphone, Sparkles, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { LAUNCHERS, pageAt, pagesIn } from './admin-nav';
 import { LauncherLink, OpensElsewhere, RestaurantSwitch, SearchField } from './NavParts';
 import type { AdminShell } from './shell';
+import { tourLabel } from './whats-new';
 
 /**
  * "More", on a phone: everything that is not one of the four areas in the
@@ -105,6 +106,13 @@ const MoreSheet = ({ shell, open, onOpenChange }: { shell: AdminShell; open: boo
                     Signed in as <span className="font-medium text-foreground">{shell.email}</span>
                   </p>
                 )}
+                <button type="button" onClick={() => { close(); shell.openTour(); }} className={row}>
+                  <IconTile><Sparkles className="h-[18px] w-[18px]" aria-hidden /></IconTile>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-[15px] leading-snug text-foreground">{tourLabel(shell.audience.demo)}</span>
+                    <span className="block truncate text-[13px] leading-snug text-muted-foreground">A one-minute tour of the admin</span>
+                  </span>
+                </button>
                 <button type="button" onClick={() => { close(); shell.changePassword(); }} className={row}>
                   <IconTile><KeyRound className="h-[18px] w-[18px]" aria-hidden /></IconTile>
                   <span className="flex-1 text-[15px] text-foreground">Change password</span>
