@@ -29,6 +29,7 @@ import { RESERVE_PATH, homeReserveFaq, reservationFacts, reservationsOffered as 
 import { rcopy } from '../reservation-copy';
 import { languageAlternates, localePath } from './locale-path';
 import { allergenName, pageT } from './page-copy';
+import { amenityFaq } from './amenity-faq';
 
 /**
  * Whether Vera Italia takes table requests online. The build asks about the
@@ -251,6 +252,8 @@ export function veraFaq(m: SeoMenu, locale: Locale): Faq[] {
   pairs.push(orderingOffered() ? t.table : menuOnPhone[locale]);
   if (v.city) pairs.push(t.where);
   if (hours) pairs.push(t.when);
+  // Parking, terrace, Wi-Fi, children, takeaway and delivery, as the owner confirmed them (./amenity-faq.ts).
+  pairs.push(...amenityFaq(v, locale).map(({ q, a }): [string, string] => [q, a]));
   if (v.phone) pairs.push(t.call);
   return pairs.filter(([, a]) => a).map(([q, a]) => ({ q, a }));
 }

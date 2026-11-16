@@ -19,6 +19,7 @@ import type { SeoMenu, SeoMenuCategory, SeoMenuItem, SeoMenuSection } from './me
 import { languageAlternates, localePath } from './locale-path';
 import { siteFacts, type MenuFaq } from './menu-faq';
 import { CURATED_SIGNATURES } from '../../components/site/signature-list';
+import { amenityFaq } from './amenity-faq';
 
 /* Page addresses end in "/" — see venues.ts. */
 export { menuPath };
@@ -77,7 +78,7 @@ export const placeWithin = (venue: Venue) => (venue.municipality
   : cityNode(venue.city));
 
 const AMENITIES: Record<string, string> = {
-  parking: 'Parking', terrace: 'Terrace', wifi: 'Free Wi-Fi', childFriendly: 'Children welcome', takeaway: 'Takeaway', delivery: 'Delivery',
+  parking: 'Parking', terrace: 'Terrace', wifi: 'Wi-Fi', childFriendly: 'Children welcome', takeaway: 'Takeaway', delivery: 'Delivery',
 };
 
 /** What the owner confirmed it has, and has not (schema.org Place.amenityFeature); nothing when not confirmed. */
@@ -121,6 +122,8 @@ export function faqEntries(
   entries.push(
     { q: siteT(orderingCopy('faq_order_q', ordering), locale), a: siteT(orderingCopy('faq_order_a', ordering), locale) },
     { q: siteT('faq_languages_q', locale), a: siteT('faq_languages_a', locale) },
+    // Parking, terrace, Wi-Fi, children, takeaway and delivery, as the owner confirmed them (./amenity-faq.ts).
+    ...amenityFaq(venue, locale),
     { q: siteT('faq_menu_q', locale), a: siteT('faq_menu_a', locale) },
     // What the live menu answers (./menu-faq.ts): the same words on the page, in its data and in /site-facts.json.
     ...(facts?.[locale] ?? []),
