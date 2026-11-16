@@ -253,7 +253,13 @@ const TvMenu = () => {
                 </motion.section>
               ) : (
                 <motion.div key="waiting" className="absolute inset-0 flex items-center justify-center" exit={{ opacity: 0 }}>
-                  <span className="h-[72px] w-[72px] animate-spin rounded-full border-[6px] border-primary/20 border-t-primary" aria-hidden />
+                  {/* Loaded and still nothing to show (every dish hidden or sold out):
+                      words at reading distance, not a spinner that never stops. */}
+                  {data ? (
+                    <p className="max-w-[760px] px-[48px] text-center font-serif text-[56px] leading-[1.15] text-foreground">{t('tv_menu_updating')}</p>
+                  ) : (
+                    <span className="h-[72px] w-[72px] animate-spin motion-reduce:animate-none rounded-full border-[6px] border-primary/20 border-t-primary" aria-hidden />
+                  )}
                 </motion.div>
               )}
             </AnimatePresence>

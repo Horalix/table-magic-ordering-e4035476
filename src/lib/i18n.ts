@@ -210,6 +210,7 @@ const translations: Record<string, Record<Locale, string>> = {
   'invalid_qr': { en: 'Invalid QR code. Please ask your waiter for assistance.', bs: 'Nevažeći QR kod. Zamolite konobara za pomoć.', ar: 'رمز QR غير صالح. يرجى طلب المساعدة من النادل.' },
   'qr_expired': { en: 'This QR code is invalid or expired. Please ask your waiter to help you scan.', bs: 'Ovaj QR kod je nevažeći ili je istekao. Zamolite konobara za pomoć.', ar: 'رمز QR هذا غير صالح أو منتهي الصلاحية. اطلب من النادل المساعدة.' },
   'table_open_failed_title': { en: 'Your table didn’t open', bs: 'Sto se nije otvorio', ar: 'لم تُفتح طاولتك' },
+  'tv_menu_updating': { en: 'The menu is being updated', bs: 'Meni se ažurira', ar: 'يجري تحديث القائمة' },
   'session_failed': { en: 'Could not start your session. Please try again.', bs: 'Nismo uspjeli otvoriti vaš sto. Pokušajte ponovo.', ar: 'تعذر بدء الجلسة. يرجى المحاولة مرة أخرى.' },
   'something_wrong': { en: 'Something went wrong. Please try scanning again.', bs: 'Nešto je pošlo naopako. Pokušajte ponovo skenirati.', ar: 'حدث خطأ ما. يرجى المحاولة مرة أخرى.' },
 
