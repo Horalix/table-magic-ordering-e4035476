@@ -292,7 +292,8 @@ const UndoLastChip = ({ bump, windowSeconds, onUndo }: { bump: LastBump; windowS
     <button
       type="button"
       onClick={onUndo}
-      className="inline-flex items-center gap-1.5 text-xs font-sans font-semibold px-3 min-h-[32px] rounded-full bg-foreground text-background hover:opacity-90"
+      // Chip-sized in the status line, thumb-sized to tap: the ::before takes it to 44px.
+      className="relative inline-flex items-center gap-1.5 text-xs font-sans font-semibold px-3 min-h-[32px] rounded-full bg-foreground text-background hover:opacity-90 before:absolute before:inset-x-0 before:-inset-y-1.5 before:content-['']"
       aria-label={`Undo: table ${bump.table} ${what}, ${left} seconds left`}
     >
       <RotateCcw className="w-3.5 h-3.5" /> Undo: T{bump.table} {what} <span className="tabular-nums opacity-70">{left}s</span>
@@ -1415,7 +1416,7 @@ const KitchenDisplay = () => {
               {load
                 .filter((l) => (station === 'all' ? l.open_items > 0 : l.station === station))
                 .map((l) => {
-                  const words = <>{l.station}: {Math.round(Number(l.backlog_minutes))} min{Number(l.load_factor) >= 1 && ' behind'}</>;
+                  const words = <>{l.station === 'bar' ? 'Bar' : l.station === 'kitchen' ? 'Kitchen' : l.station}: {Math.round(Number(l.backlog_minutes))} min{Number(l.load_factor) >= 1 && ' behind'}</>;
                   const title = 'Outstanding prep, against the configured capacity';
                   return Number(l.load_factor) >= 1
                     ? <HeaderAlert key={l.station} tone={Number(l.load_factor) >= 2 ? 'late' : 'preparing'} title={title}>{words}</HeaderAlert>
@@ -1558,7 +1559,7 @@ const KitchenDisplay = () => {
               variant={isPrinter ? 'default' : 'ghost'}
               size="sm"
               onClick={() => { const next = !isPrinter; setIsPrinter(next); localStorage.setItem('kitchen:isPrinter', String(next)); toast.success(next ? 'This device will auto-print new orders' : 'Auto-print off for this device'); }}
-              className="rounded-full min-h-[44px] min-w-[44px] gap-1.5 text-xs font-sans"
+              className="rounded-full min-h-[44px] min-w-[44px] gap-1.5 text-sm font-sans font-medium"
               aria-label="Use this device as the ticket printer"
               title="Auto-print new orders from this device"
             >
@@ -1587,7 +1588,7 @@ const KitchenDisplay = () => {
               variant="ghost"
               size="sm"
               onClick={testSound}
-              className="rounded-full font-sans min-h-[44px] text-xs text-muted-foreground hover:text-foreground"
+              className="rounded-full font-sans font-medium min-h-[44px] text-sm text-muted-foreground hover:text-foreground"
               title="Play a test tone so you know alerts will be heard"
             >
               Test sound
@@ -1741,11 +1742,38 @@ const KitchenDisplay = () => {
 
       {view === 'allday' && <AllDayPanel station={station} onChanged={fetchOrders} />}
 
-      {view !== 'allday' && visible.length === 0 && (
-        <div className="flex flex-col items-center justify-center py-20">
-          <ChefHat className="w-12 h-12 text-muted-foreground mb-4" />
-          <p className="text-muted-foreground font-sans">
+      {/* Before the first load, an empty board is "not known", not "quiet":
+          a cook trusts "No orders waiting". So it says it is loading, or that
+          it could not load, and only then that there is nothing to cook. */}
+      {view !== 'allday' && visible.length === 0 && lastLoadedAt === null && !loadError && (
+        <div className="p-4 sm:px-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-5 gap-y-4" aria-busy="true" aria-label="Loading the board">
+          {[0, 1, 2].map((i) => (
+            <div key={i} className={`space-y-3 ${i > 0 ? 'hidden md:block' : ''}`}>
+              <div className="h-4 w-24 rounded-full bg-muted animate-pulse motion-reduce:animate-none" />
+              <div className="h-56 rounded-2xl border border-border bg-card animate-pulse motion-reduce:animate-none" />
+            </div>
+          ))}
+        </div>
+      )}
+      {view !== 'allday' && visible.length === 0 && lastLoadedAt === null && loadError && (
+        <div className="flex flex-col items-center justify-center py-20 px-6 text-center">
+          <span className="w-16 h-16 rounded-full bg-destructive/10 grid place-items-center mb-4" aria-hidden>
+            <WifiOff className="w-7 h-7 text-destructive" />
+          </span>
+          <p className="font-serif text-xl font-semibold text-foreground">The board has not loaded yet</p>
+          <p className="mt-1 max-w-sm text-sm font-sans text-muted-foreground">Orders are safe on the server. They show here as soon as the connection is back.</p>
+        </div>
+      )}
+      {view !== 'allday' && visible.length === 0 && lastLoadedAt !== null && (
+        <div className="flex flex-col items-center justify-center py-20 px-6 text-center">
+          <span className="w-16 h-16 rounded-full bg-muted grid place-items-center mb-4" aria-hidden>
+            {station === 'bar' && !historyView ? <CupSoda className="w-7 h-7 text-muted-foreground" /> : <ChefHat className="w-7 h-7 text-muted-foreground" />}
+          </span>
+          <p className="font-serif text-xl font-semibold text-foreground">
             {historyView ? 'Nothing served yet' : station === 'bar' ? 'No drinks waiting' : 'No orders waiting'}
+          </p>
+          <p className="mt-1 max-w-sm text-sm font-sans text-muted-foreground">
+            {historyView ? 'Served and voided orders show here.' : 'A new order shows here with a chime.'}
           </p>
         </div>
       )}
@@ -1789,8 +1817,8 @@ const KitchenDisplay = () => {
                   <div className="relative space-y-3">
                     <AnimatePresence initial={false} mode="popLayout" custom={visibleIds}>{colOrders.map((o) => renderCard(o, false))}</AnimatePresence>
                     {colOrders.length === 0 && (
-                      <div className="rounded-2xl border border-dashed border-border/70 py-9 text-center text-xs text-muted-foreground/70 font-sans">
-                        Empty
+                      <div className="rounded-2xl border border-dashed border-border py-9 text-center text-sm text-muted-foreground font-sans">
+                        {col.key === 'new' ? 'Nothing new' : col.key === 'preparing' ? 'Nothing cooking' : 'Nothing at the pass'}
                       </div>
                     )}
                   </div>

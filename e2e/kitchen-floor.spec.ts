@@ -259,7 +259,7 @@ test.describe('a combo on the bar', () => {
     await expect(page.getByText('Strawberry Lemonade')).toBeVisible();
     await expect(page.getByText(/in combos, moves with the combo/)).toBeVisible();
     await expect(page.getByRole('button', { name: 'Start all' })).toHaveCount(0);
-    await expect(page.getByRole('button', { name: 'All up' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'All ready' })).toHaveCount(0);
   });
 });
 

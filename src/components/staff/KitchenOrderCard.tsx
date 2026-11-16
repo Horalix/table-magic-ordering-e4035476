@@ -134,7 +134,7 @@ function NoteChip({ children }: { children: React.ReactNode }) {
  */
 function AllergenChip({ allergens }: { allergens: string[] }) {
   return (
-    <p className="mt-1 flex w-fit max-w-full items-start gap-1.5 rounded-md border border-[hsl(0_72%_50%/0.45)] bg-[hsl(0_72%_50%/0.06)] px-1.5 py-0.5 text-xs md:text-sm font-sans leading-snug text-[hsl(0_72%_38%)]">
+    <p className="mt-1 flex w-fit max-w-full items-start gap-1.5 rounded-md border border-[hsl(0_72%_50%/0.45)] bg-[hsl(0_72%_50%/0.06)] px-1.5 py-0.5 text-xs md:text-sm lg:text-[13px] xl:text-sm font-sans leading-snug text-[hsl(0_72%_38%)]">
       <TriangleAlert className="mt-[2px] h-3.5 w-3.5 shrink-0" aria-hidden />
       <span className="min-w-0"><span className="font-bold">Allergens:</span> <span className="font-semibold">{allergens.join(', ')}</span></span>
     </p>
@@ -412,16 +412,21 @@ const KitchenOrderCard = React.forwardRef<HTMLDivElement, Props>(({
           </div>
 
           {/* Urgency is spelled out, not only coloured — colour alone fails for
-              colour-blind staff and for anyone glancing across a room. */}
-          <span className={`shrink-0 text-lg md:text-2xl font-sans font-semibold tabular-nums inline-flex items-center justify-end gap-1 leading-none ${
-            late
-              ? `${TONE.late.solid} rounded-lg px-2 py-1`
-              : urgency === 'attention' ? `${TONE.preparing.text} py-1` : 'text-foreground/70 py-1'
-          }`}>
-            {urgencyMark(urgency) && <span aria-hidden>{urgencyMark(urgency)}</span>}
-            {formatMinutes(ageMs)}
-            {urgency !== 'fresh' && <span className="sr-only"> — {urgency}</span>}
-          </span>
+              colour-blind staff and for anyone glancing across a room. In
+              History the age is nobody's wait any more: no big number there
+              (the line under the table says when it was served). */}
+          {!showStatus && (
+            <span className={`shrink-0 text-lg md:text-2xl font-sans font-semibold tabular-nums inline-flex items-center justify-end gap-1 leading-none ${
+              late
+                ? `${TONE.late.solid} rounded-lg px-2 py-1`
+                : urgency === 'attention' ? `${TONE.preparing.text} py-1` : 'text-foreground/70 py-1'
+            }`}>
+              {urgencyMark(urgency) && <span aria-hidden>{urgencyMark(urgency)}</span>}
+              {/* "0m" read like a stopped clock on a ticket that just came in. */}
+              {ageMs < 60_000 ? 'now' : formatMinutes(ageMs)}
+              {urgency !== 'fresh' && <span className="sr-only"> — {urgency}</span>}
+            </span>
+          )}
         </div>
 
         {/* Everything else about the ticket, one quiet line under the table:
@@ -475,7 +480,9 @@ const KitchenOrderCard = React.forwardRef<HTMLDivElement, Props>(({
               <div className="flex-1 min-w-0">
                 {/* The dish is the ticket: largest type on the card after the
                     table, the quantity bold in front where a cook counts. */}
-                <p className={`text-[17px] md:text-[21px] font-sans font-medium leading-snug tracking-[-0.01em] transition-colors duration-300 ${item.status === 'ready' ? 'text-muted-foreground' : 'text-foreground'}`}>
+                {/* 19px on a 1024 board (three narrow columns), 21px where there is room:
+                    at 21px every second dish broke onto two lines there. */}
+                <p className={`text-[17px] md:text-[21px] lg:text-[19px] xl:text-[21px] font-sans font-medium leading-snug tracking-[-0.01em] transition-colors duration-300 ${item.status === 'ready' ? 'text-muted-foreground' : 'text-foreground'}`}>
                   {/* More than one is the count most often missed: it gets a tint. */}
                   <span className={`tabular-nums font-bold ${item.quantity > 1 ? 'rounded-md bg-foreground/[0.08] px-1 -ml-0.5' : ''}`}>{item.quantity}×</span> {item.menu_item_name}
                   {station === 'all' && item.station === 'bar' && (
@@ -521,7 +528,7 @@ const KitchenOrderCard = React.forwardRef<HTMLDivElement, Props>(({
                   onClick={() => run(item.id, () => onBumpItem(item.id, next))}
                   aria-label={`Mark ${item.menu_item_name} as ${next}`}
                   // "Ready" is the colour the line turns when tapped.
-                  className={`min-h-[48px] md:min-h-[56px] min-w-[80px] md:min-w-[96px] rounded-[10px] text-sm md:text-base font-sans font-semibold shrink-0 active:scale-95 transition-[transform,background-color] ${
+                  className={`min-h-[48px] md:min-h-[56px] min-w-[80px] md:min-w-[96px] lg:min-w-[84px] xl:min-w-[96px] rounded-[10px] text-sm md:text-base font-sans font-semibold shrink-0 active:scale-95 transition-[transform,background-color] ${
                     item.status === 'preparing' ? `${TONE.ready.solid} hover:bg-[hsl(150_46%_28%)]` : 'bg-card'
                   }`}
                 >
@@ -544,7 +551,7 @@ const KitchenOrderCard = React.forwardRef<HTMLDivElement, Props>(({
         {parts.map((part) => <PartLine key={part.key} part={part} />)}
 
         {items.length === 0 && parts.length === 0 && (
-          <p className="px-2 py-3 text-xs text-muted-foreground font-sans">Nothing for this station.</p>
+          <p className="px-2 py-3 text-sm text-muted-foreground font-sans">Nothing for this station.</p>
         )}
       </div>
 
@@ -567,7 +574,7 @@ const KitchenOrderCard = React.forwardRef<HTMLDivElement, Props>(({
           {printStates.map((p) => (
             <span key={p.type} className={p.tone === 'busy' ? TONE.preparing.text : undefined}>
               <Printer className="inline w-3 h-3 -mt-0.5 mr-1" aria-hidden />
-              {printStates.length > 1 ? `${p.type}: ` : ''}{p.label}
+              {printStates.length > 1 ? `${p.type === 'bar' ? 'Bar' : 'Kitchen'}: ` : ''}{p.label}
             </span>
           ))}
         </p>
