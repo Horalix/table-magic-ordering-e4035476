@@ -22,8 +22,20 @@
 -- Gulf visitors in Arabic, the rest in English — was sent with every request
 -- and ignored.
 --
--- v4 (restaurant_settings.reco_learner, default 'v4'; 'v3' runs the old
--- ranker exactly as it was):
+-- DEFAULT: v3. Applying this file changes nothing guests see: the ranker
+-- stays v3 (restaurant_settings.reco_learner = 'v3') and no experiment is
+-- closed. What it does add for everyone is the guest's language on every
+-- decision and the per-language record, so v4 has data the day it is tried.
+-- In the offline simulator (supabase/tests/reco-simulator.test.ts, 3 seeds ×
+-- 6 weeks × 36 tables a day on La Soul's real menu) v4 earned 5% less margin
+-- per table than v3 where languages differ in taste and 2% less where they
+-- do not: its posterior draw explores more than v3's bounded novelty bonus,
+-- and six weeks of one café is too little data per language for the
+-- context to pay that back. Switch a restaurant with
+--   UPDATE public.restaurant_settings SET reco_learner = 'v4' WHERE venue_id = ...;
+-- (a trigger closes that restaurant's running experiment: a policy change).
+--
+-- v4 (opt-in; 'v3' runs the old ranker exactly as it was):
 --   1. P(taken) is a draw from each candidate's posterior (reco_posterior_v4),
 --      seeded by the table session so the card does not change while a guest
 --      looks; how far from the mean is the exploration dial that already
@@ -47,9 +59,9 @@
 --      off-policy later.
 --   5. Policy version 'v4-thompson-context'. maybe_enable_sampling() has
 --      nothing to switch under v4 and no longer closes the experiment for it.
---      An experiment running under another policy is closed here (a policy
---      change starts a new experiment); the always-on check
---      (20261116120000_reco_always_measured.sql) opens the next one.
+--      Changing reco_learner closes the restaurant's running experiment (a
+--      policy change starts a new one); the always-on check
+--      (20261116120000_reco_always_measured.sql) opens the next.
 --
 -- The signatures of reco_rank_scored, rank_recommendations and
 -- guest_get_recommendations are unchanged. Additive otherwise: two columns,
@@ -61,7 +73,7 @@
 -- ---------------------------------------------------------------------
 
 ALTER TABLE public.restaurant_settings
-  ADD COLUMN IF NOT EXISTS reco_learner text NOT NULL DEFAULT 'v4';
+  ADD COLUMN IF NOT EXISTS reco_learner text NOT NULL DEFAULT 'v3';
 
 DO $chk$
 BEGIN
@@ -73,7 +85,7 @@ END
 $chk$;
 
 COMMENT ON COLUMN public.restaurant_settings.reco_learner IS
-  'Suggestion ranker: v4 = Thompson sampling with the guest''s language as context (20261116130000); v3 = the ranker of 20261031120000.';
+  'Suggestion ranker: v3 (default) = the ranker of 20261031120000; v4 = Thompson sampling with the guest''s language as context (20261116130000), opt-in: it did not beat v3 in the offline simulator.';
 
 /** The language the guest read the menu in when the decision was made. */
 ALTER TABLE public.recommendation_decisions
@@ -100,11 +112,17 @@ CREATE UNIQUE INDEX IF NOT EXISTS suggestion_context_stats_key
                                      COALESCE(source_item_id, '00000000-0000-0000-0000-000000000000'::uuid),
                                      placement, context);
 
+-- Access first, then row level security, then the policy (the order Lovable
+-- applies; supabase/tests/migration-grants.test.ts). Written only by the
+-- SECURITY DEFINER refresh; staff may read it.
+REVOKE ALL ON public.suggestion_context_stats FROM PUBLIC, anon;
+GRANT SELECT ON public.suggestion_context_stats TO authenticated;
+GRANT ALL ON public.suggestion_context_stats TO service_role;
+
 ALTER TABLE public.suggestion_context_stats ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Staff read suggestion context stats" ON public.suggestion_context_stats;
 CREATE POLICY "Staff read suggestion context stats" ON public.suggestion_context_stats
   FOR SELECT TO authenticated USING (public.is_staff_member());
-REVOKE ALL ON public.suggestion_context_stats FROM anon;
 
 -- ---------------------------------------------------------------------
 -- 1. Which ranker, and its version
@@ -117,7 +135,7 @@ STABLE
 SECURITY DEFINER
 SET search_path = public
 AS $$
-  SELECT COALESCE((SELECT reco_learner FROM public.restaurant_settings WHERE venue_id = _venue), 'v4');
+  SELECT COALESCE((SELECT reco_learner FROM public.restaurant_settings WHERE venue_id = _venue), 'v3');
 $$;
 
 REVOKE ALL ON FUNCTION public.reco_learner_for(uuid) FROM PUBLIC;
@@ -139,6 +157,32 @@ AS $$
     ELSE 'v3-profit'
   END;
 $$;
+
+/** Switching the ranker is a policy change: the running experiment closes. */
+CREATE OR REPLACE FUNCTION public.trg_reco_learner_changed()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  IF NEW.reco_learner IS DISTINCT FROM OLD.reco_learner THEN
+    UPDATE public.experiments
+       SET ended_at = now(),
+           notes = COALESCE(notes || ' ', '') || '[closed: ranking policy changed to '
+                   || public.reco_policy_version_for(NEW.venue_id) || ']'
+     WHERE ended_at IS NULL AND venue_id = NEW.venue_id;
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.trg_reco_learner_changed() FROM PUBLIC, anon, authenticated;
+
+DROP TRIGGER IF EXISTS trg_reco_learner_changed ON public.restaurant_settings;
+CREATE TRIGGER trg_reco_learner_changed
+  AFTER UPDATE OF reco_learner ON public.restaurant_settings
+  FOR EACH ROW EXECUTE FUNCTION public.trg_reco_learner_changed();
 
 -- ---------------------------------------------------------------------
 -- 2. The per-language record, rebuilt from the ledger
@@ -1852,7 +1896,7 @@ BEGIN
 
   -- v4 samples whenever the exploration dial is above 0.
   SELECT COALESCE(reco_sampling_enabled, false)
-         OR (COALESCE(reco_learner, 'v4') = 'v4' AND COALESCE(reco_exploration, 15) > 0)
+         OR (COALESCE(reco_learner, 'v3') = 'v4' AND COALESCE(reco_exploration, 15) > 0)
     INTO v_sampling
     FROM public.restaurant_settings WHERE venue_id = v_venue;
 
@@ -2002,16 +2046,3 @@ $$;
 
 REVOKE ALL ON FUNCTION public.refresh_menu_intelligence() FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.refresh_menu_intelligence() TO authenticated;
-
--- ---------------------------------------------------------------------
--- 10. A policy change starts a new experiment
--- ---------------------------------------------------------------------
--- An experiment compares one policy against no suggestions; one running under
--- another policy would now average two treatments. Closed, with a note; the
--- always-on check opens the next one under v4.
-UPDATE public.experiments e
-   SET ended_at = now(),
-       notes = COALESCE(e.notes || ' ', '') || '[closed: ranking policy changed to '
-               || public.reco_policy_version_for(e.venue_id) || ' by 20261116130000_reco_learner_v4.sql]'
- WHERE e.ended_at IS NULL
-   AND e.policy_version IS DISTINCT FROM public.reco_policy_version_for(e.venue_id);

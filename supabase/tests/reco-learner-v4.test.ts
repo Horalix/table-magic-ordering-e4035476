@@ -3,9 +3,14 @@
  *
  * Learner v4 (20261116130000_reco_learner_v4.sql), on La Soul's real menu:
  *
- *   - it is the default, under its own policy version, and the decision
- *     records the guest's language, each candidate's posterior and the
- *     probability its choice really had;
+ *   - it is NOT the default (it lost to v3 in the offline simulator): a
+ *     fresh database and an existing one both end up on v3, applying the
+ *     file changes no ranking and closes no experiment, yet every decision
+ *     records the guest's language; switching reco_learner is a policy
+ *     change and closes the running experiment;
+ *   - switched on, it runs under its own policy version, and the decision
+ *     records each candidate's posterior and the probability its choice
+ *     really had;
  *   - with the exploration dial at 0 and no language record it ranks
  *     exactly as v3 (the posterior mean is v3's acceptance), so every
  *     waiter-scenario promise of v3 still holds; 'v3' still runs the old
@@ -21,6 +26,8 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { laSoulDatabase, MENU_TABLE, type Db } from './harness/la-soul-menu';
+// @ts-expect-error -- plain JS harness, no types needed
+import { createTestDatabase } from '../../scripts/db-harness.mjs';
 
 const MIGRATIONS = path.join(__dirname, '..', 'migrations');
 const migration = (file: string) => readFileSync(path.join(MIGRATIONS, file), 'utf8');
@@ -116,9 +123,69 @@ const CARTS: Array<{ cart: string[]; at: string; placement?: string }> = [
   { cart: [], at: '20:30', placement: 'tab' },
 ];
 
-describe('v4 is the default and the ledger knows what it did', () => {
+describe('v3 stays the default; v4 is a switch', () => {
+  it('an existing database (settings rows present when the file runs) ends up on v3', async () => {
+    const { rows } = await db.query<{ l: string }>(`SELECT DISTINCT reco_learner AS l FROM public.restaurant_settings`);
+    expect(rows.map((r) => r.l)).toEqual(['v3']);
+  });
+
+  it('a fresh database, a restaurant added later, and a restaurant with no settings row all get v3', async () => {
+    const fresh = (await createTestDatabase({ quiet: true })) as unknown as Db;
+    try {
+      const { rows } = await fresh.query<{ l: string; v: string; none: string; def: string }>(`
+        SELECT (SELECT string_agg(DISTINCT reco_learner, ',') FROM public.restaurant_settings) AS l,
+               public.reco_policy_version_for((SELECT venue_id FROM public.restaurant_settings LIMIT 1)) AS v,
+               public.reco_learner_for('00000000-0000-4000-8000-0000000000ff') AS none,
+               (SELECT column_default FROM information_schema.columns
+                 WHERE table_name = 'restaurant_settings' AND column_name = 'reco_learner') AS def`);
+      expect(rows[0]).toMatchObject({ l: 'v3', v: 'v3-profit', none: 'v3' });
+      expect(rows[0].def).toContain("'v3'");
+    } finally {
+      await fresh.close();
+    }
+  }, 240_000);
+
+  it('applying the file again keeps a restaurant that chose v4 on v4', async () => {
+    await setting(`reco_learner = 'v4'`);
+    await db.exec(migration('20261116130000_reco_learner_v4.sql'));
+    const { rows } = await db.query<{ l: string }>(`SELECT reco_learner AS l FROM public.restaurant_settings WHERE id = 1`);
+    expect(rows[0].l).toBe('v4');
+    await setting(`reco_learner = 'v3'`);
+  });
+
+  it('on v3 the ranking and the policy are as before, and the language is still recorded', async () => {
+    const a = await ask(['La Soul Burger'], { lang: 'bs' });
+    expect(a.decision.policy_version).toBe('v3-profit');
+    expect(a.decision.language).toBe('bs');
+    expect(a.decision.candidates.every((c) => c.p_mean === undefined)).toBe(true);
+  });
+
+  it('switching the ranker closes the running experiment, and only when it really changes', async () => {
+    await db.query(`SELECT set_config('lasoul.scheduled_job', 'on', false)`);
+    try {
+      await db.exec(`UPDATE public.restaurant_settings SET reco_auto_holdout_pct = 10 WHERE id = 1`);
+      await db.query(`SELECT public.reco_keep_measuring()`);
+      const open = async () => (await db.query<{ id: string; policy_version: string }>(
+        `SELECT id, policy_version FROM public.experiments WHERE ended_at IS NULL AND venue_id = public.default_venue()`)).rows;
+      const [first] = await open();
+      expect(first.policy_version).toBe('v3-profit');
+      await setting(`reco_learner = 'v3'`);
+      expect((await open())[0]?.id).toBe(first.id);
+      await setting(`reco_learner = 'v4'`);
+      expect(await open()).toHaveLength(0);
+      await db.query(`SELECT public.reco_keep_measuring()`);
+      expect((await open())[0].policy_version).toBe('v4-thompson-context');
+    } finally {
+      await db.query(`SELECT set_config('lasoul.scheduled_job', '', false)`);
+      await db.exec(`UPDATE public.restaurant_settings SET reco_auto_holdout_pct = 0 WHERE id = 1;
+                     UPDATE public.experiments SET ended_at = now() WHERE ended_at IS NULL`);
+    }
+  });
+});
+
+describe('v4 switched on: the ledger knows what it did', () => {
   it('runs under its own policy version, with the language, the posteriors and an honest probability', async () => {
-    await setting(`reco_exploration = 15`);
+    await setting(`reco_exploration = 15, reco_learner = 'v4'`);
     const a = await ask(['La Soul Burger'], { lang: 'ar' });
     expect(a.names.length).toBeGreaterThan(0);
     expect(a.decision.policy_version).toBe('v4-thompson-context');

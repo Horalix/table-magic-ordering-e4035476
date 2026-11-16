@@ -64,9 +64,7 @@ async function seed() {
 
     UPDATE public.restaurant_settings
        SET ordering_enabled = true, recommendations_enabled = true,
-           reco_holdout_pct = 0, reco_sampling_enabled = false,
-           -- The gated sampler of the v3 ranker; v4 samples always (reco-learner-v4.test.ts).
-           reco_learner = 'v3'
+           reco_holdout_pct = 0, reco_sampling_enabled = false
      WHERE id = 1;
 
     INSERT INTO auth.users(id) VALUES ('${ADMIN}'), ('${STAFF}');

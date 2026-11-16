@@ -16,6 +16,7 @@
  *   RECO_SIM=v4 RECO_SIM_OUT=sim-v4.json npx vitest run supabase/tests/reco-simulator.test.ts
  *
  * RECO_SIM_DAYS (28), RECO_SIM_TABLES per day (36), RECO_SIM_SEED (1),
+ * RECO_SIM_EXPLORE (the exploration dial, 15),
  * RECO_SIM_WORLD: 'tourists' (default: Arabic, Bosnian and English guests
  * differ in taste) or 'flat' (they do not; what context costs when it is
  * not needed).
@@ -37,6 +38,8 @@ const TABLES = Number(process.env.RECO_SIM_TABLES ?? 36);
 const SEED = Number(process.env.RECO_SIM_SEED ?? 1);
 const WORLD = process.env.RECO_SIM_WORLD ?? 'tourists';
 const OUT = process.env.RECO_SIM_OUT;
+/** The exploration dial (reco_exploration) for the run: 15 is the default. */
+const EXPLORE = Number(process.env.RECO_SIM_EXPLORE ?? 15);
 
 const MIGRATIONS = path.join(__dirname, '..', 'migrations');
 const migration = (file: string) => readFileSync(path.join(MIGRATIONS, file), 'utf8');
@@ -169,7 +172,7 @@ async function simulate(policy: 'v3' | 'v4') {
   await db.exec(`
     UPDATE public.restaurant_settings
        SET recommendations_enabled = true, reco_holdout_pct = 0, reco_auto_holdout_pct = 0,
-           reco_exploration = 15, reco_sampling_enabled = false, reco_learner = '${policy}';
+           reco_exploration = ${EXPLORE}, reco_sampling_enabled = false, reco_learner = '${policy}';
     UPDATE public.experiments SET ended_at = now() WHERE ended_at IS NULL;
   `);
 
@@ -285,12 +288,12 @@ async function simulate(policy: 'v3' | 'v4') {
 
 describe.skipIf(!RUN)('offline simulator', () => {
   for (const policy of RUN.split(',').filter((p): p is 'v3' | 'v4' => p === 'v3' || p === 'v4')) {
-    it(`simulates ${DAYS} days of ${TABLES} tables a day under ${policy} (seed ${SEED}, ${WORLD})`, async () => {
+    it(`simulates ${DAYS} days of ${TABLES} tables a day under ${policy} (seed ${SEED}, ${WORLD}, dial ${EXPLORE})`, async () => {
       const weeks = await simulate(policy);
       const total = weeks.reduce((s, w) => ({ shown: s.shown + w.shown, taken: s.taken + w.taken, margin: s.margin + w.margin,
         expected: s.expected + w.expected, oracle: s.oracle + w.oracle, tables: s.tables + w.tables }),
       { shown: 0, taken: 0, margin: 0, expected: 0, oracle: 0, tables: 0 });
-      const result = { policy, seed: SEED, world: WORLD, days: DAYS, tablesPerDay: TABLES, total, weeks };
+      const result = { policy, seed: SEED, world: WORLD, explore: EXPLORE, days: DAYS, tablesPerDay: TABLES, total, weeks };
       if (OUT) writeFileSync(OUT, JSON.stringify(result, null, 2));
       expect(total.shown).toBeGreaterThan(0);
     }, 6 * 3_600_000);
