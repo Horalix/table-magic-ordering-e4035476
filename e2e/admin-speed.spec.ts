@@ -149,6 +149,8 @@ test.describe('admin on a phone', () => {
   test('an area opens on the page last used in it', async ({ page }) => {
     await withMenu(page);
     await page.goto('/admin/analytics');
+    // Each tap follows the last without waiting for its page to appear: the address changes at
+    // once, the page a moment later, and a tap in between must still go where it should.
     await areas(page).getByRole('link', { name: 'Home' }).click();
     await expect(page).toHaveURL(/\/admin$/);
     await areas(page).getByRole('link', { name: 'Reports' }).click();
@@ -156,6 +158,14 @@ test.describe('admin on a phone', () => {
     // A second tap on the area you are in goes to its first page.
     await areas(page).getByRole('link', { name: 'Reports' }).click();
     await expect(page).toHaveURL(/\/admin\/reports$/);
+    // And the same once every page has had time to appear.
+    await expect(page.getByRole('heading', { level: 1, name: 'Daily report' })).toBeVisible();
+    await tabs(page).getByRole('link', { name: 'Performance' }).click();
+    await expect(page.getByRole('heading', { level: 1, name: 'Performance' })).toBeVisible();
+    await areas(page).getByRole('link', { name: 'Home' }).click();
+    await expect(page.getByRole('heading', { level: 1, name: 'Dashboard' })).toBeVisible();
+    await areas(page).getByRole('link', { name: 'Reports' }).click();
+    await expect(page).toHaveURL(/\/admin\/performance$/);
   });
 
   test('More has the search, Setup, the other screens and the account', async ({ page }) => {
@@ -229,6 +239,14 @@ test.describe('admin on a laptop', () => {
     // The tabs stay at the top while the page scrolls under them.
     await page.evaluate(() => window.scrollTo(0, 400));
     await expect(tabs(page)).toBeInViewport();
+
+    // The sidebar remembers the same way: Printing has been seen, so Setup comes back to it,
+    // even tapped before Home's page has appeared.
+    await expect(page.getByRole('heading', { level: 1, name: 'Printing' })).toBeVisible();
+    await sidebar(page).getByRole('link', { name: 'Home' }).click();
+    await expect(page).toHaveURL(/\/admin\/?(overview)?$/);
+    await sidebar(page).getByRole('link', { name: 'Setup' }).click();
+    await expect(page).toHaveURL(/\/admin\/printing$/);
   });
 
   test('every part of the navigation is reached with the keyboard', async ({ page }, testInfo) => {

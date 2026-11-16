@@ -2,8 +2,9 @@ import { Link } from 'react-router-dom';
 import { Ellipsis } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { AREAS, pagesIn } from '@/components/admin/nav/admin-nav';
-import { areaLanding } from '@/components/admin/nav/nav-memory';
+import { areaTarget } from '@/components/admin/nav/nav-memory';
 import { WaitingBadge, WaitingWords } from '@/components/admin/nav/NavParts';
+import { useAreaTap } from '@/components/admin/nav/use-area-tap';
 import type { AdminShell } from '@/components/admin/nav/shell';
 
 /**
@@ -21,6 +22,7 @@ const item = 'relative flex min-h-[56px] w-full flex-col items-center justify-ce
 const AdminMobileTabs = ({ shell, moreOpen, onMore }: { shell: AdminShell; moreOpen: boolean; onMore: () => void }) => {
   const areas = AREAS.filter((a) => a.id !== 'setup');
   const inMore = shell.area === 'setup';
+  const tap = useAreaTap(shell.audience);
   return (
     <nav
       aria-label="Admin quick navigation"
@@ -32,12 +34,13 @@ const AdminMobileTabs = ({ shell, moreOpen, onMore }: { shell: AdminShell; moreO
           if (!pages.length) return <li key={area.id} />;
           const active = shell.area === area.id;
           // The area you are in goes to its first page; any other, to where you last were in it.
-          const to = (active ? pages[0] : areaLanding(area.id, shell.audience) ?? pages[0]).path;
+          const to = areaTarget(area.id, shell.audience, shell.pathname) ?? pages[0].path;
           const waiting = area.id === 'service' ? shell.pending : 0;
           return (
             <li key={area.id}>
               <Link
                 to={to}
+                onClick={tap(area.id, to)}
                 aria-current={active ? 'location' : undefined}
                 className={cn(item, active ? 'font-semibold text-primary' : 'text-muted-foreground')}
               >

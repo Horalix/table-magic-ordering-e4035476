@@ -60,6 +60,17 @@ export function areaLanding(area: AreaId, audience: NavAudience): NavPage | null
   return pages.find((p) => p.path === last) ?? pages[0];
 }
 
+/**
+ * Where a tap on an area goes from `pathname`: the area you are in, to its
+ * first page; any other, to the page last used in it. Null for an area with
+ * no page for this account.
+ */
+export function areaTarget(area: AreaId, audience: NavAudience, pathname: string): string | null {
+  const pages = pagesIn(area, audience);
+  if (!pages.length) return null;
+  return (pageAt(pathname)?.area === area ? pages[0] : areaLanding(area, audience) ?? pages[0]).path;
+}
+
 /** The pages visited before this one, newest first, among those this account has. */
 export function recentPages(currentPath: string, audience: NavAudience, count = 3): NavPage[] {
   const current = pageAt(currentPath)?.path;

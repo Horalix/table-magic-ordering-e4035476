@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { AREAS, LAUNCHERS, PAGES, ownerPaths, pageAt, pagesFor, pagesIn, searchScore, searchText } from './admin-nav';
-import { areaLanding, recentPages, rememberVisit } from './nav-memory';
+import { areaLanding, areaTarget, recentPages, rememberVisit } from './nav-memory';
 
 /**
  * The admin's map against the app's routes: a page added to src/App.tsx and
@@ -148,6 +148,18 @@ describe('what the navigation remembers', () => {
     rememberVisit('/admin/analytics');
     expect(areaLanding('reports', ADMIN)?.path).toBe('/admin/analytics');
     expect(areaLanding('service', ADMIN)?.path).toBe('/admin/orders');
+  });
+
+  it('sends a tap on the area you are in to its first page, and on any other to its last-used page', () => {
+    rememberVisit('/admin/analytics');
+    // On Analytics, Reports is where you are: its first page.
+    expect(areaTarget('reports', ADMIN, '/admin/analytics')).toBe('/admin/reports');
+    expect(areaTarget('home', ADMIN, '/admin/analytics')).toBe('/admin');
+    // Once the address is Home's (even before its page has arrived), Reports is another area again.
+    expect(areaTarget('reports', ADMIN, '/admin')).toBe('/admin/analytics');
+    expect(areaTarget('reports', ADMIN, '/admin/')).toBe('/admin/analytics');
+    // An address that is no admin page is in no area.
+    expect(areaTarget('service', ADMIN, '/kitchen')).toBe('/admin/orders');
   });
 
   it('never lands a restaurant’s admin on a page that is the owner’s', () => {
