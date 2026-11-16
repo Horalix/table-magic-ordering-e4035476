@@ -1,10 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { Card, CardContent } from '@/components/ui/card';
+import { AdminCard, AdminCardContent, EmptyState } from '@/components/admin/AdminCard';
+import { AdminPageHeader, AdminToolbar } from '@/components/admin/AdminPage';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
-import { ChevronDown, ChevronRight, ScrollText, Search } from 'lucide-react';
+import { ChevronRight, ScrollText, Search } from 'lucide-react';
 import { formatStamp } from '@/lib/timing';
 import { localDayISO } from '@/lib/reporting';
 import { DEFAULT_VENUE, VENUES, venueByDbId } from '@/lib/venues';
@@ -52,6 +53,12 @@ const actionTone = (action: string) => {
   if (/payment|paid|shift/.test(action)) return 'bg-primary/10 text-primary';
   if (/revert|reprint/.test(action)) return 'bg-accent/10 text-accent';
   return 'bg-muted text-muted-foreground';
+};
+
+/** `order.status_changed` → "Order status changed". The raw name stays in the row's tooltip. */
+const sayAction = (action: string) => {
+  const words = action.replace(/[._]+/g, ' ').replace(/\s+/g, ' ').trim();
+  return words.charAt(0).toUpperCase() + words.slice(1);
 };
 
 const AdminAudit = () => {
@@ -107,135 +114,144 @@ const AdminAudit = () => {
     });
   }, [rows, quick, search]);
 
+  const filtered = quick !== 'all' || search.trim() !== '';
+  const dateInput = 'h-11 w-[11.5rem] rounded-xl text-base sm:text-sm';
+
   return (
     <div>
-      <div className="flex items-center justify-between mb-6 flex-wrap gap-2">
-        <div>
-          <h1 className="font-serif text-3xl font-bold text-foreground">Audit log</h1>
-          <p className="text-sm text-muted-foreground font-sans">
-            Every action that touched money or order state at this restaurant. Append-only — nothing here can be edited.
-          </p>
-        </div>
-        <Button variant="outline" size="sm" onClick={() => void load()}>Refresh</Button>
-      </div>
+      <AdminPageHeader
+        title="Audit log"
+        description="Every action that touched money or order state at this restaurant. Append-only — nothing here can be edited."
+        loading={loading && rows.length > 0}
+        actions={<Button variant="outline" className="h-11 rounded-xl px-4" onClick={() => void load()}>Refresh</Button>}
+      />
 
-      <Card className="mb-4">
-        <CardContent className="p-3 space-y-3">
-          <div className="flex flex-wrap items-center gap-2">
-            <Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="w-auto" aria-label="From date" />
-            <span className="text-sm text-muted-foreground">to</span>
-            <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="w-auto" aria-label="To date" />
+      <AdminCard className="mb-4">
+        <AdminCardContent className="space-y-3 pt-4 sm:pt-5">
+          <div className="relative">
+            <Search className="pointer-events-none absolute start-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Who, what, or an order id…"
+              className="h-11 rounded-xl ps-10 text-base sm:text-sm"
+              aria-label="Search the audit log"
+            />
           </div>
-          <div className="flex flex-wrap gap-1.5">
+          <AdminToolbar className="gap-1.5">
             {QUICK_FILTERS.map((f) => (
               <button
                 key={f.key}
                 type="button"
                 onClick={() => setQuick(f.key)}
                 aria-pressed={quick === f.key}
-                className={`px-3 min-h-[36px] rounded-full text-xs font-sans border transition-colors ${
-                  quick === f.key ? 'bg-foreground text-background border-foreground' : 'bg-card text-muted-foreground border-border hover:text-foreground'
+                className={`min-h-[44px] rounded-full border px-4 text-sm font-sans transition-colors ${
+                  quick === f.key ? 'border-foreground bg-foreground text-background' : 'border-border bg-card text-muted-foreground hover:text-foreground'
                 }`}
               >
                 {f.label}
               </button>
             ))}
-          </div>
-          <div className="relative">
-            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Who, what, or an order id…"
-              className="pl-9"
-              aria-label="Search the audit log"
-            />
-          </div>
-        </CardContent>
-      </Card>
+          </AdminToolbar>
+          <AdminToolbar className="gap-x-2 gap-y-2">
+            <Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className={dateInput} aria-label="From date" />
+            <span className="text-sm text-muted-foreground">to</span>
+            <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} className={dateInput} aria-label="To date" />
+          </AdminToolbar>
+        </AdminCardContent>
+      </AdminCard>
 
       {loadError && (
-        <Card className="mb-4 border-destructive/40">
-          <CardContent className="p-4">
+        <AdminCard className="mb-4 border-destructive/40" role="alert">
+          <AdminCardContent className="pt-5">
             <p className="text-sm font-sans text-destructive">Could not load the audit log: {loadError}</p>
-            <p className="text-xs text-muted-foreground font-sans mt-1">
+            <p className="mt-1 text-xs font-sans text-muted-foreground">
               This is a read failure, not an empty log. Nothing has been removed.
             </p>
-          </CardContent>
-        </Card>
+            <Button variant="outline" className="mt-3 h-11" onClick={() => void load()}>Try again</Button>
+          </AdminCardContent>
+        </AdminCard>
       )}
 
       {truncated && (
-        <p className="text-xs font-sans text-accent mb-3">
+        <p className="mb-3 text-xs font-sans text-accent">
           Showing the newest {PAGE_SIZE} entries in this range — narrow the dates to see the rest.
         </p>
       )}
 
-      {loading ? (
-        <div className="space-y-2">{[1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-14 w-full rounded-lg" />)}</div>
+      {loading && rows.length === 0 ? (
+        <div className="space-y-2" aria-busy="true" aria-label="Loading">
+          {[1, 2, 3, 4, 5].map((i) => <Skeleton key={i} className="h-[68px] w-full rounded-2xl" />)}
+        </div>
       ) : visible.length === 0 ? (
-        <Card className="border-dashed">
-          <CardContent className="py-14 text-center">
-            <ScrollText className="w-10 h-10 mx-auto text-muted-foreground/40 mb-3" />
-            <p className="font-serif text-lg font-semibold text-foreground">Nothing recorded in this range</p>
-            <p className="text-sm font-sans text-muted-foreground mt-1">Try a wider date range or a different filter.</p>
-          </CardContent>
-        </Card>
+        loadError ? null : (
+          <AdminCard>
+            <EmptyState
+              icon={ScrollText}
+              title="Nothing recorded in this range"
+              hint={filtered ? 'Clear the search or pick Everything, or try a wider date range.' : 'Try a wider date range.'}
+            />
+          </AdminCard>
+        )
       ) : (
-        <div className="space-y-1.5">
-          <p className="text-xs text-muted-foreground font-sans" aria-live="polite">{visible.length} entries</p>
+        <div className={`space-y-2 transition-opacity ${loading ? 'opacity-60' : ''}`}>
+          <p className="px-1 text-[13px] font-sans text-muted-foreground tabular-nums" aria-live="polite">
+            {filtered ? `${visible.length} of ${rows.length} entries` : `${visible.length} entries`}
+          </p>
           {visible.map((row) => {
             const open = expanded === row.id;
             return (
-              <Card key={row.id} className="overflow-hidden">
+              <AdminCard key={row.id} className="overflow-hidden">
                 <button
                   type="button"
                   onClick={() => setExpanded(open ? null : row.id)}
                   aria-expanded={open}
-                  className="w-full text-left px-3 py-2.5 flex items-start gap-2 hover:bg-muted/40 transition-colors min-h-[52px]"
+                  title={row.action}
+                  className="flex min-h-[56px] w-full items-start gap-2.5 px-4 py-3 text-start transition-colors hover:bg-muted/40"
                 >
-                  {open ? <ChevronDown className="w-4 h-4 mt-0.5 shrink-0" /> : <ChevronRight className="w-4 h-4 mt-0.5 shrink-0" />}
+                  <ChevronRight className={`mt-1 h-4 w-4 shrink-0 text-muted-foreground transition-transform motion-reduce:transition-none ${open ? 'rotate-90' : ''}`} aria-hidden />
                   <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className={`text-[11px] font-sans font-semibold px-2 py-0.5 rounded-full ${actionTone(row.action)}`}>
-                        {row.action}
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                      <span className={`rounded-full px-2.5 py-0.5 text-xs font-sans font-semibold ${actionTone(row.action)}`}>
+                        {sayAction(row.action)}
                       </span>
-                      <span className="text-xs text-muted-foreground font-sans">
+                      <span className="text-xs font-sans text-muted-foreground">
                         {row.entity_type}
                         {row.entity_id ? ` · ${row.entity_id.slice(0, 8)}` : ''}
                       </span>
-                      <span className="text-[11px] font-sans px-2 py-0.5 rounded-full border border-border text-muted-foreground">
-                        {venueNameOf(row)}
-                      </span>
                     </div>
-                    <p className="text-xs text-muted-foreground font-sans mt-0.5">
+                    <p className="mt-1 text-[13px] font-sans leading-snug text-muted-foreground">
                       {/* Who, then when. An unattributed entry says so rather
                           than rendering a blank where a name should be. */}
-                      {row.actor_label || (row.actor_user_id ? row.actor_user_id.slice(0, 8) : 'system')}
+                      <span className="font-medium text-foreground">
+                        {row.actor_label || (row.actor_user_id ? row.actor_user_id.slice(0, 8) : 'system')}
+                      </span>
                       {' · '}
-                      {formatStamp(row.created_at)}
-                      {row.reason ? ` · ${row.reason}` : ''}
+                      <span className="tabular-nums">{formatStamp(row.created_at)}</span>
+                      {' · '}
+                      {venueNameOf(row)}
                     </p>
+                    {row.reason && <p className="mt-0.5 break-words text-[13px] font-sans text-muted-foreground">{row.reason}</p>}
                   </div>
                 </button>
 
                 {open && (
-                  <div className="px-3 pb-3 pt-0 grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    <div>
-                      <p className="text-[11px] uppercase tracking-wide text-muted-foreground font-sans mb-1">Before</p>
-                      <pre className="text-[11px] font-mono bg-muted rounded-lg p-2 overflow-x-auto whitespace-pre-wrap break-words">
+                  <div className="grid grid-cols-1 gap-3 border-t border-border/60 px-4 pb-4 pt-3 sm:grid-cols-2">
+                    <div className="min-w-0">
+                      <p className="mb-1 text-[11px] font-sans font-semibold uppercase tracking-wide text-muted-foreground">Before</p>
+                      <pre className="whitespace-pre-wrap break-words rounded-xl bg-muted p-3 font-mono text-[11px]">
                         {row.before_state ? JSON.stringify(row.before_state, null, 2) : '—'}
                       </pre>
                     </div>
-                    <div>
-                      <p className="text-[11px] uppercase tracking-wide text-muted-foreground font-sans mb-1">After</p>
-                      <pre className="text-[11px] font-mono bg-muted rounded-lg p-2 overflow-x-auto whitespace-pre-wrap break-words">
+                    <div className="min-w-0">
+                      <p className="mb-1 text-[11px] font-sans font-semibold uppercase tracking-wide text-muted-foreground">After</p>
+                      <pre className="whitespace-pre-wrap break-words rounded-xl bg-muted p-3 font-mono text-[11px]">
                         {row.after_state ? JSON.stringify(row.after_state, null, 2) : '—'}
                       </pre>
                     </div>
                   </div>
                 )}
-              </Card>
+              </AdminCard>
             );
           })}
         </div>
