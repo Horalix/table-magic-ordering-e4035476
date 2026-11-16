@@ -16,13 +16,16 @@ published by hand.
 
 | | Where | Why it matters |
 |---|---|---|
-| **Real HTML for every public page** | `scripts/seo-prerender.ts` (runs in `vite build`) | Most AI crawlers do not run JavaScript; to them a React app was an empty page. Every public page is now written as HTML with its real words: the website in 3 languages, the menu, 3 category pages and **a page for every dish** (166) |
-| **A page per dish** | `/menu/lasoul/dish/<name>/` | Ranks for "San Sebastian cheesecake Sarajevo"-style searches; each has photo, price in KM, description in 3 languages, allergens, halal, and links to its neighbours. People who open it land on the dish, open, on the real menu |
+| **Real HTML for every public page** | `scripts/seo-prerender.ts` (runs in `vite build`) | Most AI crawlers do not run JavaScript; to them a React app was an empty page. Every public page is written as HTML with its real words, **in each of the three languages at its own address** (below): the website, the menu, each category, **a page for every dish**, the booking page and the privacy notice — 502 pages for La Soul from the menu of 16 November 2026 (158 dishes × 3) |
+| **A page per dish** | `/menu/lasoul/dish/<name>/`, `/bs/menu/lasoul/dish/<name>/`, `/ar/menu/lasoul/dish/<name>/` | Ranks for "San Sebastian cheesecake Sarajevo"-style searches, and for the Bosnian and Arabic names; each has photo, price in KM, its description, allergens, halal, its names in the other two languages as one "also called" line, and links to its neighbours. People who open it land on the dish, open, on the real menu |
+| **Photographs in the HTML** | `src/lib/seo/static-pages.ts` | The home page's first photograph and each signature dish, a 240 px square of every dish on the menu and category pages, the dish's own photo on its page: real `<img>` with size and alt text in the page's language, for image search and readers that run no script. All `loading="lazy"`: the app hides this HTML when it runs, and a lazy image in a hidden element is never fetched, so visitors download none of them |
 | **Structured data (schema.org)** | `src/lib/seo/structured-data.ts` | Restaurant + CafeOrCoffeeShop with address, map pin, hours, phone, Instagram, Google Maps listing, price range, payment; the full **Menu** with every dish marked **HalalDiet** and priced in BAM; **FAQPage**; breadcrumbs; WebSite |
 | **FAQ on the page** | `src/components/site/SiteFaq.tsx` | Halal, alcohol, where, hours, ordering at the table, languages, what is on the menu, contact — the questions answer engines get asked, answered in one sentence each, identical in the structured data |
 | **Reserving a table** | `/reserve/`, `src/lib/seo/reservations.ts` | Only while the restaurant takes requests online (Admin → Reservations): the booking page is listed under its own title, the restaurant's structured data says `acceptsReservations` with a `ReserveAction`, the home page and `llms.txt` say how, and the sitemap has the page. Off, none of it is there and the page says `noindex`. Written at build time from the live database; the sites publish themselves again within the hour of the switch changing (docs/reservations.md, "Where guests find it") |
-| **Language addresses** | `/`, `/bs/`, `/ar/` with `hreflang` | Bosnian searches find the Bosnian page, Arabic-speaking visitors the Arabic one; a shared link opens in its language |
-| **One address per page** | `src/lib/venues.ts` (`menuPath`, `menuCategoryPath`) | Every page address ends in `/`, the form Netlify serves a prerendered page at (it redirects `/bs` to `/bs/`). Canonical links, hreflang, the sitemap, structured data, llms.txt and every link in the app use that form, so search engines never meet a redirect or two addresses for one page |
+| **Language addresses** | `src/lib/seo/locale-path.ts` | Every public page in English at its usual address, in Bosnian under `/bs/` and in Arabic under `/ar/`, the same path after the prefix. Each names all three and `x-default` with `hreflang` and is its own canonical. Bosnian searches find the Bosnian page, Arabic-speaking visitors the Arabic one; a shared link opens in its language. See "Pages in three languages" below |
+| **Questions from the live menu** | `src/lib/seo/menu-faq.ts` | The home page also answers what the menu can: signatures with prices, breakfast, a kids' menu, pizza, what a burger, a coffee or a cake costs, vegetarian dishes (only those the menu marks so). Built from the live menu at publish time, written into the pages and into `/site-facts.json`, which the live home page reads, so the page, its FAQPage data and the prerendered HTML say the same words |
+| **A dish that is gone answers 404** | `public/_redirects` | An address under `/menu/<venue>/dish/` (and its `/bs/`, `/ar/` forms) with no page is served the app with "404 Not Found": a dish added since the last publish still opens for a person, a dish that was removed drops out of search instead of lingering as a "soft 404" |
+| **One address per page and language** | `src/lib/venues.ts` (`menuPath`, `menuCategoryPath`) | Every page address ends in `/`, the form Netlify serves a prerendered page at (it redirects `/bs` to `/bs/`). Canonical links, hreflang, the sitemap, structured data, llms.txt and every link in the app use that form, so search engines never meet a redirect or two addresses for one page |
 | **Head tags** | every page | Title, description, canonical, Open Graph + Twitter cards (a dish's own photo on its page), `geo.*` tags with the map pin |
 | **robots.txt** | generated | Welcomes Google, Bing and the AI crawlers (GPTBot, OAI-SearchBot, ClaudeBot, PerplexityBot, Google-Extended, Applebot…); keeps admin, kitchen, waiter, cart and table pages and a guest's own reservation (`/reservation/…`) out |
 | **sitemap.xml** | generated | Every public page, language alternates, and **dish photos** for Google Images |
@@ -34,6 +37,75 @@ The facts all come from one place: `src/lib/venues.ts` (address, phone, hours
 11:00–21:00 every day, Instagram @lasoul.bih, map pin, the Google Maps listing
 name). Change a fact there and the website, structured data, sitemap and
 llms.txt all follow on the next deploy.
+
+## Pages in three languages
+
+**The addresses.** English keeps the addresses the site always had. Bosnian
+is the same address under `/bs/`, Arabic under `/ar/`:
+
+| | English | Bosnian | Arabic |
+|---|---|---|---|
+| Website | `/` | `/bs/` | `/ar/` |
+| Menu | `/menu/lasoul/` | `/bs/menu/lasoul/` | `/ar/menu/lasoul/` |
+| A category | `/menu/lasoul/food/` | `/bs/menu/lasoul/food/` | `/ar/menu/lasoul/food/` |
+| A dish | `/menu/lasoul/dish/spanish-latte/` | `/bs/menu/lasoul/dish/spanish-latte/` | `/ar/menu/lasoul/dish/spanish-latte/` |
+| Booking | `/reserve/` | `/bs/reserve/` | `/ar/reserve/` |
+| Privacy | `/privacy/` | `/bs/privacy/` | `/ar/privacy/` |
+
+Slugs are the same in every language (made from the English name), so a
+page's other versions are found by swapping the prefix. Vera Italia's own
+site (veraitalia.net) has the same shape for its pages.
+
+**What each page carries.** `<html lang>` (and `dir="rtl"` in Arabic),
+`og:locale`, its own canonical, `hreflang` for all three and `x-default` (the
+English address) — the same set on every member of a family, as Google asks
+(developers.google.com/search/docs/specialty/international/localized-versions).
+Its words are its language's: titles and descriptions follow the English
+patterns in `src/lib/site-copy.ts` and `src/lib/reservation-copy.ts`; dish and
+category names and descriptions come from the database's `name_bs`/`name_ar`
+columns, and where a translation is missing the English is used for that
+field rather than leaving it empty. The fixed words around them ("Allergens",
+"Also called", "Open … on the menu") are in `src/lib/seo/page-copy.ts`. The
+sitemap lists every address with its alternates and the dish photos.
+
+**In the app.** A prefixed address opens the same screen in its language
+before the first paint, whatever the phone had saved
+(`src/lib/seo/AddressLanguage.tsx`), and when the visitor changes language
+there the address follows (`/bs/…` → `/ar/…`, or to the unprefixed address
+for English; query and hash kept). Inside the app, links keep going to the
+unprefixed addresses and the language stays with the visitor; table ordering
+is untouched. The head is kept by one rule in `usePageMeta`
+(`src/lib/seo/page-meta.ts`, `headFor`): a page shown in a language names
+that language's address as canonical and its whole family. So each of the
+three addresses, opened fresh by a crawler that runs JavaScript, ends with
+the same title, description, canonical and hreflang its HTML had.
+
+One case differs, as it always has: a phone set to Bosnian (or with Bosnian
+saved) that opens an **English** address sees the page in Bosnian, and its
+head then names the Bosnian address as canonical, the page it is showing.
+Crawlers send no saved language and read English there.
+
+**Adding a language** (say German, `de`): add it to `Locale` in
+`src/lib/i18n.ts` and to every trilingual table (`site-copy.ts`,
+`reservation-copy.ts`, `page-copy.ts`, `menu-faq.ts`, the Vera copy), add
+`'de'` to `PREFIXED_LOCALES` in `src/lib/seo/locale-path.ts` and to `LOCALES`
+in `structured-data.ts`, its `og:locale` in `static-pages.ts` and
+`page-meta.ts`, the `/de/…` routes in `src/App.tsx` (the test in
+`languages.test.ts` lists them) and the `/de/…` rules in `public/_redirects`
+(`appRedirects` writes Vera Italia's). The build then writes every page in it.
+
+**Adding a restaurant with its own site**: its facts in `src/lib/venues.ts`
+(a fact not known stays null and is left out everywhere), its address in
+`src/lib/seo/site-url.ts`, and a module like `vera-seo.ts` that builds its
+pages for each language with `localePath` and `languageAlternates`.
+
+**After this reaches the live site** (first publish with the new pages):
+submit `https://lasoul.net/sitemap.xml` and `https://veraitalia.net/sitemap.xml`
+again in Google Search Console and Bing Webmaster Tools, use URL Inspection
+on `/bs/menu/lasoul/` and `/ar/menu/lasoul/` to ask for indexing, and run
+`npm run indexnow -- https://lasoul.net` (and Vera Italia's). Search Console's
+"International targeting" report shows hreflang errors, if any, within a few
+weeks.
 
 ## Moving lasoul.net here — website, menu and QR codes, email untouched
 
