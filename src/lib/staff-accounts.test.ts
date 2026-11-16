@@ -25,7 +25,7 @@ describe('the password rule is the same everywhere: 10 characters', () => {
     for (const file of [
       'supabase/functions/create-waiter/index.ts',
       'supabase/functions/manage-admins/index.ts',
-      'src/components/admin/AdminLayout.tsx',
+      'src/components/admin/nav/ChangePasswordDialog.tsx',
     ]) {
       expect(source(file), file).toMatch(/const MIN_PASSWORD = 10;/);
     }

@@ -67,7 +67,13 @@ const AdminCommandPalette = ({ shell, open, onOpenChange }: { shell: AdminShell;
           className="fixed left-1/2 top-[calc(env(safe-area-inset-top)+0.75rem)] z-50 w-[calc(100vw-1.5rem)] max-w-xl -translate-x-1/2 overflow-hidden rounded-2xl border border-border bg-card shadow-2xl outline-none duration-150 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=open]:fade-in-0 data-[state=closed]:fade-out-0 data-[state=open]:zoom-in-[0.98] data-[state=closed]:zoom-out-[0.98] sm:top-[14vh]"
         >
           <Dialog.Title className="sr-only">Search the admin</Dialog.Title>
-          <Command label="Search the admin" loop filter={(value, search, keywords) => searchScore(value, keywords ?? [], search)} className="flex max-h-[min(34rem,calc(100dvh-env(safe-area-inset-top)-1.5rem))] flex-col sm:max-h-[min(34rem,70vh)]">
+          <Command
+            label="Search the admin"
+            loop
+            filter={(value, search, keywords) => searchScore(value, keywords ?? [], search)}
+            // Escape closes at once: the dialog's own handler is only ready a frame after it opens.
+            onKeyDown={(event) => { if (event.key === 'Escape') { event.preventDefault(); onOpenChange(false); } }}
+            className="flex max-h-[min(34rem,calc(100dvh-env(safe-area-inset-top)-1.5rem))] flex-col sm:max-h-[min(34rem,70vh)]">
             <div className="flex items-center gap-3 border-b border-border px-4">
               <Search className="h-[18px] w-[18px] shrink-0 text-muted-foreground" aria-hidden />
               <Command.Input
