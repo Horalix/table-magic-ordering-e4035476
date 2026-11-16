@@ -26,6 +26,7 @@ import {
   Receipt,
   RefreshCw,
   Sparkles,
+  TriangleAlert,
   UserX,
   Users,
   Utensils,
@@ -118,6 +119,16 @@ interface PendingSettle {
 
 const tableOf = (row: { table_sessions: { tables: { table_number: number } | null } | null }) =>
   row.table_sessions?.tables?.table_number ?? '?';
+
+/**
+ * A strip that asks for one tap (sound off, sound blocked): the same soft
+ * amber as the end-of-day notice under it, words left-aligned beside their
+ * icon, so two warnings never look like two different apps.
+ */
+const CAUTION_STRIP = 'w-full min-h-[44px] rounded-xl border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-start text-sm font-sans font-semibold leading-snug text-foreground flex items-center gap-2.5 hover:bg-amber-500/15 transition-colors';
+
+/** "Table 7", the same size and face on every card in the lists. */
+const TABLE_TITLE = 'font-serif text-[26px] font-bold leading-none tracking-tight';
 
 const WaiterDashboard = () => {
   /** The signed-in account, for which restaurant this phone works at. */
@@ -725,9 +736,13 @@ const WaiterDashboard = () => {
                   retrying" next to "3 tables" is wider than a 360px phone
                   leaves here. */}
               <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-sm text-muted-foreground mt-0.5">
-                {/* Not "0 tables" before anything has loaded. */}
-                {loaded && <span className="whitespace-nowrap">{plural(tables.length, 'table')}</span>}
-                {venueName && <span className="whitespace-nowrap">{loaded ? '· ' : ''}{venueName}</span>}
+                {/* Not "0 tables" before anything has loaded. One run of words,
+                    so a 360px phone never starts its second line with "·". */}
+                {(loaded || venueName) && (
+                  <span className="min-w-0 truncate">
+                    {[loaded ? plural(tables.length, 'table') : null, venueName].filter(Boolean).join(' · ')}
+                  </span>
+                )}
                 <ConnectionPill state={connection} />
               </div>
             </div>
@@ -763,25 +778,25 @@ const WaiterDashboard = () => {
           <div className="max-w-6xl mx-auto px-4 sm:px-6 pb-2">
             <button
               onClick={() => { void toggleSound(); }}
-              className="w-full min-h-[44px] rounded-xl bg-amber-100 text-amber-900 border border-amber-200 text-sm font-sans font-semibold flex items-center justify-center gap-2 px-3"
+              className={CAUTION_STRIP}
             >
-              <VolumeX className="w-4 h-4 shrink-0" aria-hidden />
-              {mutedUntil ? `Sound is off until ${soundBackAt(mutedUntil)}` : 'Sound is off'}
-              {buzzes ? ' — the phone only buzzes. Tap to turn on.' : ' — you will not hear calls or ready food. Tap to turn on.'}
+              <VolumeX className="w-4 h-4 shrink-0 text-amber-700" aria-hidden />
+              <span className="min-w-0">
+                {mutedUntil ? `Sound is off until ${soundBackAt(mutedUntil)}` : 'Sound is off'}
+                {buzzes ? ' — the phone only buzzes. Tap to turn on.' : ' — you will not hear calls or ready food. Tap to turn on.'}
+              </span>
             </button>
           </div>
         )}
-
-        <MenuOnlyNotice audience="waiter" outerClassName="max-w-6xl mx-auto px-4 sm:px-6 pb-2" />
-        {staffVenue && <EndOfDayTables hours={staffVenue.venue.hours} outerClassName="max-w-6xl mx-auto px-4 sm:px-6 pb-2" />}
 
         {soundOn && !audioUnlocked && (
           <div className="max-w-6xl mx-auto px-4 sm:px-6 pb-2">
             <button
               onClick={() => { void unlockSound().then((ok) => { if (ok) playWaiterCallAlert(); }); }}
-              className="w-full min-h-[44px] rounded-xl bg-amber-100 text-amber-900 border border-amber-200 text-sm font-sans font-semibold flex items-center justify-center gap-2"
+              className={CAUTION_STRIP}
             >
-              <VolumeX className="w-4 h-4" aria-hidden /> {buzzes ? 'Alerts are silent — tap once to turn on sound and vibration' : 'Alerts are silent — tap once to turn on sound'}
+              <VolumeX className="w-4 h-4 shrink-0 text-amber-700" aria-hidden />
+              <span className="min-w-0">{buzzes ? 'Alerts are silent — tap once to turn on sound and vibration' : 'Alerts are silent — tap once to turn on sound'}</span>
             </button>
           </div>
         )}
@@ -811,7 +826,8 @@ const WaiterDashboard = () => {
             label="Owed"
             // The unit small, so "114.00 KM" stays on one line in a third of a phone.
             value={totalOwed > 0 ? <>{totalOwed.toFixed(2)}<span className="text-xs font-medium"> KM</span></> : '—'}
-            tone={totalOwed > 0 ? 'warn' : 'idle'}
+            // Money, not cooking: plain ink, not the amber of "preparing".
+            tone={totalOwed > 0 ? 'active' : 'idle'}
           />
           {/* The same count as the "In the kitchen" list below. Plates already
               up are not in it: they are on top of the screen, to be run. */}
@@ -847,6 +863,11 @@ const WaiterDashboard = () => {
       </header>
 
       <main className="max-w-6xl mx-auto px-4 sm:px-6 py-5 space-y-7">
+        {/* In the page, not the sticky header: with the end-of-day notice in
+            it the header took 42% of a 390px phone and 48% of a 360px one,
+            and the list it exists to show was barely on screen. */}
+        <MenuOnlyNotice audience="waiter" />
+        {staffVenue && <EndOfDayTables hours={staffVenue.venue.hours} />}
         {/* On top while there is something to do about it (turn it on, add the
             app to the Home Screen, unblock notifications); below the tables
             once it is on, or put off with "Not now". */}
@@ -1009,8 +1030,8 @@ const WaiterDashboard = () => {
               <h2 className="font-serif text-base sm:text-lg font-bold">My tables</h2>
               <span className="text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground tabular-nums">{tables.length}</span>
               {totalOwed > 0 && (
-                <span className="text-sm font-sans font-semibold text-amber-700 dark:text-amber-400 tabular-nums">
-                  {km(totalOwed)} owed
+                <span className="text-sm font-sans font-medium text-muted-foreground tabular-nums">
+                  · <span className="font-semibold text-foreground">{km(totalOwed)}</span> owed
                 </span>
               )}
               <ChevronDown className="w-5 h-5 ml-auto text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
@@ -1126,7 +1147,7 @@ const OwesRow = ({
   onCash: () => void;
   onTerminal: () => void;
 }) => (
-  <div className="rounded-lg border border-amber-500/40 bg-amber-500/5 p-2.5">
+  <div className={`rounded-xl border p-2.5 ${TONE.bill.surface}`}>
     <p className="text-sm font-sans font-semibold text-foreground">
       Owes <span className="tabular-nums">{km(amount)}</span>
       {orders > 1 && <span className="font-normal text-muted-foreground"> · {orders} orders</span>}
@@ -1212,8 +1233,8 @@ const AlertCard = React.forwardRef<HTMLDivElement, {
             {icon}
           </div>
           <div className="min-w-0 flex-1">
-            <p className="font-sans font-bold text-xl leading-tight truncate">{title}</p>
-            <p className={`text-sm font-semibold truncate ${t.text}`}>
+            <p className={`${TABLE_TITLE} truncate`}>{title}</p>
+            <p className={`mt-1 text-sm font-semibold truncate ${t.text}`}>
               {label} · <Elapsed since={alert.created_at} />
             </p>
             <p className={`text-sm truncate ${claimed ? 'font-semibold text-foreground' : 'text-muted-foreground'}`}>
@@ -1256,7 +1277,7 @@ const TableCard = ({
       <CardContent className="p-4 space-y-3">
         <div className="flex items-start justify-between">
           <div>
-            <p className="font-serif text-2xl font-bold leading-none">T{tableNumber}</p>
+            <p className={TABLE_TITLE}>Table {tableNumber}</p>
             {session.guest_name && <p className="text-sm text-muted-foreground mt-1 truncate max-w-[160px]">{session.guest_name}</p>}
           </div>
           {/* Seated duration, on the seated scale. Colouring it with the
@@ -1286,7 +1307,7 @@ const UnassignedRow = ({ session, busy, onTake }: { session: WaiterSession; busy
   const ms = useElapsed(session.opened_at);
   return (
     <li className="rounded-lg border border-border ps-3 pe-1.5 py-1.5 min-h-[56px] flex items-center gap-2 text-sm">
-      <span className="font-serif text-lg font-bold shrink-0">T{session.tables?.table_number ?? '?'}</span>
+      <span className="font-serif text-lg font-bold shrink-0">Table {session.tables?.table_number ?? '?'}</span>
       <span className="text-muted-foreground truncate flex-1">{session.guest_name ?? ''}</span>
       <span className={`text-xs px-2 py-0.5 rounded-full border tabular-nums shrink-0 ${seatedBg(ms)}`}>{formatDuration(ms)}</span>
       <Button className="tap-sm min-h-[44px] shrink-0 text-sm font-semibold" disabled={busy} onClick={onTake}>
@@ -1352,9 +1373,9 @@ const OrderCard = ({ order, busy, onUpdate, highlight = false, arriving = false 
     <Card className={`relative card-lux-hover rounded-2xl ${highlight ? `${TONE.ready.surface} border-[hsl(150_46%_36%/0.45)]` : ''}`}>
       {glow && <ArrivalGlow tone="ready" />}
       <CardContent className="p-4">
-        <div className="flex items-center justify-between mb-2.5 gap-2">
-          <div className="flex items-center gap-2 min-w-0 flex-wrap">
-            <p className="font-serif text-[28px] font-bold leading-none tracking-tight shrink-0">T{tableNumber}</p>
+        <div className="flex items-start justify-between mb-2.5 gap-2">
+          <div className="flex items-center gap-x-2 gap-y-1.5 min-w-0 flex-wrap">
+            <p className={`${TABLE_TITLE} shrink-0`}>Table {tableNumber}</p>
             <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-sans font-semibold ${
               highlight ? TONE.ready.solid : tone ? TONE[tone].chip : 'bg-muted text-muted-foreground'
             }`}>
@@ -1366,14 +1387,14 @@ const OrderCard = ({ order, busy, onUpdate, highlight = false, arriving = false 
             {inKitchen && <PaymentBadge method={order.payment_method} status={order.payment_status} className="bg-transparent px-0.5 text-xs" />}
           </div>
           {inKitchen && (
-            <span className={`text-xs font-semibold px-2 py-0.5 rounded-full tabular-nums shrink-0 ${waitChip(ms)}`}>{formatDuration(ms)}</span>
+            <span className={`mt-0.5 text-xs font-semibold px-2 py-0.5 rounded-full tabular-nums shrink-0 ${waitChip(ms)}`}>{formatDuration(ms)}</span>
           )}
         </div>
         {/* A card order whose payment has not cleared looked exactly like a
             new "Pending" one, and the waiter chased the kitchen for food it had
             never been sent. */}
         {!inKitchen && (
-          <p className={`text-sm font-sans font-semibold mb-2 ${order.status === 'payment_failed' ? 'text-destructive' : 'text-accent'}`}>
+          <p className={`text-sm font-sans font-semibold mb-2 ${order.status === 'payment_failed' ? 'text-destructive' : 'text-foreground'}`}>
             {held
               ? 'Not in kitchen — confirm it above'
               : order.status === 'payment_failed'
@@ -1387,7 +1408,13 @@ const OrderCard = ({ order, busy, onUpdate, highlight = false, arriving = false 
               <span className={`tabular-nums w-7 shrink-0 ${item.quantity > 1 ? 'font-bold text-foreground' : 'text-muted-foreground'}`}>{item.quantity}×</span>
               <span className="min-w-0">
                 {item.menu_items?.name ?? 'Menu item'}
-                {item.notes && <span className="block text-sm font-semibold text-[hsl(30_70%_28%)]">! {item.notes}</span>}
+                {item.notes && (
+                  // The kitchen's note mark, so a runner reads it the way the cook did.
+                  <span className="mt-0.5 flex w-fit max-w-full items-start gap-1 rounded-md bg-[hsl(42_96%_56%/0.22)] px-1.5 py-0.5 text-sm font-semibold text-[hsl(30_70%_20%)]">
+                    <TriangleAlert className="mt-[3px] h-3.5 w-3.5 shrink-0" aria-hidden />
+                    <span className="min-w-0">{item.notes}</span>
+                  </span>
+                )}
               </span>
             </li>
           ))}
