@@ -245,7 +245,7 @@ const AdminSections = () => {
                   aria-label={COLOR_NAMES[c] ?? c}
                   onClick={() => setNewColor(c)}
                   className={cn(
-                    'grid h-11 w-full place-items-center rounded-xl transition sm:h-10',
+                    'grid h-11 w-full place-items-center rounded-xl transition lg:h-10',
                     'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card',
                     newColor === c ? 'bg-muted' : 'hover:bg-muted/60',
                   )}
@@ -278,7 +278,7 @@ const AdminSections = () => {
         actions={(
           <>
             {!isToday && (
-              <Button variant="outline" onClick={() => setDate(todayISO())} className="h-11 sm:h-10">
+              <Button variant="outline" onClick={() => setDate(todayISO())} className="h-11 lg:h-10">
                 Back to today
               </Button>
             )}
@@ -289,7 +289,7 @@ const AdminSections = () => {
                 type="date"
                 value={date}
                 onChange={(e) => setDate(e.target.value)}
-                className="h-11 w-auto min-w-[10rem] text-foreground sm:h-10"
+                className="h-11 w-auto min-w-[10rem] text-foreground lg:h-10"
                 aria-label="Shift date"
               />
             </label>
@@ -316,7 +316,7 @@ const AdminSections = () => {
                 This is a connection problem, not an empty restaurant — nothing has been deleted.
               </p>
             </div>
-            <Button variant="outline" className="mt-4 h-11 sm:h-10" onClick={() => { setLoading(true); void fetchAll(); }}>
+            <Button variant="outline" className="mt-4 h-11 lg:h-10" onClick={() => { setLoading(true); void fetchAll(); }}>
               Try again
             </Button>
           </AdminCardContent>
@@ -371,7 +371,7 @@ const AdminSections = () => {
                           variant="ghost"
                           size="icon"
                           aria-label={`Delete section ${s.name}`}
-                          className="-me-2 h-11 w-11 shrink-0 text-muted-foreground hover:bg-destructive/10 hover:text-destructive sm:h-10 sm:w-10"
+                          className="-me-2 h-11 w-11 shrink-0 text-muted-foreground hover:bg-destructive/10 hover:text-destructive lg:h-10 lg:w-10"
                         >
                           <Trash2 className="h-4 w-4" />
                         </Button>

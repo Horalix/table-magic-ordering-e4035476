@@ -287,7 +287,7 @@ const AdminQRCodes = () => {
         title="QR codes"
         description="The codes guests scan to open the menu. Print them once: they keep working until you replace them."
         actions={(
-          <Button onClick={printAll} disabled={!canPrint} className="h-11 gap-1.5 sm:h-10">
+          <Button onClick={printAll} disabled={!canPrint} className="h-11 gap-1.5 lg:h-10">
             <Printer className="h-4 w-4" /> {printLabel}
           </Button>
         )}
@@ -297,7 +297,7 @@ const AdminQRCodes = () => {
         <div role="alert" className="no-print mb-6 rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm font-sans">
           <p className="font-semibold text-destructive">The codes could not be loaded.</p>
           <p className="mt-1 text-muted-foreground">Check the internet connection and try again. Do not print until they show.</p>
-          <Button type="button" variant="outline" className="mt-3 h-11 gap-1.5 sm:h-9" onClick={() => { void load(); }}>
+          <Button type="button" variant="outline" className="mt-3 h-11 gap-1.5 lg:h-9" onClick={() => { void load(); }}>
             <RefreshCw className="h-4 w-4" /> Try again
           </Button>
         </div>
@@ -371,7 +371,7 @@ const AdminQRCodes = () => {
                 </p>
                 <div className="flex flex-wrap gap-2">
                   <Button
-                    type="button" variant="outline" className="h-11 gap-1.5 sm:h-10" disabled={!venueUrl}
+                    type="button" variant="outline" className="h-11 gap-1.5 lg:h-10" disabled={!venueUrl}
                     onClick={() => { if (venueUrl) navigator.clipboard.writeText(venueUrl).then(() => toast.success('Link copied')); }}
                   >
                     <Copy className="h-4 w-4" /> Copy link
@@ -388,7 +388,7 @@ const AdminQRCodes = () => {
                     <span>Replacing the code stops every printed room code at once. Only do it if someone copied your code, and print the new one straight after.</span>
                   </p>
                   <Button
-                    type="button" variant="ghost" className="-ms-3 h-11 gap-1.5 px-3 text-destructive hover:bg-destructive/5 hover:text-destructive sm:h-9"
+                    type="button" variant="ghost" className="-ms-3 h-11 gap-1.5 px-3 text-destructive hover:bg-destructive/5 hover:text-destructive lg:h-9"
                     onClick={() => setConfirmReplace(true)} disabled={rotating || !loaded || !venueUrl}
                   >
                     <RefreshCw className={cn('h-4 w-4', rotating && 'animate-spin motion-reduce:animate-none')} /> Replace code…
@@ -451,7 +451,7 @@ const AdminQRCodes = () => {
                     label={`Table ${table.table_number}`}
                     size="md"
                   />
-                  <Button onClick={() => printSingle(table.id)} variant="ghost" className="no-print mt-1 h-11 gap-1.5 text-xs text-muted-foreground sm:h-9">
+                  <Button onClick={() => printSingle(table.id)} variant="ghost" className="no-print mt-1 h-11 gap-1.5 text-xs text-muted-foreground lg:h-9">
                     <Printer className="h-3.5 w-3.5" /> Print this one
                   </Button>
                 </div>

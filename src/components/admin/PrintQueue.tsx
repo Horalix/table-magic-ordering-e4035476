@@ -84,7 +84,7 @@ const PrintQueue = () => {
         {error && (
           <div role="alert" className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm font-sans text-destructive">
             <span className="min-w-0">{error}</span>
-            <Button variant="outline" className="h-11 gap-1.5 sm:h-9" onClick={() => { void load(); }}>
+            <Button variant="outline" className="h-11 gap-1.5 lg:h-9" onClick={() => { void load(); }}>
               <RefreshCw className="h-4 w-4" /> Try again
             </Button>
           </div>
@@ -130,7 +130,7 @@ const PrintQueue = () => {
                   </div>
                   {t.status !== 'cancelled' && (
                     <Button
-                      variant={t.status === 'printed' ? 'ghost' : 'outline'} className="h-11 shrink-0 gap-1.5 px-3 sm:h-9"
+                      variant={t.status === 'printed' ? 'ghost' : 'outline'} className="h-11 shrink-0 gap-1.5 px-3 lg:h-9"
                       disabled={busy === t.id} onClick={() => retry(t)}
                       aria-label={`${t.status === 'printed' ? 'Reprint' : 'Retry'} table ${table ?? '?'} ${t.ticket_type}`}
                     >

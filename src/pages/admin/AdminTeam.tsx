@@ -304,7 +304,7 @@ const AdminTeam = () => {
 
   // On a phone the row's buttons are icons only, each a full 44 px tap, so
   // both fit beside a name at 360 px; their labels come back from sm up.
-  const rowButton = 'gap-1.5 min-h-[44px] min-w-[44px] px-2.5 sm:min-h-[40px] sm:px-3 shrink-0';
+  const rowButton = 'gap-1.5 min-h-[44px] min-w-[44px] px-2.5 lg:min-h-[40px] sm:px-3 shrink-0';
 
   const removeButton = (a: Account) => (
     <Button
@@ -496,10 +496,10 @@ const AdminTeam = () => {
         description="Who runs each restaurant, and every sign-in. Only you, the owner, see this page."
         actions={(
           <>
-            <Button variant="outline" onClick={() => void copyAll()} disabled={!data} className="h-11 gap-2 sm:h-10">
+            <Button variant="outline" onClick={() => void copyAll()} disabled={!data} className="h-11 gap-2 lg:h-10">
               <Copy className="w-4 h-4" aria-hidden /> Copy all sign-ins
             </Button>
-            <Button onClick={goToForm} className="h-11 gap-2 sm:h-10">
+            <Button onClick={goToForm} className="h-11 gap-2 lg:h-10">
               <UserPlus className="w-4 h-4" aria-hidden /> Add an admin
             </Button>
           </>
@@ -520,7 +520,7 @@ const AdminTeam = () => {
           <p role="alert" className="rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm font-sans text-destructive">
             Could not load the team: {error.message}. The manage-admins function may not be deployed yet.
           </p>
-          <Button variant="outline" disabled={isFetching} onClick={() => { void refetch(); }} className="mt-3 h-11 gap-2 sm:h-10">
+          <Button variant="outline" disabled={isFetching} onClick={() => { void refetch(); }} className="mt-3 h-11 gap-2 lg:h-10">
             {isFetching && <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden />} Try again
           </Button>
         </div>
@@ -601,7 +601,7 @@ const AdminTeam = () => {
           ) : null}
         </div>
 
-        <div className="min-w-0 lg:sticky lg:top-6">
+        <div className="min-w-0 lg:sticky lg:top-[calc(var(--admin-top,0px)+1.5rem)]">
           {appointForm}
         </div>
       </div>
@@ -625,7 +625,7 @@ const AdminTeam = () => {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter className="gap-2">
-            <Button type="button" variant="outline" disabled={!!removing} onClick={() => setRemoveTarget(null)} className="h-11 sm:h-10">
+            <Button type="button" variant="outline" disabled={!!removing} onClick={() => setRemoveTarget(null)} className="h-11 lg:h-10">
               Keep them
             </Button>
             {removeTarget?.kind === 'admin' && (
@@ -634,7 +634,7 @@ const AdminTeam = () => {
                 variant="outline"
                 disabled={!!removing}
                 onClick={() => removeTarget && void revoke(removeTarget)}
-                className="h-11 gap-2 sm:h-10"
+                className="h-11 gap-2 lg:h-10"
               >
                 {removing === 'revoke' ? <Loader2 className="w-4 h-4 animate-spin motion-reduce:animate-none" /> : <UserMinus className="w-4 h-4" />}
                 Only stop running {nameOf(removeTarget.venue)}
@@ -644,7 +644,7 @@ const AdminTeam = () => {
               type="button"
               disabled={!!removing}
               onClick={() => removeTarget && void removeAccount(removeTarget)}
-              className="h-11 gap-2 bg-destructive text-destructive-foreground hover:bg-destructive/90 sm:h-10"
+              className="h-11 gap-2 bg-destructive text-destructive-foreground hover:bg-destructive/90 lg:h-10"
             >
               {removing === 'remove' ? <Loader2 className="w-4 h-4 animate-spin motion-reduce:animate-none" /> : <Trash2 className="w-4 h-4" />}
               Remove account
@@ -679,8 +679,8 @@ const AdminTeam = () => {
               </p>
             </div>
             <DialogFooter className="gap-2">
-              <Button type="button" variant="outline" onClick={closeReset} className="h-11 sm:h-10">Cancel</Button>
-              <Button type="submit" disabled={resetting} className="h-11 gap-2 sm:h-10">
+              <Button type="button" variant="outline" onClick={closeReset} className="h-11 lg:h-10">Cancel</Button>
+              <Button type="submit" disabled={resetting} className="h-11 gap-2 lg:h-10">
                 {resetting && <Loader2 className="w-4 h-4 animate-spin motion-reduce:animate-none" />} Set new password
               </Button>
             </DialogFooter>

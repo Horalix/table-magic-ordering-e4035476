@@ -36,7 +36,7 @@ type TableRow = Database['public']['Tables']['tables']['Row'] & {
 const TABLE_TABLES = ['table_sessions', 'tables'] as const;
 
 /** Tap targets: 44 px on a phone, 40 on a desktop. */
-const TAP = 'h-11 sm:h-10';
+const TAP = 'h-11 lg:h-10';
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
@@ -210,7 +210,7 @@ const AdminTables = () => {
           <p className="mt-1 text-muted-foreground">
             This is a loading problem, not an empty restaurant — do not recreate them. Check the connection and try again.
           </p>
-          <Button type="button" variant="outline" className="mt-3 h-11 gap-1.5 sm:h-9" onClick={() => { void fetchTables(); }}>
+          <Button type="button" variant="outline" className="mt-3 h-11 gap-1.5 lg:h-9" onClick={() => { void fetchTables(); }}>
             <RefreshCw className="h-4 w-4" /> Try again
           </Button>
         </div>
@@ -296,7 +296,7 @@ const AdminTables = () => {
                               </SelectContent>
                             </Select>
                             <Button
-                              variant="outline" size="icon" className="h-11 w-11 shrink-0 sm:h-10 sm:w-10"
+                              variant="outline" size="icon" className="h-11 w-11 shrink-0 lg:h-10 lg:w-10"
                               aria-label="Show QR" aria-expanded={qrOpen}
                               onClick={() => setShowQR(qrOpen ? null : table.id)}
                             >
@@ -316,7 +316,7 @@ const AdminTables = () => {
                             <AlertDialogTrigger asChild>
                               <Button
                                 variant="ghost" size="icon"
-                                className="col-start-3 row-start-1 h-11 w-11 text-muted-foreground hover:bg-destructive/5 hover:text-destructive sm:col-start-4 sm:h-10 sm:w-10"
+                                className="col-start-3 row-start-1 h-11 w-11 text-muted-foreground hover:bg-destructive/5 hover:text-destructive sm:col-start-4 lg:h-10 lg:w-10"
                                 aria-label={`Delete table ${table.table_number}`}
                               >
                                 <Trash2 className="h-4 w-4" />
@@ -360,7 +360,7 @@ const AdminTables = () => {
             </AdminCard>
           </Stagger>
 
-          <Stagger className="space-y-6 lg:sticky lg:top-6">
+          <Stagger className="space-y-6 lg:sticky lg:top-[calc(var(--admin-top,0px)+1.5rem)]">
             <AdminCard>
               <AdminCardHeader icon={Plus} title="Add tables" />
               <AdminCardContent className="space-y-4">

@@ -38,7 +38,7 @@ const sampleOrder = {
 };
 
 /** Tap targets: 44 px on a phone, the desktop's 40. */
-const TAP = 'h-11 sm:h-10';
+const TAP = 'h-11 lg:h-10';
 
 const CopyField = ({ value, label }: { value: string; label?: string }) => {
   const [copied, setCopied] = useState(false);
@@ -51,7 +51,7 @@ const CopyField = ({ value, label }: { value: string; label?: string }) => {
       {label && <p className="mb-1 text-xs font-sans font-medium text-muted-foreground">{label}</p>}
       <div className="flex flex-col gap-2 sm:flex-row sm:items-stretch">
         <code className="min-w-0 flex-1 break-all rounded-lg border border-border bg-card px-3 py-2.5 font-mono text-xs leading-relaxed">{value}</code>
-        <Button type="button" variant="outline" onClick={copy} className="h-11 shrink-0 gap-1.5 self-start sm:h-auto sm:min-h-[40px] sm:self-stretch">
+        <Button type="button" variant="outline" onClick={copy} className="h-11 shrink-0 gap-1.5 self-start sm:h-auto lg:min-h-[40px] sm:self-stretch">
           {copied ? <Check className="h-4 w-4 text-primary" /> : <Copy className="h-4 w-4" />}{copied ? 'Copied' : 'Copy'}
         </Button>
       </div>

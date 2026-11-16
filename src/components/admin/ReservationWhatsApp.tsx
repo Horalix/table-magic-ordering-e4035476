@@ -138,7 +138,7 @@ const ReservationWhatsApp = ({ venueSlug }: { venueSlug: string }) => {
             {rejected.length > 0 && ` Not approved: ${rejected.map((t) => `${t.name} (${t.language})`).join(', ')}.`}
           </p>
           {missing > 0 && (
-            <Button type="button" size="sm" onClick={() => void setUp()} disabled={busy !== null} className="h-11 gap-2 sm:h-9">
+            <Button type="button" size="sm" onClick={() => void setUp()} disabled={busy !== null} className="h-11 gap-2 lg:h-9">
               {busy === 'setup' && <Loader2 className="w-3.5 h-3.5 animate-spin" />} Set up the messages
             </Button>
           )}

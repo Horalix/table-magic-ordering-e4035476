@@ -146,12 +146,12 @@ const AlertThisPhone = ({ venueId }: { venueId: string }) => {
       <p className="mt-2 text-xs leading-relaxed text-muted-foreground">{explainAlerts(state)}</p>
       {/* A page of its own, not part of the app: how to add the Manager app, step by step. */}
       {state === 'needs-home-screen' && (
-        <Button asChild variant="outline" size="sm" className="mt-3 h-11 sm:h-9">
+        <Button asChild variant="outline" size="sm" className="mt-3 h-11 lg:h-9">
           <a href="/manager-app/" data-testid="manager-app-link">Step by step</a>
         </Button>
       )}
       {on && (
-        <Button type="button" variant="outline" size="sm" onClick={test} className="mt-3 h-11 sm:h-9">
+        <Button type="button" variant="outline" size="sm" onClick={test} className="mt-3 h-11 lg:h-9">
           Send a test
         </Button>
       )}
@@ -194,7 +194,7 @@ const TellGuest = ({ told, venueName, phone, auto, onDone }: {
         icon={MessageCircle}
         title={`Tell ${r.guest_name}`}
         description={`Their page already shows your answer. A message from your own phone makes sure they see it. It is written in ${LANGUAGE[locale]}, the language they asked in.`}
-        action={<Button variant="outline" size="sm" onClick={onDone} className="h-11 px-4 sm:h-9">Done</Button>}
+        action={<Button variant="outline" size="sm" onClick={onDone} className="h-11 px-4 lg:h-9">Done</Button>}
       />
       <AdminCardContent className="space-y-3 font-sans">
         {auto && auto.status !== 'sending' && (
@@ -567,10 +567,10 @@ const AdminReservations = () => {
                               )}
                             </div>
                             <div className="col-start-2 flex items-center gap-1 sm:col-start-auto sm:justify-end">
-                              <Button variant="ghost" size="sm" onClick={() => setTold({ r, kind: 'confirmed', reply: r.reply ?? '' })} className="h-11 gap-1.5 px-3 text-primary sm:h-9">
+                              <Button variant="ghost" size="sm" onClick={() => setTold({ r, kind: 'confirmed', reply: r.reply ?? '' })} className="h-11 gap-1.5 px-3 text-primary lg:h-9">
                                 <MessageCircle className="h-4 w-4" aria-hidden /> Message
                               </Button>
-                              <Button variant="ghost" size="sm" onClick={() => { setCancelReply(''); setCancelling(r); }} className="h-11 px-3 text-muted-foreground hover:text-destructive sm:h-9">
+                              <Button variant="ghost" size="sm" onClick={() => { setCancelReply(''); setCancelling(r); }} className="h-11 px-3 text-muted-foreground hover:text-destructive lg:h-9">
                                 Cancel
                               </Button>
                             </div>
@@ -606,7 +606,7 @@ const AdminReservations = () => {
                           </p>
                         </div>
                         {r.shown === 'declined' && Date.parse(r.reserved_for) > now && (
-                          <Button variant="outline" size="sm" disabled={answering === r.id} onClick={() => void answer(r, 'confirm', r.reply ?? '')} className="h-11 sm:h-9">
+                          <Button variant="outline" size="sm" disabled={answering === r.id} onClick={() => void answer(r, 'confirm', r.reply ?? '')} className="h-11 lg:h-9">
                             Confirm after all
                           </Button>
                         )}
@@ -616,7 +616,7 @@ const AdminReservations = () => {
                 </ul>
                 {rest.length > answeredShown.length && (
                   <div className="border-t border-border/70 px-4 py-2 sm:px-5">
-                    <Button variant="ghost" size="sm" onClick={() => setAllAnswered(true)} className="h-11 w-full gap-1.5 text-muted-foreground sm:h-9 sm:w-auto">
+                    <Button variant="ghost" size="sm" onClick={() => setAllAnswered(true)} className="h-11 w-full gap-1.5 text-muted-foreground lg:h-9 sm:w-auto">
                       <History className="h-4 w-4" aria-hidden /> Show {rest.length - answeredShown.length} more
                     </Button>
                   </div>
@@ -651,7 +651,7 @@ const AdminReservations = () => {
                       <a href={guestLink} target="_blank" rel="noreferrer" className="min-w-0 flex-1 truncate text-sm font-semibold text-primary underline-offset-4 hover:underline">
                         {guestLink}
                       </a>
-                      <Button type="button" variant="outline" size="sm" onClick={() => void copyLink()} className="h-11 shrink-0 gap-1.5 sm:h-9">
+                      <Button type="button" variant="outline" size="sm" onClick={() => void copyLink()} className="h-11 shrink-0 gap-1.5 lg:h-9">
                         <Copy className="h-3.5 w-3.5" aria-hidden /> Copy
                       </Button>
                     </div>
@@ -722,7 +722,7 @@ const AdminReservations = () => {
                       onChange={(e) => setDraft({ ...draft, reservations_note: e.target.value })} className="mt-1 h-11" />
                   </div>
                   <div className="flex items-center gap-3 pt-1">
-                    <Button type="submit" disabled={!changed || saving} className="h-11 gap-2 sm:h-10">
+                    <Button type="submit" disabled={!changed || saving} className="h-11 gap-2 lg:h-10">
                       {saving && <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden />} Save the rules
                     </Button>
                     {changed && !saving && <span className="text-xs text-muted-foreground">Not saved yet</span>}
@@ -747,9 +747,9 @@ const AdminReservations = () => {
             <Input id="cancel-reply" value={cancelReply} maxLength={300} onChange={(e) => setCancelReply(e.target.value)} className="mt-1 h-11" />
           </div>
           <AlertDialogFooter>
-            <AlertDialogCancel className="h-11 sm:h-10">Keep it</AlertDialogCancel>
+            <AlertDialogCancel className="h-11 lg:h-10">Keep it</AlertDialogCancel>
             <AlertDialogAction onClick={() => { const r = cancelling; setCancelling(null); if (r) void answer(r, 'cancel', cancelReply); }}
-              className="h-11 bg-destructive text-destructive-foreground hover:bg-destructive/90 sm:h-10">
+              className="h-11 bg-destructive text-destructive-foreground hover:bg-destructive/90 lg:h-10">
               Cancel the reservation
             </AlertDialogAction>
           </AlertDialogFooter>
@@ -777,7 +777,7 @@ const ReservationsSkeleton = () => (
 /** A guest's number, one tap to call. */
 const PhoneLink = ({ phone, compact = false }: { phone: string; compact?: boolean }) => (
   <a href={telHref(phone)}
-    className={cn('inline-flex items-center gap-1.5 tabular-nums text-primary underline-offset-4 hover:underline', compact ? 'min-h-[32px] text-xs sm:text-sm' : 'min-h-[44px] text-sm sm:min-h-[32px]')}>
+    className={cn('inline-flex items-center gap-1.5 tabular-nums text-primary underline-offset-4 hover:underline', compact ? 'min-h-[32px] text-xs sm:text-sm' : 'min-h-[44px] text-sm lg:min-h-[32px]')}>
     {!compact && <Phone className="h-3.5 w-3.5" aria-hidden />}{phone}
   </a>
 );

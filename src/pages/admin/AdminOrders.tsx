@@ -283,7 +283,7 @@ const AdminOrders = () => {
         title="Orders"
         description="One trading day of orders, newest first. Find one by its code, its table, a guest or a dish."
         actions={day !== today ? (
-          <Button variant="outline" onClick={() => setDay(today)} className="h-11 gap-1.5 sm:h-10">
+          <Button variant="outline" onClick={() => setDay(today)} className="h-11 gap-1.5 lg:h-10">
             <CalendarDays className="h-4 w-4" aria-hidden /> Back to today
           </Button>
         ) : undefined}
@@ -357,7 +357,7 @@ const AdminOrders = () => {
         <div role="alert" className="mb-4 flex flex-wrap items-center gap-3 rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm font-sans text-destructive">
           <AlertTriangle className="h-4 w-4 shrink-0" aria-hidden />
           <span className="min-w-[200px] flex-1">Could not load orders — what you see may be out of date. ({loadError})</span>
-          <Button variant="outline" size="sm" className="h-11 gap-1.5 sm:h-9" onClick={() => { void fetchOrders(); }}>
+          <Button variant="outline" size="sm" className="h-11 gap-1.5 lg:h-9" onClick={() => { void fetchOrders(); }}>
             <RefreshCw className="h-4 w-4" aria-hidden /> Try again
           </Button>
         </div>
@@ -495,7 +495,7 @@ const AdminOrders = () => {
                 <div className="mt-4 flex flex-wrap items-center gap-2">
                   {flowStep && order.status === 'pending' && held && (
                     <Button
-                      className="h-11 font-semibold sm:h-10"
+                      className="h-11 font-semibold lg:h-10"
                       disabled={busy.has(`status:${order.id}`)}
                       onClick={async () => {
                         try {
@@ -511,7 +511,7 @@ const AdminOrders = () => {
                     </Button>
                   )}
                   {flowStep && next && (
-                    <Button className="h-11 font-semibold sm:h-10" disabled={busy.has(`status:${order.id}`)} onClick={() => updateStatus(order.id, next.to)}>
+                    <Button className="h-11 font-semibold lg:h-10" disabled={busy.has(`status:${order.id}`)} onClick={() => updateStatus(order.id, next.to)}>
                       {next.label}
                     </Button>
                   )}
@@ -521,10 +521,10 @@ const AdminOrders = () => {
                       got recorded twice. */}
                   {canPay && (
                     <>
-                      <Button variant="outline" className="h-11 gap-1.5 sm:h-10" onClick={() => setPaying({ order, method: 'cash' })}>
+                      <Button variant="outline" className="h-11 gap-1.5 lg:h-10" onClick={() => setPaying({ order, method: 'cash' })}>
                         <Banknote className="h-4 w-4" aria-hidden /> Paid cash
                       </Button>
-                      <Button variant="outline" className="h-11 gap-1.5 sm:h-10" onClick={() => setPaying({ order, method: 'pos_terminal' })}>
+                      <Button variant="outline" className="h-11 gap-1.5 lg:h-10" onClick={() => setPaying({ order, method: 'pos_terminal' })}>
                         <Smartphone className="h-4 w-4" aria-hidden /> Paid on terminal
                       </Button>
                     </>
@@ -534,14 +534,14 @@ const AdminOrders = () => {
                       "you will need to refund it separately" and stopped there.
                       A partly refunded order can still be refunded the rest. */}
                   {refundable && (
-                    <Button variant="outline" className="h-11 gap-1.5 sm:h-10" onClick={() => setRefunding(order)}>
+                    <Button variant="outline" className="h-11 gap-1.5 lg:h-10" onClick={() => setRefunding(order)}>
                       <Undo2 className="h-4 w-4" aria-hidden /> Refund
                     </Button>
                   )}
                   {!cancelled && (
                     <Button
                       variant="ghost"
-                      className="ms-auto h-11 gap-1.5 px-3 text-muted-foreground hover:bg-destructive/10 hover:text-destructive sm:h-10"
+                      className="ms-auto h-11 gap-1.5 px-3 text-muted-foreground hover:bg-destructive/10 hover:text-destructive lg:h-10"
                       disabled={busy.has(`cancel:${order.id}`)}
                       onClick={() => { setCancelReason(''); setCancelling(order); }}
                       aria-label={`Cancel order ${order.order_code ?? order.id}`}
@@ -579,7 +579,7 @@ const AdminOrders = () => {
           <div className="flex justify-center pt-2">
             <Button
               variant="outline"
-              className="h-11 gap-2 sm:h-10"
+              className="h-11 gap-2 lg:h-10"
               disabled={loadingMore}
               onClick={() => { setLoadingMore(true); setPages((p) => p + 1); }}
             >
@@ -612,14 +612,14 @@ const AdminOrders = () => {
             aria-label="Reason for cancelling"
           />
           <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => { setCancelling(null); setCancelReason(''); }} className="h-11 sm:h-10">
+            <Button variant="outline" onClick={() => { setCancelling(null); setCancelReason(''); }} className="h-11 lg:h-10">
               Keep order
             </Button>
             <Button
               variant="destructive"
               disabled={!cancelling || busy.has(`cancel:${cancelling.id}`) || cancelReason.trim().length < 3}
               onClick={confirmCancel}
-              className="h-11 sm:h-10"
+              className="h-11 lg:h-10"
             >
               {cancelling && busy.has(`cancel:${cancelling.id}`) ? 'Cancelling…' : 'Cancel order'}
             </Button>
@@ -652,14 +652,14 @@ const AdminOrders = () => {
             />
           )}
           <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setFiscal(null)} className="h-11 sm:h-10">
+            <Button variant="outline" onClick={() => setFiscal(null)} className="h-11 lg:h-10">
               Cancel
             </Button>
             <Button
               variant={fiscal?.mode === 'clear' ? 'destructive' : 'default'}
               disabled={!fiscal || busy.has(`fiscal:${fiscal.order.id}`)}
               onClick={saveFiscal}
-              className="h-11 sm:h-10"
+              className="h-11 lg:h-10"
             >
               {fiscal?.mode === 'clear' ? 'Clear fiscalization' : receipt.trim() ? 'Record receipt' : 'Mark without a number'}
             </Button>

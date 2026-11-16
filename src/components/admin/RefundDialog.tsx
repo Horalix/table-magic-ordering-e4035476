@@ -198,8 +198,8 @@ const RefundDialog = ({ open, onOpenChange, order, onDone }: Props) => {
         </div>
 
         <DialogFooter className="gap-2">
-          <Button variant="outline" onClick={() => onOpenChange(false)} className="h-11 sm:h-10">Cancel</Button>
-          <Button onClick={submit} disabled={!valid || saving} className="h-11 sm:h-10">
+          <Button variant="outline" onClick={() => onOpenChange(false)} className="h-11 lg:h-10">Cancel</Button>
+          <Button onClick={submit} disabled={!valid || saving} className="h-11 lg:h-10">
             {saving ? 'Recording…' : `Record refund${Number.isFinite(value) && value > 0 && value <= remaining + 0.001 ? ` of ${value.toFixed(2)} KM` : ''}`}
           </Button>
         </DialogFooter>

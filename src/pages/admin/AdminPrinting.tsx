@@ -325,7 +325,7 @@ const AdminPrinting = () => {
         title="Printing"
         description="Which printer prints the kitchen and bar tickets, and what they look like. The fiscal receipt printer (Tring) is set up separately."
         actions={(
-          <Button variant="outline" onClick={goToAddPrinter} className="h-11 gap-1.5 sm:h-10">
+          <Button variant="outline" onClick={goToAddPrinter} className="h-11 gap-1.5 lg:h-10">
             <Plus className="h-4 w-4" /> Add a printer
           </Button>
         )}
@@ -401,7 +401,7 @@ const AdminPrinting = () => {
                     {dirty && <span className={cn('h-1.5 w-1.5 rounded-full', TONE.preparing.dot)} aria-hidden />}
                     {dirty ? 'Changes not saved yet' : 'Saved. Applies from the next ticket.'}
                   </p>
-                  <Button onClick={save} disabled={saving || loading} className="h-11 w-full sm:h-10 sm:w-auto sm:min-w-[132px]">
+                  <Button onClick={save} disabled={saving || loading} className="h-11 w-full lg:h-10 sm:w-auto sm:min-w-[132px]">
                     {saving ? <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-label="Saving" /> : 'Save settings'}
                   </Button>
                 </div>
@@ -409,7 +409,7 @@ const AdminPrinting = () => {
             )}
           </AdminCard>
 
-          <AdminCard className="lg:sticky lg:top-6">
+          <AdminCard className="lg:sticky lg:top-[calc(var(--admin-top,0px)+1.5rem)]">
             <AdminCardHeader
               icon={Eye}
               title="What prints"

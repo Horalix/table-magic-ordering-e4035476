@@ -167,11 +167,11 @@ const AdminFloorTonight = () => {
         actions={(
           <>
             {!isToday && (
-              <Button variant="outline" onClick={() => setDate(todayISO())} className="h-11 gap-2 sm:h-10">
+              <Button variant="outline" onClick={() => setDate(todayISO())} className="h-11 gap-2 lg:h-10">
                 <CalendarDays className="h-4 w-4" aria-hidden /> Back to today
               </Button>
             )}
-            <Button variant="outline" asChild className="h-11 gap-2 sm:h-10">
+            <Button variant="outline" asChild className="h-11 gap-2 lg:h-10">
               <Link to="/admin/sections"><Layers className="h-4 w-4" aria-hidden /> Edit sections</Link>
             </Button>
           </>
@@ -196,7 +196,7 @@ const AdminFloorTonight = () => {
                 This is a connection problem, not an empty restaurant — nothing has been deleted.
               </p>
             </div>
-            <Button variant="outline" className="mt-4 h-11 sm:h-10" onClick={() => { setLoading(true); void fetchAll(); }}>
+            <Button variant="outline" className="mt-4 h-11 lg:h-10" onClick={() => { setLoading(true); void fetchAll(); }}>
               Try again
             </Button>
           </AdminCardContent>
@@ -211,7 +211,7 @@ const AdminFloorTonight = () => {
             className="pb-6"
           />
           <div className="flex justify-center pb-8">
-            <Button asChild className="h-11 gap-2 sm:h-10"><Link to="/admin/sections"><Plus className="h-4 w-4" aria-hidden /> Set up sections</Link></Button>
+            <Button asChild className="h-11 gap-2 lg:h-10"><Link to="/admin/sections"><Plus className="h-4 w-4" aria-hidden /> Set up sections</Link></Button>
           </div>
         </AdminCard>
       ) : (
@@ -287,7 +287,7 @@ const AdminFloorTonight = () => {
             })}
           </Stagger>
 
-          <AdminCard className="lg:sticky lg:top-6">
+          <AdminCard className="lg:sticky lg:top-[calc(var(--admin-top,0px)+1.5rem)]">
             <AdminCardHeader
               icon={Users}
               title="On the floor"

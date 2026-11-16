@@ -108,7 +108,7 @@ const CopyUrl = ({ url }: { url: string }) => {
   return (
     <div className="flex flex-col gap-2 sm:flex-row sm:items-stretch">
       <code className="min-w-0 flex-1 select-all break-all rounded-lg border border-border bg-card px-3 py-2.5 font-mono text-xs leading-relaxed">{url}</code>
-      <Button type="button" variant="outline" onClick={copy} className="h-11 shrink-0 gap-1.5 self-start sm:h-auto sm:min-h-[40px] sm:self-stretch">
+      <Button type="button" variant="outline" onClick={copy} className="h-11 shrink-0 gap-1.5 self-start sm:h-auto lg:min-h-[40px] sm:self-stretch">
         {copied ? <Check className="h-4 w-4 text-primary" /> : <Copy className="h-4 w-4" />}{copied ? 'Copied' : 'Copy'}
       </Button>
     </div>
@@ -215,7 +215,7 @@ const PrinterCard = ({ printer, onChanged }: { printer: PrinterRow; onChanged: (
         </div>
         <div className="flex shrink-0 items-center gap-1">
           <Button
-            variant="outline" className="h-11 gap-1.5 px-3 sm:h-10" disabled={busy || !printer.enabled}
+            variant="outline" className="h-11 gap-1.5 px-3 lg:h-10" disabled={busy || !printer.enabled}
             onClick={() => act('Test print', async () => {
               await requestTestPrint(printer.id);
               toast.success(`${printer.name} prints a test page on its next call — within about 10 seconds`);
@@ -226,7 +226,7 @@ const PrinterCard = ({ printer, onChanged }: { printer: PrinterRow; onChanged: (
           </Button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-11 w-11 sm:h-10 sm:w-10" aria-label={`More for ${printer.name}`}>
+              <Button variant="ghost" size="icon" className="h-11 w-11 lg:h-10 lg:w-10" aria-label={`More for ${printer.name}`}>
                 <MoreHorizontal className="h-4 w-4" />
               </Button>
             </DropdownMenuTrigger>
@@ -237,7 +237,7 @@ const PrinterCard = ({ printer, onChanged }: { printer: PrinterRow; onChanged: (
                 onValueChange={(v) => act('Station', () => updatePrinter(printer.id, { station: v as PrinterStation }))}
               >
                 {(Object.keys(STATION_LABEL) as PrinterStation[]).map((s) => (
-                  <DropdownMenuRadioItem key={s} value={s} className="min-h-[44px] sm:min-h-[40px]">{STATION_LABEL[s]} tickets</DropdownMenuRadioItem>
+                  <DropdownMenuRadioItem key={s} value={s} className="min-h-[44px] lg:min-h-[40px]">{STATION_LABEL[s]} tickets</DropdownMenuRadioItem>
                 ))}
               </DropdownMenuRadioGroup>
               <DropdownMenuSeparator />
@@ -245,32 +245,32 @@ const PrinterCard = ({ printer, onChanged }: { printer: PrinterRow; onChanged: (
                 value={String(printer.paper_width)}
                 onValueChange={(v) => act('Paper', () => updatePrinter(printer.id, { paper_width: Number(v) as 58 | 80 }))}
               >
-                <DropdownMenuRadioItem value="80" className="min-h-[44px] sm:min-h-[40px]">80 mm paper</DropdownMenuRadioItem>
-                <DropdownMenuRadioItem value="58" className="min-h-[44px] sm:min-h-[40px]">58 mm paper</DropdownMenuRadioItem>
+                <DropdownMenuRadioItem value="80" className="min-h-[44px] lg:min-h-[40px]">80 mm paper</DropdownMenuRadioItem>
+                <DropdownMenuRadioItem value="58" className="min-h-[44px] lg:min-h-[40px]">58 mm paper</DropdownMenuRadioItem>
               </DropdownMenuRadioGroup>
               <DropdownMenuSeparator />
               <DropdownMenuCheckboxItem
                 checked={printer.plain_text}
                 onCheckedChange={(v) => act('Plain text', () => updatePrinter(printer.id, { plain_text: !!v }))}
-                className="min-h-[44px] sm:min-h-[40px]"
+                className="min-h-[44px] lg:min-h-[40px]"
               >
                 Plain text (if tickets print garbled)
               </DropdownMenuCheckboxItem>
               <DropdownMenuCheckboxItem
                 checked={printer.enabled}
                 onCheckedChange={(v) => act('Enable', () => updatePrinter(printer.id, { enabled: !!v }))}
-                className="min-h-[44px] sm:min-h-[40px]"
+                className="min-h-[44px] lg:min-h-[40px]"
               >
                 Printing on
               </DropdownMenuCheckboxItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem
-                className="min-h-[44px] gap-2 sm:min-h-[40px]"
+                className="min-h-[44px] gap-2 lg:min-h-[40px]"
                 onSelect={() => setConfirmNewAddress(true)}
               >
                 <RefreshCw className="h-4 w-4" /> New address
               </DropdownMenuItem>
-              <DropdownMenuItem className="min-h-[44px] gap-2 text-destructive focus:text-destructive sm:min-h-[40px]" onSelect={() => setConfirmDelete(true)}>
+              <DropdownMenuItem className="min-h-[44px] gap-2 text-destructive focus:text-destructive lg:min-h-[40px]" onSelect={() => setConfirmDelete(true)}>
                 <Trash2 className="h-4 w-4" /> Remove printer
               </DropdownMenuItem>
             </DropdownMenuContent>
@@ -282,7 +282,7 @@ const PrinterCard = ({ printer, onChanged }: { printer: PrinterRow; onChanged: (
         type="button"
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
-        className="mt-1 inline-flex min-h-[44px] items-center gap-1 rounded-md text-sm font-sans font-medium text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:ms-[52px] sm:min-h-[36px]"
+        className="mt-1 inline-flex min-h-[44px] items-center gap-1 rounded-md text-sm font-sans font-medium text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:ms-[52px] lg:min-h-[36px]"
       >
         {open ? 'Hide setup' : 'Address & setup steps'}
         <ChevronDown className={cn('h-4 w-4 transition-transform motion-reduce:transition-none', open && 'rotate-180')} aria-hidden />
@@ -380,7 +380,7 @@ const AddPrinter = ({ existing, onAdded }: { existing: PrinterRow[]; onAdded: ()
             options={([80, 58] as const).map((w) => ({ value: w, label: `${w} mm` }))}
           />
         </div>
-        <Button onClick={add} disabled={busy || !name.trim()} className="h-11 gap-1.5 sm:h-10">
+        <Button onClick={add} disabled={busy || !name.trim()} className="h-11 gap-1.5 lg:h-10">
           {busy ? <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" /> : <Plus className="h-4 w-4" />} Add printer
         </Button>
       </div>

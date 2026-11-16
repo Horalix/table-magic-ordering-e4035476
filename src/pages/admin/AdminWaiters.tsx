@@ -395,7 +395,7 @@ const AdminWaiters = () => {
               variant="outline"
               size="sm"
               onClick={() => { setResetTarget(waiter); setResetPassword(''); setResetProblem(null); }}
-              className="h-11 gap-1.5 sm:order-3 sm:h-9"
+              className="h-11 gap-1.5 sm:order-3 lg:h-9"
               aria-label={`New password for ${waiter.display_name}`}
             >
               <LockKeyhole className="h-4 w-4" aria-hidden /> Password
@@ -405,7 +405,7 @@ const AdminWaiters = () => {
             variant="outline"
             size="sm"
             onClick={() => { setPinTarget(waiter); setPinValue(''); }}
-            className="h-11 gap-1.5 sm:order-3 sm:h-9"
+            className="h-11 gap-1.5 sm:order-3 lg:h-9"
             aria-label={`Set PIN for ${waiter.display_name}`}
           >
             <KeyRound className="h-4 w-4" aria-hidden /> PIN
@@ -416,7 +416,7 @@ const AdminWaiters = () => {
                 variant="ghost"
                 size="icon"
                 aria-label={`Remove waiter ${waiter.display_name}`}
-                className="ms-auto h-11 w-11 text-destructive hover:bg-destructive/10 hover:text-destructive sm:order-5 sm:ms-0 sm:h-9 sm:w-9"
+                className="ms-auto h-11 w-11 text-destructive hover:bg-destructive/10 hover:text-destructive sm:order-5 sm:ms-0 lg:h-9 lg:w-9"
               >
                 <Trash2 className="h-4 w-4" />
               </Button>
@@ -464,7 +464,7 @@ const AdminWaiters = () => {
           <p role="alert" className="rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm font-sans text-destructive">
             The list could not be loaded. Nothing is lost.
           </p>
-          <Button variant="outline" className="mt-3 h-11 sm:h-10" onClick={() => { void fetchAll(); }}>Try again</Button>
+          <Button variant="outline" className="mt-3 h-11 lg:h-10" onClick={() => { void fetchAll(); }}>Try again</Button>
         </div>
       );
     }
@@ -507,7 +507,7 @@ const AdminWaiters = () => {
         description="Everyone who signs in to the waiter app or the kitchen screen here: add them, switch them off, or give them a new password or floor PIN."
         actions={(
           <>
-            <Button variant="outline" onClick={copyLoginLink} className="h-11 gap-2 sm:h-10">
+            <Button variant="outline" onClick={copyLoginLink} className="h-11 gap-2 lg:h-10">
               <Copy className="h-4 w-4" aria-hidden /> Copy waiter login link
             </Button>
             <Button onClick={goToForm} className="h-11 gap-2 lg:hidden">
@@ -553,7 +553,7 @@ const AdminWaiters = () => {
           </AdminCardContent>
         </AdminCard>
 
-        <AdminCard ref={formCard} className="min-w-0 scroll-mt-20 lg:sticky lg:top-6">
+        <AdminCard ref={formCard} className="min-w-0 scroll-mt-[calc(var(--admin-top,0px)+1rem)] lg:sticky lg:top-[calc(var(--admin-top,0px)+1.5rem)]">
           <AdminCardHeader
             icon={UserPlus}
             title="Add Waiter"
@@ -711,8 +711,8 @@ const AdminWaiters = () => {
               </p>
             </div>
             <DialogFooter className="gap-2">
-              <Button type="button" variant="outline" onClick={() => { setPinTarget(null); setPinValue(''); }} className="h-11 sm:h-10">Cancel</Button>
-              <Button type="submit" disabled={savingPin || pinValue.length !== 4} className="h-11 sm:h-10">
+              <Button type="button" variant="outline" onClick={() => { setPinTarget(null); setPinValue(''); }} className="h-11 lg:h-10">Cancel</Button>
+              <Button type="submit" disabled={savingPin || pinValue.length !== 4} className="h-11 lg:h-10">
                 {savingPin ? <Loader2 className="w-4 h-4 animate-spin motion-reduce:animate-none" /> : 'Save PIN'}
               </Button>
             </DialogFooter>
@@ -745,8 +745,8 @@ const AdminWaiters = () => {
               </p>
             </div>
             <DialogFooter className="gap-2">
-              <Button type="button" variant="outline" onClick={() => setResetTarget(null)} className="h-11 sm:h-10">Cancel</Button>
-              <Button type="submit" disabled={resetting} className="h-11 gap-2 sm:h-10">
+              <Button type="button" variant="outline" onClick={() => setResetTarget(null)} className="h-11 lg:h-10">Cancel</Button>
+              <Button type="submit" disabled={resetting} className="h-11 gap-2 lg:h-10">
                 {resetting && <Loader2 className="w-4 h-4 animate-spin motion-reduce:animate-none" />} Set new password
               </Button>
             </DialogFooter>
