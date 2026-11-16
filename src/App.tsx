@@ -11,6 +11,7 @@ import LocaleShell from "./components/LocaleShell";
 import { menuCategoryPath, menuHome, ownSiteElsewhere, venueBySlug } from "./lib/venues";
 import { currentVenueSlug } from "./lib/current-venue";
 import { HOME_VENUE } from "./lib/home-venue";
+import { posterShown } from "./lib/seo/poster";
 import { DEMO_PATHS } from "./demo/brand";
 
 const VERA_HOME = HOME_VENUE === "veraitalia";
@@ -105,8 +106,13 @@ const queryClient = new QueryClient({
  * fast load never flashes anything, and nothing spins in the middle of the
  * screen.
  */
+/*
+ * Clear, not cream, while a home page still shows the photograph its HTML
+ * came with (src/lib/seo/poster.ts): the first screen's code is on its way,
+ * and what the visitor already sees stays.
+ */
 const RouteFallback = () => (
-  <div className="min-h-screen bg-background" role="status" aria-label="Loading">
+  <div className={`min-h-screen ${posterShown() ? '' : 'bg-background'}`} role="status" aria-label="Loading">
     <div className="fixed inset-x-0 top-0 h-0.5 overflow-hidden opacity-0 animate-[progress-appear_0.3s_ease-out_0.25s_forwards]">
       <div className="h-full w-1/3 bg-primary/70 animate-[progress-indeterminate_1.1s_ease-in-out_infinite] motion-reduce:animate-none" />
     </div>

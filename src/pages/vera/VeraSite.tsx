@@ -16,6 +16,7 @@ import ReserveLink from '@/components/site/ReserveLink';
 import { useReservationsOffered } from '@/hooks/useReservationsOffered';
 import { RESERVE_PATH } from '@/lib/seo/reservations';
 import { rcopy } from '@/lib/reservation-copy';
+import { dropPoster } from '@/lib/seo/poster';
 import menuData from '../../../scripts/vera-italia/menu.json';
 
 /**
@@ -45,6 +46,8 @@ const RoomImage = ({ name, alt, sizes, className, priority }: { name: Room; alt:
       loading={priority ? 'eager' : 'lazy'}
       decoding="async"
       {...(priority ? { fetchpriority: 'high' } : {})}
+      // The first screen's photograph is in: the one the page's HTML came with has done its work (src/lib/seo/poster.ts).
+      onLoad={priority ? dropPoster : undefined}
       style={{ backgroundImage: `url(${r.blur})`, backgroundSize: 'cover' }}
       className={className}
     />
@@ -105,6 +108,9 @@ const VeraSite = ({ locale: pathLocale }: { locale?: Locale }) => {
     title: pick(SITE.seoTitle, shownLocale), description: pick(SITE.seoDescription, shownLocale),
     path: veraSitePath(shownLocale), locale: shownLocale, alternates: veraSiteAlternates(), jsonLd, image: VERA_OG_IMAGE,
   });
+
+  // Leaving for another page: the first screen's poster, were it still there, goes too.
+  useEffect(() => dropPoster, []);
 
   // The header sits on the photograph until the page moves, then on travertine.
   const [scrolled, setScrolled] = useState(false);

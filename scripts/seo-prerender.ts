@@ -24,6 +24,7 @@ import type { Locale } from '../src/lib/i18n';
 import { siteT } from '../src/lib/site-copy';
 import { VERA_OG_IMAGE, veraLlms, veraPages, veraRestaurantNode, veraSeoMenu } from '../src/lib/seo/vera-seo';
 import { HOME_VENUE } from '../src/lib/home-venue';
+import { homePoster, posterScript, type Poster } from '../src/lib/seo/poster';
 import { PRIVACY_PATH, privacyBody, privacyCopy, privacyGraph } from '../src/lib/privacy';
 import { OWN_SITE_LIVE, VENUE_URLS } from '../src/lib/seo/site-url';
 import { DEFAULT_VENUE, VENUES, type Venue } from '../src/lib/venues';
@@ -46,14 +47,20 @@ const PRERENDER_STYLE = '<script>document.documentElement.classList.add(\'js\')<
   + '<style>.js [data-prerender]{display:none}[data-prerender]{max-width:46rem;margin:0 auto;padding:1.5rem;'
   + 'font-family:Inter,system-ui,sans-serif;line-height:1.6;color:#232E28;background:#F7F4EC}</style>';
 
-export function renderPage(template: string, head: string, body: string, locale: Locale): string {
+/**
+ * `poster`: the first screen's photograph, for a home page (src/lib/seo/poster.ts).
+ * `own` says the page is a file of its own (/bs/, /ar/), not the one every
+ * address without a page falls back to: its head then asks for the photograph
+ * itself.
+ */
+export function renderPage(template: string, head: string, body: string, locale: Locale, poster?: Poster | null, own = false): string {
   return template
     .replace(/<html lang="[^"]*"[^>]*>/, `<html lang="${locale}"${locale === 'ar' ? ' dir="rtl"' : ''}>`)
     // The template's defaults are for pages this step does not write.
     .replace(/\s*<title>[\s\S]*?<\/title>/, '')
     .replace(/\s*<meta (?:name|property)="(?:description|author|og:[^"]+|twitter:[^"]+)"[^>]*>/g, '')
-    .replace('</head>', `    ${head}\n    ${PRERENDER_STYLE}\n  </head>`)
-    .replace('<div id="root"></div>', `<div id="root"><div data-prerender>\n${body}\n</div></div>`);
+    .replace('</head>', `    ${head}\n    ${PRERENDER_STYLE}${poster ? poster.style + (own ? poster.preload : '') : ''}\n  </head>`)
+    .replace('<div id="root"></div>', `${poster ? posterScript(poster.markup) : ''}<div id="root"><div data-prerender>\n${body}\n</div></div>`);
 }
 
 /**
@@ -71,7 +78,12 @@ export function withBrand(html: string, venue: Venue): string {
     .replace(/(<link rel="icon"[^>]*href=")[^"]*/, `$1${venue.brand.icon}`)
     .replace(/(<link rel="manifest" href=")[^"]*/, `$1${venue.brand.manifest}`)
     // The heading face it uses, not La Soul's Lora (index.html preloads that).
-    .replace(/(<link rel="preload" as="font" type="font\/woff2" href=")\/fonts\/lora\.woff2/, `$1${venue.brand.headingFont}`);
+    .replace(/(<link rel="preload" as="font" type="font\/woff2" href=")\/fonts\/lora\.woff2/, `$1${venue.brand.headingFont}`)
+    // And its own first photograph: the template asks for La Soul's hero on "/",
+    // which Vera Italia's home page never shows (a wasted download ahead of its own).
+    .replace(/preload\('hero-wide'[^\n]*\n\s*preload\('hero-tall'[^\n]*/, (asked) => (venue.slug === 'veraitalia'
+      ? "preload('vera/room-2', [640, 960, 1280, 1600, 2400], 'all');"
+      : asked));
 }
 
 /*
@@ -259,7 +271,9 @@ export function seoPrerender(): Plugin {
       const veraMenu = veraSeoMenu();
       const writeVera = (): SitemapEntry[] => {
         const pages = veraPages(veraMenu);
-        for (const page of pages) write(page.path, withBrand(renderPage(template, headTags(page.head), page.body, page.locale), vera));
+        // Its home page, in each language, shows the room before any code has run.
+        const poster = (p: string) => (veraHome && /^\/(?:(?:bs|ar)\/)?$/.test(p) ? homePoster('veraitalia') : null);
+        for (const page of pages) write(page.path, withBrand(renderPage(template, headTags(page.head), page.body, page.locale, poster(page.path), page.path !== '/'), vera));
         return pages.map((page) => page.sitemap).filter((e): e is SitemapEntry => !!e);
       };
 
@@ -288,7 +302,7 @@ export function seoPrerender(): Plugin {
           title: siteT('seo_title', locale), description: siteT(orderingCopy('seo_description'), locale),
           jsonLd: homeGraph(venue, locale),
         });
-        write(sitePath(locale), renderPage(template, head, homeBody(venue, locale), locale));
+        write(sitePath(locale), renderPage(template, head, homeBody(venue, locale), locale, homePoster(venue.slug), sitePath(locale) !== '/'));
       }
 
       // The menu: one address in every language, so no alternates; English

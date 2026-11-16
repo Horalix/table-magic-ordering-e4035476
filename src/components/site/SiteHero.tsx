@@ -9,6 +9,7 @@ import { RESERVE_PATH } from '@/lib/seo/reservations';
 import { rcopy } from '@/lib/reservation-copy';
 import { menuPath, type Venue } from '@/lib/venues';
 import { siteImage, siteSrc, siteSrcSet } from './site-image-data';
+import { dropPoster } from '@/lib/seo/poster';
 
 /**
  * Art direction, in three layouts:
@@ -60,7 +61,8 @@ const SiteHero = ({ venue, ordering, reservations = false }: { venue: Venue; ord
             loading="eager"
             decoding="async"
             {...({ fetchpriority: 'high' } as Record<string, string>)}
-            onLoad={() => setLoaded(true)}
+            // The photograph the page's HTML came with (src/lib/seo/poster.ts) has done its work.
+            onLoad={() => { setLoaded(true); dropPoster(); }}
             className="absolute inset-0 h-full w-full object-cover object-[50%_0%] rtl:-scale-x-100 sm:object-[88%_50%] lg:object-[100%_50%]"
             style={loaded ? undefined : { backgroundColor: '#EFE9DD' }}
           />

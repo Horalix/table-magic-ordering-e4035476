@@ -19,6 +19,7 @@ import { orderingCopy } from '@/lib/seo/ordering';
 import { useMenuOnly } from '@/hooks/useMenuOnly';
 import { useReservationsOffered } from '@/hooks/useReservationsOffered';
 import { DEFAULT_VENUE, VENUES } from '@/lib/venues';
+import { dropPoster } from '@/lib/seo/poster';
 import './site.css';
 
 const ALTERNATES: Record<string, string> = { ...Object.fromEntries(LOCALES.map((l) => [l, sitePath(l)])), 'x-default': '/' };
@@ -70,7 +71,8 @@ const SiteHome = ({ venueSlug = DEFAULT_VENUE, locale: pathLocale }: { venueSlug
   useEffect(() => {
     const root = document.documentElement;
     root.classList.add('site-smooth');
-    return () => root.classList.remove('site-smooth');
+    // Leaving for another page: the first screen's poster, were it still there, goes too.
+    return () => { root.classList.remove('site-smooth'); dropPoster(); };
   }, []);
 
   return (
