@@ -13,6 +13,7 @@ import { reservationCopyTable } from '../reservation-copy';
 import { VENUES } from '../venues';
 import { SITE_URL } from './site-url';
 import { faqEntries, homeGraph, LOCALES, restaurantNode } from './structured-data';
+import { languageAlternates, localePath } from './locale-path';
 import { headTags, homeBody, jsonForScript, llmsFullTxt, llmsTxt, robotsTxt, sitemapXml } from './static-pages';
 import {
   RESERVATION_PREFIX, RESERVE_PATH, fetchReservationsOffered, homeReserveFaq, offerReservations, reservationFacts,
@@ -112,9 +113,10 @@ describe('once the restaurant takes requests online', () => {
 
   it('the home page links to the booking page, in its own language', () => {
     offerReservations(true);
+    // Each to the booking page in the same language (src/lib/seo/locale-path.ts).
     expect(homeBody(venue, 'en')).toContain('<a href="/reserve/">Reserve a table</a>');
-    expect(homeBody(venue, 'bs')).toContain('<a href="/reserve/">Rezervišite sto</a>');
-    expect(homeBody(venue, 'ar')).toContain('<a href="/reserve/">احجز طاولة</a>');
+    expect(homeBody(venue, 'bs')).toContain('<a href="/bs/reserve/">Rezervišite sto</a>');
+    expect(homeBody(venue, 'ar')).toContain('<a href="/ar/reserve/">احجز طاولة</a>');
   });
 
   it('answer engines are told how, and given the page', () => {
@@ -123,7 +125,8 @@ describe('once the restaurant takes requests online', () => {
       expect(llms).toContain(`- Reservations: ask for a table online at ${SITE_URL}/reserve/`);
       expect(llms).toContain('the restaurant confirms each request itself');
     }
-    expect(llmsTxt(venue, null)).toContain(`- [Reserve a table](${SITE_URL}/reserve/): ask online, the restaurant confirms`);
+    // Its three addresses, one per language.
+    expect(llmsTxt(venue, null)).toContain(`- Reserve a table (ask online, the restaurant confirms): [English](${SITE_URL}/reserve/) · [Bosanski](${SITE_URL}/bs/reserve/) · [العربية](${SITE_URL}/ar/reserve/)`);
   });
 
   it('the live site says what the database says now, whatever the build believed', () => {
@@ -158,7 +161,10 @@ describe('the booking page (/reserve/)', () => {
       const graph = reserveGraph(venue, locale, restaurantNode(venue, locale, true, true));
       const restaurant = restaurantOf(graph);
       const page = typed(graph, 'WebPage');
-      expect(page.url).toBe(`${SITE_URL}/reserve/`);
+      // Each language's page is its own address, in its own language.
+      const own = `${SITE_URL}${locale === 'en' ? '' : `/${locale}`}/reserve/`;
+      expect(page.url).toBe(own);
+      expect(page.inLanguage).toBe(locale);
       expect(page.name).toBe(reserveMeta(venue, locale).title);
       expect(page.about).toEqual({ '@id': restaurant['@id'] });
       expect((page.potentialAction as Node)['@type']).toBe('ReserveAction');
@@ -166,7 +172,7 @@ describe('the booking page (/reserve/)', () => {
       expect((typed(graph, 'FAQPage').mainEntity as { name: string; acceptedAnswer: { text: string } }[])
         .map((q) => ({ q: q.name, a: q.acceptedAnswer.text }))).toEqual(reserveFaq(locale));
       expect((typed(graph, 'BreadcrumbList').itemListElement as { item: string }[]).map((i) => i.item))
-        .toEqual([`${SITE_URL}/`, `${SITE_URL}/reserve/`]);
+        .toEqual([`${SITE_URL}${locale === 'en' ? '' : `/${locale}`}/`, own]);
       expect(() => JSON.parse(jsonForScript(graph))).not.toThrow();
     }
   });
@@ -193,26 +199,38 @@ describe('the booking page (/reserve/)', () => {
     }
   });
 
-  it('is written as a real page: listed, with its words in English, Bosnian and Arabic', () => {
+  it('is written as a real page in each language, at its own address, naming the other two', () => {
     offerReservations(true);
-    const html = renderPage(template, headTags({
-      path: RESERVE_PATH, locale: 'en', venue, ...reserveMeta(venue, 'en'),
-      jsonLd: reserveGraph(venue, 'en', restaurantNode(venue, 'en')),
-    }), reserveBody(venue), 'en');
+    const page = (locale: 'en' | 'bs' | 'ar') => renderPage(template, headTags({
+      path: localePath(RESERVE_PATH, locale), locale, venue, ...reserveMeta(venue, locale), alternates: languageAlternates(RESERVE_PATH),
+      jsonLd: reserveGraph(venue, locale, restaurantNode(venue, locale)),
+    }), reserveBody(venue, '/', locale), locale);
+    const html = page('en');
     expect(html).toContain('<title>Reserve a table at La Soul, Sarajevo</title>');
     expect(html).toContain(`<link rel="canonical" href="${SITE_URL}/reserve/" />`);
     expect(html).toContain('<meta name="robots" content="index, follow, max-image-preview:large" />');
     expect(html).toContain('"@type":"ReserveAction"');
-    // One address in every language: no alternates that point a page at itself.
-    expect(html).not.toContain('hreflang');
+    for (const [lang, href] of [['en', '/reserve/'], ['bs', '/bs/reserve/'], ['ar', '/ar/reserve/'], ['x-default', '/reserve/']]) {
+      expect(html).toContain(`<link rel="alternate" hreflang="${lang}" href="${SITE_URL}${href}" />`);
+    }
     expect(html).toContain('<h1>Reserve a table at La Soul, Sarajevo</h1>');
     expect(html).toContain('<h2>How it works</h2>');
-    expect(html.match(/<li>/g)).toHaveLength(9);
+    // Its three steps and nothing in another language: those have pages of their own.
+    expect(html.match(/<li>/g)).toHaveLength(3);
+    expect(html).not.toContain('<section lang=');
     expect(html).toContain('<dt>Does a reservation cost anything?</dt><dd>No. Reserving a table is free.</dd>');
-    expect(html).toContain('<section lang="bs"><h2>Rezervišite sto u La Soul, Sarajevo</h2>');
-    expect(html).toContain('<section lang="ar" dir="rtl">');
     expect(html).toContain(`<a href="tel:${venue.phoneHref}">`);
     expect(html).toContain('<a href="/">La Soul</a>');
+
+    const bs = page('bs');
+    expect(bs).toContain('<html lang="bs">');
+    expect(bs).toContain(`<link rel="canonical" href="${SITE_URL}/bs/reserve/" />`);
+    expect(bs).toContain('<h1>Rezervišite sto u La Soul, Sarajevo</h1>');
+    expect(bs).toContain('<a href="/bs/">La Soul</a>');
+    const ar = page('ar');
+    expect(ar).toContain('<html lang="ar" dir="rtl">');
+    expect(ar).toContain(`<link rel="canonical" href="${SITE_URL}/ar/reserve/" />`);
+    expect(ar).toContain('<a href="/ar/">La Soul</a>');
   });
 
   it('is in the sitemap and comes with its own code, so the form is there at once', () => {

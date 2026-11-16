@@ -45,12 +45,21 @@ describe('the facts', () => {
       telephone: '+38733877779',
       url: `${SITE_URL}/`,
       hasMenu: `${SITE_URL}/menu/lasoul/`,
-      address: { streetAddress: 'Butmirska cesta 16A | 16B', addressLocality: 'Sarajevo', addressCountry: 'BA' },
+      // Two house numbers as an address reads (the page keeps the owner's "16A | 16B"), and the postal code they gave.
+      address: { streetAddress: 'Butmirska cesta 16A/16B', postalCode: '71210', addressLocality: 'Sarajevo', addressCountry: 'BA' },
+      areaServed: { '@type': 'City', name: 'Sarajevo', sameAs: ['https://www.wikidata.org/wiki/Q11194', 'https://en.wikipedia.org/wiki/Sarajevo'] },
+      containedInPlace: { '@type': 'AdministrativeArea', name: 'Ilidža' },
       geo: { '@type': 'GeoCoordinates', latitude: 43.827548, longitude: 18.3103156 },
       currenciesAccepted: 'BAM',
     });
     expect(place.alternateName).toContain('La Soul Cafe & Burger Boutique');
     expect(place.servesCuisine).toContain('Halal');
+    // What the owner confirmed it has, and does not.
+    expect(place.amenityFeature).toContainEqual({ '@type': 'LocationFeatureSpecification', name: 'Parking', value: true });
+    expect(place.amenityFeature).toContainEqual({ '@type': 'LocationFeatureSpecification', name: 'Delivery', value: false });
+    // One restaurant: every page's graph refers to the same @id.
+    expect(place['@id']).toBe(`${SITE_URL}/#restaurant`);
+    expect((homeGraph(venue, 'bs')['@graph'][0] as Record<string, unknown>)['@id']).toBe(`${SITE_URL}/#restaurant`);
     expect(place.sameAs).toEqual(expect.arrayContaining(['https://www.instagram.com/lasoul.bih', venue.mapsUrl]));
     expect(place.openingHoursSpecification).toEqual([{
       '@type': 'OpeningHoursSpecification',
@@ -73,7 +82,7 @@ describe('the facts', () => {
     expect(en).toContain('23:00');
     expect(en).toContain('Butmirska cesta 16A | 16B');
     expect(en).toMatch(/alcohol-free/);
-    const faq = homeGraph(venue, 'bs')['@graph'][2] as { mainEntity: { name: string; acceptedAnswer: { text: string } }[] };
+    const faq = homeGraph(venue, 'bs')['@graph'].find((n) => (n as { '@type': string })['@type'] === 'FAQPage') as { mainEntity: { name: string; acceptedAnswer: { text: string } }[] };
     expect(faq.mainEntity[0].name).toBe('Je li sve u La Soulu halal?');
   });
 });
@@ -107,8 +116,10 @@ describe('the menu', () => {
       suitableForDiet: 'https://schema.org/HalalDiet',
       offers: { '@type': 'Offer', price: '15.50', priceCurrency: 'BAM' },
     });
-    const crumbs = (dishGraph(venue, menu.categories[1], menu.categories[1].sections[0], menu.categories[1].sections[0].items[1], 'en')['@graph'][2] as { itemListElement: { name: string }[] }).itemListElement;
+    const crumbs = (dishGraph(venue, menu.categories[1], menu.categories[1].sections[0], menu.categories[1].sections[0].items[1], 'en')['@graph']
+      .find((n) => (n as { '@type': string })['@type'] === 'BreadcrumbList') as { itemListElement: { name: string; position: number }[] }).itemListElement;
     expect(crumbs.map((c) => c.name)).toEqual(['La Soul', 'Menu', 'Food', 'La Soul Burger']);
+    expect(crumbs.map((c) => c.position)).toEqual([1, 2, 3, 4]);
   });
 });
 
@@ -147,7 +158,8 @@ describe('the prerendered pages', () => {
       description: 'La Soul Burger at La Soul in Sarajevo, 15.50 KM. Beef & cheddar. Fully halal and alcohol-free. Order it from your table.',
     });
     expect(dishMeta('Espresso', 3, null, 'en').description).toBe('Espresso at La Soul in Sarajevo, 3.00 KM. Fully halal and alcohol-free. Order it from your table.');
-    expect(dishMeta('Kafa', 3, 'Domaća', 'bs').description).toBe('Kafa u La Soulu u Sarajevu, 3.00 KM. Domaća. Potpuno halal i bez alkohola. Naručite sa svog stola.');
+    // Prices as they are written in Bosnian.
+    expect(dishMeta('Kafa', 3, 'Domaća', 'bs').description).toBe('Kafa u La Soulu u Sarajevu, 3,00 KM. Domaća. Potpuno halal i bez alkohola. Naručite sa svog stola.');
   });
 
   it('include the privacy notice and terms, at the address the app shows them', () => {
@@ -204,6 +216,10 @@ describe('Vera Italia on its own site (veraitalia.net)', () => {
       ['/veraitalia/*', '/', '301!'],
       ['/menu/lasoul', 'https://lasoul.net/menu/lasoul/', '301!'],
       ['/menu/lasoul/*', 'https://lasoul.net/menu/lasoul/:splat', '301!'],
+      ['/bs/menu/lasoul', 'https://lasoul.net/bs/menu/lasoul/', '301!'],
+      ['/bs/menu/lasoul/*', 'https://lasoul.net/bs/menu/lasoul/:splat', '301!'],
+      ['/ar/menu/lasoul', 'https://lasoul.net/ar/menu/lasoul/', '301!'],
+      ['/ar/menu/lasoul/*', 'https://lasoul.net/ar/menu/lasoul/:splat', '301!'],
       // Last: every rule above must win over the app's addresses and "not found".
       ...appRedirects().map((l) => l.split(/\s+/)),
     ]);
@@ -217,6 +233,10 @@ describe('Vera Italia on its own site (veraitalia.net)', () => {
       ['/veraitalia/*', 'https://veraitalia.net/', '301!'],
       ['/menu/veraitalia', 'https://veraitalia.net/menu/veraitalia/', '301!'],
       ['/menu/veraitalia/*', 'https://veraitalia.net/menu/veraitalia/:splat', '301!'],
+      ['/bs/menu/veraitalia', 'https://veraitalia.net/bs/menu/veraitalia/', '301!'],
+      ['/bs/menu/veraitalia/*', 'https://veraitalia.net/bs/menu/veraitalia/:splat', '301!'],
+      ['/ar/menu/veraitalia', 'https://veraitalia.net/ar/menu/veraitalia/', '301!'],
+      ['/ar/menu/veraitalia/*', 'https://veraitalia.net/ar/menu/veraitalia/:splat', '301!'],
     ]);
     // Nothing of La Soul's own is touched.
     expect(forward.some(([from]) => /lasoul|^\/\*$|^\/$/.test(from))).toBe(false);

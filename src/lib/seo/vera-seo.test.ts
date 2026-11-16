@@ -125,8 +125,11 @@ describe('Vera Italia’s structured data', () => {
   it('is in Sarajevo — the Sarajevo on Wikidata — in every language', () => {
     for (const locale of LOCALES) {
       const restaurant = typed(veraSiteGraph(menu, locale), 'Restaurant');
-      expect(restaurant.areaServed).toEqual({ '@type': 'City', name: 'Sarajevo', sameAs: 'https://www.wikidata.org/wiki/Q11194' });
-      expect(restaurant.address).toMatchObject({ addressLocality: 'Sarajevo', addressCountry: 'BA' });
+      const sarajevo = { '@type': 'City', name: 'Sarajevo', sameAs: ['https://www.wikidata.org/wiki/Q11194', 'https://en.wikipedia.org/wiki/Sarajevo'] };
+      expect(restaurant.areaServed).toEqual(sarajevo);
+      // In Ilidža, in Sarajevo, as the owner gave it (src/lib/venues.ts).
+      expect(restaurant.containedInPlace).toEqual({ '@type': 'AdministrativeArea', name: 'Ilidža', containedInPlace: sarajevo });
+      expect(restaurant.address).toMatchObject({ addressLocality: 'Sarajevo', addressCountry: 'BA', postalCode: '71210' });
     }
   });
 });

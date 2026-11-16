@@ -5,17 +5,25 @@ import { PRODUCT, RESTAURANT } from '../../demo/brand';
 import { absoluteUrl } from './site-url';
 import { OG_IMAGE_PATH } from './structured-data';
 import { jsonForScript } from './static-pages';
+import { languageAlternates, localePath } from './locale-path';
 
 const OG_LOCALE: Record<Locale, string> = { en: 'en_GB', bs: 'bs_BA', ar: 'ar_AR' };
 
 export interface PageMeta {
   title: string;
   description: string;
-  /** The page's own address; canonical and og:url. */
+  /**
+   * The page, by any of its three addresses (/menu/lasoul/, /bs/menu/lasoul/…):
+   * which one is canonical follows `locale` (see headFor).
+   */
   path: string;
   locale: Locale;
-  /** hreflang → path. Pages that are one address in every language pass none, and any are removed. */
-  alternates?: Record<string, string>;
+  /**
+   * hreflang → path. Left out: the page's three addresses and x-default
+   * (./locale-path.ts), which every public page has. Null: none, for a page
+   * that exists in one language only (Vera Italia's website on La Soul's site).
+   */
+  alternates?: Record<string, string> | null;
   /** Replaces the page's structured data. Omitted: whatever the prerendered page carried stays. */
   jsonLd?: unknown;
   image?: string | null;
@@ -42,6 +50,23 @@ function setCanonical(href: string) {
 }
 
 /**
+ * The address rule, in one place: a page shown in a language is that
+ * language's address of the page — its canonical and og:url — and names its
+ * whole family with hreflang, exactly as the prerendered HTML at that address
+ * does (scripts/seo-prerender.ts). So /bs/menu/lasoul/, opened fresh by a
+ * crawler that runs the app, opens in Bosnian (./AddressLanguage.tsx) and
+ * ends with the same head its HTML had. A phone set to Bosnian that opens the
+ * English address sees Bosnian, as it always has, and its head then names the
+ * Bosnian address as canonical: it is showing that page.
+ */
+export function headFor(path: string, locale: Locale, alternates?: Record<string, string> | null): {
+  canonical: string; alternates: Record<string, string>;
+} {
+  if (alternates === null) return { canonical: path, alternates: {} };
+  return { canonical: alternates ? path : localePath(path, locale), alternates: alternates ?? languageAlternates(path) };
+}
+
+/**
  * The page's title, description, canonical address, language alternates and
  * structured data, kept in step with what the prerendered HTML for the same
  * address says (scripts/seo-prerender.ts) — Google reads the page after the
@@ -53,7 +78,8 @@ function setCanonical(href: string) {
  */
 export function usePageMeta(meta: PageMeta, enabled = true) {
   const { title, description, path, locale, alternates, jsonLd, image } = meta;
-  const alternatesKey = JSON.stringify(alternates ?? {});
+  // 'family': none given, the page's three addresses (headFor).
+  const alternatesKey = JSON.stringify(alternates === undefined ? 'family' : alternates);
   const jsonLdKey = jsonLd === undefined ? '' : JSON.stringify(jsonLd);
   useEffect(() => {
     if (!enabled) return;
@@ -62,7 +88,9 @@ export function usePageMeta(meta: PageMeta, enabled = true) {
       document.title = `${RESTAURANT.name} — ${PRODUCT.name} demo`;
       return;
     }
-    const url = absoluteUrl(path);
+    const given = JSON.parse(alternatesKey) as Record<string, string> | null | 'family';
+    const head = headFor(path, locale, given === 'family' ? undefined : given);
+    const url = absoluteUrl(head.canonical);
     const img = absoluteUrl(image || OG_IMAGE_PATH);
     document.title = title;
     setMeta('name', 'description', description);
@@ -77,7 +105,7 @@ export function usePageMeta(meta: PageMeta, enabled = true) {
     setMeta('name', 'twitter:image', img);
 
     document.head.querySelectorAll('link[rel="alternate"][hreflang]').forEach((el) => el.remove());
-    for (const [lang, p] of Object.entries(JSON.parse(alternatesKey) as Record<string, string>)) {
+    for (const [lang, p] of Object.entries(head.alternates)) {
       const link = document.createElement('link');
       link.rel = 'alternate';
       link.hreflang = lang;

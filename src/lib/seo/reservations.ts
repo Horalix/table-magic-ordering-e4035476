@@ -21,8 +21,9 @@ import { rcopy, type ReservationCopyKey } from '../reservation-copy';
 import { siteT } from '../site-copy';
 import type { Venue } from '../venues';
 import { absoluteUrl } from './site-url';
+import { localePath } from './locale-path';
 
-/** The booking page, one address in every language. Page addresses end in "/" (venues.ts). */
+/** The booking page; /bs/reserve/ and /ar/reserve/ in the other two languages (./locale-path.ts). Page addresses end in "/" (venues.ts). */
 export const RESERVE_PATH = '/reserve/';
 /** A guest's own reservation is at /reservation/<id>?t=<key>: never a search result. */
 export const RESERVATION_PREFIX = '/reservation/';
@@ -117,7 +118,7 @@ export function reserveMeta(venue: Venue, locale: Locale): { title: string; desc
  * action it offers, its questions, and where it sits.
  */
 export function reserveGraph(venue: Venue, locale: Locale, restaurant: Record<string, unknown>, homePath = '/') {
-  const url = absoluteUrl(RESERVE_PATH);
+  const url = absoluteUrl(localePath(RESERVE_PATH, locale));
   const meta = reserveMeta(venue, locale);
   return {
     '@context': 'https://schema.org',
@@ -129,7 +130,8 @@ export function reserveGraph(venue: Venue, locale: Locale, restaurant: Record<st
         url,
         name: meta.title,
         description: meta.description,
-        inLanguage: ['en', 'bs', 'ar'],
+        inLanguage: locale,
+        isPartOf: { '@id': absoluteUrl(`${homePath}#website`) },
         about: { '@id': restaurant['@id'] },
         potentialAction: reservationFacts().potentialAction,
       },
@@ -144,7 +146,7 @@ export function reserveGraph(venue: Venue, locale: Locale, restaurant: Record<st
       {
         '@type': 'BreadcrumbList',
         itemListElement: [
-          { '@type': 'ListItem', position: 1, name: venue.name, item: absoluteUrl(homePath) },
+          { '@type': 'ListItem', position: 1, name: venue.name, item: absoluteUrl(localePath(homePath, locale)) },
           { '@type': 'ListItem', position: 2, name: rcopy('title', locale), item: url },
         ],
       },
@@ -166,42 +168,37 @@ export function reserveClosedMeta(venue: Venue, locale: Locale): { title: string
 
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
-/** The same, as plain HTML: closed online, and how to reach the restaurant. */
-export function reserveClosedBody(venue: Venue, homePath = '/'): string {
+/** The same, as plain HTML in the page's language: closed online, and how to reach the restaurant. */
+export function reserveClosedBody(venue: Venue, homePath = '/', locale: Locale = 'en'): string {
   return [
-    `<header><p><a href="${homePath}">${esc(venue.name)}</a></p></header>`,
+    `<header><p><a href="${localePath(homePath, locale)}">${esc(venue.name)}</a></p></header>`,
     `<main>`,
-    `<h1>${esc(rcopy('closed_title', 'en'))}</h1>`,
-    `<p>${esc(rcopy(venue.phone ? 'closed_body' : 'closed_body_no_phone', 'en'))}</p>`,
+    `<h1>${esc(rcopy('closed_title', locale))}</h1>`,
+    `<p>${esc(rcopy(venue.phone ? 'closed_body' : 'closed_body_no_phone', locale))}</p>`,
     venue.phone ? `<p><a href="tel:${esc(venue.phoneHref)}">${esc(venue.phone)}</a></p>` : '',
     `</main>`,
   ].filter(Boolean).join('\n');
 }
 
 /**
- * The booking page as plain HTML, for whatever runs no JavaScript: what it
- * is, how it works and its questions in English, and the same promise in
- * Bosnian and Arabic. The app replaces it with the form the moment it starts.
+ * The booking page as plain HTML, for whatever runs no JavaScript, in the
+ * page's language: what it is, how it works and its questions (the other two
+ * languages have pages of their own: /bs/reserve/, /ar/reserve/). The app
+ * replaces it with the form the moment it starts.
  */
-export function reserveBody(venue: Venue, homePath = '/'): string {
-  const meta = reserveMeta(venue, 'en');
+export function reserveBody(venue: Venue, homePath = '/', locale: Locale = 'en'): string {
+  const meta = reserveMeta(venue, locale);
   const where = [venue.address, venue.city].filter(Boolean).join(', ');
-  const other = (locale: 'bs' | 'ar') =>
-    `<section lang="${locale}"${locale === 'ar' ? ' dir="rtl"' : ''}><h2>${esc(reserveMeta(venue, locale).title)}</h2>`
-    + `<p>${esc(reserveMeta(venue, locale).description)}</p>`
-    + `<ol>${reserveSteps(locale).map((s) => `<li>${esc(s)}</li>`).join('')}</ol></section>`;
   return [
-    `<header><p><a href="${homePath}">${esc(venue.name)}</a>${venue.tagline ? ` — ${esc(venue.tagline)}` : ''}</p></header>`,
+    `<header><p><a href="${localePath(homePath, locale)}">${esc(venue.name)}</a>${venue.tagline ? ` — ${esc(venue.tagline)}` : ''}</p></header>`,
     `<main>`,
     `<h1>${esc(meta.title)}</h1>`,
     `<p>${esc(meta.description)}</p>`,
-    `<section><h2>${esc(rcopy('how_title', 'en'))}</h2><ol>${reserveSteps('en').map((s) => `<li>${esc(s)}</li>`).join('')}</ol></section>`,
-    `<section id="faq"><h2>${esc(rcopy('faq_title', 'en'))}</h2><dl>${reserveFaq('en').map(({ q, a }) => `<dt>${esc(q)}</dt><dd>${esc(a)}</dd>`).join('')}</dl></section>`,
+    `<section><h2>${esc(rcopy('how_title', locale))}</h2><ol>${reserveSteps(locale).map((s) => `<li>${esc(s)}</li>`).join('')}</ol></section>`,
+    `<section id="faq"><h2>${esc(rcopy('faq_title', locale))}</h2><dl>${reserveFaq(locale).map(({ q, a }) => `<dt>${esc(q)}</dt><dd>${esc(a)}</dd>`).join('')}</dl></section>`,
     where || venue.phone
       ? `<address>${esc(venue.name)}${where ? `<br />${esc(where)}` : ''}${venue.phone ? `<br /><a href="tel:${esc(venue.phoneHref)}">${esc(venue.phone)}</a>` : ''}</address>`
       : '',
-    other('bs'),
-    other('ar'),
     `</main>`,
   ].filter(Boolean).join('\n');
 }

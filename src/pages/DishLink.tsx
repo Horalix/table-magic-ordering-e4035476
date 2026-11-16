@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
-import { Navigate, useParams } from 'react-router-dom';
+import { Navigate, useLocation, useParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { sectionSlug } from '@/lib/menu-sections';
 import { assignDishSlugs } from '@/lib/seo/menu-data';
 import { menuBase, menuCategoryPath, menuPath } from '@/lib/venues';
+import { addressLocale, localePath } from '@/lib/seo/locale-path';
 import NotFound from './NotFound';
 
 type Row = { id: string; name: string; subcategories: { name: string; categories: { name: string } | null } | null };
@@ -22,6 +23,8 @@ type Row = { id: string; name: string; subcategories: { name: string; categories
  */
 const DishLink = () => {
   const { dishSlug } = useParams<{ dishSlug: string }>();
+  // Opened at /bs/… or /ar/…: the dish opens on that language's category page (src/lib/seo/locale-path.ts).
+  const language = addressLocale(useLocation().pathname);
   const [target, setTarget] = useState<string | null | undefined>(undefined);
 
   useEffect(() => {
@@ -52,7 +55,7 @@ const DishLink = () => {
       </div>
     );
   }
-  return target ? <Navigate to={target} replace state={{ dishPage: `${menuBase()}/dish/${dishSlug}/` }} /> : <NotFound />;
+  return target ? <Navigate to={localePath(target, language)} replace state={{ dishPage: `${menuBase()}/dish/${dishSlug}/` }} /> : <NotFound />;
 };
 
 export default DishLink;

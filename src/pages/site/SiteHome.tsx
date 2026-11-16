@@ -20,6 +20,7 @@ import { useMenuOnly } from '@/hooks/useMenuOnly';
 import { useReservationsOffered } from '@/hooks/useReservationsOffered';
 import { DEFAULT_VENUE, VENUES } from '@/lib/venues';
 import { dropPoster } from '@/lib/seo/poster';
+import { useSiteFacts } from '@/lib/seo/site-facts';
 import './site.css';
 
 const ALTERNATES: Record<string, string> = { ...Object.fromEntries(LOCALES.map((l) => [l, sitePath(l)])), 'x-default': '/' };
@@ -60,7 +61,9 @@ const SiteHome = ({ venueSlug = DEFAULT_VENUE, locale: pathLocale }: { venueSlug
   const ordering = useMenuOnly() === false;
   // Nor a table asked for online, while the restaurant takes no requests there (src/lib/seo/reservations.ts).
   const reservations = useReservationsOffered(venue.slug);
-  const jsonLd = useMemo(() => homeGraph(venue, shownLocale, ordering, reservations), [venue, shownLocale, ordering, reservations]);
+  // And what the live menu answered at the last publish (src/lib/seo/menu-faq.ts), once it is here: SiteFaq asks the same.
+  const facts = useSiteFacts();
+  const jsonLd = useMemo(() => homeGraph(venue, shownLocale, ordering, reservations, facts), [venue, shownLocale, ordering, reservations, facts]);
   usePageMeta({
     title: st('seo_title'), description: st(orderingCopy('seo_description', ordering)),
     path: sitePath(shownLocale), locale: shownLocale, alternates: ALTERNATES, jsonLd,

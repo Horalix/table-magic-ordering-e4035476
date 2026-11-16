@@ -12,6 +12,7 @@ import { menuCategoryPath, menuHome, ownSiteElsewhere, venueBySlug } from "./lib
 import { currentVenueSlug } from "./lib/current-venue";
 import { HOME_VENUE } from "./lib/home-venue";
 import { posterShown } from "./lib/seo/poster";
+import AddressLanguage from "./lib/seo/AddressLanguage";
 import { DEMO_PATHS } from "./demo/brand";
 
 const VERA_HOME = HOME_VENUE === "veraitalia";
@@ -207,6 +208,21 @@ const App = () => (
             <Route path="/menu/:venue" element={<OnItsOwnSite><VenueMenu /></OnItsOwnSite>} />
             <Route path="/menu/:venue/:type" element={<OnItsOwnSite><VenueCategory /></OnItsOwnSite>} />
             <Route path="/menu/:venue/dish/:dishSlug" element={<OnItsOwnSite><DishLink /></OnItsOwnSite>} />
+            {/* The same public pages in Bosnian and Arabic, each at an address of its own
+                (src/lib/seo/locale-path.ts): opened in that language, and the address
+                follows a change of language (src/lib/seo/AddressLanguage.tsx). */}
+            <Route element={<AddressLanguage />}>
+              <Route path="/bs/menu/:venue" element={<OnItsOwnSite><VenueMenu /></OnItsOwnSite>} />
+              <Route path="/bs/menu/:venue/:type" element={<OnItsOwnSite><VenueCategory /></OnItsOwnSite>} />
+              <Route path="/bs/menu/:venue/dish/:dishSlug" element={<OnItsOwnSite><DishLink /></OnItsOwnSite>} />
+              <Route path="/bs/reserve" element={<ReservePage />} />
+              <Route path="/bs/privacy" element={<PageTransition><Trust /></PageTransition>} />
+              <Route path="/ar/menu/:venue" element={<OnItsOwnSite><VenueMenu /></OnItsOwnSite>} />
+              <Route path="/ar/menu/:venue/:type" element={<OnItsOwnSite><VenueCategory /></OnItsOwnSite>} />
+              <Route path="/ar/menu/:venue/dish/:dishSlug" element={<OnItsOwnSite><DishLink /></OnItsOwnSite>} />
+              <Route path="/ar/reserve" element={<ReservePage />} />
+              <Route path="/ar/privacy" element={<PageTransition><Trust /></PageTransition>} />
+            </Route>
             <Route path="/cart" element={<PageTransition><CartPage /></PageTransition>} />
             <Route path="/tab" element={<PageTransition><RunningTabPage /></PageTransition>} />
             <Route path="/table/:tableNumber" element={<TableEntry />} />

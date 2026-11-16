@@ -14,7 +14,7 @@
  * Relative imports only: the build imports this module outside the app.
  */
 import type { Locale } from '../i18n';
-import { COURSES, PLACE, SITE, VERA, clip, courseTitle, dishMeta, km } from '../../components/vera/copy';
+import { COURSES, PLACE, SITE, VERA, clip, courseTitle, dishMeta, km, pick } from '../../components/vera/copy';
 import VERA_MENU from '../../../scripts/vera-italia/menu.json';
 import IMAGE_MANIFEST from '../image-manifest.json';
 import { HOME_VENUE } from '../home-venue';
@@ -23,10 +23,12 @@ import { sectionSlug } from '../menu-sections';
 import { buildSeoMenu, type SeoMenu, type SeoMenuCategory, type SeoMenuItem, type SeoMenuSection } from './menu-data';
 import { absoluteUrl } from './site-url';
 import { escapeHtml, type PageHead, type SitemapEntry } from './static-pages';
-import { categoryPath, dishPath, LOCALES } from './structured-data';
+import { amenityFeatures, categoryPath, cityNode, dishPath, LOCALES, placeWithin, postalAddress } from './structured-data';
 import { orderingOffered } from './ordering';
 import { RESERVE_PATH, homeReserveFaq, reservationFacts, reservationsOffered as reservationsOfferedHere } from './reservations';
 import { rcopy } from '../reservation-copy';
+import { languageAlternates, localePath } from './locale-path';
+import { allergenName, pageT } from './page-copy';
 
 /**
  * Whether Vera Italia takes table requests online. The build asks about the
@@ -42,8 +44,6 @@ const ON_OWN_SITE = HOME_VENUE === SLUG;
 export const VERA_OG_IMAGE = '/site/vera/og.jpg';
 const ROOM_IMAGES = ['/site/vera/room-2-1600.webp', '/site/vera/room-1-1600.webp', '/site/vera/room-3-1600.webp'];
 const LOGO = '/brand/vera/icon-512.png';
-/** Which Sarajevo: its Wikidata entry, for engines that link a restaurant to its city. */
-const WIKIDATA_CITY: Record<string, string> = { Sarajevo: 'https://www.wikidata.org/wiki/Q11194' };
 const upper = (s: string) => s.replace(/^./, (c) => c.toUpperCase());
 
 // ---- addresses --------------------------------------------------------------
@@ -51,20 +51,26 @@ const upper = (s: string) => s.replace(/^./, (c) => c.toUpperCase());
 /** Its website in a language: /, /bs/, /ar/ on its own site; /veraitalia/ (English) on La Soul's until then. */
 export function veraSitePath(locale: Locale): string {
   if (!ON_OWN_SITE) return `/${SLUG}/`;
-  return locale === 'en' ? '/' : `/${locale}/`;
+  return localePath('/', locale);
 }
 
-/** hreflang for its website: the three languages on its own site, none on La Soul's (one page there). */
-export function veraSiteAlternates(): Record<string, string> | undefined {
-  if (!ON_OWN_SITE) return undefined;
-  return { ...Object.fromEntries(LOCALES.map((l) => [l, veraSitePath(l)])), 'x-default': veraSitePath('en') };
+/**
+ * hreflang for its website: the three languages on its own site; null on
+ * La Soul's (one page there), which tells usePageMeta (./page-meta.ts) not to
+ * name any.
+ */
+export function veraSiteAlternates(): Record<string, string> | null {
+  if (!ON_OWN_SITE) return null;
+  return languageAlternates('/');
 }
 
 const restaurantId = () => absoluteUrl(`${veraSitePath('en')}#restaurant`);
 const websiteId = () => absoluteUrl(`${veraSitePath('en')}#website`);
-const menuUrl = () => absoluteUrl(menuPath(SLUG));
-const courseUrl = (c: SeoMenuCategory) => absoluteUrl(categoryPath(SLUG, c.slug));
-const dishUrl = (i: SeoMenuItem) => absoluteUrl(dishPath(SLUG, i));
+/** A page's address in a language: on its own site each language has its own (./locale-path.ts); on La Soul's, English only. */
+const inLocale = (path: string, locale: Locale) => (ON_OWN_SITE ? localePath(path, locale) : path);
+const menuUrl = (locale: Locale = 'en') => absoluteUrl(inLocale(menuPath(SLUG), locale));
+const courseUrl = (c: SeoMenuCategory, locale: Locale = 'en') => absoluteUrl(inLocale(categoryPath(SLUG, c.slug), locale));
+const dishUrl = (i: SeoMenuItem, locale: Locale = 'en') => absoluteUrl(inLocale(dishPath(SLUG, i), locale));
 
 // ---- the menu ---------------------------------------------------------------
 
@@ -88,8 +94,15 @@ export function veraImage(id: string): string | null {
   return `/menu/${id}/${widths.includes(768) ? 768 : widths[widths.length - 1]}.webp${v ? `?v=${v}` : ''}`;
 }
 
+/** The same photo as a small square (240 px), for lists of dishes. */
+export function veraThumb(id: string): string | null {
+  const entry = manifest[id] as { squares?: number[]; v?: string } | undefined;
+  if (!entry?.squares?.includes(240)) return null;
+  return `/menu/${id}/sq-240.webp${entry.v ? `?v=${entry.v}` : ''}`;
+}
+
 /** Its menu, grouped as La Soul's is for its pages (src/lib/seo/menu-data.ts): the same dish addresses as the app's. */
-export function veraSeoMenu(imageFor: (id: string) => string | null = veraImage): SeoMenu {
+export function veraSeoMenu(imageFor: (id: string) => string | null = veraImage, thumbFor: (id: string) => string | null = veraThumb): SeoMenu {
   return buildSeoMenu(
     COURSE_ROWS.map(({ id, name, name_bs, name_ar, sort_order }) => ({ id, name, name_bs, name_ar, sort_order })),
     COURSE_ROWS.flatMap((c) => c.sections.map(({ id, name, name_bs, name_ar, sort_order }) => ({ id, name, name_bs, name_ar, sort_order, category_id: c.id }))),
@@ -99,6 +112,7 @@ export function veraSeoMenu(imageFor: (id: string) => string | null = veraImage)
       price: i.price, sort_order: n, allergens: i.allergens ?? [], dietary_tags: i.dietary_tags ?? [],
     })))),
     imageFor,
+    thumbFor,
   );
 }
 
@@ -280,16 +294,14 @@ export function veraRestaurantNode(m: SeoMenu, locale: Locale, reservations: boo
     ...(reservations ? reservationFacts() : {}),
     // The city as soon as it is known, the street once the owner gives it.
     ...(v.city ? {
-      address: {
-        '@type': 'PostalAddress',
-        ...(v.address ? { streetAddress: v.address } : {}),
-        addressLocality: v.city,
-        ...(v.country ? { addressCountry: v.country } : {}),
-      },
-      areaServed: { '@type': 'City', name: v.city, ...(WIKIDATA_CITY[v.city] ? { sameAs: WIKIDATA_CITY[v.city] } : {}) },
+      address: postalAddress(v),
+      areaServed: cityNode(v.city),
+      containedInPlace: placeWithin(v),
     } : {}),
     ...(v.geo ? { geo: { '@type': 'GeoCoordinates', latitude: v.geo.lat, longitude: v.geo.lng } } : {}),
-    ...(v.mapsUrl ? { hasMap: v.mapsUrl } : {}),
+    ...(v.mapsListingUrl || v.mapsUrl ? { hasMap: v.mapsListingUrl || v.mapsUrl } : {}),
+    // What the owner confirmed it has (src/lib/venues.ts).
+    ...amenityFeatures(v),
     ...(v.hours?.length ? {
       openingHoursSpecification: v.hours.map((h) => ({
         '@type': 'OpeningHoursSpecification', dayOfWeek: h.days.map((d) => `https://schema.org/${d}`), opens: h.opens, closes: h.closes,
@@ -299,40 +311,41 @@ export function veraRestaurantNode(m: SeoMenu, locale: Locale, reservations: boo
   };
 }
 
-const menuItemNode = (i: SeoMenuItem) => ({
+/** A dish, in one language: the same entity (@id) on all three of its pages. */
+const menuItemNode = (i: SeoMenuItem, locale: Locale = 'en') => ({
   '@type': 'MenuItem',
   '@id': `${dishUrl(i)}#dish`,
-  name: i.names.en,
-  url: dishUrl(i),
-  ...(i.descriptions.en ? { description: i.descriptions.en } : {}),
+  name: i.names[locale],
+  url: dishUrl(i, locale),
+  ...(i.descriptions[locale] ? { description: i.descriptions[locale] } : {}),
   ...(i.image ? { image: absoluteUrl(i.image) } : {}),
   // Who serves it, at what price: an engine reading one dish's page alone
   // still learns it is Vera Italia's, in Sarajevo.
   offers: {
     '@type': 'Offer', price: i.price.toFixed(2), priceCurrency: 'BAM', availability: 'https://schema.org/InStock',
-    url: dishUrl(i), offeredBy: { '@id': restaurantId() },
+    url: dishUrl(i, locale), offeredBy: { '@id': restaurantId() },
   },
   ...(isVegetarian(i) ? { suitableForDiet: 'https://schema.org/VegetarianDiet' } : {}),
 });
 
-const courseNode = (c: SeoMenuCategory) => ({
+const courseNode = (c: SeoMenuCategory, locale: Locale = 'en') => ({
   '@type': 'MenuSection',
   '@id': `${courseUrl(c)}#course`,
-  name: c.names.en,
-  url: courseUrl(c),
-  ...(COURSES[c.names.en] ? { description: COURSES[c.names.en].line.en } : {}),
-  hasMenuSection: c.sections.map((s) => ({ '@type': 'MenuSection', name: s.names.en, hasMenuItem: s.items.map(menuItemNode) })),
+  name: c.names[locale],
+  url: courseUrl(c, locale),
+  ...(COURSES[c.names.en] ? { description: pick(COURSES[c.names.en].line, locale) } : {}),
+  hasMenuSection: c.sections.map((s) => ({ '@type': 'MenuSection', name: s.names[locale], hasMenuItem: s.items.map((i) => menuItemNode(i, locale)) })),
 });
 
 /** The menu as schema.org Menu → MenuSection → MenuItem, every dish priced in BAM with its own page. */
-export function veraMenuNode(m: SeoMenu, only?: SeoMenuCategory) {
+export function veraMenuNode(m: SeoMenu, only?: SeoMenuCategory, locale: Locale = 'en') {
   return {
     '@type': 'Menu',
-    '@id': `${menuUrl()}#menu`,
-    name: only ? `Vera Italia — ${only.names.en}` : VERA.menuTitle.en,
-    url: only ? courseUrl(only) : menuUrl(),
-    inLanguage: ['en', 'bs', 'ar'],
-    hasMenuSection: (only ? [only] : m.categories).map(courseNode),
+    '@id': `${menuUrl(locale)}#menu`,
+    name: only ? `Vera Italia — ${only.names[locale]}` : pick(VERA.menuTitle, locale),
+    url: only ? courseUrl(only, locale) : menuUrl(locale),
+    inLanguage: locale,
+    hasMenuSection: (only ? [only] : m.categories).map((c) => courseNode(c, locale)),
   };
 }
 
@@ -340,11 +353,18 @@ const breadcrumbs = (trail: { name: string; url: string }[]) => ({
   '@type': 'BreadcrumbList',
   itemListElement: trail.map((t, n) => ({ '@type': 'ListItem', position: n + 1, name: t.name, item: t.url })),
 });
-const trailHome = () => ({ name: 'Vera Italia', url: absoluteUrl(veraSitePath('en')) });
-const trailMenu = () => ({ name: VERA.menu.en, url: menuUrl() });
+const trailHome = (locale: Locale = 'en') => ({ name: 'Vera Italia', url: absoluteUrl(veraSitePath(locale)) });
+const trailMenu = (locale: Locale = 'en') => ({ name: pick(VERA.menu, locale), url: menuUrl(locale) });
+
+/** The page itself, in its language, about the one restaurant. */
+const webPage = (url: string, locale: Locale, name: string, extra: Record<string, unknown> = {}) => ({
+  '@type': 'WebPage', '@id': `${url}#webpage`, url, name, inLanguage: locale,
+  isPartOf: { '@id': websiteId() }, about: { '@id': restaurantId() }, ...extra,
+});
 
 /** Everything its website says about itself, in one language, as one @graph. */
 export function veraSiteGraph(m: SeoMenu, locale: Locale, reservations: boolean = reservationsOffered()) {
+  const signature = signatures(m);
   return {
     '@context': 'https://schema.org',
     '@graph': [
@@ -352,8 +372,10 @@ export function veraSiteGraph(m: SeoMenu, locale: Locale, reservations: boolean 
       // The site's name in Google's results ("Vera Italia", not "veraitalia.net"), and the other one it may use.
       {
         '@type': 'WebSite', '@id': websiteId(), url: absoluteUrl(veraSitePath('en')), name: 'Vera Italia',
-        alternateName: vera().alternateNames.slice(0, 1), inLanguage: locale, publisher: { '@id': restaurantId() },
+        alternateName: vera().alternateNames.slice(0, 1), inLanguage: ['en', 'bs', 'ar'], publisher: { '@id': restaurantId() },
+        about: { '@id': restaurantId() },
       },
+      webPage(absoluteUrl(veraSitePath(locale)), locale, pick(SITE.seoTitle, locale), { mainEntity: { '@id': restaurantId() } }),
       {
         '@type': 'FAQPage',
         '@id': absoluteUrl(`${veraSitePath(locale)}#faq`),
@@ -361,6 +383,15 @@ export function veraSiteGraph(m: SeoMenu, locale: Locale, reservations: boolean 
         mainEntity: [...veraFaq(m, locale), ...(reservations ? [homeReserveFaq(locale)] : [])]
           .map(({ q, a }) => ({ '@type': 'Question', name: q, acceptedAnswer: { '@type': 'Answer', text: a } })),
       },
+      // The house's specialities, as the page lists them.
+      ...(signature.length ? [{
+        '@type': 'ItemList',
+        '@id': absoluteUrl(`${veraSitePath(locale)}#signatures`),
+        name: pick(SITE.signatures, locale),
+        itemListOrder: 'https://schema.org/ItemListOrderAscending',
+        numberOfItems: signature.length,
+        itemListElement: signature.map(({ item }, n) => ({ '@type': 'ListItem', position: n + 1, item: { '@id': `${dishUrl(item)}#dish` }, name: item.names[locale], url: dishUrl(item, locale) })),
+      }] : []),
     ],
   };
 }
@@ -379,172 +410,213 @@ export interface VeraPage {
 const h = escapeHtml;
 const faqTitle: Record<Locale, string> = { en: 'Questions', bs: 'Pitanja', ar: 'أسئلة' };
 const languageName: Record<Locale, string> = { en: 'English', bs: 'Bosanski', ar: 'العربية' };
-const dishLine = (i: SeoMenuItem, withNames = true) => [
-  `<a href="${h(dishPath(SLUG, i))}">${h(i.names.en)}</a>`,
-  withNames && i.names.bs !== i.names.en ? ` / <span lang="bs">${h(i.names.bs)}</span>` : '',
-  withNames && i.names.ar !== i.names.en ? ` / <span lang="ar" dir="rtl">${h(i.names.ar)}</span>` : '',
-  ` — ${km(i.price)}`,
-  i.descriptions.en ? `. ${h(i.descriptions.en)}` : '',
-  isVegetarian(i) ? ' (vegetarian)' : '',
-  i.allergens.length ? ` Allergens: ${h(i.allergens.join(', '))}.` : '',
+/** The same page in the other languages, on its own site; nothing on La Soul's (one language there). */
+const otherLanguages = (path: string, locale: Locale) => (ON_OWN_SITE
+  ? `<p>${LOCALES.map((l) => (l === locale ? `<strong lang="${l}">${languageName[l]}</strong>` : `<a href="${h(localePath(path, l))}" hreflang="${l}" lang="${l}">${languageName[l]}</a>`)).join(' · ')}</p>`
+  : '');
+const at = (path: string, locale: Locale) => (ON_OWN_SITE ? localePath(path, locale) : path);
+const dishLine = (i: SeoMenuItem, locale: Locale) => [
+  i.thumb ? `<img src="${h(i.thumb)}" alt="${h(pageT('photo_alt', locale, { dish: i.names[locale], venue: 'Vera Italia', city: pick(PLACE.city, locale) }))}" width="240" height="240" loading="lazy" decoding="async" />` : '',
+  `<a href="${h(at(dishPath(SLUG, i), locale))}">${h(i.names[locale])}</a>`,
+  ` — ${km(i.price, locale)}`,
+  i.descriptions[locale] ? `. ${h(i.descriptions[locale] as string)}` : '',
+  isVegetarian(i) ? ` (${h(pageT('vegetarian', locale))})` : '',
+  i.allergens.length ? ` ${h(pageT('allergens', locale, { list: i.allergens.map((a) => allergenName(a, locale)).join(', ') }))}` : '',
 ].join('');
-const courseBlock = (c: SeoMenuCategory, link: boolean) => [
-  `<h2>${link ? `<a href="${h(categoryPath(SLUG, c.slug))}">${h(c.names.en)}</a>` : h(c.names.en)}</h2>`,
-  COURSES[c.names.en] ? `<p>${h(COURSES[c.names.en].line.en)}</p>` : '',
-  ...c.sections.map((s) => `<h3>${h(s.names.en)}</h3><ul>${s.items.map((i) => `<li>${dishLine(i)}</li>`).join('')}</ul>`),
+const courseBlock = (c: SeoMenuCategory, link: boolean, locale: Locale) => [
+  `<h2>${link ? `<a href="${h(at(categoryPath(SLUG, c.slug), locale))}">${h(c.names[locale])}</a>` : h(c.names[locale])}</h2>`,
+  COURSES[c.names.en] ? `<p>${h(pick(COURSES[c.names.en].line, locale))}</p>` : '',
+  ...c.sections.map((s) => `<h3>${h(s.names[locale])}</h3><ul>${s.items.map((i) => `<li>${dishLine(i, locale)}</li>`).join('')}</ul>`),
 ].join('\n');
 
 /** Where to find it: the street and phone once the owner gives them, until then the city. */
 function visitFacts(locale: Locale): string {
   const v = vera();
-  const pick = (c: Record<Locale, string>) => h(c[locale] ?? c.en);
+  const p = (c: Record<Locale, string>) => h(c[locale] ?? c.en);
   return v.address
-    ? `<address>${h(v.name)}<br />${h(v.address)}, ${pick(PLACE.city)}, ${pick(PLACE.country)}${v.phone ? `<br /><a href="tel:${h(v.phoneHref)}">${h(v.phone)}</a>` : ''}</address>`
+    ? `<address>${h(v.name)}<br />${h(v.address)}, ${p(PLACE.city)}, ${p(PLACE.country)}${v.phone ? `<br /><a href="tel:${h(v.phoneHref)}">${h(v.phone)}</a>` : ''}</address>`
     : v.city
-      ? `<p>${pick(PLACE.city)}, ${pick(PLACE.country)}. ${pick(SITE.visitSoon)}</p>`
-      : `<p>${pick(SITE.openingSoon)}. ${pick(SITE.visitSoon)}</p>`;
+      ? `<p>${p(PLACE.city)}, ${p(PLACE.country)}. ${p(SITE.visitSoon)}</p>`
+      : `<p>${p(SITE.openingSoon)}. ${p(SITE.visitSoon)}</p>`;
 }
 
+/** "Also called": a dish's names in the other two languages, as one modest line. */
+const alsoCalled = (i: SeoMenuItem, locale: Locale) => {
+  const others = LOCALES.filter((l) => l !== locale).map((l) => ({ l, name: i.names[l] }))
+    .filter(({ name }, n, all) => name !== i.names[locale] && all.findIndex((o) => o.name === name) === n);
+  return others.length
+    ? `<p>${pageT('also_called', locale, { names: others.map(({ l, name }) => `<span lang="${l}"${l === 'ar' ? ' dir="rtl"' : ''}>${h(name)}</span>`).join(' · ') })}</p>`
+    : '';
+};
+
 /**
- * A dish's own page, in English with its Bosnian and Arabic names: what it
- * is, where it is served, and the dishes beside it on the menu — as La Soul's
- * dish pages (static-pages.ts dishBody). A page that was only the dish was a
- * dead end to a crawler and said nothing an answer engine could quote about
- * the restaurant serving it.
+ * A dish's own page, in one language: what it is, where it is served, and
+ * the dishes beside it on the menu — as La Soul's dish pages (static-pages.ts
+ * dishBody). A page that was only the dish was a dead end to a crawler and
+ * said nothing an answer engine could quote about the restaurant serving it.
  */
-function dishBody(m: SeoMenu, c: SeoMenuCategory, s: SeoMenuSection, i: SeoMenuItem): string {
-  const home = veraSitePath('en');
-  const course = categoryPath(SLUG, c.slug);
+function dishBody(m: SeoMenu, c: SeoMenuCategory, s: SeoMenuSection, i: SeoMenuItem, locale: Locale = 'en'): string {
+  const home = veraSitePath(locale);
+  const course = at(categoryPath(SLUG, c.slug), locale);
   const open = `${course}?${new URLSearchParams({ section: sectionSlug(s.names.en), dish: i.id })}`;
   // The rest of its course; a course of one dish points at the house's specialities instead.
   const beside = itemsOf(c, false).filter((x) => x.id !== i.id);
   const others = beside.length ? beside : signatures(m).map(({ item }) => item).filter((x) => x.id !== i.id);
   const facts = [
-    `<strong>${km(i.price)}</strong>`, h(c.names.en),
-    s.names.en !== c.names.en ? h(s.names.en) : '',
-    isVegetarian(i) ? 'vegetarian' : '',
+    `<strong>${km(i.price, locale)}</strong>`, h(c.names[locale]),
+    s.names.en !== c.names.en ? h(s.names[locale]) : '',
+    isVegetarian(i) ? h(pageT('vegetarian', locale)) : '',
   ].filter(Boolean).join(' · ');
   return [
-    `<header><p><a href="${h(home)}">Vera Italia</a> — ${h(SITE.place.en)}</p>`,
-    `<nav aria-label="Breadcrumb"><a href="${h(home)}">Vera Italia</a> › <a href="${h(menuPath(SLUG))}">${h(VERA.menu.en)}</a> › <a href="${h(course)}">${h(c.names.en)}</a></nav></header>`,
+    `<header><p><a href="${h(home)}">Vera Italia</a> — ${h(pick(SITE.place, locale))}</p>`,
+    `<nav aria-label="${h(pageT('breadcrumb', locale))}"><a href="${h(home)}">Vera Italia</a> › <a href="${h(at(menuPath(SLUG), locale))}">${h(pick(VERA.menu, locale))}</a> › <a href="${h(course)}">${h(c.names[locale])}</a></nav>`,
+    otherLanguages(dishPath(SLUG, i), locale),
+    `</header>`,
     `<main><article>`,
-    `<h1>${h(i.names.en)}</h1>`,
-    i.names.bs !== i.names.en ? `<p lang="bs">${h(i.names.bs)}</p>` : '',
-    i.names.ar !== i.names.en ? `<p lang="ar" dir="rtl">${h(i.names.ar)}</p>` : '',
-    i.image ? `<img src="${h(i.image)}" alt="${h(i.names.en)} at Vera Italia, ${h(PLACE.city.en)}" width="768" loading="lazy" />` : '',
+    `<h1>${h(i.names[locale])}</h1>`,
+    alsoCalled(i, locale),
+    i.image ? `<img src="${h(i.image)}" alt="${h(pageT('photo_alt', locale, { dish: i.names[locale], venue: 'Vera Italia', city: pick(PLACE.city, locale) }))}" width="768" decoding="async" />` : '',
     `<p>${facts}</p>`,
-    ...LOCALES.map((l) => (i.descriptions[l] && (l === 'en' || i.descriptions[l] !== i.descriptions.en)
-      ? `<p lang="${l}"${l === 'ar' ? ' dir="rtl"' : ''}>${h(i.descriptions[l] as string)}</p>` : '')),
-    i.allergens.length ? `<p>Allergens: ${h(i.allergens.join(', '))}. Please tell your waiter about any allergy.</p>` : '',
-    COURSES[c.names.en] ? `<p>${h(c.names.en)} at Vera Italia: ${h(COURSES[c.names.en].line.en)}.</p>` : '',
-    `<p><a href="${h(open)}">Open ${h(i.names.en)} on the menu</a> · <a href="${h(course)}">All ${h(c.names.en)}</a></p>`,
+    i.descriptions[locale] ? `<p>${h(i.descriptions[locale] as string)}</p>` : '',
+    i.allergens.length ? `<p>${h(pageT('allergens', locale, { list: i.allergens.map((a) => allergenName(a, locale)).join(', ') }))}</p>` : '',
+    COURSES[c.names.en] ? `<p>${h(c.names[locale])}: ${h(pick(COURSES[c.names.en].line, locale))}.</p>` : '',
+    `<p><a href="${h(open)}">${h(pageT('open_on_menu', locale, { dish: i.names[locale] }))}</a> · <a href="${h(course)}">${h(pageT('all_of', locale, { category: c.names[locale] }))}</a></p>`,
     others.length
-      ? `<section><h2>${beside.length ? `More ${h(c.names.en)} at Vera Italia` : h(SITE.signatures.en)}</h2><ul>${others.map((x) => `<li><a href="${h(dishPath(SLUG, x))}">${h(x.names.en)}</a> — ${km(x.price)}</li>`).join('')}</ul></section>`
+      ? `<section><h2>${beside.length ? h(pageT('more_of', locale, { section: c.names[locale], venue: 'Vera Italia' })) : h(pick(SITE.signatures, locale))}</h2><ul>${others.map((x) => `<li><a href="${h(at(dishPath(SLUG, x), locale))}">${h(x.names[locale])}</a> — ${km(x.price, locale)}</li>`).join('')}</ul></section>`
       : '',
     `</article></main>`,
-    `<section id="visit"><h2>${h(SITE.visit.en)}</h2><p>${h(SITE.seoDescription.en)}</p>${visitFacts('en')}</section>`,
+    `<section id="visit"><h2>${h(pick(SITE.visit, locale))}</h2><p>${h(pick(SITE.seoDescription, locale))}</p>${visitFacts(locale)}</section>`,
   ].filter(Boolean).join('\n');
 }
 
 function siteBody(m: SeoMenu, locale: Locale): string {
   const v = vera();
-  const pick = (c: Record<Locale, string>) => h(c[locale] ?? c.en);
+  const p = (c: Record<Locale, string>) => h(c[locale] ?? c.en);
   const facts = visitFacts(locale);
   return [
     `<h1>Vera Italia</h1>`,
-    v.city ? `<p>${pick(SITE.place)}</p>` : '',
-    `<p>${pick(SITE.heroLine)}</p>`,
-    `<p>${pick(SITE.intro)} ${pick(SITE.introRoom)}</p>`,
-    `<h2>${pick(SITE.signatures)}</h2>`,
-    `<ul>${signatures(m).map(({ item, note }) => `<li><a href="${h(dishPath(SLUG, item))}">${h(item.names[locale])}</a> — ${h(note[locale])} — ${km(item.price, locale)}</li>`).join('')}</ul>`,
-    `<h2>${pick(SITE.ovenTitle)}</h2><p>${pick(SITE.ovenBody)}</p>`,
-    `<h2>${pick(SITE.menuTitle)}</h2>`,
-    `<ul>${m.categories.map((c) => `<li><a href="${h(categoryPath(SLUG, c.slug))}">${h(c.names[locale])}</a>${COURSES[c.names.en] ? ` — ${pick(COURSES[c.names.en].line)}` : ''} (${range(itemsOf(c, false), locale)})</li>`).join('')}</ul>`,
-    `<p><a href="${h(menuPath(SLUG))}">${pick(SITE.viewMenu)}</a></p>`,
-    `<h2>${pick(SITE.roomTitle)}</h2><p>${pick(SITE.roomBody)}</p>`,
+    v.city ? `<p>${p(SITE.place)}</p>` : '',
+    `<p>${p(SITE.heroLine)}</p>`,
+    `<p>${p(SITE.intro)} ${p(SITE.introRoom)}</p>`,
+    `<h2>${p(SITE.signatures)}</h2>`,
+    `<ul>${signatures(m).map(({ item, note }, n) => `<li>${item.image ? `<img src="${h(item.thumb ?? item.image)}" alt="${h(pageT('photo_alt', locale, { dish: item.names[locale], venue: 'Vera Italia', city: pick(PLACE.city, locale) }))}" ${item.thumb ? 'width="240" height="240"' : 'width="768"'}${n ? ' loading="lazy"' : ''} decoding="async" />` : ''}<a href="${h(at(dishPath(SLUG, item), locale))}">${h(item.names[locale])}</a> — ${h(note[locale])} — ${km(item.price, locale)}</li>`).join('')}</ul>`,
+    `<h2>${p(SITE.ovenTitle)}</h2><p>${p(SITE.ovenBody)}</p>`,
+    `<h2>${p(SITE.menuTitle)}</h2>`,
+    `<ul>${m.categories.map((c) => `<li><a href="${h(at(categoryPath(SLUG, c.slug), locale))}">${h(c.names[locale])}</a>${COURSES[c.names.en] ? ` — ${p(COURSES[c.names.en].line)}` : ''} (${range(itemsOf(c, false), locale)})</li>`).join('')}</ul>`,
+    `<p><a href="${h(at(menuPath(SLUG), locale))}">${p(SITE.viewMenu)}</a></p>`,
+    `<h2>${p(SITE.roomTitle)}</h2><p>${p(SITE.roomBody)}</p>`,
     `<section id="faq"><h2>${h(faqTitle[locale])}</h2>${[...veraFaq(m, locale), ...(reservationsOffered() ? [homeReserveFaq(locale)] : [])].map(({ q, a }) => `<h3>${h(q)}</h3><p>${h(a)}</p>`).join('')}</section>`,
-    `<h2>${pick(SITE.visit)}</h2>${facts}`,
+    `<h2>${p(SITE.visit)}</h2>${facts}`,
     // Only while a table can be asked for online (src/lib/seo/reservations.ts).
-    reservationsOffered() ? `<p><a href="${RESERVE_PATH}">${h(rcopy('title', locale))}</a></p>` : '',
-    ON_OWN_SITE ? `<p>${LOCALES.map((l) => (l === locale ? `<strong>${languageName[l]}</strong>` : `<a href="${veraSitePath(l)}" hreflang="${l}" lang="${l}">${languageName[l]}</a>`)).join(' · ')}</p>` : '',
+    reservationsOffered() ? `<p><a href="${at(RESERVE_PATH, locale)}">${h(rcopy('title', locale))}</a></p>` : '',
+    otherLanguages('/', locale),
   ].filter(Boolean).join('\n');
 }
 
-/** Every page of Vera Italia's the build writes: its website, its menu, each course and each dish. */
+/**
+ * Every page of Vera Italia's the build writes: its website, its menu, each
+ * course and each dish — on its own site in each of the three languages, at
+ * its own address (./locale-path.ts), each naming the other two.
+ */
 export function veraPages(m: SeoMenu): VeraPage[] {
   const v = vera();
   const noindex = !v.live;
   const pages: VeraPage[] = [];
   const languages = ON_OWN_SITE ? LOCALES : (['en'] as Locale[]);
+  const family = (path: string) => (ON_OWN_SITE ? languageAlternates(path) : undefined);
 
   for (const locale of languages) {
     const path = veraSitePath(locale);
     pages.push({
       path, locale,
       head: {
-        path, locale, venue: v, image: VERA_OG_IMAGE, alternates: veraSiteAlternates(),
+        path, locale, venue: v, image: VERA_OG_IMAGE, alternates: veraSiteAlternates() ?? undefined,
         title: SITE.seoTitle[locale], description: SITE.seoDescription[locale], jsonLd: veraSiteGraph(m, locale),
       },
       body: siteBody(m, locale),
       sitemap: locale === 'en'
-        ? { path, priority: ON_OWN_SITE ? 1 : 0.8, alternates: veraSiteAlternates(), images: [VERA_OG_IMAGE, ...ROOM_IMAGES] }
-        : { path, priority: 0.9, alternates: veraSiteAlternates() },
+        ? { path, priority: ON_OWN_SITE ? 1 : 0.8, alternates: veraSiteAlternates() ?? undefined, images: [VERA_OG_IMAGE, ...ROOM_IMAGES] }
+        : { path, priority: 0.9, alternates: veraSiteAlternates() ?? undefined },
     });
   }
 
-  const menu = menuPath(SLUG);
   const signature = signatures(m)[0]?.item;
-  pages.push({
-    path: menu, locale: 'en',
-    head: {
-      path: menu, locale: 'en', venue: v, image: signature?.image ?? VERA_OG_IMAGE, noindex,
-      title: VERA.menuTitle.en, description: VERA.menuDescription.en,
-      jsonLd: { '@context': 'https://schema.org', '@graph': [veraMenuNode(m), breadcrumbs([trailHome(), trailMenu()])] },
-    },
-    body: [`<h1>Vera Italia — ${h(VERA.menu.en)}</h1>`, `<p>${h(VERA.menuDescription.en)} Prices in KM (BAM).</p>`, ...m.categories.map((c) => courseBlock(c, true))].join('\n'),
-    sitemap: noindex ? null : { path: menu, priority: 0.9 },
-  });
-
-  for (const c of m.categories) {
-    const path = categoryPath(SLUG, c.slug);
-    const line = COURSES[c.names.en]?.line.en;
-    const cover = COURSES[c.names.en]?.cover;
+  for (const locale of languages) {
+    const menu = at(menuPath(SLUG), locale);
     pages.push({
-      path, locale: 'en',
+      path: menu, locale,
       head: {
-        path, locale: 'en', venue: v, image: (cover && veraImage(cover)) || VERA_OG_IMAGE, noindex,
-        title: courseTitle(c.names.en, 'en'),
-        description: clip(`${c.names.en} at Vera Italia, an Italian restaurant ${PLACE.inCity.en}${line ? `: ${line}` : ''}, ${range(itemsOf(c, false), 'en')}.`),
-        jsonLd: { '@context': 'https://schema.org', '@graph': [veraMenuNode(m, c), breadcrumbs([trailHome(), trailMenu(), { name: c.names.en, url: courseUrl(c) }])] },
+        path: menu, locale, venue: v, image: signature?.image ?? VERA_OG_IMAGE, noindex, alternates: family(menu),
+        title: pick(VERA.menuTitle, locale), description: pick(VERA.menuDescription, locale),
+        jsonLd: { '@context': 'https://schema.org', '@graph': [
+          veraMenuNode(m, undefined, locale),
+          webPage(menuUrl(locale), locale, pick(VERA.menuTitle, locale), { mainEntity: { '@id': `${menuUrl(locale)}#menu` } }),
+          breadcrumbs([trailHome(locale), trailMenu(locale)]),
+        ] },
       },
-      body: [`<h1>Vera Italia — ${h(c.names.en)}</h1>`, courseBlock(c, false), `<p><a href="${h(menu)}">${h(VERA.menuTitle.en)}</a></p>`].join('\n'),
-      sitemap: noindex ? null : { path, priority: 0.8, images: cover && veraImage(cover) ? [veraImage(cover) as string] : [] },
+      body: [
+        `<header>${otherLanguages(menuPath(SLUG), locale)}</header>`,
+        `<h1>Vera Italia — ${h(pick(VERA.menu, locale))}</h1>`, `<p>${h(pick(VERA.menuDescription, locale))} ${h(pageT('prices', locale))}.</p>`,
+        ...m.categories.map((c) => courseBlock(c, true, locale)),
+      ].join('\n'),
+      sitemap: noindex ? null : { path: menu, priority: 0.9, alternates: family(menu) },
     });
-  }
 
-  for (const c of m.categories) {
-    for (const s of c.sections) {
-      for (const i of s.items) {
-        const path = dishPath(SLUG, i);
-        pages.push({
-          path, locale: 'en',
-          head: {
-            path, locale: 'en', venue: v, image: i.image ?? VERA_OG_IMAGE, noindex,
-            // The same title and description the app shows while this dish is open from here.
-            ...dishMeta(c.names.en, i.names.en, i.price, i.descriptions.en, 'en'),
-            // The restaurant beside the dish, as on La Soul's dish pages.
-            jsonLd: {
-              '@context': 'https://schema.org',
-              '@graph': [
-                { ...veraRestaurantNode(m, 'en'), hasMenu: { '@id': `${menuUrl()}#menu` } },
-                menuItemNode(i),
-                breadcrumbs([trailHome(), trailMenu(), { name: c.names.en, url: courseUrl(c) }, { name: i.names.en, url: dishUrl(i) }]),
-              ],
+    for (const c of m.categories) {
+      const path = at(categoryPath(SLUG, c.slug), locale);
+      const line = COURSES[c.names.en] ? pick(COURSES[c.names.en].line, locale) : undefined;
+      const cover = COURSES[c.names.en]?.cover;
+      const lead = {
+        en: `${c.names.en} at Vera Italia, an Italian restaurant ${PLACE.inCity.en}`,
+        bs: `${c.names.bs} u Vera Italia, italijanskom restoranu ${PLACE.inCity.bs}`,
+        ar: `${c.names.ar} في Vera Italia، مطعم إيطالي ${PLACE.inCity.ar}`,
+      }[locale];
+      pages.push({
+        path, locale,
+        head: {
+          path, locale, venue: v, image: (cover && veraImage(cover)) || VERA_OG_IMAGE, noindex, alternates: family(path),
+          title: courseTitle(c.names[locale], locale),
+          description: clip(`${lead}${line ? `${locale === 'ar' ? '، ' : ': '}${line}` : ''}, ${range(itemsOf(c, false), locale)}.`),
+          jsonLd: { '@context': 'https://schema.org', '@graph': [
+            veraMenuNode(m, c, locale),
+            webPage(courseUrl(c, locale), locale, courseTitle(c.names[locale], locale), { mainEntity: { '@id': `${menuUrl(locale)}#menu` } }),
+            breadcrumbs([trailHome(locale), trailMenu(locale), { name: c.names[locale], url: courseUrl(c, locale) }]),
+          ] },
+        },
+        body: [`<header>${otherLanguages(categoryPath(SLUG, c.slug), locale)}</header>`, `<h1>Vera Italia — ${h(c.names[locale])}</h1>`, courseBlock(c, false, locale), `<p><a href="${h(at(menuPath(SLUG), locale))}">${h(pick(VERA.menuTitle, locale))}</a></p>`].join('\n'),
+        sitemap: noindex ? null : { path, priority: 0.8, alternates: family(path), images: cover && veraImage(cover) ? [veraImage(cover) as string] : [] },
+      });
+    }
+
+    for (const c of m.categories) {
+      for (const s of c.sections) {
+        for (const i of s.items) {
+          const path = at(dishPath(SLUG, i), locale);
+          const meta = dishMeta(c.names[locale], i.names[locale], i.price, i.descriptions[locale], locale);
+          pages.push({
+            path, locale,
+            head: {
+              path, locale, venue: v, image: i.image ?? VERA_OG_IMAGE, noindex, alternates: family(path),
+              // The same title and description the app shows while this dish is open from here.
+              ...meta,
+              // The restaurant beside the dish, as on La Soul's dish pages.
+              jsonLd: {
+                '@context': 'https://schema.org',
+                '@graph': [
+                  { ...veraRestaurantNode(m, locale), hasMenu: { '@id': `${menuUrl(locale)}#menu` } },
+                  { ...menuItemNode(i, locale), mainEntityOfPage: { '@id': `${dishUrl(i, locale)}#webpage` } },
+                  webPage(dishUrl(i, locale), locale, i.names[locale], {
+                    mainEntity: { '@id': `${dishUrl(i)}#dish` },
+                    ...(i.image ? { primaryImageOfPage: { '@type': 'ImageObject', url: absoluteUrl(i.image), contentUrl: absoluteUrl(i.image), caption: i.names[locale] } } : {}),
+                  }),
+                  breadcrumbs([trailHome(locale), trailMenu(locale), { name: c.names[locale], url: courseUrl(c, locale) }, { name: i.names[locale], url: dishUrl(i, locale) }]),
+                ],
+              },
             },
-          },
-          body: dishBody(m, c, s, i),
-          sitemap: noindex ? null : { path, priority: 0.6, images: i.image ? [i.image] : [] },
-        });
+            body: dishBody(m, c, s, i, locale),
+            sitemap: noindex ? null : { path, priority: 0.6, alternates: family(path), images: i.image ? [i.image] : [] },
+          });
+        }
       }
     }
   }
@@ -583,10 +655,13 @@ export function veraLlms(m: SeoMenu): { short: string; full: string } {
     `> ${SITE.seoDescription.en}`, '',
     ...known, '',
     '## Pages', '',
+    ...(ON_OWN_SITE ? ['Every page is in English, Bosnian and Arabic: the same address with /bs/ or /ar/ in front (dish pages too).', ''] : []),
     `- [Vera Italia](${absoluteUrl(veraSitePath('en'))}): the restaurant, its signature dishes, the oven and the room` +
       (ON_OWN_SITE ? ` (also in [Bosnian](${absoluteUrl(veraSitePath('bs'))}) and [Arabic](${absoluteUrl(veraSitePath('ar'))}))` : ''),
-    `- [The menu](${menuUrl()}): every dish with its price`,
-    ...(reservationsOffered() ? [`- [Reserve a table](${absoluteUrl(RESERVE_PATH)}): ask online, the restaurant confirms`] : []),
+    `- [The menu](${menuUrl()}): every dish with its price` +
+      (ON_OWN_SITE ? ` (also in [Bosnian](${menuUrl('bs')}) and [Arabic](${menuUrl('ar')}))` : ''),
+    ...(reservationsOffered() ? [`- [Reserve a table](${absoluteUrl(RESERVE_PATH)}): ask online, the restaurant confirms` +
+      (ON_OWN_SITE ? ` (also in [Bosnian](${absoluteUrl(localePath(RESERVE_PATH, 'bs'))}) and [Arabic](${absoluteUrl(localePath(RESERVE_PATH, 'ar'))}))` : '')] : []),
     ...m.categories.map((c) => `- [${c.names.en}](${courseUrl(c)}): ${COURSES[c.names.en]?.line.en ?? ''}`.replace(/: $/, '')),
     '',
     '## Questions', '',

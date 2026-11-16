@@ -25,7 +25,7 @@ import { siteT } from '../src/lib/site-copy';
 import { VERA_OG_IMAGE, veraLlms, veraPages, veraRestaurantNode, veraSeoMenu } from '../src/lib/seo/vera-seo';
 import { HOME_VENUE } from '../src/lib/home-venue';
 import { homePoster, posterScript, type Poster } from '../src/lib/seo/poster';
-import { PRIVACY_PATH, privacyBody, privacyCopy, privacyGraph } from '../src/lib/privacy';
+import { PRIVACY_PATH } from '../src/lib/privacy';
 import { OWN_SITE_LIVE, VENUE_URLS } from '../src/lib/seo/site-url';
 import { DEFAULT_VENUE, VENUES, type Venue } from '../src/lib/venues';
 import { fetchSeoMenu, type SeoMenu } from '../src/lib/seo/menu-data';
@@ -41,6 +41,9 @@ import {
   dishBody, dishMeta, escapeHtml, forwardToOwnSite, headTags, homeBody, llmsFullTxt, llmsTxt, menuBody, ownSiteRedirects, robotsTxt,
   sitemapXml, type SitemapEntry,
 } from '../src/lib/seo/static-pages';
+import { languageAlternates, localePath, unprefixed } from '../src/lib/seo/locale-path';
+import { menuFaq, setSiteFacts, SITE_FACTS_PATH } from '../src/lib/seo/menu-faq';
+import { privacyPageBody, privacyPageGraph, privacyPageMeta } from '../src/lib/seo/privacy-page';
 
 /** The app hides the plain HTML the moment its code runs; crawlers that run none read it. */
 const PRERENDER_STYLE = '<script>document.documentElement.classList.add(\'js\')</script>'
@@ -106,8 +109,10 @@ const SCREEN = {
   start: 'src/pages/TableNumberEntry.tsx',
 };
 
-/** The modules a prerendered address draws first (see src/App.tsx's routes). */
-export function pageModules(urlPath: string, veraHome: boolean): string[] {
+/** The modules a prerendered address draws first (see src/App.tsx's routes): the same in every language. */
+export function pageModules(address: string, veraHome: boolean): string[] {
+  // /bs/menu/lasoul/ is /menu/lasoul/'s screen; /bs/ and /ar/ are the website's.
+  const urlPath = unprefixed(address);
   if (/^\/menu\/[^/]+\/dish\//.test(urlPath)) return [SCREEN.dish, SHELL, SCREEN.category];
   if (/^\/menu\/[^/]+\/$/.test(urlPath)) return [SHELL, SCREEN.menu];
   if (/^\/menu\//.test(urlPath)) return [SHELL, SCREEN.category];
@@ -223,9 +228,15 @@ export function seoPrerender(): Plugin {
         const v = manifest[id]?.v;
         return `/menu/${id}/${widths.includes(768) ? 768 : widths[widths.length - 1]}.webp${v ? `?v=${v}` : ''}`;
       };
+      // A small square of it, for lists of dishes: a 240 px file by address keeps the menu page's HTML small.
+      const thumbFor = (id: string) => {
+        const entry = manifest[id] as { squares?: number[]; v?: string } | undefined;
+        if (!entry?.squares?.includes(240)) return null;
+        return `/menu/${id}/sq-240.webp${entry.v ? `?v=${entry.v}` : ''}`;
+      };
       const menu: SeoMenu | null = HOME_VENUE !== 'lasoul' || offline || !env.VITE_SUPABASE_URL || !env.VITE_SUPABASE_PUBLISHABLE_KEY
         ? null
-        : await fetchSeoMenu(env.VITE_SUPABASE_URL, env.VITE_SUPABASE_PUBLISHABLE_KEY, imageFor);
+        : await fetchSeoMenu(env.VITE_SUPABASE_URL, env.VITE_SUPABASE_PUBLISHABLE_KEY, imageFor, undefined, thumbFor);
 
       const write = (urlPath: string, html: string) => {
         const file = urlPath === '/' ? templatePath : path.join(outDir, urlPath.replace(/^\//, ''), 'index.html');
@@ -236,14 +247,16 @@ export function seoPrerender(): Plugin {
       // The privacy notice and terms of the restaurant whose site this is
       // (src/lib/privacy.ts), in its colours and icons. Without it,
       // /privacy was the home page's HTML to anything that runs no JavaScript.
-      const writePrivacy = (home: Venue, image?: string): SitemapEntry => {
-        const copy = privacyCopy(home);
-        write(PRIVACY_PATH, withBrand(renderPage(template, headTags({
-          path: PRIVACY_PATH, locale: 'en', venue: home, image,
-          title: copy.title.en, description: copy.intro.en, jsonLd: privacyGraph(home, 'en'),
-        }), privacyBody(home), 'en'), home));
-        return { path: PRIVACY_PATH, priority: 0.3 };
-      };
+      // In each language, at its own address (src/lib/seo/locale-path.ts).
+      const writePrivacy = (home: Venue, image?: string): SitemapEntry[] => LOCALES.map((locale) => {
+        const p = localePath(PRIVACY_PATH, locale);
+        const alternates = languageAlternates(PRIVACY_PATH);
+        write(p, withBrand(renderPage(template, headTags({
+          path: p, locale, venue: home, image, alternates,
+          ...privacyPageMeta(home, locale), jsonLd: privacyPageGraph(home, locale),
+        }), privacyPageBody(home, locale), locale), home));
+        return { path: p, priority: 0.3, alternates };
+      });
 
       // The booking page (src/pages/ReservePage.tsx) of the restaurant whose
       // site this is. While it takes requests online: what the page is, how
@@ -251,14 +264,19 @@ export function seoPrerender(): Plugin {
       // place in the sitemap. While it does not: the same address says so and
       // asks to be left out of search results, so a page that was listed once
       // is dropped, not kept (src/lib/seo/reservations.ts).
-      const writeReserve = (home: Venue, restaurant: Record<string, unknown>, image?: string): SitemapEntry[] => {
+      // In each language at its own address; while closed, none of them is listed or named by hreflang.
+      const writeReserve = (home: Venue, restaurant: (locale: Locale) => Record<string, unknown>, image?: string): SitemapEntry[] => {
         const on = reservationsOffered();
-        write(RESERVE_PATH, withBrand(renderPage(template, headTags({
-          path: RESERVE_PATH, locale: 'en', venue: home, image, noindex: !on,
-          ...(on ? reserveMeta(home, 'en') : reserveClosedMeta(home, 'en')),
-          jsonLd: on ? reserveGraph(home, 'en', restaurant) : { '@context': 'https://schema.org', ...restaurant },
-        }), on ? reserveBody(home) : reserveClosedBody(home), 'en'), home));
-        return on ? [{ path: RESERVE_PATH, priority: 0.8 }] : [];
+        const alternates = on ? languageAlternates(RESERVE_PATH) : undefined;
+        return LOCALES.flatMap((locale) => {
+          const p = localePath(RESERVE_PATH, locale);
+          write(p, withBrand(renderPage(template, headTags({
+            path: p, locale, venue: home, image, noindex: !on, alternates,
+            ...(on ? reserveMeta(home, locale) : reserveClosedMeta(home, locale)),
+            jsonLd: on ? reserveGraph(home, locale, restaurant(locale)) : { '@context': 'https://schema.org', ...restaurant(locale) },
+          }), on ? reserveBody(home, '/', locale) : reserveClosedBody(home, '/', locale), locale), home));
+          return on ? [{ path: p, priority: 0.8, alternates }] : [];
+        });
       };
 
       // Vera Italia's pages (src/lib/seo/vera-seo.ts): its website — at "/",
@@ -281,8 +299,8 @@ export function seoPrerender(): Plugin {
       if (HOME_VENUE === 'veraitalia') {
         const pages = veraPages(veraMenu).length;
         const entries = writeVera();
-        entries.push(...writeReserve(vera, veraRestaurantNode(veraMenu, 'en'), VERA_OG_IMAGE));
-        entries.push(writePrivacy(vera, VERA_OG_IMAGE));
+        entries.push(...writeReserve(vera, (l) => veraRestaurantNode(veraMenu, l), VERA_OG_IMAGE));
+        entries.push(...writePrivacy(vera, VERA_OG_IMAGE));
         const today = new Date().toISOString().slice(0, 10);
         const llms = veraLlms(veraMenu);
         writeFileSync(path.join(outDir, 'robots.txt'), robotsTxt());
@@ -290,63 +308,74 @@ export function seoPrerender(): Plugin {
         writeFileSync(path.join(outDir, 'llms.txt'), llms.short);
         writeFileSync(path.join(outDir, 'llms-full.txt'), llms.full);
         writeFileSync(path.join(outDir, '_redirects'), ownSiteRedirects('veraitalia', VENUE_URLS.lasoul));
-        config.logger.info(`  seo: Vera Italia's own site — ${pages} pages (${vera.live ? 'open' : 'menu and dishes not indexed until it opens'}), booking page (${reservationsOffered() ? 'open, listed' : 'not open online, not listed'}), privacy, robots.txt, sitemap.xml, llms.txt, _redirects`);
+        config.logger.info(`  seo: Vera Italia's own site — ${pages} pages in ${LOCALES.length} languages (${vera.live ? 'open' : 'menu and dishes not indexed until it opens'}), booking page (${reservationsOffered() ? 'open, listed' : 'not open online, not listed'}), privacy, robots.txt, sitemap.xml, llms.txt, _redirects`);
         return;
       }
 
+      // What the live menu answers (src/lib/seo/menu-faq.ts): asked on the home pages below, in their
+      // FAQPage data, and left in /site-facts.json for the live home page to ask the same.
+      const facts = menuFaq(menu);
+      setSiteFacts(menu ? facts : null);
+      writeFileSync(path.join(outDir, SITE_FACTS_PATH.replace(/^\//, '')), JSON.stringify(facts));
+
       // The website, once per language, each pointing at the others.
-      const alternates: Record<string, string> = { ...Object.fromEntries(LOCALES.map((l) => [l, sitePath(l)])), 'x-default': '/' };
+      const alternates = languageAlternates('/');
       for (const locale of LOCALES) {
         const head = headTags({
           path: sitePath(locale), locale, venue, alternates,
           title: siteT('seo_title', locale), description: siteT(orderingCopy('seo_description'), locale),
           jsonLd: homeGraph(venue, locale),
         });
-        write(sitePath(locale), renderPage(template, head, homeBody(venue, locale), locale, homePoster(venue.slug), sitePath(locale) !== '/'));
+        write(sitePath(locale), renderPage(template, head, homeBody(venue, locale, thumbFor), locale, homePoster(venue.slug), sitePath(locale) !== '/'));
       }
 
-      // The menu: one address in every language, so no alternates; English
-      // titles with the Bosnian and Arabic names in the content itself.
-      // hreflang names a page's other-language versions, each at an address
-      // of its own; the menu, its categories and its dishes have none — a
-      // guest picks the language inside the app and the phone remembers it,
-      // the address stays the same (Vera Italia's are the same: vera-seo.ts).
-      // Alternates pointing a page at itself would claim three languages for
-      // HTML that is English. The websites, which do have /bs/ and /ar/, carry
-      // them. The browser tests read both off the built pages (e2e/site.spec.ts,
-      // e2e/vera-own-site.spec.ts).
+      // The menu, each category and every dish, in each language at its own
+      // address (src/lib/seo/locale-path.ts): /menu/lasoul/, /bs/menu/lasoul/,
+      // /ar/menu/lasoul/, the same slugs after the prefix. Each page is
+      // written in its language — names, descriptions (English where a
+      // translation is missing), the words around them — names its other two
+      // versions with hreflang, and is its own canonical. The app shows the
+      // same head at each address (usePageMeta, src/lib/seo/page-meta.ts).
       const base = menuPath(venue.slug);
-      write(base, renderPage(template, headTags({
-        path: base, locale: 'en', venue,
-        title: siteT('seo_menu_title', 'en'), description: siteT('seo_menu_description', 'en'),
-        jsonLd: menu ? menuGraph(venue, menu, 'en') : homeGraph(venue, 'en'),
-      }), menuBody(venue, menu, 'en'), 'en'));
-
       const categories = menu?.categories ?? [];
-      for (const category of categories) {
-        const p = categoryPath(venue.slug, category.slug);
-        write(p, renderPage(template, headTags({
-          path: p, locale: 'en', venue,
-          title: siteT('seo_category_title', 'en', { category: category.names.en }),
-          description: siteT('seo_category_description', 'en', { category: category.names.en }),
-          jsonLd: menuGraph(venue, menu as SeoMenu, 'en', category),
-        }), menuBody(venue, menu, 'en', category), 'en'));
-      }
-
-      // A page for every dish: what people search for by name, and what
-      // answer engines cite when someone asks where to get it in Sarajevo.
+      const menuEntries: SitemapEntry[] = [];
       const dishEntries: SitemapEntry[] = [];
-      for (const category of categories) {
-        for (const section of category.sections) {
-          for (const item of section.items) {
-            const p = dishPath(venue.slug, item);
-            write(p, renderPage(template, headTags({
-              path: p, locale: 'en', venue, image: item.image,
-              // The same title and description the app shows while this dish is open from here.
-              ...dishMeta(item.names.en, item.price, item.descriptions.en, 'en'),
-              jsonLd: dishGraph(venue, category, section, item, 'en'),
-            }), dishBody(venue, category, section, item), 'en'));
-            dishEntries.push({ path: p, priority: 0.6, images: item.image ? [item.image] : [] });
+      for (const locale of LOCALES) {
+        const p = localePath(base, locale);
+        write(p, renderPage(template, headTags({
+          path: p, locale, venue, alternates: languageAlternates(base),
+          title: siteT('seo_menu_title', locale), description: siteT('seo_menu_description', locale),
+          jsonLd: menu ? menuGraph(venue, menu, locale) : homeGraph(venue, locale),
+        }), menuBody(venue, menu, locale), locale));
+        menuEntries.push({ path: p, priority: locale === 'en' ? 0.9 : 0.85, alternates: languageAlternates(base) });
+
+        for (const category of categories) {
+          const en = categoryPath(venue.slug, category.slug);
+          const cp = localePath(en, locale);
+          write(cp, renderPage(template, headTags({
+            path: cp, locale, venue, alternates: languageAlternates(en),
+            title: siteT('seo_category_title', locale, { category: category.names[locale] }),
+            description: siteT('seo_category_description', locale, { category: category.names[locale] }),
+            jsonLd: menuGraph(venue, menu as SeoMenu, locale, category),
+          }), menuBody(venue, menu, locale, category), locale));
+          menuEntries.push({ path: cp, priority: 0.8, alternates: languageAlternates(en) });
+        }
+
+        // A page for every dish: what people search for by name, and what
+        // answer engines cite when someone asks where to get it in Sarajevo.
+        for (const category of categories) {
+          for (const section of category.sections) {
+            for (const item of section.items) {
+              const en = dishPath(venue.slug, item);
+              const dp = localePath(en, locale);
+              write(dp, renderPage(template, headTags({
+                path: dp, locale, venue, image: item.image, alternates: languageAlternates(en),
+                // The same title and description the app shows while this dish is open from here.
+                ...dishMeta(item.names[locale], item.price, item.descriptions[locale], locale),
+                jsonLd: dishGraph(venue, category, section, item, locale),
+              }), dishBody(venue, category, section, item, locale), locale));
+              dishEntries.push({ path: dp, priority: 0.6, alternates: languageAlternates(en), images: item.image ? [item.image] : [] });
+            }
           }
         }
       }
@@ -360,19 +389,18 @@ export function seoPrerender(): Plugin {
         writeFileSync(rules, forwardToOwnSite('veraitalia', VENUE_URLS.veraitalia) + '\n' + current);
       }
 
-      const reserve = writeReserve(venue, restaurantNode(venue, 'en'));
+      const reserve = writeReserve(venue, (l) => restaurantNode(venue, l));
       const privacy = writePrivacy(venue);
 
       const today = new Date().toISOString().slice(0, 10);
       const entries: SitemapEntry[] = [
         ...LOCALES.map((l) => ({ path: sitePath(l), alternates, priority: l === 'en' ? 1 : 0.9, images: ['/site/hero-wide-1600.webp'] })),
-        { path: base, priority: 0.9 },
-        ...categories.map((c) => ({ path: categoryPath(venue.slug, c.slug), priority: 0.8 })),
+        ...menuEntries,
         // Only prerendered pages: anything else is served the home page's
         // HTML until the app runs, canonical and all.
         ...dishEntries,
         ...reserve,
-        privacy,
+        ...privacy,
         ...veraEntries,
       ];
       writeFileSync(path.join(outDir, 'robots.txt'), robotsTxt());
@@ -381,7 +409,7 @@ export function seoPrerender(): Plugin {
       writeFileSync(path.join(outDir, 'llms-full.txt'), llmsFullTxt(venue, menu));
 
       const dishes = categories.reduce((n, c) => n + c.sections.reduce((m, s) => m + s.items.length, 0), 0);
-      config.logger.info(`  seo: ${LOCALES.length} site pages, ${1 + categories.length} menu pages, ${dishEntries.length} dish pages (${menu ? `${dishes} dishes` : 'menu offline'}), booking page (${reservationsOffered() ? 'open, listed' : 'not open online, not listed'}), privacy, robots.txt, sitemap.xml, llms.txt`);
+      config.logger.info(`  seo: ${LOCALES.length} languages — ${LOCALES.length} site pages, ${menuEntries.length} menu pages, ${dishEntries.length} dish pages, ${facts.en.length} menu questions (${menu ? `${dishes} dishes` : 'menu offline'}), booking page (${reservationsOffered() ? 'open, listed' : 'not open online, not listed'}), privacy, robots.txt, sitemap.xml, llms.txt`);
     },
   };
 }
