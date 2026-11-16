@@ -17,14 +17,22 @@ screens are in English; guests see their own language.
 
 ## Part 1 — Before the rehearsal (manager, a laptop, 1–2 hours)
 
-Sign in at **/admin/login** with the manager's email and password. Everything
-here is in the admin menu on the left (on a phone: **More**).
+Sign in at **/admin/login** with the manager's email and password. The admin
+has five areas: **Home**, **Service**, **Menu**, **Reports** and **Setup**. On a
+laptop they are down the left side; on a phone they are the bar at the bottom,
+with Setup under **More**. The pages of an area are the tabs across the top.
+Below, **Setup → Waiters** means: open Setup, then the Waiters tab. The
+magnifier (Ctrl K) finds any page by name.
+
+The first time you open the admin, a one-minute tour, **What’s new**, shows
+where everything is. It is there again at the bottom of the left side (on a
+phone: **More → What’s new**), or type "tour" in the search.
 
 ### Accounts
 
 - [ ] **Manager password.** Reset it in Lovable (Cloud → Users) if nobody
       knows it, then sign in at `/admin/login`.
-- [ ] **Waiters** → **Add Waiter**, once per waiter: *Name*, *Username*
+- [ ] **Setup → Waiters** → **Add Waiter**, once per waiter: *Name*, *Username*
       (filled in from the name), *Password* (10+ characters; **Generate**
       makes one), *Floor PIN* (optional) → **Create**. A login card shows the
       address, username, password and PIN once: **Share** or **Copy** it to
@@ -38,18 +46,18 @@ here is in the admin menu on the left (on a phone: **More**).
 
 ### Tables, sections and tonight's floor
 
-- [ ] **Tables** → *How many tables do you have?* → **Generate tables**. The
+- [ ] **Setup → Tables** → *How many tables do you have?* → **Generate tables**. The
       numbers must match the numbers on the real tables.
-- [ ] **Sections** → *New section name* → **Add section** for each area
+- [ ] **Setup → Floor sections** → *New section name* → **Add section** for each area
       (e.g. Terrace, Inside). Tap a table chip → **Move table N to…**.
-- [ ] **Tonight** → tap a section → tap the waiters who cover it → **Done**.
+- [ ] **Service → Tonight’s waiters** → tap a section → tap the waiters who cover it → **Done**.
       **This is per day** (the trading day runs to 05:00) and must be done
       before every service. Without it every table lands under *No waiter
       yet* on the waiter phones.
 
 ### Menu
 
-- [ ] **Menu**: check every price (tap a price to change it), and that
+- [ ] **Menu → Dishes**: check every price (tap a price to change it), and that
       anything not on offer is **Sold out**.
 - [ ] Pencil icon → *Edit item* → **Allergens** on everything with nuts,
       dairy, gluten, eggs or sesame, and a **Photo** on the best sellers →
@@ -61,7 +69,7 @@ here is in the admin menu on the left (on a phone: **More**).
 
 - [ ] Write down the printer's **make and model** — it also decides how
       fiscal receipts can be automated later.
-- [ ] **Printing** → **Network printers** (Epson with *Server Direct Print*,
+- [ ] **Setup → Printing** → **Network printers** (Epson with *Server Direct Print*,
       or Star with *CloudPRNT*): *Add a network printer* → name, station
       (Kitchen / Bar / Kitchen + bar), paper (80 mm / 58 mm) → **Add
       printer** → open **Address & setup steps**, enter that address on the
@@ -71,7 +79,7 @@ here is in the admin menu on the left (on a phone: **More**).
 - [ ] *Printing on* and *Print new orders by themselves* switched on, *Copies
       per ticket* set → **Save settings**.
 
-### Service settings — Ordering & service
+### Service settings — Setup → Ordering & service
 
 - [ ] **Accept orders from guests**: on. **Pay at the table**: on.
 - [ ] **Online card payment (Monri)**: **off**. It stays off until Monri is
@@ -86,7 +94,7 @@ here is in the admin menu on the left (on a phone: **More**).
 
 ### QR codes
 
-- [ ] **QR Codes** → **A4 Sheet** → **Print**: one test sheet for the
+- [ ] **Setup → QR codes** → **A4 Sheet** → **Print**: one test sheet for the
       rehearsal is enough. Scan one with a phone before printing more.
 - [ ] Choose for the real launch: **Per table** codes (the guest lands on
       their table — recommended) or one **Venue QR** (the guest types the
@@ -221,7 +229,7 @@ Date: ______________ Started: ______ Finished: ______
 
 ### H. When things go wrong
 
-22. - [ ] Manager: **Ordering & service** → *Accept orders from guests*
+22. - [ ] Manager: **Setup → Ordering & service** → *Accept orders from guests*
           off → **Stop orders**. Within a minute the guest's cart says
           *Ordering is paused*, and **Send order** is greyed out. Switch it
           back on.
@@ -233,39 +241,39 @@ Date: ______________ Started: ______ Finished: ______
           there.
 25. - [ ] Printer: switch it off → a guest orders → switch it back on → the
           ticket comes out **once**. If the kitchen shows *Did not print* or
-          *PRINTER STUCK*, tap **Reprint** / **Retry** (also under Printing →
-          *Print queue*). No ticket lost, none printed twice.
+          *PRINTER STUCK*, tap **Reprint** / **Retry** (also under Setup →
+          Printing → *Print queue*). No ticket lost, none printed twice.
 
 ### I. Closing — the manager
 
-26. - [ ] **Orders** → **Mark fiscalized** on one paid order → *Fiscal
+26. - [ ] **Service → Orders** → **Mark fiscalized** on one paid order → *Fiscal
           receipt number* → **Record receipt**. (Practice only: do **not**
           ring rehearsal orders into the real fiscal device.)
-27. - [ ] **Daily Report**: *Cash* and *POS terminal* each match what the
+27. - [ ] **Reports → Daily report**: *Cash* and *POS terminal* each match what the
           waiter recorded; read *Needs attention before close*.
 28. - [ ] *Close the day*: type the system's own amounts → *Cash balances.*
           → **Close the day**. (It can be redone; it changes no orders.)
 
 ### J. Clean-up — before the first real service
 
-29. - [ ] **Orders** → the red cancel icon on every rehearsal order → reason
+29. - [ ] **Service → Orders** → the red cancel icon on every rehearsal order → reason
           "Rehearsal" → **Cancel order** (orders already in the kitchen or
           paid need the manager's account). Cancelled orders leave the sales
           figures; a paid one shows "needs a refund" — that is expected here.
-30. - [ ] **Tables** → **Free** any table still open.
+30. - [ ] **Setup → Tables** → **Free** any table still open.
 31. - [ ] **Service hours** back to the real hours, if you widened them.
 
 ### Do not press during the rehearsal
 
 | Button | Why |
 |---|---|
-| QR Codes → **Replace code…** | Kills every printed room code at once (it asks first) |
+| Setup → QR codes → **Replace code…** | Kills every printed room code at once (it asks first) |
 | **Online card payment (Monri)** | Guests are charged for real |
-| Tables → bin icon (**Delete table**) | Ends the session and removes its orders |
-| Waiters → **Remove** | Deletes that waiter's login for good |
-| Menu → **Re-translate All** → **Overwrite all** | Replaces corrected Bosnian and Arabic text |
-| Printing → **New address** / **Remove printer** | The printer stops receiving tickets |
-| Service → **Start measuring at N%** | Hides suggestions from some real tables |
+| Setup → Tables → bin icon (**Delete table**) | Ends the session and removes its orders |
+| Setup → Waiters → **Remove** | Deletes that waiter's login for good |
+| Menu → Dishes → **More** → **Re-translate everything…** → **Overwrite all** | Replaces corrected Bosnian and Arabic text |
+| Setup → Printing → **New address** / **Remove printer** | The printer stops receiving tickets |
+| Setup → Ordering & service → **Start measuring at N%** | Hides suggestions from some real tables |
 
 Notes:
 
@@ -280,8 +288,8 @@ Notes:
 ## Part 3 — Soft launch (the first 2–3 services)
 
 - [ ] One section only, one service. A manager keeps `/kitchen` and the
-      **Daily Report** open throughout.
-- [ ] Before each service: **Tonight**, the **Live** pills, a **Test print**.
+      **Reports → Daily report** open throughout.
+- [ ] Before each service: **Service → Tonight’s waiters**, the **Live** pills, a **Test print**.
 - [ ] Every app order is rung into the restaurant's certified fiscal POS, then
       **Mark fiscalized** with the receipt number. The accountant confirms
       this workflow in writing (`docs/fiscalization-workflow.md`). **⚠**
@@ -328,11 +336,11 @@ Fastest first. None of these needs a code change.
 
 | To stop | Do | Effect |
 |---|---|---|
-| **Online card payments** | Ordering & service → *Online card payment (Monri)* off | Immediate. Payments already in progress still resolve; pay-at-table unaffected |
-| **All guest ordering** | Ordering & service → *Accept orders from guests* off | Guests see the pause message and ask a waiter; the server refuses orders. Existing orders continue |
-| **A rush** | Ordering & service → *Kitchen delay notice (minutes)* | Guests are warned it may take longer, and still order. Use before stopping orders |
-| **Suggestions** | Ordering & service → *Show suggestions to guests* off | No suggestions anywhere |
-| **Printing** | Kitchen → printer icon off, or Printing → *Printing on* off | The kitchen screen keeps working |
+| **Online card payments** | Setup → Ordering & service → *Online card payment (Monri)* off | Immediate. Payments already in progress still resolve; pay-at-table unaffected |
+| **All guest ordering** | Setup → Ordering & service → *Accept orders from guests* off | Guests see the pause message and ask a waiter; the server refuses orders. Existing orders continue |
+| **A rush** | Setup → Ordering & service → *Kitchen delay notice (minutes)* | Guests are warned it may take longer, and still order. Use before stopping orders |
+| **Suggestions** | Setup → Ordering & service → *Show suggestions to guests* off | No suggestions anywhere |
+| **Printing** | Kitchen → printer icon off, or Setup → Printing → *Printing on* off | The kitchen screen keeps working |
 | **A bad website or app update** | Netlify → Deploys → the previous deploy → *Publish deploy* | About a minute; the database is untouched |
 
 Emergencies, outage by outage: `docs/operations-runbook.md` §7.
@@ -359,7 +367,7 @@ possible again. On the live database this goes through Lovable, like any SQL.
 
 - Every order reaches the kitchen and the waiter within seconds, and prints
   once.
-- The cash drawer and the terminal batch match the Daily Report exactly,
+- The cash drawer and the terminal batch match the Daily report exactly,
   three services running.
 - Every app order is on the fiscal device, and marked so in the app.
 - Staff can say what every label means without looking it up.
