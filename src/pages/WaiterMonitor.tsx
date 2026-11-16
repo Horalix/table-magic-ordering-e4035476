@@ -12,7 +12,7 @@ import {
 import ConnectionPill from '@/components/staff/ConnectionPill';
 import TableActionSheet, { type SheetTable } from '@/components/monitor/TableActionSheet';
 import { businessDayISO } from '@/lib/reporting';
-import { ArrowLeft, Bell, CheckCircle2, ChefHat, Clock, Grid3x3, Lock, LogIn, Receipt, Users, Volume2, VolumeX } from 'lucide-react';
+import { ArrowLeft, Bell, CheckCircle2, ChefHat, Clock, Grid3x3, Hand, Lock, LogIn, Receipt, Users, Volume2, VolumeX } from 'lucide-react';
 import PinPad from '@/components/monitor/PinPad';
 import { toast } from 'sonner';
 import {
@@ -130,6 +130,8 @@ const WaiterMonitor = () => {
   const { unlocked: audioUnlocked, unlock: unlockSound } = useAudioUnlock();
   /** Shown instead of a toast storm: the board says it is stale until a fetch succeeds. */
   const [stale, setStale] = useState(false);
+  /** The floor has answered once. Before that, "0/0" and an empty rail are not known, not quiet. */
+  const [loaded, setLoaded] = useState(false);
   const beginFetch = useLatestRequest();
 
   const fetchAll = useCallback(async () => {
@@ -193,6 +195,7 @@ const WaiterMonitor = () => {
     // A kitchen tablet signs in as a waiter (Admin → Waiters) but serves no tables.
     setWaiters(((w.data ?? []) as (Waiter & { username: string | null })[]).filter((x) => !isKitchenUsername(x.username)));
     setAssignments((a.data ?? []) as Assignment[]);
+    setLoaded(true);
   }, [beginFetch]);
 
   useEffect(() => { void fetchAll(); }, [fetchAll]);
@@ -465,13 +468,13 @@ const WaiterMonitor = () => {
           {soundOn && !audioUnlocked && (
             <button
               onClick={() => { void unlockSound(); }}
-              className="shrink-0 inline-flex items-center gap-1.5 h-9 px-3 rounded-full text-sm font-sans font-semibold bg-amber-100 text-amber-900 border border-amber-200"
+              className="shrink-0 inline-flex items-center gap-1.5 h-9 px-3 rounded-full text-sm font-sans font-semibold bg-amber-500/10 text-foreground border border-amber-500/40 hover:bg-amber-500/15 transition-colors"
             >
-              <VolumeX className="w-4 h-4" aria-hidden /> Tap to enable sound
+              <VolumeX className="w-4 h-4 text-amber-700" aria-hidden /> Tap to enable sound
             </button>
           )}
-          <StatPill icon={<Users className="w-3.5 h-3.5" />} label="Occupied" value={`${occupied}/${tables.length}`} tone="active" />
-          <StatPill icon={<ChefHat className="w-3.5 h-3.5" />} label="Orders" value={openOrders.length} tone={openOrders.length ? 'active' : 'idle'} />
+          <StatPill icon={<Users className="w-3.5 h-3.5" />} label="Occupied" value={loaded ? `${occupied}/${tables.length}` : '—'} tone="active" />
+          <StatPill icon={<ChefHat className="w-3.5 h-3.5" />} label="Orders" value={loaded ? openOrders.length : '—'} tone={openOrders.length ? 'active' : 'idle'} />
           <StatPill
             icon={<Bell className="w-3.5 h-3.5" />}
             label="Alerts"
@@ -495,14 +498,17 @@ const WaiterMonitor = () => {
             Could not refresh — this floor may be out of date. Retrying automatically.
           </div>
         )}
-        <MenuOnlyNotice audience="waiter" outerClassName="px-4 sm:px-6 pb-3" />
-        {staffVenue && <EndOfDayTables hours={staffVenue.venue.hours} outerClassName="px-4 sm:px-6 pb-3" />}
       </header>
 
       <main className="p-4 sm:p-6">
+        {/* In the page, not the sticky header: there they took a quarter of a
+            1024×768 tablet for the whole shift, over the tables. */}
+        <MenuOnlyNotice audience="waiter" outerClassName="mb-4" />
+        {staffVenue && <EndOfDayTables hours={staffVenue.venue.hours} outerClassName="mb-4" />}
         {/* Pinned above every mode: the floor monitor is often the screen nearest the door. */}
         <HeldOrdersCard soundEnabled={soundOn} className="mb-4" onChanged={refetch} />
-        {mode === 'rail' && (
+        {mode === 'rail' && !loaded && <RailSkeleton />}
+        {mode === 'rail' && loaded && (
           <RailView
             waiters={waiters}
             waiterStats={waiterStats}
@@ -524,6 +530,7 @@ const WaiterMonitor = () => {
             tableWaiter={tableWaiter}
             now={sortNow}
             large={false}
+            showWaiter
             onOpen={setOpenTableId}
           />
         )}
@@ -542,6 +549,7 @@ const WaiterMonitor = () => {
             tableWaiter={tableWaiter}
             now={sortNow}
             large
+            showWaiter={false}
             onOpen={setOpenTableId}
           />
         )}
@@ -568,6 +576,18 @@ const WaiterMonitor = () => {
     </div>
   );
 };
+
+/** The rail's shape while the floor loads, so the cards do not pop in under a finger. */
+const RailSkeleton = () => (
+  <div aria-busy="true" aria-label="Loading the floor">
+    <div className="mx-auto mb-6 h-4 w-48 rounded-full bg-muted animate-pulse motion-reduce:animate-none" />
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+      {[0, 1, 2, 3].map((i) => (
+        <div key={i} className="min-h-[120px] rounded-2xl border border-border bg-card animate-pulse motion-reduce:animate-none" />
+      ))}
+    </div>
+  </div>
+);
 
 const RailView = ({
   waiters,
@@ -631,7 +651,7 @@ const RailView = ({
             </div>
             <div className="flex flex-wrap gap-1.5 mt-2">
               {stats.calls > 0 && (
-                <Chip tone="calling" icon={<Bell className="w-3.5 h-3.5" />}>{plural(stats.calls, 'call')}</Chip>
+                <Chip tone="calling" icon={<Hand className="w-3.5 h-3.5" />}>{plural(stats.calls, 'call')}</Chip>
               )}
               {stats.bills > 0 && (
                 <Chip tone="bill" icon={<Receipt className="w-3.5 h-3.5" />}>{plural(stats.bills, 'bill')}</Chip>
@@ -677,6 +697,7 @@ const TablesGrid = ({
   tableWaiter,
   now,
   large,
+  showWaiter,
   onOpen,
 }: {
   /** Says why there is nothing here, which depends on whose view this is. */
@@ -690,6 +711,8 @@ const TablesGrid = ({
   tableWaiter: (table: TableRow) => string | null;
   now: number;
   large: boolean;
+  /** "Waiter: Amra" on each card. Not on Amra's own floor, where it is every card. */
+  showWaiter: boolean;
   onOpen: (tableId: string) => void;
 }) => {
   if (tables.length === 0) {
@@ -735,7 +758,7 @@ const TablesGrid = ({
             oldestMs={oldestMs}
             hasCall={hasCall}
             hasBill={hasBill}
-            waiterName={waiterName}
+            waiterName={showWaiter ? waiterName : null}
             onOpen={() => onOpen(table.id)}
           />
           </motion.div>
@@ -891,7 +914,7 @@ const TableCard = ({
               )}
               {hasCall && (
                 <span className={`inline-flex items-center gap-1 font-semibold ${TONE.calling.text}`}>
-                  <Bell className="w-3.5 h-3.5" aria-hidden /> Calling
+                  <Hand className="w-3.5 h-3.5" aria-hidden /> Calling
                 </span>
               )}
               {readyCount > 0 && (
@@ -907,7 +930,7 @@ const TableCard = ({
               )}
             </div>
             {awaitingPayment > 0 && (
-              <p className="text-xs text-accent font-sans mt-1">
+              <p className="text-xs text-foreground font-sans font-medium mt-1">
                 {awaitingPayment} not in kitchen — payment pending
               </p>
             )}

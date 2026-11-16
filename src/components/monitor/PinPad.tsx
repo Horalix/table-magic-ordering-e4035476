@@ -111,14 +111,14 @@ const PinPad: React.FC<PinPadProps> = ({
         )}
 
         <div
-          className={`flex justify-center gap-3 my-5 ${shake ? 'animate-shake' : ''}`}
+          className={`flex justify-center gap-4 my-5 ${shake ? 'animate-shake motion-reduce:animate-none' : ''}`}
           role="status"
           aria-label={`${pin.length} of ${length} digits entered`}
         >
           {Array.from({ length }).map((_, i) => (
             <div
               key={i}
-              className={`w-4 h-4 rounded-full border-2 transition-colors ${
+              className={`w-[18px] h-[18px] rounded-full border-2 transition-colors ${
                 i < pin.length
                   ? error ? 'bg-destructive border-destructive' : 'bg-primary border-primary'
                   : 'border-muted-foreground/40'
@@ -176,8 +176,8 @@ const PinPad: React.FC<PinPadProps> = ({
           >
             <X className="w-4 h-4" aria-hidden /> Cancel
           </button>
-          <span className="inline-flex items-center gap-1.5 text-[11px] font-sans text-muted-foreground/70">
-            <CornerDownLeft className="w-3 h-3" aria-hidden /> keyboard works too
+          <span className="inline-flex items-center gap-1.5 text-xs font-sans text-muted-foreground">
+            <CornerDownLeft className="w-3 h-3" aria-hidden /> Keyboard works too
           </span>
         </div>
       </DialogContent>

@@ -202,7 +202,7 @@ const TableActionSheet = ({ table, meId, onClose, onChanged }: Props) => {
             {table.billId && (
               <div className={`rounded-xl border p-3 ${TONE.bill.surface}`}>
                 <p className={`text-sm font-sans font-semibold flex items-center gap-1.5 ${TONE.bill.text}`}>
-                  <Receipt className="w-4 h-4" /> Asked for the bill
+                  <Receipt className="w-4 h-4" /> Wants the bill
                   {outstanding > 0 && <span className="ml-auto tabular-nums text-foreground">Owes {km(outstanding)}</span>}
                 </p>
                 {table.billHeldBy && (
@@ -279,7 +279,7 @@ const TableActionSheet = ({ table, meId, onClose, onChanged }: Props) => {
         {/* ---- Orders ---- */}
         {table.orders.length > 0 && (
           <div className="space-y-2">
-            <p className="text-xs uppercase tracking-wide text-muted-foreground font-sans">Orders</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground font-sans">Orders</p>
             {table.orders.map((order) => {
               const held = isHeld(order);
               const inKitchen = isInKitchen(order.status) && !held;
@@ -308,19 +308,25 @@ const TableActionSheet = ({ table, meId, onClose, onChanged }: Props) => {
                       kitchen. Without saying so it looks like a brand-new order,
                       and the waiter chases food nobody is cooking. */}
                   {!inKitchen && order.status !== 'cancelled' && (
-                    <p className="text-sm font-sans text-accent mt-1">
+                    <p className="text-sm font-sans font-medium text-foreground mt-1">
                       {held ? 'Not in kitchen — confirm it in “Needs confirming”' : 'Not in kitchen — online payment pending'}
                     </p>
                   )}
                   {/* The runner has never had the allergy note the kitchen printed. */}
-                  {order.notes && <p className="text-sm text-accent font-semibold mt-1">Note: {order.notes}</p>}
-                  <div className="flex items-center justify-between gap-2 mt-2">
+                  {order.notes && (
+                    <p className="mt-1.5 rounded-lg bg-[hsl(42_96%_56%/0.22)] px-2.5 py-1.5 text-sm font-sans font-semibold text-[hsl(30_70%_20%)]">
+                      Note: {order.notes}
+                    </p>
+                  )}
+                  {/* The buttons drop under the amount on a phone, rather than
+                      squeezing "31.50 KM · Not paid" onto two lines. */}
+                  <div className="flex flex-wrap items-center justify-between gap-2 mt-2">
                     <span className="font-sans text-sm tabular-nums">
                       {km(order.total)}
                       {payLabel && <span className="text-muted-foreground"> · {payLabel}</span>}
                     </span>
                     {payable && (
-                      <div className="flex gap-2">
+                      <div className="flex gap-2 ms-auto">
                         <Button
                           size="sm" variant="outline" className="min-h-[44px] text-sm"
                           disabled={busy !== null}
