@@ -222,12 +222,13 @@ test.describe('admin on a laptop', () => {
     await expect(tabs(page).getByRole('link')).toHaveText(['Orders', 'Reservations', 'Tonight’s waiters']);
     await expect(tabs(page).getByRole('link', { name: 'Orders' })).toHaveAttribute('aria-current', 'page');
 
-    // Everything in the sidebar is on screen at 1366×768: nothing to scroll to.
+    // Everything in the sidebar is on screen at 1366×768: nothing to scroll to, in it or in its middle.
     const aside = page.locator('aside');
     expect(await aside.evaluate((el) => el.scrollHeight <= el.clientHeight)).toBe(true);
+    expect(await page.getByTestId('admin-sidebar-middle').evaluate((el) => el.scrollHeight <= el.clientHeight)).toBe(true);
     // ...with room to spare between the other screens and the account, not a pixel-perfect fit.
     const lastScreen = await aside.getByRole('link', { name: /^Floor monitor/ }).boundingBox();
-    const account = await aside.getByRole('button', { name: 'Change password' }).boundingBox();
+    const account = await aside.getByRole('button', { name: 'What’s new' }).boundingBox();
     expect(account!.y - (lastScreen!.y + lastScreen!.height)).toBeGreaterThan(24);
     await expect(aside.getByRole('button', { name: 'Sign out' })).toBeInViewport({ ratio: 1 });
     await expect(aside.getByRole('link', { name: /^Floor monitor/ })).toBeInViewport({ ratio: 1 });
@@ -249,17 +250,38 @@ test.describe('admin on a laptop', () => {
     await expect(page).toHaveURL(/\/admin\/printing$/);
   });
 
+  test('in a short window the middle of the sidebar scrolls, and the account stays in reach', async ({ page, staff }) => {
+    // A 768 px laptop with the browser's own bars leaves about this much; the owner's sidebar is the tallest.
+    staff.roles = [{ user_id: 'staff-user-1', role: 'admin', venue_id: null }];
+    await page.setViewportSize({ width: 1280, height: 620 });
+    await page.goto('/admin/orders');
+    const aside = page.locator('aside');
+    await expect(page.getByTestId('admin-venue')).toBeInViewport({ ratio: 1 });
+    for (const name of ['What’s new', 'Change password', 'Sign out']) {
+      await expect(aside.getByRole('button', { name })).toBeInViewport({ ratio: 1 });
+    }
+    // What does not fit is a scroll away inside the sidebar, not lost under the edge of the screen.
+    const middle = page.getByTestId('admin-sidebar-middle');
+    expect(await middle.evaluate((el) => el.scrollHeight > el.clientHeight)).toBe(true);
+    const floor = aside.getByRole('link', { name: /^Floor monitor/ });
+    await floor.scrollIntoViewIfNeeded();
+    await expect(floor).toBeInViewport({ ratio: 1 });
+    await expect(aside.getByRole('button', { name: 'Sign out' })).toBeInViewport({ ratio: 1 });
+    // The page itself has not grown a second scrollbar for it.
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
+  });
+
   test('every part of the navigation is reached with the keyboard', async ({ page }, testInfo) => {
     test.skip(testInfo.project.name !== 'desktop', 'a phone has no Tab key; iPhone’s Safari does not tab to links');
     await page.goto('/admin');
     await expect(page.getByTestId('admin-venue')).toBeVisible();
     await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
     const seen: string[] = [];
-    for (let i = 0; i < 10; i += 1) {
+    for (let i = 0; i < 11; i += 1) {
       await page.keyboard.press('Tab');
       seen.push(await page.evaluate(() => (document.activeElement?.getAttribute('aria-label') ?? document.activeElement?.textContent ?? '').trim().replace(/\s+/g, ' ')));
     }
-    for (const stop of ['Search or jump to a page', 'Home', 'Service', 'Menu', 'Reports', 'Setup', 'Change password', 'Sign out']) {
+    for (const stop of ['Search or jump to a page', 'Home', 'Service', 'Menu', 'Reports', 'Setup', 'What’s new', 'Change password', 'Sign out']) {
       expect(seen.some((name) => name.startsWith(stop)), `Tab reaches “${stop}” (${seen.join(' | ')})`).toBe(true);
     }
   });

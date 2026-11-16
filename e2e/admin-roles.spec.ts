@@ -907,6 +907,8 @@ for (const [venue, other] of [[VERA, LA_SOUL], [LA_SOUL, VERA]] as const) {
       await expect(search.getByRole('option', { name: /Both restaurants/ })).toHaveCount(0);
       await escape(page, search);
       await page.goto('/admin');
+      // (Let it finish arriving: WebKit refuses a new address while the last one is still loading.)
+      await expect(page.getByRole('heading', { level: 1, name: 'Dashboard' })).toBeVisible();
 
       // The owner's addresses send them to their own dashboard.
       for (const path of ['/admin/overview', '/admin/team']) {
