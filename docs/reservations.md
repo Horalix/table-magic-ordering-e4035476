@@ -189,6 +189,17 @@ rings the same way.
   open in a new tab instead.
 - **The magnifier finds any page** by its name or by what the manager wants
   to do ("printer", "price", "PIN", "close the day").
+- **A one-minute walkthrough, "What's new".** The first time an admin opens
+  the admin on a device after the November 2026 layout, eight short steps
+  point at the real things on their screen: the five areas and where the old
+  pages went, the search, Service and its waiting number, this app, the
+  floor monitor, What the app earned. Skip or Done and it does not come
+  back. To see it again: **More → What's new** on a phone, **What's new**
+  at the bottom of the sidebar on a laptop, or type "tour" in the search. To
+  send it to a manager, give them `lasoul.net/admin?tour=1`. To show a new
+  walkthrough after a later update, change the steps in
+  `src/components/admin/nav/whats-new.ts` and the version in
+  `whats-new-version.ts`; `e2e/admin-tour.spec.ts` holds it.
 
 `e2e/admin-speed.spec.ts` holds these in Chromium and WebKit with an iPhone
 profile, telling the page it was opened from the Home Screen. What only a

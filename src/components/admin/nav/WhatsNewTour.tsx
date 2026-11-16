@@ -140,7 +140,8 @@ const WhatsNewTour = ({ open, onClose, owner, demo, standalone, returnTo }: Prop
 
   const onKeyDown = (event: React.KeyboardEvent) => {
     if (event.key === 'Escape') { event.preventDefault(); onClose(); }
-    if (event.key === 'ArrowRight') { event.preventDefault(); forward(); }
+    // The right arrow steps on, but only Done (or Escape) ends it: a held key must not close the last step unread.
+    if (event.key === 'ArrowRight') { event.preventDefault(); go(index + 1); }
     if (event.key === 'ArrowLeft') { event.preventDefault(); go(index - 1); }
   };
 

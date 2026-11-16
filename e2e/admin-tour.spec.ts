@@ -121,6 +121,11 @@ test.describe('the first time after the update', () => {
         const next = tour(page).getByRole('button', { name: i === TITLES.length - 1 ? 'Done' : 'Next' });
         expect((await next.boundingBox())!.height).toBeGreaterThanOrEqual(44);
         if (!wide) expect(await tour(page).locator('#whats-new-words p').first().evaluate((el) => parseFloat(getComputedStyle(el).fontSize))).toBeGreaterThanOrEqual(16);
+        if (i === TITLES.length - 1) {
+          // The right arrow steps on but never ends it: only Done does, so a held key cannot close the last step unread.
+          await page.keyboard.press('ArrowRight');
+          await expect(tour(page)).toContainText('Step 8 of 8');
+        }
         await next.click();
       }
       await expect(tour(page)).toHaveCount(0);
