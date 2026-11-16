@@ -31,7 +31,9 @@ const LanguageSelector = ({ variant = 'default' }: Props) => {
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <button
-          aria-label={`${t('change_language')}: ${localeLabels[locale]}`}
+          // The name holds the code the button shows ("EN"), as WCAG 2.5.3 asks:
+          // a voice user says what they see. "Change language: EN (English)".
+          aria-label={`${t('change_language')}: ${SHORT[locale]} (${localeLabels[locale]})`}
           className={`flex items-center gap-1.5 px-3 py-2 rounded-full font-sans text-sm font-medium transition-all duration-300 min-h-[44px] ${
             // The focus ring in the restaurant's own colour (its --ring), not La Soul's green on Vera Italia's site.
             isSite
