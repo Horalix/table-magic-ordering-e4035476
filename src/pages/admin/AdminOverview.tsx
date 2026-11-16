@@ -239,10 +239,10 @@ const AdminOverview = () => {
   return (
     <div>
       <AdminPageHeader
-        title="Overview"
+        title="Both restaurants"
         description={(
           <>
-            Both restaurants, today
+            Today's sales, orders and tables at each restaurant, side by side
             {dataUpdatedAt > 0 && <> · updated {formatClock(new Date(dataUpdatedAt))}</>}
           </>
         )}

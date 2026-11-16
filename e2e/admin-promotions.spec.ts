@@ -98,7 +98,7 @@ test.describe('sales', () => {
     await page.getByRole('textbox', { name: 'Find a dish' }).fill('soul');
     await page.getByRole('button', { name: 'Sale', exact: true }).click();
     const dialog = page.getByRole('dialog');
-    await expect(dialog.getByRole('heading', { name: 'Edit item' })).toBeVisible();
+    await expect(dialog.getByRole('heading', { name: 'Edit dish' })).toBeVisible();
 
     await dialog.getByRole('switch', { name: 'Sale' }).click();
     await dialog.getByRole('textbox', { name: 'Percent off' }).fill('20');
@@ -152,7 +152,7 @@ test.describe('sales', () => {
     // And the menu page says which dishes are on sale.
     await page.goto('/admin/menu');
     await page.getByRole('button', { name: /Drinks/ }).first().click();
-    await page.getByRole('button', { name: 'Soft drinks 2 items' }).click();
+    await page.getByRole('button', { name: /^Soft drinks/ }).click();
     await expect(page.getByText('Sale soon')).toBeVisible();
   });
 });
@@ -191,7 +191,7 @@ test.describe('combos', () => {
     await expect(summary).toContainText('Ordered separately: 22.00–25.50 KM · Combo: 20.00 KM');
     await expect(summary).toContainText('Guests save 2.00–3.50 KM vs ordering separately');
 
-    await dialog.getByRole('button', { name: 'Add item' }).click();
+    await dialog.getByRole('button', { name: 'Add dish' }).click();
     await expect(dialog).toBeHidden();
     expect(writes.inserts.at(-1)).toMatchObject({ name: 'Burger Combo', price: 20, subcategory_id: 'sub-burgers' });
     expect(writes.combos.at(-1)).toEqual({

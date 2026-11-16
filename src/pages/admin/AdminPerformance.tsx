@@ -121,7 +121,7 @@ const AdminPerformance = () => {
   return (
     <div>
       <AdminPageHeader
-        title="Staff performance"
+        title="Performance"
         description="How each waiter did over the days you pick: sales, tips, speed and what guests said."
         loading={loading && !!data}
       >
