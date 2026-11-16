@@ -52,6 +52,27 @@ function partyColumns(max: number): React.CSSProperties {
   return { '--party-cols': narrow, '--party-cols-wide': wide } as React.CSSProperties;
 }
 
+/**
+ * The keys of a group of radio buttons, which a row of chips is to a keyboard
+ * and a screen reader: one tab stop for the whole group (the chosen chip), and
+ * the arrow keys, Home and End move the choice within it. Without this the
+ * thirty days were thirty tab stops before the name field.
+ */
+function radioKeys(e: React.KeyboardEvent<HTMLDivElement>) {
+  const step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[e.key];
+  if (step === undefined && e.key !== 'Home' && e.key !== 'End') return;
+  const all = [...e.currentTarget.querySelectorAll<HTMLButtonElement>('[role="radio"]')];
+  const at = all.indexOf(document.activeElement as HTMLButtonElement);
+  if (at < 0) return;
+  e.preventDefault();
+  // Left is the next one where the row runs right to left.
+  const forward = step !== undefined && (e.key === 'ArrowLeft' || e.key === 'ArrowRight') && getComputedStyle(e.currentTarget).direction === 'rtl' ? -step : step;
+  const next = e.key === 'Home' ? all[0] : e.key === 'End' ? all[all.length - 1] : all[(at + (forward ?? 0) + all.length) % all.length];
+  next.focus();
+  next.click();
+  next.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+}
+
 /** One of the three choices: its name, what is chosen now, and the choices. */
 const Choice = ({ labelId, label, value, children }: { labelId: string; label: string; value?: React.ReactNode; children: React.ReactNode }) => (
   <div>
@@ -268,18 +289,18 @@ const ReservePage = () => {
 
                       {/* A day, a time and how many: each a tap. The groups read to a screen reader as the choices they are. */}
                       <Choice labelId="reserve-day-label" label={rc('day')} value={day ? formatReservationDay(day, locale) : undefined}>
-                        <div role="radiogroup" aria-labelledby="reserve-day-label"
+                        <div role="radiogroup" aria-labelledby="reserve-day-label" onKeyDown={radioKeys}
                           className="-mx-5 mt-3 flex snap-x scroll-px-5 gap-2 overflow-x-auto px-5 pb-3 pt-0.5 [mask-image:linear-gradient(to_right,transparent,black_16px,black_calc(100%-32px),transparent)] [scrollbar-width:none] sm:-mx-8 sm:scroll-px-8 sm:px-8 sm:[mask-image:linear-gradient(to_right,transparent,black_28px,black_calc(100%-40px),transparent)] [&::-webkit-scrollbar]:hidden">
                           {days.map((d, i) => {
                             const parts = reservationDayParts(d, locale);
                             const none = reservationTimes(options, d).length === 0;
                             return (
-                              <button key={d} type="button" role="radio" aria-checked={day === d} aria-label={dayLabel(d, i)} data-value={d}
+                              <button key={d} type="button" role="radio" aria-checked={day === d} tabIndex={day === d ? 0 : -1} aria-label={dayLabel(d, i)} data-value={d}
                                 onClick={() => setDay(d)}
                                 className={cn(chip(day === d), 'flex h-[88px] w-[72px] shrink-0 snap-start flex-col items-center justify-center gap-1 leading-none', none && day !== d && 'opacity-45')}>
-                                <span className="max-w-full truncate px-0.5 text-[10px] font-semibold uppercase tracking-[0.04em] opacity-75 rtl:text-[11px] rtl:tracking-normal">{i === 0 ? rc('today') : i === 1 ? rc('tomorrow') : parts.weekday}</span>
+                                <span className={cn('max-w-full truncate px-0.5 text-[10px] font-semibold uppercase tracking-[0.04em] rtl:text-[11px] rtl:tracking-normal', day !== d && 'text-muted-foreground')}>{i === 0 ? rc('today') : i === 1 ? rc('tomorrow') : parts.weekday}</span>
                                 <span className="font-serif text-[23px] font-semibold" dir="ltr">{parts.number}</span>
-                                <span className="text-[11px] opacity-75">{parts.month}</span>
+                                <span className={cn('text-[11px]', day !== d && 'text-muted-foreground')}>{parts.month}</span>
                               </button>
                             );
                           })}
@@ -303,9 +324,9 @@ const ReservePage = () => {
                                 ))}
                               </div>
                             )}
-                            <div role="radiogroup" aria-labelledby="reserve-time-label" className="mt-2.5 grid grid-cols-4 gap-2 sm:grid-cols-5" dir="ltr">
+                            <div role="radiogroup" aria-labelledby="reserve-time-label" onKeyDown={radioKeys} className="mt-2.5 grid grid-cols-4 gap-2 sm:grid-cols-5" dir="ltr">
                               {times.filter((x) => partOfDay(x) === part).map((x) => (
-                                <button key={x} type="button" role="radio" aria-checked={time === x} data-value={x} onClick={() => setTime(x)}
+                                <button key={x} type="button" role="radio" aria-checked={time === x} tabIndex={time === x ? 0 : -1} data-value={x} onClick={() => setTime(x)}
                                   className={cn(chip(time === x), 'min-h-[48px] text-[15px] font-semibold tabular-nums')}>
                                   {x}
                                 </button>
@@ -316,10 +337,10 @@ const ReservePage = () => {
                       </Choice>
 
                       <Choice labelId="reserve-party-label" label={rc('guests')} value={<span dir="ltr">{party}</span>}>
-                        <div role="radiogroup" aria-labelledby="reserve-party-label" dir="ltr" style={partyColumns(options.maxParty)}
+                        <div role="radiogroup" aria-labelledby="reserve-party-label" dir="ltr" style={partyColumns(options.maxParty)} onKeyDown={radioKeys}
                           className="mt-3 grid grid-cols-[repeat(var(--party-cols),minmax(0,1fr))] gap-2 sm:grid-cols-[repeat(var(--party-cols-wide),minmax(0,1fr))]">
                           {Array.from({ length: options.maxParty }, (_, i) => i + 1).map((n) => (
-                            <button key={n} type="button" role="radio" aria-checked={party === n} data-value={n} onClick={() => setParty(n)}
+                            <button key={n} type="button" role="radio" aria-checked={party === n} tabIndex={party === n ? 0 : -1} data-value={n} onClick={() => setParty(n)}
                               className={cn(chip(party === n), 'min-h-[48px] text-[15px] font-semibold tabular-nums')}>
                               {n}
                             </button>

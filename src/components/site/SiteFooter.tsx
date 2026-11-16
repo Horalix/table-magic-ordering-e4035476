@@ -38,7 +38,7 @@ const SiteFooter = ({ venue, reservations = false }: { venue: Venue; reservation
             </ul>
           </nav>
         </div>
-        <p className="pt-8 text-[13px] text-ls-cream/50">{st('footer_rights', { year: new Date().getFullYear() })}</p>
+        <p className="pt-8 text-[13px] text-ls-cream/60">{st('footer_rights', { year: new Date().getFullYear() })}</p>
       </Container>
     </footer>
   );

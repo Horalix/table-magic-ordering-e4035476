@@ -34,6 +34,18 @@
 /menu/*/*.webp
   Cache-Control: public, max-age=2592000
 
+# The websites' own photographs, the logos and the category covers
+# (public/site, public/brand, public/covers). Same names whatever is in them,
+# like the faces below, so a week and no longer; after that a browser shows
+# the one it has while it asks for a newer one. They had no rule, and were
+# asked for again on every visit.
+/site/*
+  Cache-Control: public, max-age=604800, stale-while-revalidate=2592000
+/brand/*
+  Cache-Control: public, max-age=604800, stale-while-revalidate=2592000
+/covers/*
+  Cache-Control: public, max-age=604800, stale-while-revalidate=2592000
+
 # The self-hosted faces (scripts/build-fonts.py). Same names whatever is in
 # them, so a week, not a year: a regenerated face reaches every browser
 # within one. The service worker precaches them by revision, so an installed
