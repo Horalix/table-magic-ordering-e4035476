@@ -40,8 +40,8 @@ type Words = (n: number, range: string, names: string) => FaqEntry;
 
 const COPY: Record<Asked, Record<Locale, Words>> = {
   kids: {
-    en: (n, r, names) => ({ q: 'Is there a kids’ menu at La Soul?', a: `Yes. The kids’ menu has ${n} dishes, ${r}: ${names}.` }),
-    bs: (n, r, names) => ({ q: 'Ima li La Soul dječiji meni?', a: `Ima. Dječiji meni ima ${n} jela, ${r}: ${names}.` }),
+    en: (n, r, names) => ({ q: 'Is there a kids’ menu at La Soul?', a: `Yes. The kids’ menu has ${n} dishes, ${r}, among them ${names}.` }),
+    bs: (n, r, names) => ({ q: 'Ima li La Soul dječiji meni?', a: `Ima. Dječiji meni ima ${n} jela, ${r}, među njima ${names}.` }),
     ar: (n, r, names) => ({ q: 'هل توجد قائمة للأطفال في La Soul؟', a: `نعم. أسعار قائمة الأطفال ${r}، ومنها ${names}.` }),
   },
   breakfast: {

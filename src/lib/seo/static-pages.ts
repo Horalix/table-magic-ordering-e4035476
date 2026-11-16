@@ -105,9 +105,19 @@ export const languageLinks = (path: string, current: Locale = addressLocale(path
 /** "/menu/lasoul/" as the reader of a page in `locale` should follow it. */
 const at = (path: string, locale: Locale) => localePath(path, locale);
 
-/** A dish's square photo in a list: by address, never inlined, lazy, its size known. */
-const thumbImg = (src: string, alt: string, eager = false) =>
-  `<img src="${escapeHtml(src)}" alt="${escapeHtml(alt)}" width="240" height="240"${eager ? '' : ' loading="lazy"'} decoding="async" />`;
+/**
+ * A photograph in the HTML crawlers read: by address, never inlined, its
+ * size known, and every one lazy, the first too. This HTML is hidden the
+ * moment the app runs (`.js [data-prerender]{display:none}`), and a browser
+ * still fetches an eager <img> inside a hidden element: an eager first photo
+ * would be a download every visitor pays for and nobody sees. A lazy one in a
+ * hidden element is never fetched; crawlers and image search read its src.
+ */
+const img = (src: string, alt: string, width: number, height?: number) =>
+  `<img src="${escapeHtml(src)}" alt="${escapeHtml(alt)}" width="${width}"${height ? ` height="${height}"` : ''} loading="lazy" decoding="async" />`;
+
+/** A dish's square photo in a list (240 px). */
+const thumbImg = (src: string, alt: string) => img(src, alt, 240, 240);
 
 /** What a dish's photo shows, in the page's language. */
 const photoAlt = (venue: Venue, dish: string, locale: Locale) =>
@@ -163,7 +173,7 @@ export function homeBody(venue: Venue, locale: Locale, imageFor: (id: string) =>
     languageLinks(sitePath(locale), locale), `</header>`,
     `<main>`,
     `<h1>${st('hero_title', locale)}</h1>`,
-    `<img src="${HERO.src}" alt="${st('hero_alt', locale)}" width="${HERO.width}" height="${HERO.height}" />`,
+    img(HERO.src, siteT('hero_alt', locale), HERO.width, HERO.height),
     `<p>${st(orderingCopy('hero_sub'), locale)}</p>`,
     `<p><a href="${menu}">${st('hero_cta', locale)}</a>${reservationsOffered() ? ` · <a href="${at(RESERVE_PATH, locale)}">${escapeHtml(rcopy('title', locale))}</a>` : ''}</p>`,
     `<section id="story"><h2>${st('story_title', locale)}</h2><p>${st('story_p1', locale)}</p><p>${st('story_p2', locale)}</p></section>`,
@@ -227,17 +237,14 @@ export function menuBody(venue: Venue, menu: SeoMenu | null, locale: Locale, onl
   const title = only
     ? `${escapeHtml(only.names[locale])} — ${escapeHtml(venue.name)}`
     : `${escapeHtml(venue.name)} — ${st('nav_menu', locale)}`;
-  let first = true;
   const body = categories.map((c) => [
     only ? '' : `<h2><a href="${at(categoryPath(venue.slug, c.slug), locale)}">${escapeHtml(c.names[locale])}</a></h2>`,
     ...c.sections.map((s) => [
       `<section><h3>${escapeHtml(s.names[locale])}</h3><ul>`,
       ...s.items.map((i) => {
-        // The first photo is the one a reader sees first: not lazy.
-        const img = i.thumb ? thumbImg(i.thumb, photoAlt(venue, i.names[locale], locale), first) : '';
-        if (i.thumb) first = false;
+        const photo = i.thumb ? thumbImg(i.thumb, photoAlt(venue, i.names[locale], locale)) : '';
         return [
-          `<li>${img}<strong><a href="${at(dishPath(venue.slug, i), locale)}">${escapeHtml(i.names[locale])}</a></strong> — ${price(i.price, locale)}`,
+          `<li>${photo}<strong><a href="${at(dishPath(venue.slug, i), locale)}">${escapeHtml(i.names[locale])}</a></strong> — ${price(i.price, locale)}`,
           i.descriptions[locale] ? `<br />${escapeHtml(i.descriptions[locale] as string)}` : '',
           `</li>`,
         ].join('');
@@ -284,7 +291,7 @@ export function dishBody(venue: Venue, category: SeoMenuCategory, section: SeoMe
     `<main><article>`,
     `<h1>${name}</h1>`,
     also ? `<p>${also}</p>` : '',
-    item.image ? `<img src="${escapeHtml(item.image)}" alt="${escapeHtml(photoAlt(venue, item.names[locale], locale))}" width="768" decoding="async" />` : '',
+    item.image ? img(item.image, photoAlt(venue, item.names[locale], locale), 768) : '',
     `<p>${facts}</p>`,
     item.descriptions[locale] ? `<p>${escapeHtml(item.descriptions[locale] as string)}</p>` : '',
     allergens,

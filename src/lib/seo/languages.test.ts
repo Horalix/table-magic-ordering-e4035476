@@ -153,19 +153,21 @@ describe('a dish’s page in Bosnian and in Arabic', () => {
 });
 
 describe('the menu and the home page in a language', () => {
-  it('list every dish in that language with a small photo by address, the first not lazy', () => {
+  it('list every dish in that language with a small photo by address, lazy (hidden HTML never fetches it)', () => {
     const html = menuBody(venue, menu, 'bs');
     expect(html).toContain('<h1>La Soul — Meni</h1>');
     expect(html).toContain('<a href="/bs/menu/lasoul/dish/la-soul-burger/">La Soul burger</a></strong> — 15,50 KM');
-    expect(html).toContain('<img src="/menu/b/sq-240.webp?v=1" alt="La Soul burger — La Soul, Sarajevo" width="240" height="240" decoding="async" />');
+    expect(html).toContain('<img src="/menu/b/sq-240.webp?v=1" alt="La Soul burger — La Soul, Sarajevo" width="240" height="240" loading="lazy" decoding="async" />');
     expect(html).toContain('Cijene su u KM (BAM)');
     expect(html).not.toMatch(/data:image/);
   });
 
   it('show the home page’s photographs as real images, with alt text in its language', () => {
     const html = homeBody(venue, 'ar', (id) => `/menu/${id}/sq-240.webp`);
-    expect(html).toMatch(/<img src="\/site\/hero-wide-\d+\.webp" alt="برغر La Soul[^"]*" width="\d+" height="\d+" \/>/);
-    expect(html.match(/<img [^>]*loading="lazy"/g)!.length).toBeGreaterThanOrEqual(8);
+    expect(html).toMatch(/<img src="\/site\/hero-wide-\d+\.webp" alt="برغر La Soul[^"]*" width="\d+" height="\d+" loading="lazy"/);
+    // All of them lazy: an eager one would be fetched by every visitor, whose app hides this HTML.
+    expect(html.match(/<img /g)!.length).toBe(9);
+    expect(html.match(/<img [^>]*loading="lazy"/g)!.length).toBe(9);
     expect(html).toContain('<a href="/ar/menu/lasoul/">');
   });
 
