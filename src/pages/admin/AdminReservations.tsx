@@ -431,7 +431,7 @@ const AdminReservations = () => {
             <Pill tone="new" data-testid="pending-count" className="px-2.5 py-1 text-[13px]">{pending.length} waiting for your answer</Pill>
           )}
           {rows !== null && (
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-muted px-2.5 py-1 text-[13px] font-medium tabular-nums text-muted-foreground">
+            <span className="hidden items-center gap-1.5 rounded-full bg-muted px-2.5 py-1 text-[13px] font-medium tabular-nums text-muted-foreground sm:inline-flex">
               <CalendarCheck2 className="h-3.5 w-3.5" aria-hidden />
               {todayList.length === 0 ? 'No tables booked today' : `Today: ${todayList.length} ${todayList.length === 1 ? 'table' : 'tables'}, ${guests(todayList.reduce((n, r) => n + r.party_size, 0))}`}
             </span>
