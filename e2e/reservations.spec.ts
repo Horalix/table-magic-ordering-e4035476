@@ -315,7 +315,9 @@ test.describe('what search engines find', () => {
     await expect(page.locator('link[rel="canonical"]')).toHaveAttribute('href', 'https://lasoul.net/reserve/');
     await expect(page.locator('meta[name="robots"]')).toHaveAttribute('content', 'index, follow, max-image-preview:large');
     await expect(page.locator('meta[name="description"]')).toHaveAttribute('content', /^Ask for a table at La Soul online/);
-    await expect(page.locator('link[rel="alternate"][hreflang]')).toHaveCount(0);
+    // Open, it names its Bosnian and Arabic versions (/bs/reserve/, /ar/reserve/), as their pages name it.
+    await expect(page.locator('link[rel="alternate"][hreflang]')).toHaveCount(4);
+    await expect(page.locator('link[rel="alternate"][hreflang="bs"]')).toHaveAttribute('href', 'https://lasoul.net/bs/reserve/');
 
     await expect(page.getByRole('heading', { level: 2, name: 'How it works' })).toBeVisible();
     await expect(page.getByRole('listitem').filter({ hasText: 'The restaurant answers, usually within minutes.' })).toBeVisible();
