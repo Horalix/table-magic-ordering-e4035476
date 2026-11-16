@@ -178,7 +178,7 @@ test.describe('a dish opened from Menu intelligence', () => {
 
     await page.goto('/admin/menu?dish=m2');
     const dialog = page.getByRole('dialog');
-    await expect(dialog.getByRole('heading')).toContainText(/La Soul Fries|Edit/);
+    await expect(dialog.getByRole('heading', { level: 2 })).toContainText(/La Soul Fries|Edit/);
     // The address is cleaned, so a reload does not reopen it.
     await expect(page).toHaveURL(/\/admin\/menu$/);
 

@@ -43,7 +43,7 @@ const InlinePrice = ({ name, price, onSave }: {
       <button
         type="button"
         onClick={() => setEditing(true)}
-        className="inline-flex items-center min-h-[36px] px-2 -mx-2 rounded-md text-xs tabular-nums text-muted-foreground hover:bg-muted hover:text-foreground underline decoration-dotted underline-offset-4"
+        className="-mx-2 -my-2 inline-flex min-h-[44px] items-center rounded-md px-2 text-[13px] font-medium tabular-nums text-foreground/80 underline decoration-muted-foreground/50 decoration-dotted underline-offset-4 hover:bg-muted hover:text-foreground sm:my-0 sm:min-h-[32px]"
         aria-label={`Price of ${name}: ${Number(price).toFixed(2)} KM. Change`}
       >
         {Number(price).toFixed(2)} KM
