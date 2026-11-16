@@ -378,7 +378,7 @@ const AdminLayout = () => {
       <div className="flex min-w-0 flex-1 flex-col">
         {/* What stays put while the page scrolls under it: on a phone the bar
             that says where you are, and under it the pages of this area. */}
-        <div ref={stickyRef} className="sticky top-0 z-30 border-b border-border/70 bg-background/90 backdrop-blur-md lg:border-0 print:hidden">
+        <div ref={stickyRef} className="sticky top-0 z-30 border-b border-border/70 bg-background/95 backdrop-blur-md lg:border-0 print:hidden">
           <header className="box-content flex h-14 items-center gap-1 pl-[calc(env(safe-area-inset-left)+1rem)] pr-[calc(env(safe-area-inset-right)+0.375rem)] pt-[env(safe-area-inset-top)] lg:hidden">
             <div className="min-w-0 flex-1 leading-tight">
               <p data-testid="admin-top-venue" className="truncate font-serif text-[17px] font-semibold text-foreground">

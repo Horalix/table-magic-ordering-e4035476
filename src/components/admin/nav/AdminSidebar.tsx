@@ -72,7 +72,7 @@ const AdminSidebar = ({ shell }: { shell: AdminShell }) => (
             <LauncherLink launcher={launcher} shell={shell} className={cn(quiet, 'h-11')}>
               <launcher.icon className="h-[18px] w-[18px] shrink-0" aria-hidden />
               <span className="min-w-0 flex-1 truncate text-left">{launcher.label}</span>
-              <OpensElsewhere />
+              {!shell.standalone && <OpensElsewhere />}
             </LauncherLink>
           </li>
         ))}

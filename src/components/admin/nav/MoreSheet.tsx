@@ -85,7 +85,9 @@ const MoreSheet = ({ shell, open, onOpenChange }: { shell: AdminShell; open: boo
                       <span className="block text-[15px] leading-snug text-foreground">{launcher.label}</span>
                       <span className="block truncate text-[13px] leading-snug text-muted-foreground">{launcher.about}</span>
                     </span>
-                    <OpensElsewhere className="h-4 w-4 text-muted-foreground" />
+                    {shell.standalone
+                      ? <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground/70" aria-hidden />
+                      : <OpensElsewhere className="h-4 w-4 text-muted-foreground" />}
                   </LauncherLink>
                 ))}
               </Group>

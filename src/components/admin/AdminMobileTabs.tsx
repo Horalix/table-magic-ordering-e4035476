@@ -24,7 +24,7 @@ const AdminMobileTabs = ({ shell, moreOpen, onMore }: { shell: AdminShell; moreO
   return (
     <nav
       aria-label="Admin quick navigation"
-      className="fixed inset-x-0 bottom-0 z-40 border-t border-border/80 bg-background/95 pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] backdrop-blur-md lg:hidden print:hidden"
+      className="fixed inset-x-0 bottom-0 z-40 border-t border-border/80 bg-background/[0.97] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] backdrop-blur-md lg:hidden print:hidden"
     >
       <ul className="mx-auto grid max-w-xl grid-cols-5">
         {areas.map((area) => {
