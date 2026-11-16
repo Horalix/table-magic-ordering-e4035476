@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence, useAnimate, useReducedMotion } from 'framer-motion';
-import { ShoppingBag, Receipt } from 'lucide-react';
+import { ShoppingBag, ReceiptText as Receipt } from 'lucide-react';
 import { useCartStore } from '@/lib/cart-store';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useT, useI18n } from '@/lib/i18n';

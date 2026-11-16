@@ -3,7 +3,7 @@ import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { duration, easeEnter } from '@/lib/motion';
 import { useCartStore } from '@/lib/cart-store';
-import { AlertCircle, Users } from 'lucide-react';
+import { AlertCircle, ScanLine, Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import GuestNameModal from '@/components/guest/GuestNameModal';
 import BrandEmblem from '@/components/BrandEmblem';
@@ -283,15 +283,15 @@ const TableEntry = () => {
           <div className="w-16 h-16 rounded-full bg-destructive/10 flex items-center justify-center mx-auto mb-4">
             <AlertCircle className="w-8 h-8 text-destructive" />
           </div>
-          <h2 className="font-serif text-xl font-bold text-foreground">{t('join_declined')}</h2>
-          <div className="mt-6 flex flex-col gap-2">
+          <h1 className="font-serif text-2xl font-bold text-foreground">{t('join_declined')}</h1>
+          <div className="mt-7 flex flex-col gap-2.5">
             <Button
               onClick={() => { if (sessionId) { setPhase('waiting'); createJoinRequest(sessionId, nameRef.current); } }}
-              className="rounded-full"
+              className="w-full h-12 rounded-2xl font-sans font-semibold"
             >
               {t('try_again')}
             </Button>
-            <Button onClick={() => navigate(menuPath())} variant="outline" className="rounded-full">
+            <Button onClick={() => navigate(menuPath())} variant="outline" className="w-full h-12 rounded-2xl font-sans font-semibold bg-transparent">
               {t('browse_menu')}
             </Button>
           </div>
@@ -300,15 +300,17 @@ const TableEntry = () => {
     );
   }
 
-  // error
+  // error: a short title, the reason under it, and the one thing the guest can do now.
+  // Calm, not an alarm: nothing is wrong with the guest, and the waiter can help.
   return (
     <div className="min-h-screen bg-background flex items-center justify-center px-6">
-      <div className="text-center max-w-sm">
-        <div className="w-16 h-16 rounded-full bg-destructive/10 flex items-center justify-center mx-auto mb-4">
-          <AlertCircle className="w-8 h-8 text-destructive" />
+      <div className="text-center max-w-sm w-full" role="alert">
+        <div className="w-16 h-16 rounded-full bg-muted grid place-items-center mx-auto mb-5">
+          <ScanLine className="w-7 h-7 text-foreground/70" aria-hidden />
         </div>
-        <h2 className="font-serif text-xl font-bold text-foreground">{error}</h2>
-        <Button onClick={() => navigate(menuPath())} variant="outline" className="mt-6 rounded-full">
+        <h1 className="font-serif text-2xl font-bold text-foreground">{t('table_open_failed_title')}</h1>
+        <p className="mt-2 text-[15px] font-sans text-muted-foreground leading-relaxed">{error}</p>
+        <Button onClick={() => navigate(menuPath())} className="mt-7 w-full h-12 rounded-2xl font-sans font-semibold">
           {t('browse_menu')}
         </Button>
       </div>

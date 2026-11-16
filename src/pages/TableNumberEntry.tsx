@@ -3,7 +3,7 @@ import { DemoLockup } from '@/demo/ui/Brand';
 import React, { useEffect, useState } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ArrowRight, AlertTriangle, Loader2 } from 'lucide-react';
+import { ArrowRight, Loader2, ScanLine } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useT } from '@/lib/i18n';
 import { useCartStore } from '@/lib/cart-store';
@@ -101,11 +101,12 @@ const TableNumberEntry = () => {
   if (phase === 'invalid') {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center px-6" style={bg}>
-        <div className="w-full max-w-sm text-center">
+        <div className="w-full max-w-sm text-center" role="alert">
           <div className="w-16 h-16 rounded-full bg-white/15 grid place-items-center mx-auto mb-5">
-            <AlertTriangle className="w-8 h-8 text-white" aria-hidden />
+            <ScanLine className="w-7 h-7 text-white" aria-hidden />
           </div>
-          <h1 className="font-serif text-2xl font-bold text-white">{t('qr_expired')}</h1>
+          <h1 className="font-serif text-2xl font-bold text-white">{t('table_open_failed_title')}</h1>
+          <p className="mt-2 text-[15px] font-sans text-white/90 leading-relaxed">{t('qr_expired')}</p>
           <Button
             onClick={browse}
             className={`mt-6 w-full h-12 rounded-2xl bg-white ${onLight} hover:bg-white/90 font-sans font-semibold`}
