@@ -128,7 +128,7 @@ export function tourSteps({ owner, wide, demo, standalone, shortcut }: TourAudie
     {
       id: 'earned',
       title: 'What the app earned',
-      body: 'Under Reports. It says what ordering from the table brought in, and “Are suggestions earning?” measures the extra margin the menu’s suggestions bring.',
+      body: 'Under Reports. It says what ordering from the table brought in.',
       anchors: ['reports'],
     },
     {
