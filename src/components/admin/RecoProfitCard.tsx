@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import {
-  attachRows, getProfitCheck, setAutoHoldout, summariseProfitCheck, type ProfitCheck,
+  attachRows, getProfitCheck, RecoNotInstalledError, setAutoHoldout, summariseProfitCheck, type ProfitCheck,
 } from '@/lib/reco-profit';
 
 /**
@@ -19,6 +19,10 @@ import {
  * scheduler (pg_cron, every 15 minutes) or when a manager presses Measure.
  * Opening a check by looking would replace the page's last finished result
  * with an empty new one.
+ *
+ * On a database without its migration (20261116120000) it renders nothing
+ * at all — not while loading, not after — so the page looks exactly as it did
+ * before the update. It carries its own bottom margin for the same reason.
  */
 
 const pct = (n: number | null) => (n === null ? '—' : `${Math.round(n * 100)}%`);
@@ -27,12 +31,17 @@ const RecoProfitCard = ({ days = 28 }: { days?: number }) => {
   const [data, setData] = useState<ProfitCheck | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  /** Unknown until the first answer; false when the database predates the migration. */
+  const [installed, setInstalled] = useState<boolean | null>(null);
 
   const load = useCallback(async () => {
     try {
-      setData(await getProfitCheck(days));
+      const check = await getProfitCheck(days);
+      setInstalled(check !== null);
+      setData(check);
       setError(null);
     } catch (e) {
+      setInstalled(true);
       setError(e instanceof Error ? e.message : String(e));
     }
   }, [days]);
@@ -52,14 +61,19 @@ const RecoProfitCard = ({ days = 28 }: { days?: number }) => {
       toast.success(next > 0 ? `Measuring: ${next}% of tables will see no suggestions` : 'Measuring paused: every table sees suggestions');
       await load();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : String(e));
+      if (e instanceof RecoNotInstalledError) setInstalled(false);
+      else toast.error(e instanceof Error ? e.message : String(e));
     } finally {
       setBusy(false);
     }
   };
 
+  // Nothing until the database has answered, and nothing on one without the
+  // function: no skeleton flashing in and out above the page.
+  if (installed !== true) return null;
+
   return (
-    <AdminCard id="reco-profit">
+    <AdminCard id="reco-profit" className="mb-6">
       <AdminCardHeader
         icon={Scale}
         title="Are suggestions earning?"

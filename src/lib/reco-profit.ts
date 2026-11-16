@@ -40,23 +40,41 @@ export interface ProfitCheck {
   attach: AttachCell[];
 }
 
-export const getProfitCheck = async (days = 28): Promise<ProfitCheck> => {
-  const { data, error } = await supabase.rpc('reco_profit_check' as never, { _days: days } as never);
-  if (error) throw new Error(error.message);
-  return data as unknown as ProfitCheck;
-};
+/**
+ * The database does not have the function: its migration
+ * (20261116120000_reco_always_measured.sql) has not been applied yet.
+ * PostgREST answers PGRST202 ("Could not find the function … in the schema
+ * cache"); Postgres itself 42883 (undefined function).
+ */
+export function isMissingFunction(error: { code?: string | null; message?: string | null } | null | undefined): boolean {
+  if (!error) return false;
+  return error.code === 'PGRST202' || error.code === '42883'
+    || /could not find the function/i.test(error.message ?? '');
+}
+
+/** Raised by the card's buttons when the database predates the migration. */
+export class RecoNotInstalledError extends Error {
+  constructor() {
+    super('Suggestion measuring is not installed on this database yet');
+    this.name = 'RecoNotInstalledError';
+  }
+}
 
 /**
- * Open the always-on check if it should be running and is not. Only a
- * manager may; for anyone else it is a no-op, never an error on screen.
+ * The check, or null when the database predates its migration: the card then
+ * shows nothing at all, so the page looks as it did before the update.
  */
-export const keepMeasuring = async (): Promise<void> => {
-  await supabase.rpc('reco_keep_measuring' as never);
+export const getProfitCheck = async (days = 28): Promise<ProfitCheck | null> => {
+  const { data, error } = await supabase.rpc('reco_profit_check' as never, { _days: days } as never);
+  if (isMissingFunction(error)) return null;
+  if (error) throw new Error(error.message);
+  return data as unknown as ProfitCheck;
 };
 
 /** 0 switches the always-on check off; 1–50 is the share of tables kept without suggestions. */
 export const setAutoHoldout = async (pct: number): Promise<void> => {
   const { error } = await supabase.rpc('set_reco_auto_holdout' as never, { _pct: pct } as never);
+  if (isMissingFunction(error)) throw new RecoNotInstalledError();
   if (error) throw new Error(error.message);
 };
 

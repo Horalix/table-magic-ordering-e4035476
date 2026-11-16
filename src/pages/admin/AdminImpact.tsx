@@ -146,10 +146,9 @@ const AdminImpact = () => {
         )}
       />
 
-      {/* Margin per week against the always-on check (20261116120000_reco_always_measured.sql). */}
-      <div className="mb-6">
-        <RecoProfitCard days={days} />
-      </div>
+      {/* Margin per week against the always-on check (20261116120000_reco_always_measured.sql);
+          renders nothing on a database without that migration. */}
+      <RecoProfitCard days={days} />
 
       {error && (
         <AdminCard className="mb-4 border-destructive/40" role="alert">

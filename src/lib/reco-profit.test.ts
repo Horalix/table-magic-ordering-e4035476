@@ -2,7 +2,48 @@ import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('@/integrations/supabase/client', () => ({ supabase: { rpc: vi.fn() } }));
 
-import { attachRows, summariseProfitCheck, type ProfitCheck } from './reco-profit';
+import { supabase } from '@/integrations/supabase/client';
+import {
+  attachRows, getProfitCheck, isMissingFunction, RecoNotInstalledError, setAutoHoldout, summariseProfitCheck,
+  type ProfitCheck,
+} from './reco-profit';
+
+const rpc = supabase.rpc as unknown as ReturnType<typeof vi.fn>;
+/** What PostgREST answers for a function the database does not have. */
+const MISSING = {
+  code: 'PGRST202',
+  message: 'Could not find the function public.reco_profit_check(_days) in the schema cache',
+  details: null, hint: null,
+};
+
+describe('a database without the migration (20261116120000)', () => {
+  it('recognises a missing function by PostgREST code, Postgres code or message', () => {
+    expect(isMissingFunction(MISSING)).toBe(true);
+    expect(isMissingFunction({ code: '42883', message: 'function public.reco_profit_check(integer) does not exist' })).toBe(true);
+    expect(isMissingFunction({ message: 'Could not find the function public.set_reco_auto_holdout(_pct) in the schema cache' })).toBe(true);
+    expect(isMissingFunction({ code: '42501', message: 'Only staff can read what suggestions earned' })).toBe(false);
+    expect(isMissingFunction(null)).toBe(false);
+  });
+
+  it('getProfitCheck answers null, not an error, so the card can show nothing', async () => {
+    rpc.mockResolvedValueOnce({ data: null, error: MISSING });
+    await expect(getProfitCheck(28)).resolves.toBeNull();
+    rpc.mockResolvedValueOnce({ data: null, error: { code: '42883', message: 'function does not exist' } });
+    await expect(getProfitCheck(28)).resolves.toBeNull();
+  });
+
+  it('any other error is still an error', async () => {
+    rpc.mockResolvedValueOnce({ data: null, error: { code: '42501', message: 'Only staff can read what suggestions earned' } });
+    await expect(getProfitCheck(28)).rejects.toThrow('Only staff');
+  });
+
+  it('the Measure and Pause buttons say "not installed" rather than showing the raw error', async () => {
+    rpc.mockResolvedValueOnce({ data: null, error: { ...MISSING, message: 'Could not find the function public.set_reco_auto_holdout(_pct) in the schema cache' } });
+    await expect(setAutoHoldout(10)).rejects.toBeInstanceOf(RecoNotInstalledError);
+    rpc.mockResolvedValueOnce({ data: null, error: { code: '42501', message: 'Only a manager can change measuring' } });
+    await expect(setAutoHoldout(10)).rejects.toThrow('Only a manager');
+  });
+});
 
 const base: ProfitCheck = { status: 'not_running', days: 28, auto_holdout_pct: 10, attach: [] };
 
