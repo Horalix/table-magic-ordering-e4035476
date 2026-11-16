@@ -351,9 +351,9 @@ const AdminDashboard = () => {
           {/* Two per row on a phone: one per row put seven tiles between the
               manager and anything below them. */}
           <Stagger className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-            <KpiCard icon={Wallet} label="Today's revenue" value={stats.todayRevenue} format={money} unit="KM" hint="since 05:00" />
+            <KpiCard icon={Wallet} label="Today's revenue" value={stats.todayRevenue} format={money} unit="KM" hint="since 05:00, tips included" />
             <KpiCard icon={ShoppingBag} label="Orders" value={stats.totalOrders} format={whole} hint="completed sales" />
-            <KpiCard icon={TrendingUp} label="Average order" value={stats.avgOrderValue} format={money} unit="KM" hint="per order" />
+            <KpiCard icon={TrendingUp} label="Average order" value={stats.avgOrderValue} format={money} unit="KM" hint="gross, per order" />
             <KpiCard icon={Users} label="Tables seated today" value={stats.guestCount} format={whole} hint="sittings since 05:00" />
           </Stagger>
 
