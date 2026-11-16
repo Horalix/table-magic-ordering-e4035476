@@ -4,8 +4,7 @@ import { motion, useReducedMotion } from 'framer-motion';
 import { springPill } from '@/lib/motion';
 import { cn } from '@/lib/utils';
 import { RESERVATIONS_PATH, areaOf, pageAt, pagesIn, type AreaId, type NavAudience } from './admin-nav';
-import { WaitingBadge } from './NavParts';
-import { waitingLabel } from './shell';
+import { WaitingBadge, WaitingWords } from './NavParts';
 
 /**
  * The pages of the area you are in, across the top of the content.
@@ -60,12 +59,11 @@ const AreaTabs = ({ area, audience, pathname, pending }: { area: AreaId; audienc
                 >
                   {/* Phone: the filled chip slides to the page you tap. */}
                   {active && <motion.span layoutId="admin-tab-chip" transition={transition} className="absolute inset-0 rounded-full bg-foreground lg:hidden" />}
-                  <span className="relative">{page.label}</span>
+                  <span className="relative">{page.label}{waiting > 0 && <WaitingWords count={waiting} />}</span>
                   {waiting > 0 && (
                     <WaitingBadge
                       data-testid="reservations-waiting"
                       count={waiting}
-                      label={waitingLabel(waiting)}
                       className={cn('relative', active && 'bg-background text-foreground lg:bg-primary lg:text-primary-foreground')}
                     />
                   )}

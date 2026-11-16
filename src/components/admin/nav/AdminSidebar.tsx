@@ -6,8 +6,8 @@ import { springPill } from '@/lib/motion';
 import { cn } from '@/lib/utils';
 import { AREAS, LAUNCHERS, pagesIn } from './admin-nav';
 import { areaLanding } from './nav-memory';
-import { LauncherLink, OpensElsewhere, RestaurantSwitch, SearchField, WaitingBadge } from './NavParts';
-import { waitingLabel, type AdminShell } from './shell';
+import { LauncherLink, OpensElsewhere, RestaurantSwitch, SearchField, WaitingBadge, WaitingWords } from './NavParts';
+import type { AdminShell } from './shell';
 
 /**
  * The sidebar, on a laptop and wider: the restaurant, the search, the five
@@ -53,8 +53,8 @@ const AdminSidebar = ({ shell }: { shell: AdminShell }) => (
               >
                 {active && <motion.span layoutId="admin-area-active" transition={springPill} className="absolute inset-0 rounded-lg bg-sidebar-accent" />}
                 <area.icon className="relative h-[18px] w-[18px] shrink-0" aria-hidden />
-                <span className="relative min-w-0 flex-1 truncate">{area.label}</span>
-                {waiting > 0 && <WaitingBadge count={waiting} label={waitingLabel(waiting)} className="relative" />}
+                <span className="relative min-w-0 flex-1 truncate">{area.label}{waiting > 0 && <WaitingWords count={waiting} />}</span>
+                {waiting > 0 && <WaitingBadge count={waiting} className="relative" />}
               </Link>
             </li>
           );

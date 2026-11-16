@@ -3,8 +3,8 @@ import { Ellipsis } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { AREAS, pagesIn } from '@/components/admin/nav/admin-nav';
 import { areaLanding } from '@/components/admin/nav/nav-memory';
-import { WaitingBadge } from '@/components/admin/nav/NavParts';
-import { waitingLabel, type AdminShell } from '@/components/admin/nav/shell';
+import { WaitingBadge, WaitingWords } from '@/components/admin/nav/NavParts';
+import type { AdminShell } from '@/components/admin/nav/shell';
 
 /**
  * The phone's bottom bar: the same areas as the laptop's sidebar.
@@ -44,14 +44,10 @@ const AdminMobileTabs = ({ shell, moreOpen, onMore }: { shell: AdminShell; moreO
                 <span className="relative">
                   <area.icon className="h-[22px] w-[22px]" strokeWidth={active ? 2.2 : 1.8} aria-hidden />
                   {waiting > 0 && (
-                    <WaitingBadge
-                      count={waiting}
-                      label={waitingLabel(waiting)}
-                      className="absolute -right-3 -top-1.5 h-[18px] min-w-[18px] px-1 ring-2 ring-background"
-                    />
+                    <WaitingBadge count={waiting} className="absolute -right-3 -top-1.5 h-[18px] min-w-[18px] px-1 ring-2 ring-background" />
                   )}
                 </span>
-                {area.label}
+                <span>{area.label}{waiting > 0 && <WaitingWords count={waiting} />}</span>
               </Link>
             </li>
           );

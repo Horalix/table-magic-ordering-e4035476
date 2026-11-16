@@ -232,3 +232,32 @@ export function pagesIn(area: AreaId, audience: NavAudience): NavPage[] {
 export function searchText(entry: { label: string; about: string; keywords: string[] }): string {
   return [entry.label, entry.about, ...entry.keywords].join(' ').toLowerCase();
 }
+
+const words = (text: string) => text.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+
+/**
+ * How well an entry answers what was typed, 0 (not at all) to 1.
+ *
+ * Plain and predictable rather than fuzzy: a manager who types "wifi
+ * printer" gets Printing first, not whichever page happens to contain those
+ * letters in that order. The name counts most, then a keyword said exactly,
+ * then every typed word starting some word of the name or a keyword.
+ */
+export function searchScore(label: string, keywords: readonly string[], query: string): number {
+  const q = query.trim().toLowerCase();
+  if (!q) return 1;
+  const name = label.toLowerCase();
+  if (name === q) return 1;
+  if (name.startsWith(q)) return 0.95;
+  if (words(name).some((w) => w.startsWith(q))) return 0.9;
+  if (name.includes(q)) return 0.85;
+  const keys = keywords.map((k) => k.toLowerCase());
+  if (keys.includes(q)) return 0.8;
+  if (keys.some((k) => k.startsWith(q))) return 0.7;
+  if (keys.some((k) => words(k).some((w) => w.startsWith(q)) || k.includes(q))) return 0.6;
+  // Several words, in any order, each the start of some word here ("printer wifi", "change price").
+  const typed = words(q);
+  const here = [...words(name), ...keys.flatMap(words)];
+  if (typed.length > 1 && typed.every((t) => here.some((w) => w.startsWith(t)))) return 0.4;
+  return 0;
+}

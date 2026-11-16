@@ -45,7 +45,7 @@ const InstallHint = ({ standalone, demo, className }: { standalone: boolean; dem
   };
 
   return (
-    <aside
+    <section
       aria-label="Add Manager to the Home Screen"
       data-testid="install-hint"
       className={cn('relative rounded-2xl border border-border bg-card py-3.5 pl-4 pr-12 font-sans text-sm text-foreground shadow-sm', className)}
@@ -87,7 +87,7 @@ const InstallHint = ({ standalone, demo, className }: { standalone: boolean; dem
           </Button>
         </div>
       )}
-    </aside>
+    </section>
   );
 };
 

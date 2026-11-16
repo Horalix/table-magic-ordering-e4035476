@@ -3,7 +3,7 @@ import * as Dialog from '@radix-ui/react-dialog';
 import { Command } from 'cmdk';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeftRight, CornerDownLeft, History, KeyRound, LogOut, Search, type LucideIcon } from 'lucide-react';
-import { AREAS, LAUNCHERS, areaOf, pagesIn, type NavPage } from './admin-nav';
+import { AREAS, LAUNCHERS, areaOf, pagesIn, searchScore, type NavPage } from './admin-nav';
 import { recentPages } from './nav-memory';
 import { OpensElsewhere } from './NavParts';
 import type { AdminShell } from './shell';
@@ -67,7 +67,7 @@ const AdminCommandPalette = ({ shell, open, onOpenChange }: { shell: AdminShell;
           className="fixed left-1/2 top-[calc(env(safe-area-inset-top)+0.75rem)] z-50 w-[calc(100vw-1.5rem)] max-w-xl -translate-x-1/2 overflow-hidden rounded-2xl border border-border bg-card shadow-2xl outline-none duration-150 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=open]:fade-in-0 data-[state=closed]:fade-out-0 data-[state=open]:zoom-in-[0.98] data-[state=closed]:zoom-out-[0.98] sm:top-[14vh]"
         >
           <Dialog.Title className="sr-only">Search the admin</Dialog.Title>
-          <Command label="Search the admin" loop className="flex max-h-[min(34rem,calc(100dvh-env(safe-area-inset-top)-1.5rem))] flex-col sm:max-h-[min(34rem,70vh)]">
+          <Command label="Search the admin" loop filter={(value, search, keywords) => searchScore(value, keywords ?? [], search)} className="flex max-h-[min(34rem,calc(100dvh-env(safe-area-inset-top)-1.5rem))] flex-col sm:max-h-[min(34rem,70vh)]">
             <div className="flex items-center gap-3 border-b border-border px-4">
               <Search className="h-[18px] w-[18px] shrink-0 text-muted-foreground" aria-hidden />
               <Command.Input
@@ -107,7 +107,7 @@ const AdminCommandPalette = ({ shell, open, onOpenChange }: { shell: AdminShell;
                       <Command.Item
                         key={page.path}
                         value={page.label}
-                        keywords={[...page.keywords, page.about, area.label]}
+                        keywords={[...page.keywords, page.about]}
                         onSelect={() => go(page)}
                         className={itemClass}
                       >

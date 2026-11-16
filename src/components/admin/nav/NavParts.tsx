@@ -5,10 +5,14 @@ import type { NavLauncher } from './admin-nav';
 import { searchShortcut } from './manager-app';
 import type { AdminShell } from './shell';
 
-/** The small count on an area or a tab: guests waiting for an answer. */
-export const WaitingBadge = ({ count, label, className, ...rest }: React.HTMLAttributes<HTMLSpanElement> & { count: number; label: string }) => (
+/**
+ * The small count on an area or a tab: guests waiting for an answer. Only
+ * the number, for the eye; `WaitingWords` after the name says it aloud, so
+ * a screen reader hears "Service, 3 waiting for an answer" and not "3 Service".
+ */
+export const WaitingBadge = ({ count, className, ...rest }: React.HTMLAttributes<HTMLSpanElement> & { count: number }) => (
   <span
-    aria-label={label}
+    aria-hidden
     className={cn(
       'grid h-5 min-w-5 place-items-center rounded-full bg-primary px-1.5 text-[11px] font-semibold leading-none text-primary-foreground tabular-nums',
       className,
@@ -17,6 +21,10 @@ export const WaitingBadge = ({ count, label, className, ...rest }: React.HTMLAtt
   >
     {count}
   </span>
+);
+
+export const WaitingWords = ({ count }: { count: number }) => (
+  <span className="sr-only">, {count} waiting for an answer</span>
 );
 
 /**

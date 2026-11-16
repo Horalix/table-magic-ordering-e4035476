@@ -30,6 +30,3 @@ export interface AdminShell {
   /** Opens the kitchen display or the floor monitor so the admin stays one tap away. */
   launch: (launcher: NavLauncher) => void;
 }
-
-/** "3 waiting for an answer", for the badge's accessible name. */
-export const waitingLabel = (count: number) => `${count} waiting for an answer`;

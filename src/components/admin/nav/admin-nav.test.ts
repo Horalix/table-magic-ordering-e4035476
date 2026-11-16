@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { AREAS, LAUNCHERS, PAGES, ownerPaths, pageAt, pagesFor, pagesIn, searchText } from './admin-nav';
+import { AREAS, LAUNCHERS, PAGES, ownerPaths, pageAt, pagesFor, pagesIn, searchScore, searchText } from './admin-nav';
 import { areaLanding, recentPages, rememberVisit } from './nav-memory';
 
 /**
@@ -93,6 +93,50 @@ describe('the admin navigation map', () => {
       expect(entry.keywords.length, entry.label).toBeGreaterThan(2);
       expect(entry.about.length, entry.label).toBeLessThanOrEqual(46);
     }
+  });
+});
+
+describe('the search', () => {
+  /** What the search lists for this, best first: as AdminCommandPalette asks. */
+  const results = (query: string) => [...PAGES, ...LAUNCHERS]
+    .map((p) => ({ label: p.label, score: searchScore(p.label, [...p.keywords, p.about], query) }))
+    .filter((r) => r.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .map((r) => r.label);
+
+  it.each([
+    ['wifi printer', 'Printing'],
+    ['printer', 'Printing'],
+    ['sold out', 'Dishes'],
+    ['price', 'Dishes'],
+    ['allergens', 'Dishes'],
+    ['pin', 'Waiters'],
+    ['refund', 'Orders'],
+    ['booking', 'Reservations'],
+    ['close the day', 'Daily report'],
+    ['tips', 'Daily report'],
+    ['menu only', 'Ordering & service'],
+    ['qr', 'QR codes'],
+    ['kitchen', 'Kitchen display'],
+    ['terrace', 'Floor sections'],
+    ['audit', 'Audit log'],
+    ['Menu int', 'Menu intelligence'],
+  ])('"%s" finds %s first', (query, first) => {
+    expect(results(query)[0]).toBe(first);
+  });
+
+  it('puts a page named what was typed before pages that only mention it', () => {
+    expect(results('waiters').slice(0, 2)).toEqual(['Waiters', 'Tonight’s waiters']);
+    expect(results('orders')[0]).toBe('Orders');
+    expect(results('tables')[0]).toBe('Tables');
+  });
+
+  it('takes the words in any order, and lists nothing for nonsense', () => {
+    expect(results('printer wifi')).toContain('Printing');
+    expect(results('zzzz')).toEqual([]);
+    // Not fuzzy: letters scattered across a page's words are not a match.
+    expect(results('wifi printer')).toEqual(['Printing']);
+    expect(searchScore('Orders', [], '')).toBe(1);
   });
 });
 
