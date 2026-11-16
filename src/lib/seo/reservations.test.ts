@@ -328,6 +328,6 @@ describe('Vera Italia on its own site (veraitalia.net)', () => {
     const graph = reservations.reserveGraph(VENUES.veraitalia, 'en', own.veraRestaurantNode(menu, 'en'));
     expect(typed(graph, 'WebPage').url).toBe(address);
     expect(reservations.reserveMeta(VENUES.veraitalia, 'en').title).toBe('Reserve a table at Vera Italia, Sarajevo');
-    expect(reservations.reserveBody(VENUES.veraitalia)).not.toMatch(/La Soul|Butmirska/);
+    expect(reservations.reserveBody(VENUES.veraitalia)).not.toMatch(/La Soul|16A/);
   });
 });

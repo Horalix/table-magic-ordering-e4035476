@@ -60,10 +60,15 @@ describe('Vera Italia’s questions and answers', () => {
       ...veraPages(menu).flatMap((p) => [p.body, JSON.stringify(p.head)]),
       veraLlms(menu).full,
     ].join('\n');
-    expect(everything).not.toMatch(/halal|burger|La Soul|Butmirska/i);
+    // Same building as La Soul (Butmirska cesta 16B), never its name, its other door or its claims.
+    expect(everything).not.toMatch(/halal|burger|La Soul|16A/i);
   });
 
   it('say where by the city until the street is given, and when and how to call only once the owner has said', () => {
+    const v = VENUES.veraitalia;
+    const given = { ...v };
+    Object.assign(v, { address: '', phone: '', phoneHref: '', postalCode: null, municipality: null });
+    try {
     const faq = veraFaq(menu, 'en');
     expect(faq.find(({ q }) => q === 'Where is Vera Italia?')?.a).toBe('In Sarajevo, Bosnia and Herzegovina.');
     expect(veraFaq(menu, 'bs').find(({ q }) => q === 'Gdje se nalazi Vera Italia?')?.a).toBe('U Sarajevu, Bosna i Hercegovina.');
@@ -71,6 +76,16 @@ describe('Vera Italia’s questions and answers', () => {
     const restaurant = typed(veraSiteGraph(menu, 'en'), 'Restaurant');
     expect(restaurant.address).toEqual({ '@type': 'PostalAddress', addressLocality: 'Sarajevo', addressCountry: 'BA' });
     expect(restaurant).not.toHaveProperty('telephone');
+    expect(restaurant).not.toHaveProperty('openingHoursSpecification');
+    } finally { Object.assign(v, given); }
+  });
+
+  it('give its street and phone as the owner gave them (16 November 2026), and no hours before it opens', () => {
+    const faq = veraFaq(menu, 'en');
+    expect(faq.find(({ q }) => q === 'Where is Vera Italia?')?.a).toBe('Butmirska cesta 16B, Sarajevo, Bosnia and Herzegovina.');
+    expect(faq.map(({ q }) => q)).not.toContain('When is Vera Italia open?');
+    const restaurant = typed(veraSiteGraph(menu, 'en'), 'Restaurant');
+    expect(restaurant).toMatchObject({ telephone: '+38733877779', address: { streetAddress: 'Butmirska cesta 16B', addressLocality: 'Sarajevo', addressCountry: 'BA' } });
     expect(restaurant).not.toHaveProperty('openingHoursSpecification');
   });
 });
@@ -210,7 +225,7 @@ describe('Vera Italia’s pages', () => {
     const site = pages.find((p) => p.path === '/veraitalia/')!;
     expect(site.head.title).toBe('Vera Italia — Italian Restaurant & Pizza in Sarajevo');
     expect(site.body).toContain('<p>Italian restaurant · Sarajevo</p>');
-    expect(site.body).toContain('Sarajevo, Bosnia and Herzegovina. Our street address and opening hours will be here very soon.');
+    expect(site.body).toContain('Butmirska cesta 16B, Sarajevo, Bosnia and Herzegovina');
     expect(site.body).not.toContain('Opening soon');
     expect(pages.find((p) => p.path === '/menu/veraitalia/')?.head.title).toBe('Menu — Vera Italia, Italian Restaurant in Sarajevo');
     expect(pages.find((p) => p.path === '/menu/veraitalia/pizza-napoletana/')?.head.title).toBe('Pizza Napoletana in Sarajevo — Vera Italia');
@@ -221,7 +236,8 @@ describe('Vera Italia’s pages', () => {
     expect(short).toMatch(/^# Vera Italia\n/);
     expect(short.includes('- Status: opening soon')).toBe(!VENUES.veraitalia.live);
     expect(short).toContain('- What: an Italian restaurant in Sarajevo, Bosnia and Herzegovina — ');
-    expect(short).toContain('- Where: Sarajevo, Bosnia and Herzegovina (street address to be announced)');
+    expect(short).toContain('- Address: Butmirska cesta 16B, Sarajevo, Bosnia and Herzegovina');
+    expect(short).toContain('- Hours: to be announced');
     expect(short).toContain('### What sets Vera Italia apart from other Italian restaurants in Sarajevo?');
     for (const r of rows) expect(full).toContain(`[${r.name}](`);
     expect(full).toContain('Truffle Pizza](https://');

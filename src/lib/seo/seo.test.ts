@@ -55,7 +55,7 @@ describe('the facts', () => {
     expect(place.openingHoursSpecification).toEqual([{
       '@type': 'OpeningHoursSpecification',
       dayOfWeek: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map((d) => `https://schema.org/${d}`),
-      opens: '11:00', closes: '21:00',
+      opens: '09:00', closes: '23:00',
     }]);
   });
 
@@ -69,8 +69,8 @@ describe('the facts', () => {
       }
     }
     const en = faqEntries(venue, 'en').map((e) => e.a).join(' ');
-    expect(en).toContain('11:00');
-    expect(en).toContain('21:00');
+    expect(en).toContain('09:00');
+    expect(en).toContain('23:00');
     expect(en).toContain('Butmirska cesta 16A | 16B');
     expect(en).toMatch(/alcohol-free/);
     const faq = homeGraph(venue, 'bs')['@graph'][2] as { mainEntity: { name: string; acceptedAnswer: { text: string } }[] };
@@ -163,11 +163,12 @@ describe('the prerendered pages', () => {
     });
   });
 
-  it('give Vera Italia its own privacy notice: its name, and no address until the owner gives one', () => {
+  it('give Vera Italia its own privacy notice: its name and its own address, nothing of La Soul’s', () => {
     const body = privacyBody(VENUES.veraitalia);
     expect(body).toContain('Vera Italia respects your privacy');
-    expect(body).toContain('contact Vera Italia directly.');
-    expect(body).not.toMatch(/La Soul|Butmirska|877 779/);
+    // Same building as La Soul, its own door (the owner, 16 November 2026); La Soul's phone for now.
+    expect(body).toContain('contact Vera Italia directly (Butmirska cesta 16B · +387 33 877 779).');
+    expect(body).not.toMatch(/La Soul|16A/);
   });
 
   it('come with robots.txt, a sitemap, and llms.txt for answer engines', () => {

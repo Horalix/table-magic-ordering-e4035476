@@ -83,7 +83,7 @@ test.describe('website', () => {
     await expect(visit.getByRole('link', { name: '+387 33 877 779' })).toHaveAttribute('href', 'tel:+38733877779');
     await expect(visit.getByRole('link', { name: /Directions/ })).toHaveAttribute('href', 'https://maps.app.goo.gl/UrsoG5vew2FfwMt66');
     await expect(visit.getByText('Every day')).toBeAttached();
-    await expect(visit.getByText('11:00–21:00')).toBeAttached();
+    await expect(visit.getByText('09:00–23:00')).toBeAttached();
     await expect(visit.getByRole('link', { name: /Instagram/ })).toHaveAttribute('href', 'https://www.instagram.com/lasoul.bih');
     await expect(visit.getByText(/TBD|Facebook/)).toHaveCount(0);
   });
@@ -111,7 +111,7 @@ test.describe('website', () => {
     expect(place.telephone).toBe('+38733877779');
     expect(place.address.streetAddress).toBe('Butmirska cesta 16A | 16B');
     expect(place.geo).toMatchObject({ latitude: 43.827548, longitude: 18.3103156 });
-    expect(place.openingHoursSpecification[0]).toMatchObject({ opens: '11:00', closes: '21:00' });
+    expect(place.openingHoursSpecification[0]).toMatchObject({ opens: '09:00', closes: '23:00' });
     await expect(page.locator('link[rel="canonical"]')).toHaveAttribute('href', /\/$/);
     await expect(page.locator('link[rel="alternate"][hreflang="bs"]')).toHaveAttribute('href', /\/bs\/$/);
     await expect(page.locator('meta[property="og:image"]')).toHaveAttribute('content', /^https:\/\/.+\/site\/og\.jpg$/);
