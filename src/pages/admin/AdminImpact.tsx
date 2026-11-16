@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { AlertTriangle, CheckCircle2, Eye, FlaskConical, HelpCircle, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
 import type { HoldoutComparison } from '@/lib/menu-intelligence';
+import RecoProfitCard from '@/components/admin/RecoProfitCard';
 
 /**
  * What did this app earn us?
@@ -144,6 +145,11 @@ const AdminImpact = () => {
           </Select>
         )}
       />
+
+      {/* Margin per week against the always-on check (20261116120000_reco_always_measured.sql). */}
+      <div className="mb-6">
+        <RecoProfitCard days={days} />
+      </div>
 
       {error && (
         <AdminCard className="mb-4 border-destructive/40" role="alert">
@@ -340,7 +346,9 @@ const AdminImpact = () => {
                 tone="accent"
                 title="How the app is choosing suggestions"
                 description={readiness.sampling_enabled
-                  ? 'It is testing as it goes. When it has only seen a pairing a handful of times it treats that as a guess rather than a fact, and gives it a share of the suggestions until it knows either way. Turned on automatically once there was enough history to learn from.'
+                  ? 'It is testing as it goes. When it has only seen a pairing a handful of times it treats that as a guess rather than a fact, and gives it a share of the suggestions until it knows either way. ' + ((readiness.policy_version ?? '').startsWith('v4')
+                    ? 'It has worked this way from the first table, and learns what guests reading in each language take.'
+                    : 'Turned on automatically once there was enough history to learn from.')
                   : "It is following fixed rules — your pairings, what sells together, and the kitchen's load. Once there is enough history it will start testing as it goes, treating a pairing it has seen four times as the guess it is instead of ranking it against one it has seen four hundred times. That happens on its own overnight; nothing to press."}
               />
               {!readiness.sampling_enabled && (

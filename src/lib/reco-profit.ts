@@ -87,7 +87,7 @@ export interface ProfitSummary {
 export function summariseProfitCheck(r: ProfitCheck | null | undefined): ProfitSummary {
   if (!r || r.status === 'not_running') {
     return r && r.auto_holdout_pct > 0
-      ? { tone: 'neutral', measured: false, headline: 'Starting', detail: `Measuring starts with the next table: ${r.auto_holdout_pct}% of tables will see no suggestions, so the difference is real money, not a guess.` }
+      ? { tone: 'neutral', measured: false, headline: 'Not measured yet', detail: `Measuring keeps ${r.auto_holdout_pct}% of tables without suggestions, so the difference is real money, not a guess. It starts by itself within a quarter of an hour where the scheduler runs, or now with Measure.` }
       : { tone: 'neutral', measured: false, headline: 'Not measured', detail: 'No tables are kept without suggestions, so nobody can say what they earn.' };
   }
   const t = r.with_suggestions?.visits ?? 0;
@@ -104,7 +104,7 @@ export function summariseProfitCheck(r: ProfitCheck | null | undefined): ProfitS
     case 'positive':
       return {
         tone: 'good', measured: true, headline: `+${km(w?.low)} a week`,
-        detail: `At least this much extra margin a week, likely ${km(w?.low)} to ${km(w?.high)} (${km2(m?.low)} to ${km2(m?.high)} a table), from ${t + h} tables.`,
+        detail: `At least this much extra margin a week, likely ${km(w?.low)} to ${km(w?.high)} (${km2(m?.low)} to ${km2(m?.high)} a table), from ${(t + h).toLocaleString('en')} tables.`,
       };
     case 'negative':
       return {

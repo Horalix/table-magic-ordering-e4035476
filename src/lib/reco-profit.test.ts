@@ -7,9 +7,10 @@ import { attachRows, summariseProfitCheck, type ProfitCheck } from './reco-profi
 const base: ProfitCheck = { status: 'not_running', days: 28, auto_holdout_pct: 10, attach: [] };
 
 describe('summariseProfitCheck', () => {
-  it('says measuring starts with the next table when the always-on check is on but not yet open', () => {
+  it('says it is not measured yet, and how it starts, when the always-on check is on but not open', () => {
     const s = summariseProfitCheck(base);
-    expect(s).toMatchObject({ headline: 'Starting', measured: false });
+    expect(s).toMatchObject({ headline: 'Not measured yet', measured: false });
+    expect(s.detail).toContain('Measure');
     expect(s.detail).toContain('10%');
   });
 

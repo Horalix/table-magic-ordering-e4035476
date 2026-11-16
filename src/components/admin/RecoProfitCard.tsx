@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import {
-  attachRows, getProfitCheck, keepMeasuring, setAutoHoldout, summariseProfitCheck, type ProfitCheck,
+  attachRows, getProfitCheck, setAutoHoldout, summariseProfitCheck, type ProfitCheck,
 } from '@/lib/reco-profit';
 
 /**
@@ -15,8 +15,10 @@ import {
  * tables yet" until there is an answer. Plus drink, dessert and coffee attach
  * per daypart, with and without suggestions.
  *
- * Opening it as a manager also makes sure the always-on check is running
- * (the scheduler does the same every 15 minutes where pg_cron exists).
+ * Viewing it never starts anything: the always-on check opens from the
+ * scheduler (pg_cron, every 15 minutes) or when a manager presses Measure.
+ * Opening a check by looking would replace the page's last finished result
+ * with an empty new one.
  */
 
 const pct = (n: number | null) => (n === null ? '—' : `${Math.round(n * 100)}%`);
@@ -28,7 +30,6 @@ const RecoProfitCard = ({ days = 28 }: { days?: number }) => {
 
   const load = useCallback(async () => {
     try {
-      await keepMeasuring().catch(() => undefined);
       setData(await getProfitCheck(days));
       setError(null);
     } catch (e) {
@@ -41,6 +42,7 @@ const RecoProfitCard = ({ days = 28 }: { days?: number }) => {
   const s = useMemo(() => summariseProfitCheck(data), [data]);
   const rows = useMemo(() => attachRows(data?.attach ?? []), [data]);
   const held = data?.experiment && !data.experiment.ended_at ? data.experiment.holdout_pct : 0;
+  const finished = !!data?.experiment?.ended_at;
   const hasHoldout = rows.some((r) => r.drink[1] !== null || r.dessert[1] !== null);
 
   const toggle = async (next: number) => {
@@ -98,25 +100,27 @@ const RecoProfitCard = ({ days = 28 }: { days?: number }) => {
             </div>
 
             {rows.length > 0 && (
-              <div className="-mx-2 overflow-x-auto px-2">
-                <table className="w-full min-w-[440px] text-xs font-sans">
+              <div>
+                <table className="w-full text-xs font-sans">
                   <caption className="sr-only">Share of tables that added a drink, a dessert or a coffee, by time of day</caption>
                   <thead>
                     <tr className="border-b border-border text-left uppercase tracking-wide text-muted-foreground">
-                      <th className="pb-1.5 font-medium">When</th>
-                      <th className="pb-1.5 text-right font-medium">Drink with food</th>
-                      <th className="pb-1.5 text-right font-medium">Dessert after a main</th>
-                      <th className="pb-1.5 text-right font-medium">Coffee after a main</th>
+                      <th className="pb-1.5 pe-2 align-bottom font-medium">When</th>
+                      <th className="pb-1.5 ps-2 text-right align-bottom font-medium">Drink with food</th>
+                      <th className="pb-1.5 ps-2 text-right align-bottom font-medium">Dessert after a main</th>
+                      <th className="pb-1.5 ps-2 text-right align-bottom font-medium">Coffee after a main</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">
                     {rows.map((r) => (
                       <tr key={r.daypart}>
-                        <td className="py-1.5">{r.label}</td>
+                        <td className="py-1.5 pe-2">{r.label}</td>
                         {([r.drink, r.dessert, r.coffee] as const).map((pair, i) => (
-                          <td key={i} className="py-1.5 text-right tabular-nums">
+                          <td key={i} className="py-1.5 ps-2 text-right tabular-nums">
                             <span className="text-foreground">{pct(pair[0])}</span>
-                            {hasHoldout && <span className="text-muted-foreground"> vs {pct(pair[1])}</span>}
+                            {hasHoldout && (
+                              <span className="block whitespace-nowrap text-muted-foreground sm:inline"> vs {pct(pair[1])}</span>
+                            )}
                           </td>
                         ))}
                       </tr>
@@ -133,17 +137,20 @@ const RecoProfitCard = ({ days = 28 }: { days?: number }) => {
               <p className="text-xs font-sans text-muted-foreground">
                 {held > 0
                   ? <>{held}% of tables see no suggestions{data.experiment?.auto ? ' (always-on check)' : ''}.</>
-                  : data.auto_holdout_pct > 0 ? <>Measuring starts with the next table.</> : <>Every table sees suggestions; nothing is measured.</>}
+                  : <>{finished ? 'The figure above is from a test that has ended. ' : ''}Every table sees suggestions right now; nothing new is being measured.</>}
               </p>
               {held > 0 && !data.experiment?.auto ? (
                 <span className="text-xs font-sans text-muted-foreground">A manager&apos;s test is running; stop it on What the app earned.</span>
-              ) : data.auto_holdout_pct > 0 || held > 0 ? (
+              ) : held > 0 ? (
                 <Button variant="outline" className="h-11 rounded-xl px-4" disabled={busy} onClick={() => toggle(0)}>
                   Pause measuring
                 </Button>
               ) : (
-                <Button className="h-11 rounded-xl px-4" disabled={busy} onClick={() => toggle(10)}>
-                  Measure with 1 table in 10
+                <Button className="h-11 rounded-xl px-4" disabled={busy}
+                        onClick={() => toggle(data.auto_holdout_pct > 0 ? data.auto_holdout_pct : 10)}>
+                  {data.auto_holdout_pct > 0 && data.auto_holdout_pct !== 10
+                    ? `Measure with ${data.auto_holdout_pct}% of tables`
+                    : 'Measure with 1 table in 10'}
                 </Button>
               )}
             </div>
