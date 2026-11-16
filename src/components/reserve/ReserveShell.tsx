@@ -144,7 +144,7 @@ export const ReserveSplit = ({ venue, locale, title, intro, facts, children }: {
           </div>
         )}
 
-        <ReserveRise className={cn('relative px-5 sm:px-8 lg:order-1 lg:mt-0 lg:px-0', !wide && '-mt-[4.5rem]')}>
+        <ReserveRise className={cn('relative px-5 sm:mx-auto sm:max-w-xl sm:px-8 lg:order-1 lg:mx-0 lg:mt-0 lg:max-w-none lg:px-0', !wide && '-mt-[4.5rem]')}>
           <ReserveEyebrow>{rcopy('eyebrow', locale)} · {venue.name}</ReserveEyebrow>
           <h1 className="mt-4 font-serif text-[2.6rem] font-medium leading-[1.04] tracking-[-0.015em] text-foreground text-balance sm:text-[3rem] lg:text-[3.5rem] rtl:font-semibold rtl:leading-[1.3] rtl:tracking-normal">
             {title}
@@ -164,7 +164,7 @@ export const ReserveSplit = ({ venue, locale, title, intro, facts, children }: {
           </ReserveRise>
         )}
 
-        {facts && <ReserveRise delay={0.14} className="mt-5 px-5 sm:px-8 lg:order-3 lg:mt-7 lg:px-0">{facts}</ReserveRise>}
+        {facts && <ReserveRise delay={0.14} className="mt-5 px-5 sm:mx-auto sm:max-w-xl sm:px-8 lg:order-3 lg:mx-0 lg:mt-7 lg:max-w-none lg:px-0">{facts}</ReserveRise>}
       </aside>
 
       <main className="mx-auto max-w-xl px-5 pb-20 pt-7 sm:px-8 lg:mx-0 lg:max-w-none lg:px-0 lg:pb-24 lg:pt-[116px]">
