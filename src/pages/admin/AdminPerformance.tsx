@@ -1,10 +1,13 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { formatStamp } from '@/lib/timing';
 import { supabase } from '@/integrations/supabase/client';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { AdminCard, AdminCardContent, AdminCardHeader, EmptyState, Stagger } from '@/components/admin/AdminCard';
+import { AdminPageHeader, AdminToolbar } from '@/components/admin/AdminPage';
+import { money, whole } from '@/components/admin/admin-format';
+import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
-import { AlertTriangle, Award, Loader2, Star } from 'lucide-react';
+import { AlertTriangle, Award, Star, Users } from 'lucide-react';
 
 /**
  * Staff performance.
@@ -58,7 +61,7 @@ interface Performance {
 
 interface Range { from: string; to: string }
 
-const km = (n: number | null | undefined) => `${Number(n ?? 0).toFixed(2)} KM`;
+const km = (n: number | null | undefined) => `${money(Number(n ?? 0))} KM`;
 const minutes = (n: number | null | undefined) => (n == null ? '—' : `${Number(n).toFixed(1)} min`);
 const DEBOUNCE_MS = 450;
 
@@ -113,102 +116,123 @@ const AdminPerformance = () => {
 
   const waiters = data?.waiters ?? [];
   const topNet = waiters[0]?.net_sales ?? 0;
+  const dateInput = 'h-11 w-[11.5rem] rounded-xl text-base sm:text-sm';
 
   return (
     <div>
-      <div className="flex flex-wrap items-center gap-2 mb-6">
-        <h1 className="font-serif text-3xl font-bold text-foreground">Staff performance</h1>
-        {loading && data && <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" aria-label="Loading" />}
-      </div>
-
-      <Card className="mb-6">
-        <CardContent className="p-4 flex flex-wrap gap-3 items-center">
-          <label className="text-sm font-sans text-muted-foreground" htmlFor="perf-from">From</label>
-          <Input
-            id="perf-from" type="date" value={draft.from} max={draft.to || undefined}
-            onChange={(e) => setDraft((d) => ({ ...d, from: e.target.value }))}
-            className="w-[160px]"
-          />
-          <label className="text-sm font-sans text-muted-foreground" htmlFor="perf-to">To</label>
-          <Input
-            id="perf-to" type="date" value={draft.to} min={draft.from || undefined} max={data?.today}
-            onChange={(e) => setDraft((d) => ({ ...d, to: e.target.value }))}
-            className="w-[160px]"
-          />
-          <p className="basis-full text-xs font-sans text-muted-foreground">
+      <AdminPageHeader
+        title="Staff performance"
+        description="How each waiter did over the days you pick: sales, tips, speed and what guests said."
+        loading={loading && !!data}
+      >
+        <AdminToolbar className="gap-x-3 gap-y-2">
+          <div className="flex items-center gap-2">
+            <label className="text-sm font-sans text-muted-foreground" htmlFor="perf-from">From</label>
+            <Input
+              id="perf-from" type="date" value={draft.from} max={draft.to || undefined}
+              onChange={(e) => setDraft((d) => ({ ...d, from: e.target.value }))}
+              className={dateInput}
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <label className="text-sm font-sans text-muted-foreground" htmlFor="perf-to">To</label>
+            <Input
+              id="perf-to" type="date" value={draft.to} min={draft.from || undefined} max={data?.today}
+              onChange={(e) => setDraft((d) => ({ ...d, to: e.target.value }))}
+              className={dateInput}
+            />
+          </div>
+          <p className="basis-full text-xs font-sans leading-relaxed text-muted-foreground">
             Sarajevo trading days. Completed orders only; net sales are items after refunds, with tips shown
             separately.
           </p>
-        </CardContent>
-      </Card>
+        </AdminToolbar>
+      </AdminPageHeader>
 
       {error && (
-        <Card className="border-destructive/30 mb-6">
-          <CardContent className="p-4 flex items-start gap-2">
-            <AlertTriangle className="w-5 h-5 text-destructive shrink-0 mt-0.5" />
-            <div className="text-sm font-sans min-w-0">
+        <AdminCard className="mb-6 border-destructive/30" role="alert">
+          <AdminCardContent className="flex items-start gap-2 pt-5">
+            <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-destructive" aria-hidden />
+            <div className="min-w-0 text-sm font-sans">
               <p className="font-semibold text-foreground">Could not load staff performance.</p>
-              <p className="text-muted-foreground mt-0.5 break-words">{error}</p>
-              {data && <p className="text-muted-foreground mt-0.5">Showing the last range that loaded.</p>}
+              <p className="mt-0.5 break-words text-muted-foreground">{error}</p>
+              {data && <p className="mt-0.5 text-muted-foreground">Showing the last range that loaded.</p>}
+              <Button variant="outline" className="mt-3 h-11" onClick={() => void load(range)}>Try again</Button>
             </div>
-          </CardContent>
-        </Card>
+          </AdminCardContent>
+        </AdminCard>
       )}
 
       {loading && !data ? (
-        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-48 rounded-xl" />)}
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3" aria-busy="true" aria-label="Loading">
+          {Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-60 rounded-2xl" />)}
         </div>
       ) : data && (
         <div className={`transition-opacity ${loading ? 'opacity-60' : ''}`} aria-busy={loading}>
           {waiters.length === 0 ? (
-            <Card className="mb-6">
-              <CardContent className="p-6 text-sm font-sans text-muted-foreground text-center">
-                No waiters on the rota, and nobody served a table in this range.
-              </CardContent>
-            </Card>
+            <AdminCard className="mb-6">
+              <EmptyState
+                icon={Users}
+                title="No waiters on the rota, and nobody served a table in this range."
+                hint="Pick a wider range, or add waiters under Waiters."
+              />
+            </AdminCard>
           ) : (
-            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+            <Stagger className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {waiters.map((w, idx) => (
-                <Card key={w.waiter_id} className="border-border">
-                  <CardContent className="p-5">
-                    <div className="flex items-start justify-between gap-3 mb-3">
+                <AdminCard key={w.waiter_id} className="h-full">
+                  <AdminCardContent className="pt-5 sm:pt-6">
+                    <div className="mb-4 flex items-start justify-between gap-3">
                       <div className="min-w-0">
-                        <p className="font-serif text-lg font-bold truncate">{w.name}</p>
+                        <p className="truncate font-serif text-lg font-bold leading-snug text-foreground">{w.name}</p>
                         {idx === 0 && topNet > 0 && (
-                          <span className="inline-flex items-center gap-1 text-xs text-accent">
-                            <Award className="w-3 h-3" /> Most sold
+                          <span className="mt-0.5 inline-flex items-center gap-1 text-xs font-medium text-accent">
+                            <Award className="h-3 w-3" aria-hidden /> Most sold
                           </span>
                         )}
                         {!w.is_active && <span className="block text-xs text-muted-foreground">No longer active</span>}
                       </div>
-                      <div className="text-right shrink-0">
+                      <div className="shrink-0 text-end">
                         <div className="flex items-center justify-end gap-1">
-                          <Star className="w-4 h-4 fill-accent text-accent" />
-                          <span className="font-serif text-lg font-bold">
+                          <Star className="h-4 w-4 fill-accent text-accent" aria-hidden />
+                          <span className="font-sans text-lg font-semibold tabular-nums">
                             {w.avg_rating == null ? '—' : Number(w.avg_rating).toFixed(1)}
                           </span>
                         </div>
-                        <p className="text-xs text-muted-foreground">{w.ratings} rating{w.ratings !== 1 ? 's' : ''}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {w.ratings} rating{w.ratings !== 1 ? 's' : ''}{w.ratings > 0 && w.ratings < 5 ? ' · too few to judge' : ''}
+                        </p>
                       </div>
                     </div>
-                    <div className="grid grid-cols-2 gap-3 text-sm font-sans">
-                      <Stat label="Net sales" value={km(w.net_sales)} />
-                      <Stat label="Tips" value={km(w.tips)} />
-                      <Stat label="Orders" value={w.orders} />
-                      <Stat label="Tables served" value={w.tables} />
-                      <Stat label="To confirm" value={minutes(w.avg_confirm_minutes)} />
-                      <Stat label="To served" value={minutes(w.avg_served_minutes)} />
-                      <Stat label="Average sitting" value={minutes(w.avg_turn_minutes)} />
+                    <div className="mb-4 grid grid-cols-2 gap-3">
+                      <div className="rounded-xl bg-muted/40 p-3">
+                        <p className="text-xs text-muted-foreground">Net sales</p>
+                        <p className="mt-1 font-sans text-lg font-semibold leading-none tabular-nums text-foreground">
+                          {money(w.net_sales)}<span className="ms-1 text-xs font-medium text-muted-foreground">KM</span>
+                        </p>
+                      </div>
+                      <div className="rounded-xl bg-muted/40 p-3">
+                        <p className="text-xs text-muted-foreground">Tips</p>
+                        <p className="mt-1 font-sans text-lg font-semibold leading-none tabular-nums text-foreground">
+                          {money(w.tips)}<span className="ms-1 text-xs font-medium text-muted-foreground">KM</span>
+                        </p>
+                      </div>
                     </div>
-                  </CardContent>
-                </Card>
+                    <dl className="divide-y divide-border/60 text-sm font-sans">
+                      <Row label="Orders" value={whole(w.orders)} />
+                      <Row label="Tables served" value={whole(w.tables)} />
+                      <Row label="To confirm" value={minutes(w.avg_confirm_minutes)} />
+                      <Row label="To served" value={minutes(w.avg_served_minutes)} />
+                      <Row label="Average sitting" value={minutes(w.avg_turn_minutes)} />
+                    </dl>
+                  </AdminCardContent>
+                </AdminCard>
               ))}
-            </div>
+            </Stagger>
           )}
 
           {data.unassigned.orders > 0 && (
-            <p className="text-xs font-sans text-muted-foreground mb-6">
+            <p className="mb-6 max-w-3xl text-xs font-sans leading-relaxed text-muted-foreground">
               {data.unassigned.orders} order{data.unassigned.orders === 1 ? '' : 's'} ({km(data.unassigned.net_sales)})
               had no waiter assigned, so the figures above do not add up to the day&apos;s total.
               Times are measured from when the order reached the kitchen.
@@ -216,27 +240,27 @@ const AdminPerformance = () => {
           )}
 
           {data.low_ratings.length > 0 && (
-            <Card>
-              <CardHeader><CardTitle className="font-serif text-lg">Recent low ratings</CardTitle></CardHeader>
-              <CardContent>
-                <div className="space-y-2">
+            <AdminCard>
+              <AdminCardHeader icon={Star} tone="destructive" title="Recent low ratings" description="Guests who gave a low score, newest first." />
+              <AdminCardContent>
+                <ul className="divide-y divide-border/60">
                   {data.low_ratings.map((rating, index) => (
-                    <div
+                    <li
                       key={`${rating.created_at}-${index}`}
-                      className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1 p-3 rounded border border-destructive/20 bg-destructive/5"
+                      className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1 py-3 first:pt-0 last:pb-0"
                     >
                       <div className="min-w-0">
-                        <p className="text-sm font-sans font-medium">
+                        <p className="text-sm font-sans font-medium text-foreground">
                           {rating.waiter_name ?? 'No waiter recorded'} — {rating.rating} star{rating.rating !== 1 ? 's' : ''}
                         </p>
-                        {rating.comment && <p className="text-xs text-muted-foreground mt-1 break-words">"{rating.comment}"</p>}
+                        {rating.comment && <p className="mt-1 break-words text-[13px] text-muted-foreground">&ldquo;{rating.comment}&rdquo;</p>}
                       </div>
-                      <span className="text-xs text-muted-foreground shrink-0">{formatStamp(rating.created_at)}</span>
-                    </div>
+                      <span className="shrink-0 text-xs tabular-nums text-muted-foreground">{formatStamp(rating.created_at)}</span>
+                    </li>
                   ))}
-                </div>
-              </CardContent>
-            </Card>
+                </ul>
+              </AdminCardContent>
+            </AdminCard>
           )}
         </div>
       )}
@@ -244,10 +268,10 @@ const AdminPerformance = () => {
   );
 };
 
-const Stat = ({ label, value }: { label: string; value: string | number }) => (
-  <div>
-    <p className="text-xs text-muted-foreground">{label}</p>
-    <p className="font-medium text-foreground tabular-nums">{value}</p>
+const Row = ({ label, value }: { label: string; value: string | number }) => (
+  <div className="flex items-center justify-between gap-3 py-2 first:pt-0 last:pb-0">
+    <dt className="text-muted-foreground">{label}</dt>
+    <dd className="font-medium tabular-nums text-foreground">{value}</dd>
   </div>
 );
 
