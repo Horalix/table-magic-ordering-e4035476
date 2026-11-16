@@ -1,4 +1,7 @@
 import SmartImage from '@/components/ui/SmartImage';
+import { capDensity } from '@/lib/image-sizes';
+
+const COVER_SIZES = capDensity('(max-width: 640px) 92vw, 600px');
 import type { ShowcasePhoto } from '@/lib/category-showcase';
 
 interface CategoryShowcaseProps {
@@ -30,7 +33,9 @@ const CategoryShowcase = ({ picture, photos, radius, priority = false }: Categor
         <img
           src={`${picture}-1080.webp`}
           srcSet={`${picture}-640.webp 640w, ${picture}-1080.webp 1080w, ${picture}-1600.webp 1600w`}
-          sizes="(max-width: 640px) 92vw, 600px"
+          // At 3x a phone asked for the 1600 px file (about 300 KB each); capped at
+          // about 2x it takes the 1080 one (src/components/ui/SmartImage.tsx, capDensity).
+          sizes={COVER_SIZES}
           alt=""
           width={1080}
           height={720}

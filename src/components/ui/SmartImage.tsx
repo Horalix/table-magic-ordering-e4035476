@@ -1,8 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
-import imageManifest from '@/lib/image-manifest.json';
 import { localImageFile } from '@/lib/menu-image';
+import { capDensity, resolveLocal } from '@/lib/image-sizes';
 
 interface SmartImageProps extends Omit<React.ImgHTMLAttributes<HTMLImageElement>, 'loading' | 'srcSet'> {
   src?: string;
@@ -32,28 +32,9 @@ interface SmartImageProps extends Omit<React.ImgHTMLAttributes<HTMLImageElement>
   square?: boolean;
 }
 
-interface ManifestEntry {
-  widths: number[];
-  /** The image_url the local files were built for. */
-  src?: string;
-  /** Square crops (sq-<n>.webp), cut around the dish. Absent on old builds. */
-  squares?: number[];
-  blur: string;
-  ext: string;
-  /**
-   * A hash of the files themselves (scripts/image-versions.mjs). It goes on
-   * every local address, so a re-shot photo or re-cut crop is a new address:
-   * the service worker caches these CacheFirst, and the same file name with
-   * new content would otherwise keep showing the old picture.
-   */
-  v?: string;
-}
-
 type FetchPriorityAttributes = {
   fetchpriority?: 'high' | 'low' | 'auto';
 };
-
-const manifest = imageManifest as Record<string, ManifestEntry>;
 
 /**
  * Build optimized CDN URL (fallback path — used only when an image is not in
@@ -112,8 +93,15 @@ const SmartImage = ({
   // The local files stand in for the photo they were built from. When a new
   // photo is uploaded in the admin, `src` changes and the upload is shown
   // (through the CDN) until the next image build picks it up.
-  const entry = id && !forceRemote ? manifest[id] : undefined;
-  const local = entry && (!entry.src || !src || entry.src === src) ? entry : undefined;
+  //
+  // A row whose image_url is itself one of the locally built files
+  // ("/menu/<folder>/1152.webp", as the demo and Vera Italia's dishes have, and
+  // dishes that borrow another dish's photo) is the local ladder too: before,
+  // it missed the manifest match and was served as one 1152 px file "1x, 2x"
+  // to every slot, a 108 px thumbnail included.
+  const resolved = forceRemote ? undefined : resolveLocal(id, src);
+  const local = resolved?.entry;
+  const fileId = resolved?.key;
 
   if ((!src && !local) || errored) {
     return (
@@ -134,12 +122,12 @@ const SmartImage = ({
   let blur: string | undefined;
 
   if (local && square && local.squares?.length) {
-    const file = localImageFile(id!, local);
+    const file = localImageFile(fileId!, local);
     blur = local.blur;
     srcSet = local.squares.map((w) => `${file(`sq-${w}`)} ${w}w`).join(', ');
     url1x = file(`sq-${local.squares[local.squares.length - 1]}`);
   } else if (local) {
-    const file = localImageFile(id!, local);
+    const file = localImageFile(fileId!, local);
     blur = local.blur;
     srcSet = local.widths.map((w) => `${file(String(w))} ${w}w`).join(', ');
     // Default `src` = largest variant (browser overrides via srcSet+sizes).
@@ -157,8 +145,9 @@ const SmartImage = ({
    * phone. The default now says "as wide as the card can get", and call sites
    * that genuinely are fixed-size pass their own.
    */
-  const resolvedSizes = sizes
-    ?? (local ? (square ? `${width}px` : `(max-width: 640px) 50vw, ${width}px`) : undefined);
+  const resolvedSizes = local
+    ? capDensity(sizes ?? (square ? `${width}px` : `(max-width: 640px) 50vw, ${width}px`))
+    : sizes;
   const fetchPriorityAttributes: FetchPriorityAttributes = {
     fetchpriority: priority ? 'high' : 'auto',
   };
