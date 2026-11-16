@@ -235,8 +235,8 @@ const RunningTabPage = () => {
                 <OrderEta orderId={activeOrder.id} active={activeOrder.status !== 'served'} />
               </div>
               {activeOrder.held && (
-                <p className="text-sm font-sans text-accent mb-2 flex items-center gap-1.5">
-                  <Clock className="w-3.5 h-3.5" aria-hidden /> {t('waiting_for_waiter_confirm')}
+                <p className="text-sm font-sans text-foreground mb-2 flex items-center gap-1.5">
+                  <Clock className="w-3.5 h-3.5 text-accent" aria-hidden /> {t('waiting_for_waiter_confirm')}
                 </p>
               )}
               {/* "Received" began when the order was placed; later stages have no
@@ -287,7 +287,7 @@ const RunningTabPage = () => {
                       </span>
                       {waitTime && <span className="text-xs font-sans text-muted-foreground">{waitTime}</span>}
                       {order.payment_method === 'card_online' && (
-                        <span className={`inline-flex items-center gap-1 text-xs font-sans font-semibold px-2 py-0.5 rounded-full ${order.payment_status === 'paid' ? 'bg-primary/10 text-primary' : 'bg-accent/10 text-accent'}`}>
+                        <span className={`inline-flex items-center gap-1 text-xs font-sans font-semibold px-2 py-0.5 rounded-full ${order.payment_status === 'paid' ? 'bg-primary/10 text-primary' : 'bg-accent/10 text-foreground'}`}>
                           <CreditCard className="w-3 h-3" aria-hidden />
                           {order.payment_status === 'paid' ? t('paid') : t('card_pending')}
                         </span>
