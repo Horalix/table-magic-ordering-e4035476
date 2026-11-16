@@ -95,6 +95,45 @@ describe('the Android staff apps', () => {
     }
   });
 
+  it('the Manager and "all apps" pages are files of their own: kept fresh, out of search, and left to the network', () => {
+    const headers = readFileSync(root('public', '_headers'), 'utf8').replace(/\r\n/g, '\n');
+    for (const path of ['/manager-app/*', '/apps/*']) {
+      expect(headers).toContain(`${path}\n  Cache-Control: no-cache\n  X-Robots-Tag: noindex, nofollow`);
+    }
+    // The service worker answers every address with the app unless told not to: these are not the app.
+    const config = readFileSync(root('vite.config.ts'), 'utf8');
+    const denylist = /navigateFallbackDenylist: \[(.*)\]/.exec(config)?.[1] ?? '';
+    const patterns = [...denylist.matchAll(/\/\^(.*?)\/(?=,|$)/g)].map((m) => new RegExp(`^${m[1]}`));
+    expect(patterns.length).toBeGreaterThanOrEqual(5);
+    const denied = (path: string) => patterns.some((p) => p.test(path));
+    for (const path of ['/manager-app/', '/apps/', '/waiter-app/', '/kitchen-app/', '/admin', '/waiter/login', '/kitchen']) expect(denied(path), path).toBe(true);
+    // And the app's own pages are not.
+    for (const path of ['/', '/menu/lasoul/', '/reserve/', '/applications']) expect(denied(path), path).toBe(false);
+  });
+
+  it('the Manager page names each restaurant\'s own manifest and icons, and they exist', () => {
+    const page = readFileSync(root('public', 'manager-app', 'index.html'), 'utf8');
+    for (const file of ['manifest-manager.webmanifest', 'manifest-manager-veraitalia.webmanifest', 'icons/manager-192.png',
+      'icons/manager-apple-touch-icon.png', 'brand/vera/manager-192.png', 'brand/vera/manager-apple-touch-icon.png']) {
+      expect(page, file).toContain(`/${file}`);
+      expect(existsSync(root('public', file)), file).toBe(true);
+    }
+    expect(page).toContain("location.replace('/admin')");
+    expect(page).toContain('noindex');
+  });
+
+  it('the "all apps" page links every download page and every screen, and their icons exist', () => {
+    const page = readFileSync(root('public', 'apps', 'index.html'), 'utf8');
+    for (const href of ['/manager-app/', '/waiter-app/', '/kitchen-app/', '/admin', '/waiter/login', '/kitchen', '/tv', '/reserve/', '/menu/']) {
+      expect(page, href).toContain(`href="${href}"`);
+    }
+    for (const icon of ['icons/manager-192.png', 'brand/vera/manager-192.png', 'icons/icon-192.png', 'brand/vera/icon-192.png',
+      'kitchen-app/la-soul-kitchen.png', 'kitchen-app/vera-italia-kitchen.png']) {
+      expect(page, icon).toContain(`/${icon}`);
+      expect(existsSync(root('public', icon)), icon).toBe(true);
+    }
+  });
+
   it('shows alerts as its own, and asks Android for leave to', () => {
     expect(manifest).toContain('android.permission.POST_NOTIFICATIONS');
     expect(manifest).toContain('android:name=".TableAlertService"');

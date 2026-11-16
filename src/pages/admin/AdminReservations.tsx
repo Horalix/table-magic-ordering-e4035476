@@ -106,6 +106,12 @@ const AlertThisPhone = ({ venueId }: { venueId: string }) => {
         <Switch id="reservation-alerts" checked={on} disabled={!actionable || busy} onCheckedChange={toggle} className="scale-125 origin-right" />
       </div>
       <p className="mt-1.5 text-xs text-muted-foreground leading-relaxed">{explainAlerts(state)}</p>
+      {/* A page of its own, not part of the app: how to add the Manager app, step by step. */}
+      {state === 'needs-home-screen' && (
+        <a href="/manager-app/" data-testid="manager-app-link" className="mt-2 inline-flex min-h-[40px] items-center rounded-lg border border-border bg-background px-3 text-xs font-semibold text-foreground">
+          Step by step
+        </a>
+      )}
       {on && (
         <button type="button" onClick={test} className="mt-2 min-h-[40px] px-3 rounded-lg border border-border bg-background text-xs font-semibold">
           Send a test
