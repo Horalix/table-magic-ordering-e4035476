@@ -1,4 +1,5 @@
 import { test as base, expect, type Page, type Route } from '@playwright/test';
+import { WHATS_NEW_VERSION, whatsNewKey } from '../src/components/admin/nav/whats-new-version';
 
 /**
  * Fixtures for the screens staff actually work on.
@@ -551,12 +552,21 @@ export async function clearStaffSession(page: Page) {
   await page.addInitScript(() => localStorage.removeItem('sb-e2e-auth-token'));
 }
 
-export const test = base.extend<{ staff: StaffState }>({
+export const test = base.extend<{ staff: StaffState; whatsNewSeen: boolean }>({
+  /**
+   * The admin's "What's new" walkthrough (src/components/admin/nav/whats-new.ts)
+   * has already been seen on this device, so it does not open over the page
+   * under test. e2e/admin-tour.spec.ts turns this off to test the walkthrough.
+   */
+  whatsNewSeen: [true, { option: true }],
   staff: [
-    async ({ page }, use) => {
+    async ({ page, whatsNewSeen }, use) => {
       const state = defaultStaffState();
       await installStaffStubs(page, state);
       await seedStaffSession(page);
+      if (whatsNewSeen) {
+        await page.addInitScript(([key, version]) => localStorage.setItem(key, version), [whatsNewKey(STAFF_ID), WHATS_NEW_VERSION]);
+      }
       await use(state);
     },
     { auto: true },
