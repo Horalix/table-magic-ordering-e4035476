@@ -5,6 +5,7 @@ import SiteHero from '@/components/site/SiteHero';
 import SiteStory from '@/components/site/SiteStory';
 import SiteSignatures from '@/components/site/SiteSignatures';
 import SiteMenuCards from '@/components/site/SiteMenuCards';
+import SiteReserve, { SiteReserveFloat } from '@/components/site/SiteReserve';
 import SiteOrderSteps from '@/components/site/SiteOrderSteps';
 import SitePromise from '@/components/site/SitePromise';
 import SiteFaq from '@/components/site/SiteFaq';
@@ -74,18 +75,20 @@ const SiteHome = ({ venueSlug = DEFAULT_VENUE, locale: pathLocale }: { venueSlug
 
   return (
     <div className="site-root">
-      <SiteHeader venue={venue} />
+      <SiteHeader venue={venue} reservations={reservations} />
       <main id="main" tabIndex={-1} className="outline-none">
-        <SiteHero venue={venue} ordering={ordering} />
+        <SiteHero venue={venue} ordering={ordering} reservations={reservations} />
         <SiteStory />
         <SiteSignatures venue={venue} />
         <SiteMenuCards venue={venue} />
+        <SiteReserve venue={venue} open={reservations} />
         {ordering && <SiteOrderSteps />}
         <SitePromise />
         <SiteFaq venue={venue} ordering={ordering} reservations={reservations} />
         <SiteVisit venue={venue} />
       </main>
-      <SiteFooter venue={venue} />
+      <SiteFooter venue={venue} reservations={reservations} />
+      <SiteReserveFloat open={reservations} />
     </div>
   );
 };

@@ -144,11 +144,13 @@ test.describe('Vera Italia’s own site', () => {
 
     await options(true);
     await page.goto('/');
-    await expect(page.getByTestId('reserve-link')).toHaveAttribute('href', '/reserve/');
+    // On the photograph, in the header from tablet width up, by the address and in the footer.
+    const reserve = page.locator('main').getByTestId('reserve-link').first();
+    await expect(reserve).toHaveAttribute('href', '/reserve/');
     await expect.poll(ld).toContain('"acceptsReservations":"https://veraitalia.net/reserve/"');
     expect(await ld()).toContain('"name":"Can I reserve a table?"');
 
-    await page.getByTestId('reserve-link').click();
+    await reserve.click();
     await expect(page.getByRole('button', { name: 'Ask for this table' })).toBeVisible();
     await expect(page).toHaveTitle('Reserve a table at Vera Italia, Sarajevo');
     await expect(page.locator('link[rel="canonical"]')).toHaveAttribute('href', 'https://veraitalia.net/reserve/');
