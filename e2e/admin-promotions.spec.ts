@@ -136,7 +136,7 @@ test.describe('sales', () => {
     await page.goto('/admin/promotions');
 
     const burger = page.locator('[data-sale-row="La Soul Burger"]');
-    await expect(burger).toContainText('Now');
+    await expect(burger).toContainText('Running');
     await expect(burger).toContainText('Happy hour');
     await expect(burger).toContainText(/ends (today|tomorrow) \d\d:\d\d/);
     await expect(page.locator('[data-sale-row="Coca-Cola"]')).toContainText('Scheduled');
