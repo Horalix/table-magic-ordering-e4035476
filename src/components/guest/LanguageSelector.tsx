@@ -37,7 +37,7 @@ const LanguageSelector = ({ variant = 'default' }: Props) => {
             isSite
               ? 'bg-transparent text-ls-forest border border-ls-forest/15 hover:bg-ls-forest/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background'
               : isHero
-                ? 'bg-white/10 text-white border border-white/20 hover:bg-white/20'
+                ? 'bg-black/20 text-white border border-white/20 hover:bg-black/25'
                 : 'bg-muted text-foreground border border-border hover:bg-muted/80'
           }`}
         >

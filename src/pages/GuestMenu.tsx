@@ -1,7 +1,7 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
-import { Phone, MapPin, ChevronRight, QrCode, RefreshCw, BadgeCheck } from 'lucide-react';
+import { Phone, MapPin, ChevronRight, QrCode, RefreshCw, BadgeCheck, CalendarClock } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import CallWaiterButton from '@/components/guest/CallWaiterButton';
@@ -38,6 +38,7 @@ import { DemoWordmark } from '@/demo/ui/Brand';
 import { useMenuOnly } from '@/hooks/useMenuOnly';
 import { VeraCourses, VeraMenuFooter, VeraMenuHero } from '@/components/vera/VeraMenu';
 import { VERA, pick } from '@/components/vera/copy';
+import ReserveLink from '@/components/site/ReserveLink';
 import type { Database } from '@/integrations/supabase/types';
 
 type CategoryRow = Database['public']['Tables']['categories']['Row'];
@@ -232,6 +233,8 @@ const GuestMenu = () => {
           className="pointer-events-none select-none absolute -top-10 -end-20 w-64 opacity-[0.18] rtl:-scale-x-100"
         />
         )}
+        {/* One centred column on a tablet or a computer, like the menu under it. */}
+        <div className="relative z-10 md:max-w-2xl md:mx-auto">
         {/* Row one is the brand and the language, nothing else, so the
             wordmark can be big enough to read across a table. */}
         <div className="relative z-10 flex items-center justify-between gap-3">
@@ -247,7 +250,7 @@ const GuestMenu = () => {
               className="h-7 w-auto drop-shadow-[0_1px_2px_rgba(0,0,0,0.15)]"
             />
             )}
-            <span className="block text-[10px] font-sans text-white/85 tracking-[0.34em] uppercase font-semibold mt-2.5 ps-0.5 rtl:tracking-normal rtl:text-xs">{t('menu')}</span>
+            <span className="block text-[10px] font-sans text-white tracking-[0.34em] uppercase font-semibold mt-2.5 ps-0.5 rtl:tracking-normal rtl:text-xs">{t('menu')}</span>
           </h1>
           <LanguageSelector variant="hero" />
         </div>
@@ -255,7 +258,7 @@ const GuestMenu = () => {
         {/* The first question many guests have, answered before they ask it. */}
         <p
 
-          className="relative z-10 mt-3 inline-flex items-center gap-1.5 rounded-full bg-white/15 px-3 py-1 text-[11px] font-sans font-semibold text-white"
+          className="relative z-10 mt-3 flex w-fit items-center gap-1.5 rounded-full bg-black/20 px-3 py-1 text-[11px] font-sans font-semibold text-white"
         >
           <BadgeCheck className="w-3.5 h-3.5" aria-hidden /> {t('halal_promise')}
         </p>
@@ -268,7 +271,7 @@ const GuestMenu = () => {
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: duration.base, ease: easeEnter }}
               onClick={onChangeTable}
-              className="px-4 min-h-[44px] rounded-full border border-white/25 bg-white/10 text-xs font-sans font-medium text-white tracking-wide rtl:tracking-normal hover:bg-white/20 transition-colors"
+              className="min-w-0 overflow-hidden text-ellipsis px-3.5 min-h-[44px] whitespace-nowrap rounded-full border border-white/20 bg-black/20 text-xs font-sans font-medium text-white hover:bg-black/25 transition-colors"
               title={t('not_your_table')}
             >
               {t('table_n', { n: table })} · <span className="underline underline-offset-2">{t('change_table')}</span>
@@ -276,6 +279,21 @@ const GuestMenu = () => {
             <CallWaiterButton variant="hero" />
           </div>
         )}
+        {/* A visitor without a table (from Google or the website) can book one,
+            where the seated guest has the table row. Never shown at a table.
+            ReserveLink draws nothing unless the restaurant takes requests online. */}
+        {guard !== 'checking' && !hasSession && (
+          <div className="relative z-10 mt-5 flex empty:hidden">
+            <ReserveLink
+              venueSlug={venue.slug}
+              locale={locale}
+              className="inline-flex items-center gap-2 px-4 min-h-[44px] whitespace-nowrap rounded-full border border-white/20 bg-black/20 text-sm font-sans font-medium text-white hover:bg-black/25 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
+            >
+              <CalendarClock className="w-4 h-4" aria-hidden />
+            </ReserveLink>
+          </div>
+        )}
+        </div>
       </motion.header>
       )}
 
@@ -283,7 +301,7 @@ const GuestMenu = () => {
         variants={staggerContainer()}
         initial="hidden"
         animate="show"
-        className={`flex-1 px-5 pb-36 space-y-4 relative z-10 ${vera ? 'pt-1' : 'bg-background pt-5 -mt-5 rounded-t-3xl'}`}
+        className={`flex-1 px-5 pb-36 space-y-4 relative z-10 md:[&>*]:max-w-2xl md:[&>*]:mx-auto ${vera ? 'pt-1' : 'bg-background pt-5 -mt-5 rounded-t-3xl'}`}
       >
         {/* Find-by-name across every category, before anything else —
             it is the first thing a guest looking for one specific thing wants. */}
@@ -291,6 +309,17 @@ const GuestMenu = () => {
             only explanation used to be hidden inside an item's sheet. Not
             where the restaurant shows its menu only: there is no ordering to
             scan for, and not before this phone knows which it is. */}
+        {vera && guard !== 'checking' && !hasSession && (
+          <div>
+          <ReserveLink
+            venueSlug={venue.slug}
+            locale={locale}
+            className="flex w-fit items-center gap-2 px-4 min-h-[44px] rounded-full border border-border bg-card text-sm font-sans font-semibold text-foreground hover:bg-muted transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <CalendarClock className="w-4 h-4 text-primary" aria-hidden />
+          </ReserveLink>
+          </div>
+        )}
         {guard !== 'checking' && !hasSession && menuOnly === false && (
           <div className="flex items-center gap-3 p-3.5 rounded-2xl bg-primary/10 border border-primary/20" role="note">
             <QrCode className="w-5 h-5 text-primary shrink-0" aria-hidden />

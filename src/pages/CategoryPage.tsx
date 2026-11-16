@@ -20,7 +20,7 @@ import { useT, useLanguageStore, getLocalizedName, getLocalizedDescription, useI
 import { useSessionHeartbeat } from '@/hooks/useSessionHeartbeat';
 import { duration, easeEnter, exitTransition, springPill, springSheet } from '@/lib/motion';
 import { DIET_TAGS, DIET_BY_KEY, getItemTags, matchesDietFilter, useDietFilterStore } from '@/lib/dietary';
-import { merchBadges, unorderableReason, windowLabel } from '@/lib/availability';
+import { MERCH_LABELS, merchBadges, unorderableReason, windowLabel } from '@/lib/availability';
 import { categoryPath, sectionSlug } from '@/lib/menu-sections';
 import { PriceTag, SaleBadge, NewBadge, ComboBadge } from '@/components/guest/PriceTag';
 import { useComboMap } from '@/lib/promotions-api';
@@ -679,7 +679,10 @@ const CategoryPage = () => {
     const marketing = fresh ? null
       : merchBadges({ merchandising_tags: (item.merchandising_tags ?? []).filter((tag) => tag !== 'new') })[0] ?? null;
     const section = isSearch ? subNameById.get(item.subcategory_id || '') : undefined;
-    const popular = !blocked && !fresh && !marketing && popularIds.has(item.id);
+    // A dish tagged "Popular" by hand and one that is popular by its sales look
+    // the same: one word, one style, on every card.
+    const taggedPopular = !fresh && (item.merchandising_tags ?? []).find((tag) => tag !== 'new' && MERCH_LABELS[tag]) === 'popular';
+    const popular = !blocked && !fresh && (taggedPopular || (!marketing && popularIds.has(item.id)));
     if (!blocked && !sale && !combo && !fresh && !marketing && !popular && !section) return null;
     return (
       <div className="flex items-center gap-1.5 flex-wrap mt-1">
@@ -687,9 +690,10 @@ const CategoryPage = () => {
         {sale && <SaleBadge label={item.sale_label} percentOff={sale.percentOff} />}
         {combo && !blocked && <ComboBadge />}
         {fresh && <NewBadge />}
-        {!blocked && marketing && <span className="text-xs font-sans font-semibold text-primary">{marketing}</span>}
+        {!blocked && marketing && !taggedPopular && <span className="text-xs font-sans font-semibold text-primary">{marketing}</span>}
         {popular && (
-          <span className="inline-flex items-center gap-1 text-xs font-sans font-semibold text-accent">
+          // text-primary, not the gold accent: gold at this size is under 4.5:1 on the card.
+          <span className="inline-flex items-center gap-1 text-xs font-sans font-semibold text-primary">
             <Star className="w-3 h-3 fill-current" aria-hidden /> {t('popular')}
           </span>
         )}

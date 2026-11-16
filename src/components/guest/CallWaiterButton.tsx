@@ -50,13 +50,14 @@ const CallWaiterButton = ({ variant = 'default' }: Props) => {
       disabled={called || loading}
       aria-busy={loading}
       whileTap={{ scale: PRESS_SCALE }}
-      className={`flex shrink-0 items-center gap-2 px-4 min-h-[44px] whitespace-nowrap rounded-full font-sans text-sm font-medium transition-all duration-300 ${
+      className={`flex shrink-0 items-center gap-2 px-3.5 min-h-[44px] whitespace-nowrap rounded-full font-sans text-sm font-medium transition-all duration-300 ${
         called
           ? isHero
-            ? 'bg-white/20 text-white border border-white/30'
+            ? 'bg-black/25 text-white border border-white/30'
             : 'bg-primary/10 text-primary border border-primary/20'
           : isHero
-            ? 'bg-white/10 text-white border border-white/20 hover:bg-white/20'
+            // Dark glass on the sage band: white on it is 4.8:1; on white glass it was 3:1.
+            ? 'bg-black/20 text-white border border-white/20 hover:bg-black/25'
             : 'bg-accent/10 text-accent border border-accent/20 hover:bg-accent/20'
       }`}
     >
