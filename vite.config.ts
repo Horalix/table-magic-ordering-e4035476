@@ -62,7 +62,8 @@ export default defineConfig(({ mode }) => ({
         // shows waiters' lock-screen alerts and opens the waiter screen from one (public/sw-push.js).
         importScripts: ["sw-rescue.js", "sw-push.js"],
         navigateFallback: "index.html",
-        navigateFallbackDenylist: [/^\/admin/, /^\/kitchen/, /^\/waiter/],
+        // The download pages are files of their own (public/waiter-app/ … /kitchen-app/, /manager-app/, /apps/): left to the network, not answered with the app.
+        navigateFallbackDenylist: [/^\/admin/, /^\/kitchen/, /^\/waiter/, /^\/manager-app/, /^\/apps(\/|$)/],
         runtimeCaching: [
           {
             urlPattern: ({ url }) => url.pathname.startsWith("/menu/") && url.pathname.endsWith(".webp"),

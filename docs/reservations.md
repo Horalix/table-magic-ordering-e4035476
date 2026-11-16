@@ -127,6 +127,14 @@ are waiting, one tap from the answer.
 
 ## The Manager app (iPhone and Android)
 
+**Send the manager `lasoul.net/manager-app/`** (Vera Italia:
+`veraitalia.net/manager-app/`). It says, in Bosnian and English, how to add it
+to the Home Screen on an iPhone and on Android, step by step, and opens the
+admin to start from. There is nothing to download: the app is the admin.
+`lasoul.net/apps/` is the one page that lists every app (Manager, Waiter,
+Kitchen) and every link (admin, kitchen board, waiter sign-in, the TV menu, the
+booking page), for a new member of the team.
+
 The admin, added to a phone's Home Screen, is its own app: **La Soul
 Manager** or **Vera Italia Manager**, with its own icon, opening the admin
 full screen. It is the same admin, so everything a manager does is in it:
@@ -207,6 +215,7 @@ The words are in `src/lib/reservation-copy.ts` (`msg_…`).
 | What search engines and AI assistants are told | `src/lib/seo/reservations.ts`, `scripts/seo-prerender.ts`, `src/hooks/useReservationsOffered.ts` |
 | Admin | `src/pages/admin/AdminReservations.tsx` |
 | The Manager app | `public/manifest-manager*.webmanifest`, `scripts/manager-icons.mjs`, `src/hooks/useVenue.ts` |
+| Pages that say how to get the apps | `public/manager-app/index.html`, `public/apps/index.html` (and `public/waiter-app/`, `public/kitchen-app/`) |
 | Days, times, wording | `src/lib/reservations.ts`, `src/lib/reservation-copy.ts` |
 | Messages to the guest, the calendar entry | `src/lib/reservation-messages.ts` |
 | WhatsApp messages sent by themselves | docs/whatsapp-messages.md |

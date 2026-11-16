@@ -130,7 +130,8 @@ describe('deciding', () => {
 });
 
 describe('the workflow', () => {
-  const workflow = readFileSync(path.join(root, '.github', 'workflows', 'republish.yml'), 'utf8');
+  // A Windows checkout writes the file with CRLF line ends; the workflow reads the same either way.
+  const workflow = readFileSync(path.join(root, '.github', 'workflows', 'republish.yml'), 'utf8').replace(/\r\n/g, '\n');
 
   it('runs twice an hour and by hand, and may push to main, nothing else', () => {
     expect(workflow).toContain("cron: '9,39 * * * *'");

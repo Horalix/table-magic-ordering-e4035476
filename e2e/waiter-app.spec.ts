@@ -143,3 +143,58 @@ test.describe('the page a tablet gets the app from', () => {
     ]);
   });
 });
+
+test.describe('the pages that say how to get the apps', () => {
+  test('the Manager page says how to add it to the Home Screen, opens the admin, and is nobody\'s search result', async ({ page }) => {
+    const response = await page.goto('/manager-app/');
+    expect(response?.status()).toBe(200);
+    await expect(page.getByRole('heading', { level: 1, name: 'La Soul Manager' })).toBeVisible();
+    await expect(page.locator('meta[name="robots"]')).toHaveAttribute('content', 'noindex, nofollow');
+    await expect(page.locator('link[rel="manifest"]')).toHaveAttribute('href', '/manifest-manager.webmanifest');
+    await expect(page.locator('link[rel="apple-touch-icon"]')).toHaveAttribute('href', '/icons/manager-apple-touch-icon.png');
+    await page.getByRole('button', { name: 'EN' }).click();
+    // Nothing to download: the way in is the admin, and the steps follow.
+    await expect(page.getByRole('link', { name: 'Open the admin' })).toHaveAttribute('href', '/admin');
+    await expect(page.getByRole('heading', { level: 2, name: 'iPhone and iPad' })).toBeVisible();
+    await expect(page.getByText('Add to Home Screen', { exact: false }).first()).toBeVisible();
+    await expect(page.getByRole('heading', { level: 2, name: 'Android' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'All the apps and links' })).toHaveAttribute('href', '/apps/');
+    await page.getByRole('button', { name: 'BS' }).click();
+    await expect(page.getByRole('heading', { level: 2, name: 'Da uvijek zazvoni' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Otvori admin' })).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
+  });
+
+  test('added to the Home Screen from there, it still opens the admin', async ({ page }) => {
+    await page.addInitScript(() => {
+      const original = window.matchMedia.bind(window);
+      window.matchMedia = (query: string) => (/display-mode:\s*standalone/.test(query)
+        ? ({ ...original(query), matches: true } as MediaQueryList) : original(query));
+    });
+    await page.goto('/manager-app/');
+    await expect(page).toHaveURL(/\/admin(\/login)?$/);
+  });
+
+  test('one page lists every app and link, each leading where it says', async ({ page }) => {
+    const response = await page.goto('/apps/');
+    expect(response?.status()).toBe(200);
+    await expect(page.getByRole('heading', { level: 1, name: 'La Soul apps' })).toBeVisible();
+    await expect(page.locator('meta[name="robots"]')).toHaveAttribute('content', 'noindex, nofollow');
+    await page.getByRole('button', { name: 'EN' }).click();
+    // One language at a time, in the cards too.
+    await expect(page.getByText('For the manager and the owner.')).toBeVisible();
+    await expect(page.getByText('Za menadžera i vlasnika.')).toBeHidden();
+    const hrefs = (names: string[]) => Promise.all(names.map((n) => page.getByRole('link', { name: new RegExp(`^${n}`) }).first().getAttribute('href')));
+    expect(await hrefs(['Manager', 'Waiter For waiters', 'Kitchen For the kitchen'])).toEqual(['/manager-app/', '/waiter-app/', '/kitchen-app/']);
+    expect(await hrefs(['Admin', 'Waiter sign-in', 'Kitchen board', 'Menu on the TV', 'Book a table'])).toEqual(['/admin', '/waiter/login', '/kitchen', '/tv', '/reserve/']);
+    await page.getByRole('button', { name: 'BS' }).click();
+    await expect(page.getByRole('heading', { level: 2, name: 'Instalacija' })).toBeVisible();
+    await expect(page.getByText('Za menadžera i vlasnika.')).toBeVisible();
+    await expect(page.getByText('For the manager and the owner.')).toBeHidden();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
+    // Every address it names is one the site answers.
+    for (const path of ['/manager-app/', '/waiter-app/', '/kitchen-app/', '/admin', '/waiter/login', '/kitchen', '/tv', '/reserve/', '/menu/']) {
+      expect((await page.request.get(path)).status(), path).toBe(200);
+    }
+  });
+});
