@@ -528,7 +528,7 @@ const KitchenOrderCard = React.forwardRef<HTMLDivElement, Props>(({
                   onClick={() => run(item.id, () => onBumpItem(item.id, next))}
                   aria-label={`Mark ${item.menu_item_name} as ${next}`}
                   // "Ready" is the colour the line turns when tapped.
-                  className={`min-h-[48px] md:min-h-[56px] min-w-[80px] md:min-w-[96px] lg:min-w-[84px] xl:min-w-[96px] rounded-[10px] text-sm md:text-base font-sans font-semibold shrink-0 active:scale-95 transition-[transform,background-color] ${
+                  className={`min-h-[48px] md:min-h-[56px] min-w-[80px] md:min-w-[96px] rounded-[10px] text-sm md:text-base font-sans font-semibold shrink-0 active:scale-95 transition-[transform,background-color] ${
                     item.status === 'preparing' ? `${TONE.ready.solid} hover:bg-[hsl(150_46%_28%)]` : 'bg-card'
                   }`}
                 >
