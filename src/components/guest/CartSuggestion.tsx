@@ -253,7 +253,8 @@ const CartSuggestion = ({ placement, disabled, forItemIds }: Props) => {
   const headline = t(headlineKeyFor(placement, primary.recommendation_type, offered));
 
   return (
-    <section className="px-4 pt-5" aria-label={headline}>
+    // In the dish sheet the sheet's own padding is the edge; the cart and the tab have none.
+    <section className={placement === 'item' ? 'pt-1' : 'px-4 pt-5'} aria-label={headline}>
       <p className="text-xs uppercase tracking-wide rtl:tracking-normal text-muted-foreground font-sans mb-2">
         {headline}
       </p>
