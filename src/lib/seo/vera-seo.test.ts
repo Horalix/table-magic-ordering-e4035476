@@ -267,6 +267,9 @@ describe('Vera Italia’s pages', () => {
     expect(short).toContain('- Address: Butmirska cesta 16B, 71210 Ilidža, Sarajevo, Bosnia and Herzegovina');
     expect(short).toContain('- Hours: to be announced');
     expect(short).toContain('- Coordinates: 43.827664, 18.3102937');
+    // Its verified Google listing (17 November 2026): where it is on Maps, and where to review it.
+    expect(short).toContain('- Google Maps: https://maps.google.com/?cid=16021552868687464448');
+    expect(short).toContain('- Google reviews: https://g.page/r/CQDIQcBy_VfeEBM/review');
     expect(short).toContain('- Payment: cash, credit cards, debit cards');
     expect(short).toContain('- Good to know: takeaway; no delivery; free Wi-Fi; step-free (wheelchair-accessible) entrance; toilet for guests; parking; a terrace; children welcome');
     expect(short).toContain('### What sets Vera Italia apart from other Italian restaurants in Sarajevo?');

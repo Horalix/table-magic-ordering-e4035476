@@ -669,7 +669,9 @@ export function veraLlms(m: SeoMenu): { short: string; full: string } {
     v.hours?.length ? `- Hours: ${v.hours.map((x) => `${x.days.join(', ')} ${x.opens}–${x.closes}`).join('; ')}` : '- Hours: to be announced',
     v.phone ? `- Phone: ${v.phone}` : '',
     v.geo ? `- Coordinates: ${v.geo.lat}, ${v.geo.lng}` : '',
-    v.paymentAccepted ? `- Payment: ${v.paymentAccepted.toLowerCase().replace(/ card/g, ' cards')}` : '',
+    v.mapsListingUrl || v.mapsUrl ? `- Google Maps: ${v.mapsListingUrl || v.mapsUrl}` : '',
+    v.reviewUrl ? `- Google reviews: ${v.reviewUrl}` : '',
+    v.paymentAccepted ?`- Payment: ${v.paymentAccepted.toLowerCase().replace(/ card/g, ' cards')}` : '',
     v.amenities ? `- Good to know: ${goodToKnow(v.amenities)}` : '',
     reservationsOffered()
       ? `- Reservations: ask for a table online at ${absoluteUrl(RESERVE_PATH)} (a day, a time, the number of guests); the restaurant confirms each request itself, usually within minutes; free, and can be cancelled`

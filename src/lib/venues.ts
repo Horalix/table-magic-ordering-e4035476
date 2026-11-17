@@ -130,9 +130,11 @@ const REAL_VENUES: Record<string, Venue> = {
    * children welcome, takeaway, no delivery. On 17 November 2026 the owner
    * added: cash, credit and debit cards; a toilet for guests; free Wi-Fi; a
    * step-free entrance. The pin is its Google Business Profile's, set on the
-   * building on 16 November (a few metres from La Soul's). It is opening soon,
-   * so it has no hours yet and the website shows none; its Google listing is
-   * not verified yet, so there is no map link; no Instagram or Facebook yet.
+   * building on 16 November (a few metres from La Soul's). Google verified the
+   * listing on 17 November 2026: its map link is the listing's own (cid), and
+   * its review link the profile's "Ask for reviews" link. It is opening soon,
+   * so it has no hours yet and the website shows none; no Instagram or
+   * Facebook yet.
    *
    * Other businesses share the name (a handbag shop, a travel agency, Italian
    * food shops, restaurants abroad), so its other names carry the city: what
@@ -150,15 +152,15 @@ const REAL_VENUES: Record<string, Venue> = {
     city: 'Sarajevo',
     country: 'BA',
     geo: { lat: 43.827664, lng: 18.3102937 },
-    mapsUrl: '',
+    mapsUrl: 'https://maps.google.com/?cid=16021552868687464448',
     hours: null,
     instagram: null,
     facebook: null,
-    reviewUrl: null,
+    reviewUrl: 'https://g.page/r/CQDIQcBy_VfeEBM/review',
     live: true,
     postalCode: '71210',
     municipality: 'Ilidža',
-    mapsListingUrl: null,
+    mapsListingUrl: 'https://maps.google.com/?cid=16021552868687464448',
     amenities: {
       parking: true, terrace: true, wifi: true, childFriendly: true, takeaway: true, delivery: false,
       freeWifi: true, wheelchairEntrance: true, restroom: true,
