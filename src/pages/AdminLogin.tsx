@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
-import { Eye, EyeOff } from 'lucide-react';
+import { Eye, EyeOff, Loader2 } from 'lucide-react';
 import { useStaffDocument } from '@/components/staff/useStaffDocument';
 import { HOME, STAFF_BRAND as BRAND } from '@/components/staff/staff-brand';
 
@@ -97,82 +97,110 @@ const AdminLogin = () => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-6" style={{ backgroundColor: BRAND.background }}>
-      <div className="w-full max-w-sm">
-        {/* [ART] The restaurant's mark on its own colour: La Soul's sage, Vera Italia's dark. */}
-        <div className="text-center mb-8">
-          <img src={BRAND.mark} alt={HOME.name} width={BRAND.width} height={BRAND.height} className="w-auto h-24 mx-auto mb-4 object-contain" />
-          <h1 className="font-serif text-2xl font-bold text-white">{HOME.name} Admin</h1>
-          <p className="text-sm text-white/60 font-sans mt-1">Sign in to manage your restaurant</p>
+    <div className="min-h-[100dvh] bg-background lg:grid lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
+      {/* [ART] On a laptop, the restaurant's mark on its own colour beside the form:
+          La Soul's sage, Vera Italia's dark. The same split as the admin behind it. */}
+      <div className="hidden flex-col justify-between p-12 text-white lg:flex xl:p-16" style={{ backgroundColor: BRAND.background }}>
+        <img src={BRAND.mark} alt={HOME.name} width={BRAND.width} height={BRAND.height} className="h-28 w-auto self-start object-contain" />
+        <div>
+          <p className="font-serif text-4xl font-semibold leading-tight">{HOME.name}</p>
+          <p className="mt-2 font-sans text-base text-white/75">{HOME.tagline}</p>
         </div>
+      </div>
 
-        {/* Unmissable, because with no configuration nothing on any screen works. */}
-        {!supabaseConfigured && (
-          <div className="mb-4 rounded-xl bg-destructive text-destructive-foreground p-4 text-sm font-sans">
-            <p className="font-semibold">This build is not connected to a database.</p>
-            <p className="mt-1 opacity-90">
-              VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY are missing from the hosting
-              environment. Nothing will work until they are set and the site is redeployed —
-              this is not a network problem.
-            </p>
+      <main className="flex min-h-[100dvh] flex-col items-center justify-center pb-[calc(env(safe-area-inset-bottom)+2rem)] pl-[max(1.25rem,env(safe-area-inset-left))] pr-[max(1.25rem,env(safe-area-inset-right))] pt-[calc(env(safe-area-inset-top)+2rem)]">
+        <div className="w-full max-w-sm">
+          {/* On a phone, the mark as the app's icon would show it: the Manager app opens here. */}
+          <div
+            className="mb-6 grid h-20 w-20 place-items-center rounded-[22px] shadow-lux-lg lg:hidden"
+            style={{ backgroundColor: BRAND.background }}
+          >
+            <img src={BRAND.mark} alt={HOME.name} width={BRAND.width} height={BRAND.height} className="h-14 w-14 object-contain" />
           </div>
-        )}
+          <h1 className="font-serif text-[1.75rem] font-bold leading-tight tracking-[-0.01em] text-foreground sm:text-3xl">{HOME.name} Admin</h1>
+          <p className="mt-1.5 font-sans text-sm text-muted-foreground">Sign in to manage your restaurant</p>
 
-        <form onSubmit={handleLogin} className="space-y-4 bg-card rounded-2xl p-6 shadow-xl">
-          <div>
-            <Label htmlFor="admin-login-email" className="font-sans text-sm text-foreground">Email</Label>
-            <Input
-              id="admin-login-email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder={BRAND.adminEmail}
-              required
-              autoFocus
-              autoComplete="username"
-              autoCapitalize="none"
-              spellCheck={false}
-              className="mt-1.5"
-            />
-          </div>
-          <div>
-            <Label htmlFor="admin-login-password" className="font-sans text-sm text-foreground">Password</Label>
-            <div className="relative mt-1.5">
+          {/* Unmissable, because with no configuration nothing on any screen works. */}
+          {!supabaseConfigured && (
+            <div className="mt-5 rounded-xl bg-destructive p-4 font-sans text-sm text-destructive-foreground">
+              <p className="font-semibold">This build is not connected to a database.</p>
+              <p className="mt-1 opacity-90">
+                VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY are missing from the hosting
+                environment. Nothing will work until they are set and the site is redeployed —
+                this is not a network problem.
+              </p>
+            </div>
+          )}
+
+          <form onSubmit={handleLogin} className="mt-6 space-y-4 rounded-2xl border border-border/80 bg-card p-5 shadow-lux sm:p-6">
+            <div>
+              <Label htmlFor="admin-login-email" className="font-sans text-sm text-foreground">Email</Label>
               <Input
-                id="admin-login-password"
-                type={showPassword ? 'text' : 'password'}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
+                id="admin-login-email"
+                type="email"
+                inputMode="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder={BRAND.adminEmail}
                 required
-                autoComplete="current-password"
-                className="pr-12"
+                autoFocus
+                autoComplete="username"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
+                // 16px at every width: iPhone zooms the page into anything smaller.
+                className="mt-1.5 h-12 md:text-base"
               />
+            </div>
+            <div>
+              <Label htmlFor="admin-login-password" className="font-sans text-sm text-foreground">Password</Label>
+              <div className="relative mt-1.5">
+                <Input
+                  id="admin-login-password"
+                  type={showPassword ? 'text' : 'password'}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="••••••••"
+                  required
+                  autoComplete="current-password"
+                  className="h-12 pr-12 md:text-base"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((v) => !v)}
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  aria-pressed={showPassword}
+                  className="absolute right-0.5 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" aria-hidden /> : <Eye className="h-4 w-4" aria-hidden />}
+                </button>
+              </div>
+            </div>
+            <Button
+              type="submit"
+              disabled={loading || !email || !password}
+              className="h-12 w-full gap-2 rounded-xl bg-primary font-sans text-base font-semibold text-primary-foreground"
+            >
+              {loading && <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden />}
+              {loading ? 'Signing in...' : 'Sign In'}
+            </Button>
+          </form>
+
+          <div className="mt-5 space-y-1 font-sans text-[13px] leading-relaxed text-muted-foreground">
+            <p>Forgot your password? The owner gives you a new one in Admin → Team.</p>
+            <p>
+              Waiter or kitchen tablet?{' '}
               <button
                 type="button"
-                onClick={() => setShowPassword((v) => !v)}
-                aria-label={showPassword ? 'Hide password' : 'Show password'}
-                className="absolute right-0 top-1/2 -translate-y-1/2 w-11 h-11 flex items-center justify-center text-muted-foreground hover:text-foreground"
+                onClick={() => navigate('/waiter/login')}
+                className="-my-3 inline-flex min-h-[44px] items-center font-medium text-foreground underline underline-offset-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
-                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                Staff sign-in
               </button>
-            </div>
+            </p>
           </div>
-          <Button
-            type="submit"
-            disabled={loading || !email || !password}
-            className="w-full h-12 rounded-xl bg-primary text-primary-foreground font-sans font-semibold"
-          >
-            {loading ? 'Signing in...' : 'Sign In'}
-          </Button>
-          <p className="text-xs text-center text-muted-foreground font-sans">
-            Forgot your password? The owner gives you a new one in Admin → Team.
-          </p>
-          <p className="text-xs text-center text-muted-foreground font-sans">
-            Waiter or kitchen tablet? <button type="button" onClick={() => navigate('/waiter/login')} className="underline">Staff sign-in</button>
-          </p>
-        </form>
-      </div>
+        </div>
+      </main>
     </div>
   );
 };

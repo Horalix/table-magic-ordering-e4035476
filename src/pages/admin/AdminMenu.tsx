@@ -1,16 +1,15 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import SmartImage from '@/components/ui/SmartImage';
 import {
-  ChevronDown, ChevronRight, ChevronUp, EyeOff, Image as ImageIcon, Languages,
-  Loader2, MoreVertical, Pencil, Plus, RefreshCw, RotateCcw, Search, Trash2, UtensilsCrossed, X,
+  AlertTriangle, ChevronDown, ChevronRight, ChevronUp, EyeOff, Image as ImageIcon, Languages,
+  Loader2, MoreHorizontal, MoreVertical, Pencil, Plus, RefreshCw, RotateCcw, Search, Tag, Trash2, UtensilsCrossed, X,
 } from 'lucide-react';
 import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -19,6 +18,9 @@ import {
 import { toast } from 'sonner';
 import MenuItemDialog from '@/components/admin/MenuItemDialog';
 import InlinePrice from '@/components/admin/InlinePrice';
+import { AdminPageHeader, AdminToolbar } from '@/components/admin/AdminPage';
+import { AdminCard, EmptyState } from '@/components/admin/AdminCard';
+import { cn } from '@/lib/utils';
 import { DIET_BY_KEY, getItemTags } from '@/lib/dietary';
 import { Link, useSearchParams } from 'react-router-dom';
 import { isNew, saleScheduled } from '@/lib/promotions';
@@ -44,21 +46,43 @@ interface MigrateImagesResponse { migrated: number; skipped: number; failed: num
 
 type Names = { name: string; name_bs: string; name_ar: string };
 
-/** Reusable EN/BS/AR name editor — used for adding and renaming. */
+const NAME_LANGS = [
+  { key: 'name', tag: 'EN', lang: 'English' },
+  { key: 'name_bs', tag: 'BS', lang: 'Bosnian' },
+  { key: 'name_ar', tag: 'AR', lang: 'Arabic' },
+] as const;
+
+/** Reusable EN/BS/AR name editor — used for adding and renaming. Enter saves. */
 const NameEditor = ({ initial, label, onSave, onCancel }: {
   initial: Names; label: string; onSave: (v: Names) => void; onCancel: () => void;
 }) => {
   const [v, setV] = useState(initial);
   return (
-    <div className="p-3 bg-muted rounded-lg space-y-2">
-      <Input placeholder={`${label} (EN)`} value={v.name} autoFocus onChange={(e) => setV({ ...v, name: e.target.value })} />
-      <Input placeholder={`${label} (BS)`} value={v.name_bs} onChange={(e) => setV({ ...v, name_bs: e.target.value })} />
-      <Input placeholder={`${label} (AR)`} value={v.name_ar} dir="rtl" onChange={(e) => setV({ ...v, name_ar: e.target.value })} />
-      <div className="flex gap-2">
-        <Button size="sm" className="font-sans" onClick={() => onSave(v)}>Save</Button>
-        <Button size="sm" variant="outline" className="font-sans" onClick={onCancel}>Cancel</Button>
+    <form
+      className="space-y-2 rounded-xl border border-primary/25 bg-primary/[0.03] p-3 sm:p-4"
+      onSubmit={(e) => { e.preventDefault(); onSave(v); }}
+      onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); onCancel(); } }}
+    >
+      <p className="text-[13px] font-sans font-semibold text-foreground">{label}</p>
+      {NAME_LANGS.map((l) => (
+        <div key={l.key} className="flex items-center gap-2">
+          <span aria-hidden className="grid h-11 w-10 shrink-0 place-items-center rounded-md bg-muted text-[11px] font-sans font-semibold tracking-wide text-muted-foreground md:h-10">{l.tag}</span>
+          <Input
+            placeholder={`${label} (${l.tag})`}
+            aria-label={`${label} in ${l.lang}`}
+            value={v[l.key]}
+            autoFocus={l.key === 'name'}
+            dir={l.key === 'name_ar' ? 'rtl' : undefined}
+            onChange={(e) => setV({ ...v, [l.key]: e.target.value })}
+            className="h-11 md:h-10"
+          />
+        </div>
+      ))}
+      <div className="flex gap-2 pt-1">
+        <Button type="submit" className="min-h-[44px] font-sans md:min-h-[38px]">Save</Button>
+        <Button type="button" variant="ghost" className="min-h-[44px] font-sans md:min-h-[38px]" onClick={onCancel}>Cancel</Button>
       </div>
-    </div>
+    </form>
   );
 };
 
@@ -73,8 +97,8 @@ const ConfirmDelete = ({ trigger, title, description, onConfirm }: {
         <AlertDialogDescription>{description}</AlertDialogDescription>
       </AlertDialogHeader>
       <AlertDialogFooter>
-        <AlertDialogCancel>Cancel</AlertDialogCancel>
-        <AlertDialogAction onClick={onConfirm} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Delete</AlertDialogAction>
+        <AlertDialogCancel className="min-h-[44px]">Cancel</AlertDialogCancel>
+        <AlertDialogAction onClick={onConfirm} className="min-h-[44px] bg-destructive text-destructive-foreground hover:bg-destructive/90">Delete</AlertDialogAction>
       </AlertDialogFooter>
     </AlertDialogContent>
   </AlertDialog>
@@ -82,6 +106,8 @@ const ConfirmDelete = ({ trigger, title, description, onConfirm }: {
 
 const sortByOrder = <T extends { sort_order: number }>(arr?: T[] | null): T[] =>
   [...(arr ?? [])].sort((a, b) => a.sort_order - b.sort_order);
+
+const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
 /**
  * Is this a "still referenced elsewhere" refusal?
@@ -108,19 +134,141 @@ const AvailabilitySwitch = ({ item, onToggle }: { item: MenuItemRow; onToggle: (
     aria-checked={item.is_available}
     aria-label={`${item.name}: ${item.is_available ? 'available' : 'sold out'}`}
     onClick={() => onToggle(item)}
-    className={`inline-flex items-center gap-2 min-h-[44px] px-2.5 rounded-lg text-xs font-sans font-semibold transition-colors ${
-      item.is_available ? 'text-primary hover:bg-primary/10' : 'text-destructive hover:bg-destructive/10'
-    }`}
+    className={cn(
+      'inline-flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center gap-2 rounded-lg px-1.5 text-xs font-sans font-semibold transition-colors sm:px-2.5',
+      item.is_available ? 'text-primary hover:bg-primary/10' : 'text-destructive hover:bg-destructive/10',
+    )}
   >
     <span
       aria-hidden
-      className={`relative inline-flex h-5 w-9 shrink-0 rounded-full transition-colors ${item.is_available ? 'bg-primary' : 'bg-muted-foreground/30'}`}
+      className={cn('relative inline-flex h-6 w-10 shrink-0 rounded-full transition-colors', item.is_available ? 'bg-primary' : 'bg-muted-foreground/30')}
     >
-      <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-background shadow transition-transform ${item.is_available ? 'translate-x-4' : 'translate-x-0.5'}`} />
+      <span className={cn('absolute top-0.5 h-5 w-5 rounded-full bg-background shadow-sm transition-transform motion-reduce:transition-none', item.is_available ? 'translate-x-[18px]' : 'translate-x-0.5')} />
     </span>
     {/* The word only where there is room for it and the dish's name; the
-        switch's own label says it either way. */}
-    <span className="hidden sm:inline w-[54px] text-left">{item.is_available ? 'Available' : 'Sold out'}</span>
+        switch's own label says it either way, and the row says "Sold out". */}
+    <span className="hidden w-[54px] text-start sm:inline">{item.is_available ? 'Available' : 'Sold out'}</span>
+  </button>
+);
+
+/** What a guest sees on a dish, as small quiet pills. */
+const DishBadges = ({ item }: { item: MenuItemRow }) => {
+  const sale = saleScheduled(item);
+  return (
+    <>
+      {!item.is_available && <span className="rounded-full bg-destructive/10 px-1.5 py-px text-[11px] font-semibold text-destructive sm:hidden">Sold out</span>}
+      {sale === 'running' && <span className="rounded-full bg-sale/10 px-1.5 py-px text-[11px] font-semibold text-sale">Sale</span>}
+      {sale === 'scheduled' && <span className="rounded-full bg-muted px-1.5 py-px text-[11px] font-semibold text-muted-foreground">Sale soon</span>}
+      {isNew(item) && <span className="rounded-full bg-primary/10 px-1.5 py-px text-[11px] font-semibold text-primary">New</span>}
+      {item.featured_rank != null && <span className="rounded-full bg-primary/10 px-1.5 py-px text-[11px] font-semibold text-primary">Featured</span>}
+    </>
+  );
+};
+
+/**
+ * One dish, the same in the menu tree and in search results: photo, name,
+ * price you can tap to change, what guests see on it, the sold-out switch,
+ * then the rarer actions (inline on a wide screen, behind one button on a
+ * phone, where they crowded the switch off the row).
+ */
+const DishRow = ({
+  item, path, onToggle, onPrice, onEdit, onDelete, onMoveUp, onMoveDown,
+}: {
+  item: MenuItemRow;
+  /** Where it lives, in search results. */
+  path?: string;
+  onToggle: (item: MenuItemRow) => void;
+  onPrice: (item: MenuItemRow, price: number) => Promise<boolean>;
+  onEdit: (item: MenuItemRow) => void;
+  onDelete: (item: MenuItemRow) => void;
+  /** Absent in search results, disabled-at-the-ends as `null`. */
+  onMoveUp?: (() => void) | null;
+  onMoveDown?: (() => void) | null;
+}) => {
+  const tags = getItemTags(item).slice(0, 4).map((k) => DIET_BY_KEY[k]?.emoji).filter(Boolean).join(' ');
+  const reorder = onMoveUp !== undefined;
+  return (
+    <li className="flex items-center gap-3 py-2.5 ps-3 pe-1 sm:ps-4 sm:pe-2">
+      {/* The photo guests see: the prepared one while it stands for this upload. Tapping it opens the dish. */}
+      <button type="button" tabIndex={-1} aria-hidden onClick={() => onEdit(item)} className={cn('shrink-0 rounded-lg', !item.is_available && 'opacity-50 grayscale')}>
+        {item.image_url
+          ? <SmartImage src={item.image_url} id={item.id} alt="" width={44} height={44} sizes="44px" square wrapperClassName="h-11 w-11 overflow-hidden rounded-lg" />
+          : <span className="grid h-11 w-11 place-items-center rounded-lg bg-muted font-serif text-muted-foreground/50">{item.name[0]}</span>}
+      </button>
+      <div className="min-w-0 flex-1">
+        <p className={cn('flex min-w-0 items-center gap-1.5 text-sm font-sans font-medium leading-snug', item.is_available ? 'text-foreground' : 'text-muted-foreground')}>
+          <span className="line-clamp-2 break-words">{item.name}</span>
+          {tags && <span className="shrink-0 text-xs leading-none" aria-hidden>{tags}</span>}
+        </p>
+        <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
+          <InlinePrice name={item.name} price={Number(item.price)} onSave={(p) => onPrice(item, p)} />
+          <DishBadges item={item} />
+          {path && <span className="min-w-0 truncate">{path}</span>}
+        </div>
+      </div>
+      <AvailabilitySwitch item={item} onToggle={onToggle} />
+      <div className="hidden items-center md:flex">
+        {reorder && (
+          <>
+            <Button variant="ghost" size="icon" className="h-9 w-9 text-muted-foreground" disabled={!onMoveUp} aria-label="Move up" onClick={() => onMoveUp?.()}><ChevronUp className="h-4 w-4" /></Button>
+            <Button variant="ghost" size="icon" className="h-9 w-9 text-muted-foreground" disabled={!onMoveDown} aria-label="Move down" onClick={() => onMoveDown?.()}><ChevronDown className="h-4 w-4" /></Button>
+          </>
+        )}
+        <Button variant="ghost" size="icon" className="h-9 w-9 text-muted-foreground hover:text-foreground" aria-label={`Edit ${item.name}`} onClick={() => onEdit(item)}><Pencil className="h-4 w-4" /></Button>
+        <Button variant="ghost" size="icon" className="h-9 w-9 text-muted-foreground hover:bg-destructive/10 hover:text-destructive" aria-label={`Delete ${item.name}`} onClick={() => onDelete(item)}><Trash2 className="h-4 w-4" /></Button>
+      </div>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="ghost" size="icon" className="h-11 w-11 shrink-0 text-muted-foreground md:hidden" aria-label={`More actions for ${item.name}`}>
+            <MoreVertical className="h-4 w-4" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="min-w-[12rem]">
+          <DropdownMenuItem className="min-h-[44px]" onSelect={() => onEdit(item)}>
+            <Pencil className="me-2 h-4 w-4" /> Edit
+          </DropdownMenuItem>
+          {reorder && (
+            <>
+              <DropdownMenuItem className="min-h-[44px]" disabled={!onMoveUp} onSelect={() => onMoveUp?.()}>
+                <ChevronUp className="me-2 h-4 w-4" /> Move up
+              </DropdownMenuItem>
+              <DropdownMenuItem className="min-h-[44px]" disabled={!onMoveDown} onSelect={() => onMoveDown?.()}>
+                <ChevronDown className="me-2 h-4 w-4" /> Move down
+              </DropdownMenuItem>
+            </>
+          )}
+          <DropdownMenuSeparator />
+          <DropdownMenuItem className="min-h-[44px] text-destructive focus:text-destructive" onSelect={() => onDelete(item)}>
+            <Trash2 className="me-2 h-4 w-4" /> Delete
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </li>
+  );
+};
+
+/** Quick views of the whole menu, each a question a manager asks. */
+type Filter = 'all' | 'soldout' | 'sale' | 'nophoto' | 'untranslated';
+const FILTERS: { key: Filter; label: string; test: (i: MenuItemRow) => boolean }[] = [
+  { key: 'all', label: 'All', test: () => true },
+  { key: 'soldout', label: 'Sold out', test: (i) => !i.is_available },
+  { key: 'sale', label: 'On sale', test: (i) => saleScheduled(i) === 'running' || saleScheduled(i) === 'scheduled' },
+  { key: 'nophoto', label: 'No photo', test: (i) => !i.image_url },
+  { key: 'untranslated', label: 'Missing a translation', test: (i) => !i.name_bs?.trim() || !i.name_ar?.trim() },
+];
+
+/** A row of toggle buttons under the search box; 44px on a phone. */
+const FilterChip = ({ on, onClick, children }: { on: boolean; onClick: () => void; children: React.ReactNode }) => (
+  <button
+    type="button"
+    aria-pressed={on}
+    onClick={onClick}
+    className={cn(
+      'inline-flex min-h-[44px] items-center gap-1.5 rounded-full border px-3.5 text-[13px] font-sans font-medium transition-colors sm:min-h-[34px] sm:px-3',
+      on ? 'border-foreground bg-foreground text-background' : 'border-border bg-card text-muted-foreground hover:border-foreground/30 hover:text-foreground',
+    )}
+  >
+    {children}
   </button>
 );
 
@@ -136,8 +284,20 @@ const AdminMenu = () => {
   const [restoring, setRestoring] = useState<string | null>(null);
   const binRef = useRef<HTMLDivElement>(null);
   const [loading, setLoading] = useState(true);
-  const [expandedCategory, setExpandedCategory] = useState<string | null>(null);
-  const [expandedSubcategory, setExpandedSubcategory] = useState<string | null>(null);
+  /** Which categories and sections are open; several at once, so a manager can compare. */
+  const [openCats, setOpenCats] = useState<Set<string>>(() => new Set());
+  const [openSubs, setOpenSubs] = useState<Set<string>>(() => new Set());
+  const flip = (set: Set<string>, id: string, to?: boolean) => {
+    const next = new Set(set);
+    if (to ?? !next.has(id)) next.add(id); else next.delete(id);
+    return next;
+  };
+  const toggleCat = (id: string) => setOpenCats((s) => flip(s, id));
+  const openCat = (id: string) => setOpenCats((s) => flip(s, id, true));
+  const toggleSub = (id: string) => setOpenSubs((s) => flip(s, id));
+  const openSub = (id: string) => setOpenSubs((s) => flip(s, id, true));
+  /** A quick view of the whole menu: sold out, on sale, no photo, untranslated. */
+  const [filter, setFilter] = useState<Filter>('all');
 
   const [addingCategory, setAddingCategory] = useState(false);
   const [search, setSearch] = useState('');
@@ -156,6 +316,8 @@ const AdminMenu = () => {
   const [pendingDelete, setPendingDelete] = useState<MenuItemRow | null>(null);
   /** The same, for a category deleted from the phone menu. */
   const [pendingCategoryDelete, setPendingCategoryDelete] = useState<AdminCategory | null>(null);
+  /** The same, for a section deleted from the phone menu. */
+  const [pendingSubDelete, setPendingSubDelete] = useState<AdminSubcategory | null>(null);
   /** An item the database refused to delete because past orders point at it. */
   const [undeletable, setUndeletable] = useState<MenuItemRow | null>(null);
 
@@ -198,7 +360,7 @@ const AdminMenu = () => {
     if (!name.trim()) return;
     const payload: CategoryInsert = { name: name.trim(), name_bs: name_bs.trim() || null, name_ar: name_ar.trim() || null, sort_order: categories.length };
     const { error } = await supabase.from('categories').insert(payload);
-    if (error) { toast.error('Failed to add category'); return; }
+    if (error) { toast.error('Could not add the category'); return; }
     toast.success('Category added'); setAddingCategory(false); await fetchMenu();
   };
 
@@ -207,8 +369,8 @@ const AdminMenu = () => {
     const cat = categories.find((c) => c.id === categoryId);
     const payload: SubcategoryInsert = { category_id: categoryId, name: name.trim(), name_bs: name_bs.trim() || null, name_ar: name_ar.trim() || null, sort_order: cat?.subcategories?.length ?? 0 };
     const { error } = await supabase.from('subcategories').insert(payload);
-    if (error) { toast.error('Failed to add subcategory'); return; }
-    toast.success('Subcategory added'); setAddingSubFor(null); await fetchMenu();
+    if (error) { toast.error('Could not add the section'); return; }
+    toast.success('Section added'); setAddingSubFor(null); await fetchMenu();
   };
 
   // ---- Rename ----
@@ -477,60 +639,140 @@ const AdminMenu = () => {
     } finally { setIsMigrating(false); }
   };
 
+  /** Every dish with where it lives, for search, the quick filters and the counts. */
+  const allDishes = useMemo(() => {
+    const out: { item: MenuItemRow; path: string }[] = [];
+    for (const cat of categories) {
+      for (const sub of cat.subcategories ?? []) {
+        for (const item of sub.menu_items ?? []) out.push({ item, path: `${cat.name} › ${sub.name}` });
+      }
+    }
+    return out;
+  }, [categories]);
+  const filterCounts = useMemo(() => Object.fromEntries(
+    FILTERS.map((f) => [f.key, allDishes.filter(({ item }) => f.test(item)).length]),
+  ) as Record<Filter, number>, [allDishes]);
+  /** What the flat list shows: a search, a quick filter, or both. Null shows the menu tree. */
+  const listed = useMemo(() => {
+    if (!searchHits && filter === 'all') return null;
+    const test = FILTERS.find((f) => f.key === filter)!.test;
+    return (searchHits ?? allDishes).filter(({ item }) => test(item));
+  }, [searchHits, filter, allDishes]);
+
+  /** Where "Add dish" can put a new one. */
+  const sectionChoices = useMemo(() => categories.flatMap((c) =>
+    (c.subcategories ?? []).map((s) => ({ id: s.id, label: `${c.name} › ${s.name}` }))), [categories]);
+
+  const dishProps = {
+    onToggle: toggleAvailability,
+    onPrice: changePrice,
+    onEdit: (item: MenuItemRow) => setItemDialog({ item }),
+    onDelete: deleteItem,
+  };
+
+  const busyTool = isTranslating ? 'Translating…' : isMigrating ? 'Moving images…' : null;
+
   return (
     <div>
-      <div className="flex items-center justify-between mb-6 flex-wrap gap-2">
-        <h1 className="font-serif text-3xl font-bold text-foreground">Menu Management</h1>
-        <div className="flex gap-2 flex-wrap">
-          <Button onClick={() => translateMenu(false)} disabled={isTranslating} variant="outline" size="sm" className="rounded-lg font-sans gap-1">
-            {isTranslating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Languages className="w-4 h-4" />}
-            {isTranslating ? 'Translating…' : 'Auto-Translate'}
-          </Button>
-          <Button onClick={() => setConfirmRetranslate(true)} disabled={isTranslating} variant="outline" size="sm" className="rounded-lg font-sans gap-1">
-            <RefreshCw className="w-4 h-4" /> Re-translate All
-          </Button>
-          <Button onClick={migrateImages} disabled={isMigrating} variant="outline" size="sm" className="rounded-lg font-sans gap-1" title="Download all external images and self-host them">
-            {isMigrating ? <Loader2 className="w-4 h-4 animate-spin" /> : <ImageIcon className="w-4 h-4" />}
-            {isMigrating ? 'Migrating…' : 'Self-host Images'}
-          </Button>
-          <Button asChild variant="outline" size="sm" className="rounded-lg font-sans gap-1">
-            <Link to="/admin/promotions">Promotions</Link>
-          </Button>
-          {bin.length > 0 && (
-            <Button onClick={openBin} variant="outline" size="sm" className="rounded-lg font-sans gap-1">
-              <Trash2 className="w-4 h-4" /> Recently deleted ({bin.length})
-            </Button>
-          )}
-          <Button onClick={() => setAddingCategory(true)} className="rounded-lg font-sans" size="sm">
-            <Plus className="w-4 h-4 mr-1" /> Add Category
-          </Button>
-        </div>
-      </div>
+      <AdminPageHeader
+        title="Dishes"
+        description="Mark a dish sold out or back, change a price, add something new. Guests see every change at once."
+        loading={!!busyTool}
+        actions={(
+          <>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" className="min-h-[44px] gap-1.5 rounded-lg font-sans md:min-h-[38px]" aria-label="Menu tools">
+                  {busyTool ? <Loader2 className="h-4 w-4 animate-spin" /> : <MoreHorizontal className="h-4 w-4" />}
+                  {busyTool ?? 'More'}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-64">
+                <DropdownMenuLabel className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Menu</DropdownMenuLabel>
+                <DropdownMenuItem className="min-h-[44px]" onSelect={() => setAddingCategory(true)}>
+                  <Plus className="me-2 h-4 w-4" /> Add category
+                </DropdownMenuItem>
+                <DropdownMenuItem className="min-h-[44px]" asChild>
+                  <Link to="/admin/promotions"><Tag className="me-2 h-4 w-4" /> Promotions</Link>
+                </DropdownMenuItem>
+                {bin.length > 0 && (
+                  <DropdownMenuItem className="min-h-[44px]" onSelect={openBin}>
+                    <Trash2 className="me-2 h-4 w-4" /> Recently deleted ({bin.length})
+                  </DropdownMenuItem>
+                )}
+                <DropdownMenuSeparator />
+                <DropdownMenuLabel className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Translations and photos</DropdownMenuLabel>
+                <DropdownMenuItem className="min-h-[44px] items-start py-2" disabled={isTranslating} onSelect={() => { void translateMenu(false); }}>
+                  <Languages className="me-2 mt-0.5 h-4 w-4 shrink-0" />
+                  <span><span className="block">Auto-translate</span><span className="block text-xs text-muted-foreground">Fills in only what is missing</span></span>
+                </DropdownMenuItem>
+                <DropdownMenuItem className="min-h-[44px] items-start py-2" disabled={isTranslating} onSelect={() => setConfirmRetranslate(true)}>
+                  <RefreshCw className="me-2 mt-0.5 h-4 w-4 shrink-0" />
+                  <span><span className="block">Re-translate everything…</span><span className="block text-xs text-muted-foreground">Replaces hand-made translations</span></span>
+                </DropdownMenuItem>
+                <DropdownMenuItem className="min-h-[44px] items-start py-2" disabled={isMigrating} onSelect={() => { void migrateImages(); }}>
+                  <ImageIcon className="me-2 mt-0.5 h-4 w-4 shrink-0" />
+                  <span><span className="block">Self-host images</span><span className="block text-xs text-muted-foreground">Copies linked photos to our own storage</span></span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            {sectionChoices.length > 0 ? (
+              <Button className="min-h-[44px] gap-1.5 rounded-lg font-sans md:min-h-[38px]" onClick={() => setItemDialog({})}>
+                <Plus className="h-4 w-4" /> Add dish
+              </Button>
+            ) : !loading && !loadFailed && (
+              <Button className="min-h-[44px] gap-1.5 rounded-lg font-sans md:min-h-[38px]" onClick={() => setAddingCategory(true)}>
+                <Plus className="h-4 w-4" /> Add category
+              </Button>
+            )}
+          </>
+        )}
+      />
 
-      {migrateResult && <div className="mb-4 px-3 py-2 rounded-md bg-muted text-xs font-sans text-muted-foreground">{migrateResult}</div>}
+      {migrateResult && (
+        <p className="mb-4 flex items-center gap-2 rounded-lg bg-muted px-3 py-2 text-xs font-sans text-muted-foreground">
+          <ImageIcon className="h-3.5 w-3.5 shrink-0" /> Images: {migrateResult}
+        </p>
+      )}
 
       {/* Find anything, without walking a three-level tree. */}
-      <div className="relative mb-4">
-        <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          ref={searchRef}
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search the whole menu… (press /)"
-          className="pl-9 pr-10 h-11"
-          aria-label="Search menu items"
-        />
-        {search && (
-          <button
-            type="button"
-            onClick={() => setSearch('')}
-            aria-label="Clear search"
-            className="absolute right-1 top-1/2 -translate-y-1/2 w-9 h-9 flex items-center justify-center text-muted-foreground hover:text-foreground"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        )}
-      </div>
+      {!loading && !loadFailed && allDishes.length > 0 && (
+        <div className="mb-5 space-y-3">
+          <div className="relative">
+            <Search className="pointer-events-none absolute start-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              ref={searchRef}
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Escape') setSearch(''); }}
+              placeholder="Search dishes, in any language"
+              className="h-12 rounded-xl bg-card ps-10 pe-12 shadow-lux md:h-11"
+              aria-label="Search menu items"
+              enterKeyHint="search"
+            />
+            {search ? (
+              <button
+                type="button"
+                onClick={() => setSearch('')}
+                aria-label="Clear search"
+                className="absolute end-1 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-lg text-muted-foreground hover:text-foreground md:h-9 md:w-9"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            ) : (
+              <kbd className="pointer-events-none absolute end-3 top-1/2 hidden -translate-y-1/2 rounded border border-border bg-muted px-1.5 font-sans text-[11px] text-muted-foreground md:block">/</kbd>
+            )}
+          </div>
+          <AdminToolbar role="group" aria-label="Show">
+            {FILTERS.filter((f) => f.key === 'all' || filterCounts[f.key] > 0 || filter === f.key).map((f) => (
+              <FilterChip key={f.key} on={filter === f.key} onClick={() => setFilter(f.key)}>
+                {f.label}
+                <span className={cn('tabular-nums', filter === f.key ? 'text-background/70' : 'text-muted-foreground/70')}>{filterCounts[f.key]}</span>
+              </FilterChip>
+            ))}
+          </AdminToolbar>
+        </div>
+      )}
 
       {/*
         The 86 list.
@@ -538,264 +780,270 @@ const AdminMenu = () => {
         looks exactly like "we do not sell that", so it never gets put back
         and the loss never shows up anywhere.
       */}
-      {offMenu.length > 0 && !searchHits && (
-        <Card className="mb-4 border-accent/40 bg-accent/5">
-          <CardContent className="p-3">
-            <p className="text-xs font-sans font-semibold text-accent uppercase tracking-wide flex items-center gap-1.5 mb-2">
-              <EyeOff className="w-3.5 h-3.5" /> Sold out right now ({offMenu.length})
-            </p>
-            <div className="flex flex-wrap gap-1.5">
-              {offMenu.map((item) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  onClick={() => toggleAvailability(item)}
-                  className="inline-flex items-center gap-1.5 px-2.5 min-h-[36px] rounded-full border border-accent/40 bg-card text-xs font-sans hover:bg-accent/10 transition-colors"
-                  title={`Put ${item.name} back on the menu`}
-                >
-                  {item.name}
-                  <span className="text-muted-foreground">· tap when back in stock</span>
-                </button>
-              ))}
+      {offMenu.length > 0 && !listed && (
+        <AdminCard className="mb-5 p-4 sm:p-5">
+          <div className="flex items-start gap-3">
+            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-destructive/10 text-destructive" aria-hidden>
+              <EyeOff className="h-4 w-4" />
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="font-serif text-base font-semibold text-foreground">
+                {offMenu.length === 1 ? '1 dish is sold out right now' : `${offMenu.length} dishes are sold out right now`}
+              </p>
+              <p className="mt-0.5 text-[13px] font-sans text-muted-foreground">Guests cannot order these. Tap one when it is back in stock.</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {offMenu.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => toggleAvailability(item)}
+                    className="inline-flex min-h-[44px] items-center gap-2 rounded-full border border-border bg-card ps-3.5 pe-2 text-[13px] font-sans font-medium text-foreground shadow-sm transition-colors hover:border-primary/40 hover:bg-primary/5 sm:min-h-[38px]"
+                    title={`Put ${item.name} back on the menu`}
+                  >
+                    {item.name}
+                    <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-semibold text-primary">Back on</span>
+                  </button>
+                ))}
+              </div>
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </AdminCard>
       )}
 
-      {searchHits && (
-        <Card className="mb-4">
-          <CardContent className="p-3">
-            <p className="text-xs font-sans text-muted-foreground mb-2" aria-live="polite">
-              {searchHits.length} {searchHits.length === 1 ? 'match' : 'matches'} for “{search.trim()}”
+      {listed && (
+        <AdminCard className="mb-5 overflow-hidden">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/70 px-4 py-3 sm:px-5">
+            <p className="text-[13px] font-sans text-muted-foreground" aria-live="polite">
+              <span className="font-semibold text-foreground tabular-nums">{listed.length}</span>
+              {' of '}<span className="tabular-nums">{allDishes.length}</span>{' dishes'}
+              {searchHits && <> matching “{search.trim()}”</>}
+              {filter !== 'all' && <> · {FILTERS.find((f) => f.key === filter)!.label.toLowerCase()}</>}
             </p>
-            <div className="space-y-1">
-              {searchHits.map(({ item, path }) => (
-                <div key={item.id} className="flex items-center justify-between gap-2 py-2 px-2 rounded-lg hover:bg-muted/30">
-                  <div className="min-w-0">
-                    <p className={`text-sm font-sans font-medium truncate ${item.is_available ? 'text-foreground' : 'text-muted-foreground line-through'}`}>
-                      {item.name}
-                    </p>
-                    <p className="text-xs text-muted-foreground truncate flex flex-wrap items-center gap-x-1">
-                      <span className="truncate">{path} ·</span>
-                      <InlinePrice name={item.name} price={Number(item.price)} onSave={(p) => changePrice(item, p)} />
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-0.5 shrink-0">
-                    <AvailabilitySwitch item={item} onToggle={toggleAvailability} />
-                    <Button variant="ghost" size="icon" className="h-11 w-11" aria-label={`Edit ${item.name}`} onClick={() => setItemDialog({ item })}>
-                      <Pencil className="w-4 h-4" />
-                    </Button>
-                  </div>
-                </div>
-              ))}
-              {searchHits.length === 0 && (
-                <p className="text-sm text-muted-foreground font-sans py-3 text-center">Nothing matches that.</p>
-              )}
-            </div>
-          </CardContent>
-        </Card>
+            <Button variant="ghost" size="sm" className="min-h-[44px] text-muted-foreground md:min-h-[32px]" onClick={() => { setSearch(''); setFilter('all'); }}>
+              Show the whole menu
+            </Button>
+          </div>
+          {listed.length > 0 ? (
+            <ul className="divide-y divide-border/60">
+              {listed.map(({ item, path }) => <DishRow key={item.id} item={item} path={path} {...dishProps} />)}
+            </ul>
+          ) : (
+            <EmptyState icon={Search} title="Nothing matches that" hint="Try another word, or a name in Bosnian or Arabic." />
+          )}
+        </AdminCard>
       )}
-
 
       {addingCategory && (
-        <Card className="mb-4 border-primary/20">
-          <CardContent className="p-4">
-            <NameEditor initial={{ name: '', name_bs: '', name_ar: '' }} label="Category name" onSave={addCategory} onCancel={() => setAddingCategory(false)} />
-          </CardContent>
-        </Card>
+        <div className="mb-4">
+          <NameEditor initial={{ name: '', name_bs: '', name_ar: '' }} label="Category name" onSave={addCategory} onCancel={() => setAddingCategory(false)} />
+        </div>
       )}
 
       {loading ? (
-        <div className="space-y-3">
-          {[1, 2, 3].map((i) => <Skeleton key={i} className="h-14 w-full rounded-xl" />)}
+        <div className="space-y-3" aria-busy="true" aria-label="Loading the menu">
+          <Skeleton className="h-12 w-full rounded-xl" />
+          {[1, 2, 3, 4, 5].map((i) => (
+            <AdminCard key={i} className="flex items-center gap-3 px-5 py-4">
+              <Skeleton className="h-4 w-4 rounded" />
+              <div className="flex-1 space-y-2">
+                <Skeleton className="h-4 w-40" />
+                <Skeleton className="h-3 w-28" />
+              </div>
+            </AdminCard>
+          ))}
         </div>
       ) : loadFailed ? (
-        <Card role="alert" className="border-destructive/30">
-          <CardContent className="py-12 text-center space-y-3">
-            <p className="font-serif text-lg font-semibold text-foreground">The menu could not be loaded</p>
-            <p className="text-sm font-sans text-muted-foreground">Nothing is lost. Check the internet connection and try again.</p>
+        <AdminCard role="alert" className="border-destructive/30">
+          <EmptyState icon={AlertTriangle} tone="destructive" title="The menu could not be loaded" hint="Nothing is lost. Check the internet connection and try again." className="pb-4" />
+          <div className="flex justify-center pb-8">
             <Button variant="outline" className="min-h-[44px]" onClick={() => { setLoading(true); void fetchMenu(); }}>Try again</Button>
-          </CardContent>
-        </Card>
+          </div>
+        </AdminCard>
       ) : categories.length === 0 && !addingCategory ? (
-        <Card className="border-dashed">
-          <CardContent className="py-14 text-center">
-            <UtensilsCrossed className="w-10 h-10 mx-auto text-muted-foreground/40 mb-3" />
-            <p className="font-serif text-lg font-semibold text-foreground">Build your menu</p>
-            <p className="text-sm font-sans text-muted-foreground mt-1 mb-4">Start with a category like “Drinks”, then add subcategories and items.</p>
-            <Button onClick={() => setAddingCategory(true)}><Plus className="w-4 h-4 mr-1" /> Add your first category</Button>
-          </CardContent>
-        </Card>
-      ) : (
+        <AdminCard className="border-dashed">
+          <EmptyState icon={UtensilsCrossed} tone="primary" title="Build your menu" hint="Start with a category like “Drinks”, then add sections and dishes." className="pb-4" />
+          <div className="flex justify-center pb-10">
+            <Button className="min-h-[44px]" onClick={() => setAddingCategory(true)}><Plus className="me-1 h-4 w-4" /> Add your first category</Button>
+          </div>
+        </AdminCard>
+      ) : !listed && (
         <div className="space-y-3">
           {categories.map((cat, catIdx) => {
-            const categoryOpen = expandedCategory === cat.id;
+            const categoryOpen = openCats.has(cat.id);
             const subs = cat.subcategories ?? [];
+            const dishes = subs.flatMap((s) => s.menu_items ?? []);
+            const soldOut = dishes.filter((d) => !d.is_available).length;
             return (
-              <Card key={cat.id} className="border-border card-lux-hover">
-                <div className="flex items-center justify-between px-4 py-3 hover:bg-muted/50 transition-colors">
-                  <button type="button" className="min-w-0 flex flex-1 items-center gap-2 text-left" aria-expanded={categoryOpen} onClick={() => setExpandedCategory(categoryOpen ? null : cat.id)}>
-                    {categoryOpen ? <ChevronDown className="w-4 h-4 shrink-0" /> : <ChevronRight className="w-4 h-4 shrink-0" />}
-                    <span className="font-serif font-semibold text-foreground truncate">{cat.name}</span>
-                    {cat.name_bs && <span className="text-xs text-muted-foreground truncate">({cat.name_bs})</span>}
-                    <span className="text-xs text-muted-foreground ml-2 shrink-0">{subs.length} {subs.length === 1 ? 'subcategory' : 'subcategories'}</span>
+              <AdminCard key={cat.id} className="overflow-hidden">
+                <div className="flex items-center gap-1 pe-1.5 sm:pe-3">
+                  <button
+                    type="button"
+                    className="flex min-h-[64px] min-w-0 flex-1 items-center gap-3 ps-4 text-start sm:ps-5"
+                    aria-expanded={categoryOpen}
+                    onClick={() => toggleCat(cat.id)}
+                  >
+                    <ChevronRight className={cn('h-4 w-4 shrink-0 text-muted-foreground transition-transform motion-reduce:transition-none', categoryOpen && 'rotate-90')} />
+                    <span className="min-w-0">
+                      <span className="flex min-w-0 items-baseline gap-2">
+                        <span className="truncate font-serif text-lg font-semibold text-foreground">{cat.name}</span>
+                        {cat.name_bs && <span className="hidden truncate text-xs text-muted-foreground sm:inline">{cat.name_bs}</span>}
+                      </span>
+                      <span className="mt-0.5 block text-xs font-sans text-muted-foreground tabular-nums">
+                        {plural(subs.length, 'section', 'sections')} · {plural(dishes.length, 'dish', 'dishes')}
+                        {soldOut > 0 && <span className="text-destructive"> · {soldOut} sold out</span>}
+                      </span>
+                    </span>
                   </button>
-                  {/* Five 32px buttons left a phone 0–9px for the category's
-                      name; there they live behind one menu button, as on a dish. */}
+                  {/* Five buttons left a phone 0–9px for the category's name;
+                      there they live behind one menu button, as on a dish. */}
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon" className="md:hidden h-11 w-11 shrink-0" aria-label={`More actions for ${cat.name}`}>
-                        <MoreVertical className="w-4 h-4" />
+                      <Button variant="ghost" size="icon" className="h-11 w-11 shrink-0 text-muted-foreground md:hidden" aria-label={`More actions for ${cat.name}`}>
+                        <MoreVertical className="h-4 w-4" />
                       </Button>
                     </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem className="min-h-[44px]" onSelect={() => { setEditing({ kind: 'category', id: cat.id }); setExpandedCategory(cat.id); }}>
-                        <Pencil className="w-4 h-4 mr-2" /> Rename
+                    <DropdownMenuContent align="end" className="min-w-[12rem]">
+                      <DropdownMenuItem className="min-h-[44px]" onSelect={() => { setAddingSubFor(cat.id); openCat(cat.id); }}>
+                        <Plus className="me-2 h-4 w-4" /> Add section
                       </DropdownMenuItem>
-                      <DropdownMenuItem className="min-h-[44px]" onSelect={() => { setAddingSubFor(cat.id); setExpandedCategory(cat.id); }}>
-                        <Plus className="w-4 h-4 mr-2" /> Add subcategory
+                      <DropdownMenuItem className="min-h-[44px]" onSelect={() => { setEditing({ kind: 'category', id: cat.id }); openCat(cat.id); }}>
+                        <Pencil className="me-2 h-4 w-4" /> Rename
                       </DropdownMenuItem>
                       <DropdownMenuItem className="min-h-[44px]" disabled={catIdx === 0} onSelect={() => move('categories', categories, cat.id, 'up')}>
-                        <ChevronUp className="w-4 h-4 mr-2" /> Move up
+                        <ChevronUp className="me-2 h-4 w-4" /> Move up
                       </DropdownMenuItem>
                       <DropdownMenuItem className="min-h-[44px]" disabled={catIdx === categories.length - 1} onSelect={() => move('categories', categories, cat.id, 'down')}>
-                        <ChevronDown className="w-4 h-4 mr-2" /> Move down
+                        <ChevronDown className="me-2 h-4 w-4" /> Move down
                       </DropdownMenuItem>
                       <DropdownMenuSeparator />
                       <DropdownMenuItem className="min-h-[44px] text-destructive focus:text-destructive" onSelect={() => setPendingCategoryDelete(cat)}>
-                        <Trash2 className="w-4 h-4 mr-2" /> Delete
+                        <Trash2 className="me-2 h-4 w-4" /> Delete
                       </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
-                  <div className="hidden md:flex gap-0.5 items-center shrink-0">
-                    <Button variant="ghost" size="icon" className="h-8 w-8" disabled={catIdx === 0} aria-label="Move up" onClick={() => move('categories', categories, cat.id, 'up')}><ChevronUp className="w-4 h-4" /></Button>
-                    <Button variant="ghost" size="icon" className="h-8 w-8" disabled={catIdx === categories.length - 1} aria-label="Move down" onClick={() => move('categories', categories, cat.id, 'down')}><ChevronDown className="w-4 h-4" /></Button>
-                    <Button variant="ghost" size="icon" className="h-8 w-8" aria-label={`Rename ${cat.name}`} onClick={() => { setEditing({ kind: 'category', id: cat.id }); setExpandedCategory(cat.id); }}><Pencil className="w-4 h-4" /></Button>
-                    <Button variant="ghost" size="icon" className="h-8 w-8" aria-label={`Add subcategory to ${cat.name}`} onClick={() => { setAddingSubFor(cat.id); setExpandedCategory(cat.id); }}><Plus className="w-4 h-4" /></Button>
+                  <div className="hidden shrink-0 items-center gap-0.5 md:flex">
+                    <Button variant="ghost" size="icon" className="h-9 w-9 text-muted-foreground" disabled={catIdx === 0} aria-label="Move up" onClick={() => move('categories', categories, cat.id, 'up')}><ChevronUp className="h-4 w-4" /></Button>
+                    <Button variant="ghost" size="icon" className="h-9 w-9 text-muted-foreground" disabled={catIdx === categories.length - 1} aria-label="Move down" onClick={() => move('categories', categories, cat.id, 'down')}><ChevronDown className="h-4 w-4" /></Button>
+                    <Button variant="ghost" size="icon" className="h-9 w-9 text-muted-foreground hover:text-foreground" aria-label={`Rename ${cat.name}`} onClick={() => { setEditing({ kind: 'category', id: cat.id }); openCat(cat.id); }}><Pencil className="h-4 w-4" /></Button>
+                    <Button variant="ghost" size="icon" className="h-9 w-9 text-muted-foreground hover:text-foreground" aria-label={`Add section to ${cat.name}`} onClick={() => { setAddingSubFor(cat.id); openCat(cat.id); }}><Plus className="h-4 w-4" /></Button>
                     <ConfirmDelete
-                      trigger={<Button variant="ghost" size="icon" className="h-8 w-8" aria-label={`Delete category ${cat.name}`}><Trash2 className="w-4 h-4 text-destructive" /></Button>}
+                      trigger={<Button variant="ghost" size="icon" className="h-9 w-9 text-muted-foreground hover:bg-destructive/10 hover:text-destructive" aria-label={`Delete category ${cat.name}`}><Trash2 className="h-4 w-4" /></Button>}
                       title={`Delete “${cat.name}”?`}
                       description={binOn
-                        ? 'Guests stop seeing it, with all of its subcategories and items. You can undo this, or restore it later from “Recently deleted”.'
-                        : 'This permanently deletes the category and all of its subcategories and items. This cannot be undone.'}
+                        ? 'Guests stop seeing it, with all of its sections and dishes. You can undo this, or restore it later from “Recently deleted”.'
+                        : 'This permanently deletes the category and all of its sections and dishes. This cannot be undone.'}
                       onConfirm={() => remove('categories', cat.id)}
                     />
                   </div>
                 </div>
 
                 {categoryOpen && (
-                  <div className="px-4 pb-4 space-y-2">
+                  <div className="space-y-2.5 border-t border-border/70 bg-muted/20 p-2.5 sm:p-4">
                     {editing?.kind === 'category' && editing.id === cat.id && (
                       <NameEditor initial={{ name: cat.name, name_bs: cat.name_bs ?? '', name_ar: cat.name_ar ?? '' }} label="Category name" onSave={(v) => rename('category', cat.id, v)} onCancel={() => setEditing(null)} />
                     )}
                     {addingSubFor === cat.id && (
-                      <NameEditor initial={{ name: '', name_bs: '', name_ar: '' }} label="Subcategory name" onSave={(v) => addSubcategory(cat.id, v)} onCancel={() => setAddingSubFor(null)} />
+                      <NameEditor initial={{ name: '', name_bs: '', name_ar: '' }} label="Section name" onSave={(v) => addSubcategory(cat.id, v)} onCancel={() => setAddingSubFor(null)} />
                     )}
 
                     {subs.map((sub) => {
-                      const subOpen = expandedSubcategory === sub.id;
+                      const subOpen = openSubs.has(sub.id);
                       const items = sub.menu_items ?? [];
+                      const subSoldOut = items.filter((d) => !d.is_available).length;
                       return (
-                        <div key={sub.id} className="border border-border rounded-lg">
-                          <div className="flex items-center justify-between px-3 py-2 hover:bg-muted/30">
-                            <button type="button" className="min-w-0 flex flex-1 items-center gap-2 text-left" aria-expanded={subOpen} onClick={() => setExpandedSubcategory(subOpen ? null : sub.id)}>
-                              {subOpen ? <ChevronDown className="w-3 h-3 shrink-0" /> : <ChevronRight className="w-3 h-3 shrink-0" />}
-                              <span className="text-sm font-sans font-medium text-foreground truncate">{sub.name}</span>
-                              <span className="text-xs text-muted-foreground shrink-0">{items.length} items</span>
+                        <div key={sub.id} className="overflow-hidden rounded-xl border border-border/80 bg-card">
+                          <div className="flex items-center gap-0.5 pe-1">
+                            <button
+                              type="button"
+                              className="flex min-h-[52px] min-w-0 flex-1 items-center gap-2.5 ps-3 text-start sm:ps-4"
+                              aria-expanded={subOpen}
+                              onClick={() => toggleSub(sub.id)}
+                            >
+                              <ChevronRight className={cn('h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform motion-reduce:transition-none', subOpen && 'rotate-90')} />
+                              <span className="truncate text-sm font-sans font-semibold text-foreground">{sub.name}</span>
+                              <span className="shrink-0 text-xs text-muted-foreground tabular-nums">
+                                {plural(items.length, 'dish', 'dishes')}
+                                {subSoldOut > 0 && <span className="text-destructive"> · {subSoldOut} sold out</span>}
+                              </span>
                             </button>
-                            <div className="flex gap-0.5 shrink-0">
-                              <Button variant="ghost" size="icon" className="h-11 w-11 md:h-7 md:w-7" aria-label={`Rename ${sub.name}`} onClick={() => { setEditing({ kind: 'subcategory', id: sub.id }); setExpandedSubcategory(sub.id); }}><Pencil className="w-3.5 h-3.5" /></Button>
-                              <Button variant="ghost" size="icon" className="h-11 w-11 md:h-7 md:w-7" aria-label={`Add item to ${sub.name}`} onClick={() => { setItemDialog({ subcategoryId: sub.id }); setExpandedSubcategory(sub.id); }}><Plus className="w-3.5 h-3.5" /></Button>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" size="icon" className="h-11 w-11 shrink-0 text-muted-foreground md:hidden" aria-label={`Section actions for ${sub.name}`}>
+                                  <MoreVertical className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end" className="min-w-[12rem]">
+                                <DropdownMenuItem className="min-h-[44px]" onSelect={() => { setItemDialog({ subcategoryId: sub.id }); openSub(sub.id); }}>
+                                  <Plus className="me-2 h-4 w-4" /> Add a dish here
+                                </DropdownMenuItem>
+                                <DropdownMenuItem className="min-h-[44px]" onSelect={() => { setEditing({ kind: 'subcategory', id: sub.id }); openSub(sub.id); }}>
+                                  <Pencil className="me-2 h-4 w-4" /> Rename
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem className="min-h-[44px] text-destructive focus:text-destructive" onSelect={() => setPendingSubDelete(sub)}>
+                                  <Trash2 className="me-2 h-4 w-4" /> Delete
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                            <div className="hidden shrink-0 items-center gap-0.5 md:flex">
+                              <Button variant="ghost" size="icon" className="h-9 w-9 text-muted-foreground hover:text-foreground" aria-label={`Rename ${sub.name}`} onClick={() => { setEditing({ kind: 'subcategory', id: sub.id }); openSub(sub.id); }}><Pencil className="h-3.5 w-3.5" /></Button>
+                              <Button variant="ghost" size="icon" className="h-9 w-9 text-muted-foreground hover:text-foreground" aria-label={`Add a dish to ${sub.name}`} onClick={() => { setItemDialog({ subcategoryId: sub.id }); openSub(sub.id); }}><Plus className="h-3.5 w-3.5" /></Button>
                               <ConfirmDelete
-                                trigger={<Button variant="ghost" size="icon" className="h-11 w-11 md:h-7 md:w-7" aria-label={`Delete subcategory ${sub.name}`}><Trash2 className="w-3.5 h-3.5 text-destructive" /></Button>}
+                                trigger={<Button variant="ghost" size="icon" className="h-9 w-9 text-muted-foreground hover:bg-destructive/10 hover:text-destructive" aria-label={`Delete section ${sub.name}`}><Trash2 className="h-3.5 w-3.5" /></Button>}
                                 title={`Delete “${sub.name}”?`}
                                 description={binOn
-                                  ? 'Guests stop seeing it and its items. You can undo this, or restore it later from “Recently deleted”.'
-                                  : 'This permanently deletes the subcategory and all of its items.'}
+                                  ? 'Guests stop seeing it and its dishes. You can undo this, or restore it later from “Recently deleted”.'
+                                  : 'This permanently deletes the section and all of its dishes.'}
                                 onConfirm={() => remove('subcategories', sub.id)}
                               />
                             </div>
                           </div>
 
                           {subOpen && (
-                            <div className="px-3 pb-3 space-y-2">
+                            <div className="border-t border-border/60">
                               {editing?.kind === 'subcategory' && editing.id === sub.id && (
-                                <NameEditor initial={{ name: sub.name, name_bs: sub.name_bs ?? '', name_ar: sub.name_ar ?? '' }} label="Subcategory name" onSave={(v) => rename('subcategory', sub.id, v)} onCancel={() => setEditing(null)} />
-                              )}
-                              {items.length === 0 && (
-                                <p className="text-xs text-muted-foreground font-sans px-2 py-3 text-center">No items yet. Use + to add one.</p>
-                              )}
-                              {items.map((item, itemIdx) => (
-                                <div key={item.id} className="flex items-center justify-between gap-2 py-2 px-2 rounded-lg hover:bg-muted/30">
-                                  <div className="min-w-0 flex items-center gap-3">
-                                    {/* The photo guests see: the prepared one while it stands for this upload. */}
-                                    {item.image_url
-                                      ? <SmartImage src={item.image_url} id={item.id} alt={item.name} width={40} height={40} sizes="40px" square wrapperClassName="w-10 h-10 rounded-lg overflow-hidden shrink-0" />
-                                      : <div className="w-10 h-10 rounded-lg bg-muted shrink-0 flex items-center justify-center text-muted-foreground/40 font-serif">{item.name[0]}</div>}
-                                    <div className="min-w-0">
-                                      <div className="flex items-center gap-1.5 min-w-0">
-                                        <p className={`text-sm font-sans font-medium line-clamp-2 break-words ${item.is_available ? 'text-foreground' : 'text-muted-foreground line-through'}`}>{item.name}</p>
-                                        {getItemTags(item).length > 0 && (
-                                          <span className="shrink-0 text-xs leading-none">{getItemTags(item).slice(0, 4).map((k) => DIET_BY_KEY[k]?.emoji).filter(Boolean).join(' ')}</span>
-                                        )}
-                                      </div>
-                                      <div className="flex flex-wrap items-center gap-x-1.5 text-xs text-muted-foreground tabular-nums">
-                                        <InlinePrice name={item.name} price={Number(item.price)} onSave={(p) => changePrice(item, p)} />
-                                        {/* What a guest sees on it, at a glance. */}
-                                        {saleScheduled(item) === 'running' && <span className="font-semibold text-sale">Sale</span>}
-                                        {saleScheduled(item) === 'scheduled' && <span className="font-semibold">Sale soon</span>}
-                                        {isNew(item) && <span className="font-semibold text-primary">New</span>}
-                                        {item.featured_rank != null && <span className="font-semibold text-primary">Featured</span>}
-                                      </div>
-                                    </div>
-                                  </div>
-                                  <div className="flex items-center gap-0.5 shrink-0">
-                                    <AvailabilitySwitch item={item} onToggle={toggleAvailability} />
-                                    {/* Inline on a wide screen; on a phone the four small
-                                        buttons crowded the switch off the row, so they live
-                                        behind one menu button instead. */}
-                                    <div className="hidden md:flex items-center gap-0.5">
-                                      <Button variant="ghost" size="icon" className="h-9 w-9" disabled={itemIdx === 0} aria-label="Move up" onClick={() => move('menu_items', items, item.id, 'up')}><ChevronUp className="w-4 h-4" /></Button>
-                                      <Button variant="ghost" size="icon" className="h-9 w-9" disabled={itemIdx === items.length - 1} aria-label="Move down" onClick={() => move('menu_items', items, item.id, 'down')}><ChevronDown className="w-4 h-4" /></Button>
-                                      <Button variant="ghost" size="icon" className="h-9 w-9" aria-label={`Edit ${item.name}`} onClick={() => setItemDialog({ item })}><Pencil className="w-4 h-4" /></Button>
-                                      <Button variant="ghost" size="icon" className="h-9 w-9" aria-label={`Delete ${item.name}`} onClick={() => deleteItem(item)}><Trash2 className="w-4 h-4 text-destructive" /></Button>
-                                    </div>
-                                    <DropdownMenu>
-                                      <DropdownMenuTrigger asChild>
-                                        <Button variant="ghost" size="icon" className="md:hidden h-11 w-11" aria-label={`More actions for ${item.name}`}>
-                                          <MoreVertical className="w-4 h-4" />
-                                        </Button>
-                                      </DropdownMenuTrigger>
-                                      <DropdownMenuContent align="end">
-                                        <DropdownMenuItem className="min-h-[44px]" onSelect={() => setItemDialog({ item })}>
-                                          <Pencil className="w-4 h-4 mr-2" /> Edit
-                                        </DropdownMenuItem>
-                                        <DropdownMenuItem className="min-h-[44px]" disabled={itemIdx === 0} onSelect={() => move('menu_items', items, item.id, 'up')}>
-                                          <ChevronUp className="w-4 h-4 mr-2" /> Move up
-                                        </DropdownMenuItem>
-                                        <DropdownMenuItem className="min-h-[44px]" disabled={itemIdx === items.length - 1} onSelect={() => move('menu_items', items, item.id, 'down')}>
-                                          <ChevronDown className="w-4 h-4 mr-2" /> Move down
-                                        </DropdownMenuItem>
-                                        <DropdownMenuSeparator />
-                                        <DropdownMenuItem className="min-h-[44px] text-destructive focus:text-destructive" onSelect={() => deleteItem(item)}>
-                                          <Trash2 className="w-4 h-4 mr-2" /> Delete
-                                        </DropdownMenuItem>
-                                      </DropdownMenuContent>
-                                    </DropdownMenu>
-                                  </div>
+                                <div className="p-3">
+                                  <NameEditor initial={{ name: sub.name, name_bs: sub.name_bs ?? '', name_ar: sub.name_ar ?? '' }} label="Section name" onSave={(v) => rename('subcategory', sub.id, v)} onCancel={() => setEditing(null)} />
                                 </div>
-                              ))}
+                              )}
+                              {items.length > 0 && (
+                                <ul className="divide-y divide-border/60">
+                                  {items.map((item, itemIdx) => (
+                                    <DishRow
+                                      key={item.id}
+                                      item={item}
+                                      {...dishProps}
+                                      onMoveUp={itemIdx > 0 ? () => move('menu_items', items, item.id, 'up') : null}
+                                      onMoveDown={itemIdx < items.length - 1 ? () => move('menu_items', items, item.id, 'down') : null}
+                                    />
+                                  ))}
+                                </ul>
+                              )}
+                              <div className="border-t border-border/60 p-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() => setItemDialog({ subcategoryId: sub.id })}
+                                  className="flex min-h-[44px] w-full items-center justify-center gap-1.5 rounded-lg text-[13px] font-sans font-medium text-primary hover:bg-primary/5"
+                                >
+                                  <Plus className="h-4 w-4" /> {items.length === 0 ? `Add the first dish to ${sub.name}` : `Add a dish to ${sub.name}`}
+                                </button>
+                              </div>
                             </div>
                           )}
                         </div>
                       );
                     })}
                     {subs.length === 0 && addingSubFor !== cat.id && (
-                      <p className="text-xs text-muted-foreground font-sans px-2 py-2">No subcategories yet. Use + to add one (e.g. “Cocktails”).</p>
+                      <div className="flex flex-col items-center gap-2 px-2 py-6 text-center">
+                        <p className="text-[13px] font-sans text-muted-foreground">No sections yet. A section groups dishes, like “Cocktails”.</p>
+                        <Button variant="outline" className="min-h-[44px] gap-1.5 md:min-h-[36px]" onClick={() => setAddingSubFor(cat.id)}>
+                          <Plus className="h-4 w-4" /> Add section
+                        </Button>
+                      </div>
                     )}
                   </div>
                 )}
-              </Card>
+              </AdminCard>
             );
           })}
         </div>
@@ -807,50 +1055,50 @@ const AdminMenu = () => {
         and pairings. Guests never see it.
       */}
       {binOn && bin.length > 0 && (
-        <Card ref={binRef} className="mt-6 scroll-mt-4">
-          <CardContent className="p-3">
-            <button
-              type="button"
-              className="w-full flex items-center gap-2 min-h-[44px] text-left"
-              aria-expanded={binOpen}
-              onClick={() => setBinOpen(!binOpen)}
-            >
-              {binOpen ? <ChevronDown className="w-4 h-4 shrink-0" /> : <ChevronRight className="w-4 h-4 shrink-0" />}
-              <Trash2 className="w-4 h-4 shrink-0 text-muted-foreground" />
-              <span className="font-serif font-semibold text-foreground">Recently deleted</span>
-              <span className="text-xs text-muted-foreground">({bin.length})</span>
-            </button>
-            {binOpen && (
-              <div className="mt-1 space-y-1">
-                <p className="text-xs font-sans text-muted-foreground px-1 pb-1">
-                  Guests don't see these. Restore puts one back where it was, as it was.
-                </p>
+        <AdminCard ref={binRef} className="mt-8 scroll-mt-4 overflow-hidden">
+          <button
+            type="button"
+            className="flex min-h-[56px] w-full items-center gap-3 px-4 text-start sm:px-5"
+            aria-expanded={binOpen}
+            onClick={() => setBinOpen(!binOpen)}
+          >
+            <ChevronRight className={cn('h-4 w-4 shrink-0 text-muted-foreground transition-transform motion-reduce:transition-none', binOpen && 'rotate-90')} />
+            <Trash2 className="h-4 w-4 shrink-0 text-muted-foreground" />
+            <span className="font-serif text-base font-semibold text-foreground">Recently deleted</span>
+            {' '}<span className="text-xs text-muted-foreground tabular-nums">({bin.length})</span>
+          </button>
+          {binOpen && (
+            <div className="border-t border-border/70">
+              <p className="px-4 pt-3 text-xs font-sans text-muted-foreground sm:px-5">
+                Guests don't see these. Restore puts one back where it was, as it was.
+              </p>
+              <ul className="divide-y divide-border/60">
                 {bin.map((entry) => (
-                  <div key={`${entry.kind}:${entry.id}`} className="flex items-center justify-between gap-2 py-2 px-2 rounded-lg hover:bg-muted/30">
+                  <li key={`${entry.kind}:${entry.id}`} className="flex items-center justify-between gap-3 px-4 py-2.5 sm:px-5">
                     <div className="min-w-0">
-                      <p className="text-sm font-sans font-medium text-foreground break-words">{whatWent(entry)}</p>
+                      <p className="break-words text-sm font-sans font-medium text-foreground">{whatWent(entry)}</p>
                       <p className="text-xs text-muted-foreground">
-                        {entry.kind === 'category' ? 'Category' : entry.kind === 'subcategory' ? `Subcategory in ${entry.where}` : entry.where}
+                        {entry.kind === 'category' ? 'Category' : entry.kind === 'subcategory' ? `Section in ${entry.where}` : entry.where}
                         {' · deleted '}{deletedWhen(entry.deletedAt)}
                       </p>
                     </div>
                     <Button
                       variant="outline"
                       size="sm"
-                      className="min-h-[44px] shrink-0 gap-1"
+                      className="min-h-[44px] shrink-0 gap-1.5 md:min-h-[36px]"
                       disabled={restoring !== null}
                       aria-label={`Restore ${entry.name}`}
                       onClick={() => { void restoreFromBin(entry.kind, entry.id); }}
                     >
-                      {restoring === entry.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <RotateCcw className="w-4 h-4" />}
+                      {restoring === entry.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
                       Restore
                     </Button>
-                  </div>
+                  </li>
                 ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
+              </ul>
+            </div>
+          )}
+        </AdminCard>
       )}
 
       <AlertDialog open={confirmRetranslate} onOpenChange={setConfirmRetranslate}>
@@ -859,7 +1107,7 @@ const AdminMenu = () => {
             <AlertDialogTitle>Re-translate the whole menu?</AlertDialogTitle>
             <AlertDialogDescription>
               Every Bosnian and Arabic name and description is replaced with a fresh machine translation —
-              including any you corrected by hand. Use Auto-Translate instead to fill in only what is missing.
+              including any you corrected by hand. Use Auto-translate instead to fill in only what is missing.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -880,8 +1128,8 @@ const AdminMenu = () => {
             <AlertDialogTitle>Delete “{pendingCategoryDelete?.name}”?</AlertDialogTitle>
             <AlertDialogDescription>
               {binOn
-                ? 'Guests stop seeing it, with all of its subcategories and items. You can undo this, or restore it later from “Recently deleted”.'
-                : 'This permanently deletes the category and all of its subcategories and items. This cannot be undone.'}
+                ? 'Guests stop seeing it, with all of its sections and dishes. You can undo this, or restore it later from “Recently deleted”.'
+                : 'This permanently deletes the category and all of its sections and dishes. This cannot be undone.'}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -889,6 +1137,28 @@ const AdminMenu = () => {
             <AlertDialogAction
               className="min-h-[44px] bg-destructive text-destructive-foreground hover:bg-destructive/90"
               onClick={() => { if (pendingCategoryDelete) void remove('categories', pendingCategoryDelete.id); setPendingCategoryDelete(null); }}
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={pendingSubDelete !== null} onOpenChange={(open) => { if (!open) setPendingSubDelete(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete “{pendingSubDelete?.name}”?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {binOn
+                ? 'Guests stop seeing it and its dishes. You can undo this, or restore it later from “Recently deleted”.'
+                : 'This permanently deletes the section and all of its dishes.'}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="min-h-[44px]">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="min-h-[44px] bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => { if (pendingSubDelete) void remove('subcategories', pendingSubDelete.id); setPendingSubDelete(null); }}
             >
               Delete
             </AlertDialogAction>
@@ -943,6 +1213,7 @@ const AdminMenu = () => {
         onOpenChange={(o) => { if (!o) setItemDialog(null); }}
         subcategoryId={itemDialog?.subcategoryId}
         item={itemDialog?.item}
+        sectionChoices={sectionChoices}
         onSaved={fetchMenu}
       />
     </div>

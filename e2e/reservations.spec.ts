@@ -275,8 +275,19 @@ test.describe('the website', () => {
 
     await guestStubs(page);
     await page.goto('/');
-    await expect(page.getByTestId('reserve-link')).toHaveAttribute('href', '/reserve/');
-    await expect(page.getByTestId('reserve-link')).toContainText('Reserve a table');
+    // In the first screen, in the header from tablet width up, after the menu, by the address
+    // and in the footer: every one of them the booking page.
+    const links = page.getByTestId('reserve-link');
+    const first = page.locator('main').getByTestId('reserve-link').first();
+    await expect(first).toBeVisible();
+    await expect(first).toContainText('Reserve a table');
+    const addresses = await links.evaluateAll((all) => all.map((a) => a.getAttribute('href')));
+    expect(addresses.length).toBeGreaterThanOrEqual(4);
+    expect(new Set(addresses)).toEqual(new Set(['/reserve/']));
+    // A part of the page of its own, after the menu, with the phone for whoever would rather call.
+    const part = page.locator('#reserve');
+    await expect(part.getByRole('heading', { level: 2, name: 'A table, ready when you arrive' })).toBeAttached();
+    await expect(part.getByRole('link', { name: 'or call +387 33 877 779' })).toHaveAttribute('href', 'tel:+38733877779');
   });
 });
 
@@ -304,7 +315,9 @@ test.describe('what search engines find', () => {
     await expect(page.locator('link[rel="canonical"]')).toHaveAttribute('href', 'https://lasoul.net/reserve/');
     await expect(page.locator('meta[name="robots"]')).toHaveAttribute('content', 'index, follow, max-image-preview:large');
     await expect(page.locator('meta[name="description"]')).toHaveAttribute('content', /^Ask for a table at La Soul online/);
-    await expect(page.locator('link[rel="alternate"][hreflang]')).toHaveCount(0);
+    // Open, it names its Bosnian and Arabic versions (/bs/reserve/, /ar/reserve/), as their pages name it.
+    await expect(page.locator('link[rel="alternate"][hreflang]')).toHaveCount(4);
+    await expect(page.locator('link[rel="alternate"][hreflang="bs"]')).toHaveAttribute('href', 'https://lasoul.net/bs/reserve/');
 
     await expect(page.getByRole('heading', { level: 2, name: 'How it works' })).toBeVisible();
     await expect(page.getByRole('listitem').filter({ hasText: 'The restaurant answers, usually within minutes.' })).toBeVisible();

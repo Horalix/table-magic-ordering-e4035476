@@ -1,13 +1,13 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import SmartImage from '@/components/ui/SmartImage';
-import { ChefHat, CupSoda, Loader2, Upload, X } from 'lucide-react';
+import { ChefHat, CupSoda, ImagePlus, Loader2, Upload, X } from 'lucide-react';
 import ComboBuilder from '@/components/admin/ComboBuilder';
 import { fetchCombos, type MenuItemRow } from '@/lib/promotions-api';
 import { SALE_LABELS, SALE_LABEL_NAMES } from '@/lib/promotions';
@@ -35,6 +35,11 @@ interface Props {
   startAsCombo?: boolean;
   /** Scroll to a section when the dialog opens. */
   focus?: 'sale' | 'combo' | 'highlight';
+  /**
+   * Where a new dish can go, when it is added without a subcategory (the
+   * page's "Add dish" button): the editor then asks, at the top.
+   */
+  sectionChoices?: { id: string; label: string }[];
 }
 
 /**
@@ -52,17 +57,64 @@ const PromoSection = ({
   disabled?: boolean;
   children?: React.ReactNode;
 }) => (
-  <section id={`item-${id}`} aria-labelledby={`item-${id}-title`} className={`rounded-xl border p-3 ${checked ? 'border-primary/40 bg-primary/[0.03]' : 'border-border'}`}>
-    <div className="flex items-start gap-3">
+  <section
+    id={`item-${id}`}
+    aria-labelledby={`item-${id}-title`}
+    className={`scroll-mt-16 rounded-xl border transition-colors ${checked ? 'border-primary/40 bg-primary/[0.03]' : 'border-border bg-card'}`}
+  >
+    {/* The whole row is the switch's label, so a thumb can hit it anywhere. */}
+    <div className="flex min-h-[56px] items-center gap-3 px-3.5 py-3">
       <div className="flex-1 min-w-0">
         <Label id={`item-${id}-title`} htmlFor={`item-${id}-switch`} className="text-sm font-sans font-semibold text-foreground">{title}</Label>
-        <p className="text-[11px] text-muted-foreground font-sans">{description}</p>
+        <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground font-sans">{description}</p>
       </div>
       <Switch id={`item-${id}-switch`} checked={checked} onCheckedChange={onCheckedChange} disabled={disabled} />
     </div>
-    {checked && children && <div className="mt-3 space-y-3">{children}</div>}
+    {checked && children && <div className="space-y-3 border-t border-primary/15 px-3.5 pb-3.5 pt-3">{children}</div>}
   </section>
 );
+
+/** A group of the editor, with an anchor the jump bar at the top scrolls to. */
+const FormGroup = ({ id, title, hint, children }: { id: string; title: string; hint?: string; children: React.ReactNode }) => (
+  <section id={`item-group-${id}`} aria-labelledby={`item-group-${id}-title`} className="scroll-mt-16 space-y-4">
+    <div>
+      <h3 id={`item-group-${id}-title`} className="font-serif text-base font-semibold text-foreground">{title}</h3>
+      {hint && <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground font-sans">{hint}</p>}
+    </div>
+    {children}
+  </section>
+);
+
+/** A field's label and its one line of help, the same everywhere in the form. */
+const Field = ({ label, htmlFor, help, children, className }: {
+  label: React.ReactNode; htmlFor?: string; help?: React.ReactNode; children: React.ReactNode; className?: string;
+}) => (
+  <div className={className}>
+    <Label htmlFor={htmlFor} className="text-[13px] font-sans font-medium text-foreground">{label}</Label>
+    <div className="mt-1.5">{children}</div>
+    {help && <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground font-sans">{help}</p>}
+  </div>
+);
+
+/** Three languages of one text, each marked, Arabic right to left. */
+const LANGS = [
+  { key: 'en', tag: 'EN', name: 'English' },
+  { key: 'bs', tag: 'BS', name: 'Bosnian' },
+  { key: 'ar', tag: 'AR', name: 'Arabic' },
+] as const;
+
+const LangTag = ({ tag }: { tag: string }) => (
+  <span aria-hidden className="grid h-11 w-10 shrink-0 place-items-center rounded-md bg-muted text-[11px] font-sans font-semibold tracking-wide text-muted-foreground md:h-10">
+    {tag}
+  </span>
+);
+
+const JUMPS = [
+  { id: 'dish', label: 'The dish' },
+  { id: 'labels', label: 'Labels' },
+  { id: 'promo', label: 'Promotions' },
+  { id: 'kitchen', label: 'Kitchen' },
+] as const;
 
 /**
  * Allergens, kept separate from dietary tags.
@@ -226,8 +278,8 @@ const Chip = ({ on, onClick, children }: { on: boolean; onClick: () => void; chi
     type="button"
     onClick={onClick}
     aria-pressed={on}
-    className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-full text-xs font-sans font-medium border transition-colors ${
-      on ? 'bg-primary text-primary-foreground border-primary' : 'bg-card text-muted-foreground border-border hover:text-foreground'
+    className={`inline-flex min-h-[44px] items-center gap-1.5 rounded-full border px-3.5 text-[13px] font-sans font-medium transition-colors sm:min-h-[36px] sm:px-3 ${
+      on ? 'bg-primary text-primary-foreground border-primary' : 'bg-card text-muted-foreground border-border hover:text-foreground hover:border-foreground/30'
     }`}
   >
     {children}
@@ -242,8 +294,11 @@ const Chip = ({ on, onClick, children }: { on: boolean; onClick: () => void; chi
  * the profitability tiebreak in the engine was inert: it had been shipped and
  * had never once been able to fire.
  */
-const MenuItemDialog = ({ open, onOpenChange, subcategoryId, item, onSaved, startAsCombo = false, focus }: Props) => {
+const MenuItemDialog = ({ open, onOpenChange, subcategoryId, item, onSaved, startAsCombo = false, focus, sectionChoices }: Props) => {
   const isEdit = !!item;
+  /** A new dish with no place yet asks where it goes. */
+  const asksSection = !isEdit && !subcategoryId && !!sectionChoices;
+  const [pickedSection, setPickedSection] = useState('');
   const [name, setName] = useState('');
   const [nameBs, setNameBs] = useState('');
   const [nameAr, setNameAr] = useState('');
@@ -331,6 +386,7 @@ const MenuItemDialog = ({ open, onOpenChange, subcategoryId, item, onSaved, star
     setWasCombo(false);
     setSlots([]);
     setPromoAvailable(!!item && 'sale_kind' in item);
+    setPickedSection('');
 
     let cancelled = false;
     // What the editor needs to know about the rest of the menu: which dishes
@@ -403,8 +459,12 @@ const MenuItemDialog = ({ open, onOpenChange, subcategoryId, item, onSaved, star
   const save = async () => {
     const trimmedName = name.trim();
     const priceNum = parsePrice(price);
+    if (asksSection && !pickedSection) {
+      toast.error('Choose where the dish goes on the menu');
+      return;
+    }
     if (!trimmedName || priceNum === null) {
-      toast.error('Enter an item name and a valid price, e.g. 4.50 or 4,50');
+      toast.error('Enter a name and a valid price, e.g. 4.50 or 4,50');
       return;
     }
     // Optional. Empty clears it, and Menu intelligence goes back to an estimate for this dish.
@@ -444,7 +504,7 @@ const MenuItemDialog = ({ open, onOpenChange, subcategoryId, item, onSaved, star
 
     setSaving(true);
     const payload: MenuItemInsert = {
-      subcategory_id: item?.subcategory_id ?? subcategoryId ?? '',
+      subcategory_id: item?.subcategory_id ?? subcategoryId ?? (pickedSection || ''),
       name: trimmedName,
       name_bs: nameBs.trim() || null,
       name_ar: nameAr.trim() || null,
@@ -557,7 +617,7 @@ const MenuItemDialog = ({ open, onOpenChange, subcategoryId, item, onSaved, star
       if (replacedImage) void deleteMenuImage(replacedImage);
     };
 
-    toast.success(isEdit ? 'Item updated' : 'Item added', undo ? {
+    toast.success(isEdit ? `${trimmedName} saved` : `${trimmedName} added to the menu`, undo ? {
       duration: 10_000,
       action: {
         label: 'Undo',
@@ -574,368 +634,420 @@ const MenuItemDialog = ({ open, onOpenChange, subcategoryId, item, onSaved, star
     onSaved();
   };
 
+  const jump = (id: string) => {
+    document.getElementById(`item-group-${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+  const priceInvalid = price.trim() !== '' && parsePrice(price) === null;
+  const costHelp = (() => {
+    const c = cost.trim() ? parsePrice(cost) : null;
+    const p = parsePrice(price);
+    if (c === null || p === null || p <= 0) {
+      return 'Optional. What the ingredients of one portion cost you. Guests never see it; Menu intelligence uses it for exact margins instead of an estimate.';
+    }
+    return `You keep ${(p - c).toFixed(2)} KM a portion (${Math.round(((p - c) / p) * 100)}% of the price). Guests never see this.`;
+  })();
+  const names = { en: [name, setName], bs: [nameBs, setNameBs], ar: [nameAr, setNameAr] } as const;
+  const descs = { en: [desc, setDesc], bs: [descBs, setDescBs], ar: [descAr, setDescAr] } as const;
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg max-h-[90dvh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="font-serif">{isEdit ? 'Edit item' : 'Add item'}</DialogTitle>
+      {/*
+        On a phone the editor is the whole screen: a header, the form scrolling
+        under a bar of jump links, and Save pinned above the home indicator. On
+        a wider screen a centred sheet, never stretched wider than a form reads.
+      */}
+      <DialogContent
+        className="flex max-h-[92dvh] max-w-2xl flex-col gap-0 overflow-hidden p-0 sm:rounded-2xl max-sm:inset-0 max-sm:left-0 max-sm:top-0 max-sm:h-[100dvh] max-sm:max-h-none max-sm:translate-x-0 max-sm:translate-y-0 max-sm:rounded-none max-sm:border-0 max-sm:data-[state=open]:slide-in-from-left-0 max-sm:data-[state=open]:slide-in-from-top-0 max-sm:data-[state=open]:zoom-in-100 max-sm:data-[state=closed]:slide-out-to-left-0 max-sm:data-[state=closed]:slide-out-to-top-0 max-sm:data-[state=closed]:zoom-out-100"
+      >
+        <DialogHeader className="shrink-0 space-y-1 border-b border-border px-5 pb-3 pe-14 pt-[calc(1rem+env(safe-area-inset-top))] text-start sm:pt-5">
+          <DialogTitle className="font-serif text-xl">{isEdit ? 'Edit dish' : 'New dish'}</DialogTitle>
+          <DialogDescription className="text-xs font-sans text-muted-foreground">
+            {isEdit ? 'Changes reach guests as soon as you save.' : 'A name and a price are enough to start; the rest can follow.'}
+          </DialogDescription>
         </DialogHeader>
 
-        {/* min-w-0: the dialog is a grid, and one long dish name in a combo part would otherwise widen the whole form past a phone screen. */}
-        <div className="space-y-3 min-w-0">
-          {/* Image */}
-          <div>
-            <Label className="text-xs text-muted-foreground">Photo</Label>
-            <div className="mt-1.5 flex items-center gap-3">
-              <div className="w-20 h-20 rounded-lg overflow-hidden bg-muted shrink-0 border border-border">
-                {imageUrl ? (
-                  // With the dish's id: the photo guests see, until a new one is uploaded here.
-                  <SmartImage src={imageUrl} id={item?.id} alt={name || 'item'} width={80} height={80} square wrapperClassName="w-20 h-20" />
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center text-muted-foreground/40 text-2xl font-serif">
-                    {(name || '·')[0]}
+        {/* min-w-0: one long dish name in a combo part would otherwise widen the whole form past a phone screen. */}
+        <div className="min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain">
+          <nav aria-label="Parts of the form" className="sticky top-0 z-10 flex gap-1 overflow-x-auto border-b border-border/60 bg-background/95 px-4 py-1.5 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+            {JUMPS.map((j) => (
+              <button
+                key={j.id}
+                type="button"
+                onClick={() => jump(j.id)}
+                className="min-h-[40px] shrink-0 rounded-full px-3 text-xs font-sans font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
+              >
+                {j.label}
+              </button>
+            ))}
+          </nav>
+
+          <div className="space-y-9 px-5 pb-10 pt-5">
+            <FormGroup id="dish" title="The dish" hint="Bosnian and Arabic can stay empty: Auto-translate on the Dishes page fills in only what is missing.">
+              {asksSection && (
+                <Field label="Goes in" htmlFor="item-section">
+                  <select
+                    id="item-section"
+                    value={pickedSection}
+                    onChange={(e) => setPickedSection(e.target.value)}
+                    className="h-11 w-full rounded-md border border-input bg-background px-3 text-base md:h-10 md:text-sm"
+                  >
+                    <option value="" disabled>Choose a section…</option>
+                    {(sectionChoices ?? []).map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
+                  </select>
+                </Field>
+              )}
+
+              {/* Photo */}
+              <div className="flex items-center gap-4">
+                <div className="h-24 w-24 shrink-0 overflow-hidden rounded-xl border border-border bg-muted sm:h-28 sm:w-28">
+                  {imageUrl ? (
+                    // With the dish's id: the photo guests see, until a new one is uploaded here.
+                    <SmartImage src={imageUrl} id={item?.id} alt={name || 'Dish photo'} width={112} height={112} square wrapperClassName="h-full w-full" />
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => fileRef.current?.click()}
+                      className="flex h-full w-full flex-col items-center justify-center gap-1 text-muted-foreground hover:text-foreground"
+                      aria-label="Add a photo"
+                    >
+                      <ImagePlus className="h-6 w-6" aria-hidden />
+                      <span className="text-[11px] font-sans">Photo</span>
+                    </button>
+                  )}
+                </div>
+                <div className="min-w-0 flex-1 space-y-2">
+                  <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleFile} />
+                  <div className="flex flex-wrap gap-2">
+                    <Button type="button" variant="outline" onClick={() => fileRef.current?.click()} disabled={uploading} className="min-h-[44px] gap-1.5 md:min-h-[40px]">
+                      {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                      {uploading ? 'Uploading…' : imageUrl ? 'Replace' : 'Upload'}
+                    </Button>
+                    {imageUrl && (
+                      <Button type="button" variant="ghost" onClick={() => setImageUrl('')} className="min-h-[44px] gap-1.5 text-muted-foreground md:min-h-[40px]">
+                        <X className="h-4 w-4" /> Remove
+                      </Button>
+                    )}
                   </div>
+                  <Input
+                    placeholder="…or paste image URL"
+                    aria-label="Image URL"
+                    value={imageUrl}
+                    onChange={(e) => setImageUrl(e.target.value)}
+                    className="h-11 text-base md:h-9 md:text-xs"
+                  />
+                </div>
+              </div>
+
+              <fieldset>
+                <legend className="text-[13px] font-sans font-medium text-foreground">Name</legend>
+                <div className="mt-1.5 space-y-2">
+                  {LANGS.map((l) => {
+                    const [v, set] = names[l.key];
+                    return (
+                      <div key={l.key} className="flex items-center gap-2">
+                        <LangTag tag={l.tag} />
+                        <Input
+                          aria-label={`Name in ${l.name}`}
+                          placeholder={l.key === 'en' ? 'Item name (EN)' : `Name (${l.tag})`}
+                          value={v}
+                          onChange={(e) => set(e.target.value)}
+                          autoFocus={l.key === 'en' && !isEdit}
+                          dir={l.key === 'ar' ? 'rtl' : undefined}
+                          className="h-11 md:h-10"
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
+              </fieldset>
+
+              <div className="grid grid-cols-2 gap-3">
+                <Field
+                  label={comboOn ? 'Combo price (KM)' : 'Price (KM)'}
+                  htmlFor="item-price"
+                  help={priceInvalid ? <span className="text-destructive">Use a number like 4,50 or 4.50</span> : undefined}
+                >
+                  {/* Text, not number: a number field drops "4,50" without a word. */}
+                  <Input
+                    id="item-price"
+                    placeholder="4,50"
+                    type="text"
+                    inputMode="decimal"
+                    autoComplete="off"
+                    value={price}
+                    onChange={(e) => setPrice(e.target.value)}
+                    aria-invalid={priceInvalid}
+                    className="h-11 tabular-nums md:h-10"
+                  />
+                </Field>
+                <Field label="Portion" htmlFor="item-portion">
+                  <Input id="item-portion" placeholder="e.g. 220 g · serves 2" value={portion} onChange={(e) => setPortion(e.target.value)} className="h-11 md:h-10" />
+                </Field>
+              </div>
+
+              <fieldset>
+                <legend className="text-[13px] font-sans font-medium text-foreground">Description</legend>
+                <div className="mt-1.5 space-y-2">
+                  {LANGS.map((l) => {
+                    const [v, set] = descs[l.key];
+                    return (
+                      <div key={l.key} className="flex items-start gap-2">
+                        <LangTag tag={l.tag} />
+                        <Textarea
+                          aria-label={`Description in ${l.name}`}
+                          placeholder={l.key === 'en' ? 'Short description (EN)' : `Description (${l.tag})`}
+                          value={v}
+                          onChange={(e) => set(e.target.value)}
+                          rows={2}
+                          dir={l.key === 'ar' ? 'rtl' : undefined}
+                          className="min-h-[64px] text-base md:text-sm"
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
+              </fieldset>
+            </FormGroup>
+
+            <FormGroup id="labels" title="Labels" hint="What guests see on the card and can filter by.">
+              {/* Dietary: a guest preference */}
+              <Field label="Dietary" help="What a guest filters by. Shown on the card.">
+                <div className="flex flex-wrap gap-1.5">
+                  {DIET_TAGS.map((d) => (
+                    <Chip key={d.key} on={diets.includes(d.key)} onClick={() => setDiets((p) => toggle(p, d.key))}>
+                      <span aria-hidden>{d.emoji}</span>{t(d.labelKey)}
+                    </Chip>
+                  ))}
+                </div>
+              </Field>
+
+              {/* Allergens: safety information, deliberately separate */}
+              <Field label="Allergens" help="Printed on the kitchen ticket and shown to the guest. Not the same as a dietary tag.">
+                <div className="flex flex-wrap gap-1.5">
+                  {ALLERGENS.map((a) => (
+                    <Chip key={a} on={allergens.includes(a)} onClick={() => setAllergens((p) => toggle(p, a))}>
+                      {a}
+                    </Chip>
+                  ))}
+                </div>
+              </Field>
+
+              <Field label="Badges">
+                <div className="flex flex-wrap gap-1.5">
+                  {MERCH_TAGS.map((m) => (
+                    <Chip key={m.key} on={merch.includes(m.key)} onClick={() => setMerch((p) => toggle(p, m.key))}>
+                      {m.label}
+                    </Chip>
+                  ))}
+                </div>
+              </Field>
+            </FormGroup>
+
+            <FormGroup id="promo" title="Promotions" hint="Each is off until you switch it on.">
+              {/* Hidden, not silently ignored, until the database can store them. */}
+              {!promoAvailable && (
+                <p className="rounded-lg bg-muted px-3 py-2 text-xs font-sans text-muted-foreground">
+                  Sales, combos and featuring appear here once the database has the promotions migration (20261026100000).
+                </p>
+              )}
+              {promoAvailable && (
+              <PromoSection
+                id="sale"
+                title="Sale"
+                description="A lower price for a while. Guests see the menu price struck through and pay the sale price, only while it runs."
+                checked={sale.on}
+                onCheckedChange={(on) => setSale((s) => ({ ...s, on }))}
+              >
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="flex gap-1.5" role="group" aria-label="Kind of sale">
+                    <Chip on={sale.kind === 'percent'} onClick={() => setSale((s) => ({ ...s, kind: 'percent' }))}>% off</Chip>
+                    <Chip on={sale.kind === 'price'} onClick={() => setSale((s) => ({ ...s, kind: 'price' }))}>Sale price</Chip>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      value={sale.value}
+                      onChange={(e) => setSale((s) => ({ ...s, value: e.target.value }))}
+                      placeholder={sale.kind === 'percent' ? '20' : '14,40'}
+                      inputMode="decimal"
+                      aria-label={sale.kind === 'percent' ? 'Percent off' : 'Sale price in KM'}
+                      className="h-11 w-24 tabular-nums md:h-10"
+                    />
+                    <span className="text-sm text-muted-foreground">{sale.kind === 'percent' ? '% off' : 'KM'}</span>
+                  </div>
+                </div>
+                <Field label="Label on the badge">
+                  <div className="flex flex-wrap gap-1.5" role="group" aria-label="Sale label">
+                    <Chip on={sale.label === ''} onClick={() => setSale((s) => ({ ...s, label: '' }))}>Just “−%”</Chip>
+                    {SALE_LABELS.map((key) => (
+                      <Chip key={key} on={sale.label === key} onClick={() => setSale((s) => ({ ...s, label: key }))}>{SALE_LABEL_NAMES[key]}</Chip>
+                    ))}
+                  </div>
+                </Field>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <Field label="Starts (empty = now)">
+                    <div className="flex gap-1.5">
+                      <Input type="date" value={sale.startDate} onChange={(e) => setSale((s) => ({ ...s, startDate: e.target.value }))} aria-label="Sale starts on" className="h-11 min-w-0 md:h-10" />
+                      <Input type="time" value={sale.startTime} onChange={(e) => setSale((s) => ({ ...s, startTime: e.target.value }))} aria-label="Sale starts at" className="h-11 w-28 md:h-10" />
+                    </div>
+                  </Field>
+                  <Field label="Ends (empty = until you end it)">
+                    <div className="flex gap-1.5">
+                      <Input type="date" value={sale.endDate} onChange={(e) => setSale((s) => ({ ...s, endDate: e.target.value }))} aria-label="Sale ends on" className="h-11 min-w-0 md:h-10" />
+                      <Input type="time" value={sale.endTime} onChange={(e) => setSale((s) => ({ ...s, endTime: e.target.value }))} aria-label="Sale ends at" className="h-11 w-28 md:h-10" />
+                    </div>
+                  </Field>
+                </div>
+                <div className="flex flex-wrap gap-1.5" role="group" aria-label="Quick end">
+                  {saleEndPresets().map((p) => (
+                    <Chip key={p.label} on={sale.endDate === p.date && sale.endTime === p.time} onClick={() => setSale((s) => ({ ...s, endDate: p.date, endTime: p.time }))}>
+                      {p.label}
+                    </Chip>
+                  ))}
+                  {(sale.startDate || sale.endDate) && (
+                    <Chip on={false} onClick={() => setSale((s) => ({ ...s, startDate: '', startTime: '', endDate: '', endTime: '' }))}>No dates</Chip>
+                  )}
+                </div>
+                {preview && (
+                  <p
+                    data-testid="sale-preview"
+                    aria-live="polite"
+                    className={`rounded-lg px-3 py-2 text-sm font-sans font-semibold tabular-nums ${preview.tone === 'ok' ? 'bg-primary/10 text-primary' : 'bg-accent/10 text-accent'}`}
+                  >
+                    {preview.text}
+                  </p>
+                )}
+                <p className="text-xs text-muted-foreground font-sans">Times are Sarajevo time.</p>
+              </PromoSection>
+              )}
+
+              {promoAvailable && (
+              <PromoSection
+                id="combo"
+                title="Combo"
+                description="Guests choose one dish for each part (a burger, a side, a drink). The price above becomes the combo price."
+                checked={comboOn}
+                onCheckedChange={setComboOn}
+              >
+                <ComboBuilder
+                  slots={slots}
+                  onChange={setSlots}
+                  items={pickable}
+                  sections={sections}
+                  comboPrice={parsePrice(price)}
+                  selfId={item?.id}
+                  comboIds={comboIds}
+                />
+              </PromoSection>
+              )}
+
+              <div id="item-highlight" className="scroll-mt-16 space-y-3">
+                <PromoSection
+                  id="new"
+                  title="Mark as new"
+                  description="A “New” badge and a place in the “New at …” row on the home screen. It ends by itself."
+                  checked={newOn}
+                  onCheckedChange={(on) => { setNewOn(on); if (on && !newUntil) setNewUntil(defaultNewUntil()); }}
+                >
+                  <Field label="New until" htmlFor="item-new-until">
+                    <Input id="item-new-until" type="date" value={newUntil} onChange={(e) => setNewUntil(e.target.value)} className="h-11 w-48 md:h-10" />
+                  </Field>
+                </PromoSection>
+
+                {promoAvailable && (
+                <PromoSection
+                  id="featured"
+                  title="Feature on the home screen"
+                  description={featuredFull
+                    ? `Three dishes are featured already (${featuredOthers.map((f) => f.name).join(', ')}). Unpin one in Promotions first.`
+                    : 'One of up to three large cards at the top of the menu, with a short line if you like.'}
+                  checked={featuredOn}
+                  onCheckedChange={setFeaturedOn}
+                  disabled={!featuredOn && featuredFull}
+                >
+                  <Input value={featuredNote} onChange={(e) => setFeaturedNote(e.target.value)} maxLength={80} placeholder="Short line (EN), e.g. Our classic since 2019" aria-label="Featured line (EN)" className="h-11 md:h-10" />
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    <Input value={featuredNoteBs} onChange={(e) => setFeaturedNoteBs(e.target.value)} maxLength={80} placeholder="Line (BS)" aria-label="Featured line (BS)" className="h-11 md:h-10" />
+                    <Input value={featuredNoteAr} onChange={(e) => setFeaturedNoteAr(e.target.value)} maxLength={80} placeholder="Line (AR)" dir="rtl" aria-label="Featured line (AR)" className="h-11 md:h-10" />
+                  </div>
+                </PromoSection>
                 )}
               </div>
-              <div className="flex-1 space-y-2">
-                <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleFile} />
-                <div className="flex gap-2">
-                  <Button type="button" variant="outline" size="sm" onClick={() => fileRef.current?.click()} disabled={uploading} className="gap-1.5">
-                    {uploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
-                    {uploading ? 'Uploading…' : 'Upload'}
-                  </Button>
-                  {imageUrl && (
-                    <Button type="button" variant="ghost" size="sm" onClick={() => setImageUrl('')} className="gap-1.5 text-muted-foreground">
-                      <X className="w-3.5 h-3.5" /> Remove
+            </FormGroup>
+
+            <FormGroup id="kitchen" title="Kitchen and costs" hint="How the dish is made and what it costs you.">
+              <Field label="Made at" help="Decides which board and which ticket printer this dish goes to.">
+                <div className="flex gap-1.5">
+                  <Chip on={station === 'kitchen'} onClick={() => setStation('kitchen')}>
+                    <ChefHat className="h-4 w-4" /> Kitchen
+                  </Chip>
+                  <Chip on={station === 'bar'} onClick={() => setStation('bar')}>
+                    <CupSoda className="h-4 w-4" /> Bar
+                  </Chip>
+                </div>
+              </Field>
+
+              {/* Course, which is a different question from station. */}
+              <Field label="Course" help="Used to time suggestions (dessert after mains) and to stop the app offering a second identical main. Leave blank if none fit.">
+                <div className="flex flex-wrap gap-1.5">
+                  {MEAL_ROLES.map((r) => (
+                    <Chip key={r.key} on={mealRole === r.key} onClick={() => setMealRole(mealRole === r.key ? '' : r.key)}>
+                      {r.label}
+                    </Chip>
+                  ))}
+                </div>
+              </Field>
+
+              <Field label="Only available between" help="Leave empty for all day. Breakfast dishes stop being orderable outside their window.">
+                <div className="flex items-center gap-2">
+                  <Input type="time" value={from} onChange={(e) => setFrom(e.target.value)} className="h-11 min-w-0 flex-1 md:h-10" aria-label="Available from" />
+                  <span className="text-sm text-muted-foreground">and</span>
+                  <Input type="time" value={to} onChange={(e) => setTo(e.target.value)} className="h-11 min-w-0 flex-1 md:h-10" aria-label="Available until" />
+                  {(from || to) && (
+                    <Button type="button" variant="ghost" className="min-h-[44px] md:min-h-[40px]" onClick={() => { setFrom(''); setTo(''); }}>
+                      Clear
                     </Button>
                   )}
                 </div>
-                <Input placeholder="…or paste image URL" value={imageUrl} onChange={(e) => setImageUrl(e.target.value)} className="h-10 text-base md:h-8 md:text-xs" />
+              </Field>
+
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <Field label="Prep minutes" htmlFor="item-prep" help="Drives the guest's estimate and the kitchen's load forecast.">
+                  <Input
+                    id="item-prep" type="number" min="0" max="240" step="1" placeholder="e.g. 12" value={prep}
+                    inputMode="numeric" onChange={(e) => setPrep(e.target.value)} className="h-11 tabular-nums md:h-10"
+                  />
+                </Field>
+                {/* Internal. It breaks ties between two equally relevant
+                    suggestions; it never changes what a guest is told. */}
+                <Field label="Margin score (0–100)" htmlFor="item-margin" help="Internal only, never shown. Higher wins a tie between two equally good suggestions.">
+                  <Input
+                    id="item-margin" type="number" min="0" max="100" step="1" value={margin}
+                    inputMode="numeric" onChange={(e) => setMargin(e.target.value)} className="h-11 tabular-nums md:h-10"
+                  />
+                </Field>
               </div>
-            </div>
-          </div>
-
-          <div>
-            <Label className="text-xs text-muted-foreground">Name</Label>
-            <Input placeholder="Item name (EN)" value={name} onChange={(e) => setName(e.target.value)} autoFocus className="mt-1" />
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            <Input placeholder="Name (BS)" value={nameBs} onChange={(e) => setNameBs(e.target.value)} />
-            <Input placeholder="Name (AR)" value={nameAr} onChange={(e) => setNameAr(e.target.value)} dir="rtl" />
-          </div>
-          <div>
-            <Label className="text-xs text-muted-foreground">Description</Label>
-            <Textarea placeholder="Short description (EN)" value={desc} onChange={(e) => setDesc(e.target.value)} rows={2} className="mt-1" />
-            <div className="grid grid-cols-1 gap-2 mt-2">
-              <Textarea placeholder="Description (BS)" value={descBs} onChange={(e) => setDescBs(e.target.value)} rows={2} />
-              <Textarea placeholder="Description (AR)" value={descAr} onChange={(e) => setDescAr(e.target.value)} rows={2} dir="rtl" />
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <Label className="text-xs text-muted-foreground">{comboOn ? 'Combo price (KM)' : 'Price (KM)'}</Label>
-              {/* Text, not number: a number field drops "4,50" without a word. */}
-              <Input
-                placeholder="4,50"
-                type="text"
-                inputMode="decimal"
-                autoComplete="off"
-                value={price}
-                onChange={(e) => setPrice(e.target.value)}
-                aria-invalid={price.trim() !== '' && parsePrice(price) === null}
-                className="mt-1"
-              />
-              {price.trim() !== '' && parsePrice(price) === null && (
-                <p className="text-[11px] text-destructive font-sans mt-1">Use a number like 4,50 or 4.50</p>
-              )}
-            </div>
-            <div>
-              <Label className="text-xs text-muted-foreground">Portion note</Label>
-              <Input placeholder="e.g. 220 g · serves 2" value={portion} onChange={(e) => setPortion(e.target.value)} className="mt-1" />
-            </div>
-          </div>
-          <div>
-            <Label htmlFor="item-food-cost" className="text-xs text-muted-foreground">Ingredient cost per portion (KM)</Label>
-            <Input
-              id="item-food-cost"
-              placeholder="e.g. 3,20"
-              type="text"
-              inputMode="decimal"
-              autoComplete="off"
-              value={cost}
-              onChange={(e) => setCost(e.target.value)}
-              aria-invalid={cost.trim() !== '' && parsePrice(cost) === null}
-              className="mt-1"
-            />
-            <p className="text-[11px] text-muted-foreground font-sans mt-1">
-              {(() => {
-                const c = cost.trim() ? parsePrice(cost) : null;
-                const p = parsePrice(price);
-                if (c === null || p === null || p <= 0) {
-                  return 'Optional. What the ingredients of one portion cost you. Guests never see it; Menu intelligence uses it for exact margins instead of an estimate.';
-                }
-                return `You keep ${(p - c).toFixed(2)} KM a portion (${Math.round(((p - c) / p) * 100)}% of the price). Guests never see this.`;
-              })()}
-            </p>
-          </div>
-
-          {/* Station */}
-          <div>
-            <Label className="text-xs text-muted-foreground">Made at</Label>
-            <div className="mt-1.5 flex gap-2">
-              <Chip on={station === 'kitchen'} onClick={() => setStation('kitchen')}>
-                <ChefHat className="w-3.5 h-3.5" /> Kitchen
-              </Chip>
-              <Chip on={station === 'bar'} onClick={() => setStation('bar')}>
-                <CupSoda className="w-3.5 h-3.5" /> Bar
-              </Chip>
-            </div>
-            <p className="text-[11px] text-muted-foreground font-sans mt-1">
-              Decides which board and which ticket printer this item goes to.
-            </p>
-          </div>
-
-          {/* Course, which is a different question from station. */}
-          <div>
-            <Label className="text-xs text-muted-foreground">Course</Label>
-            <p className="text-[11px] text-muted-foreground font-sans">
-              Used to time suggestions — dessert after mains — and to stop the app offering
-              a second identical main. Leave blank if none of these fit.
-            </p>
-            <div className="mt-1.5 flex flex-wrap gap-1.5">
-              {MEAL_ROLES.map((r) => (
-                <Chip
-                  key={r.key}
-                  on={mealRole === r.key}
-                  onClick={() => setMealRole(mealRole === r.key ? '' : r.key)}
-                >
-                  {r.label}
-                </Chip>
-              ))}
-            </div>
-          </div>
-
-          {/* Dietary — a guest preference */}
-          <div>
-            <Label className="text-xs text-muted-foreground">Dietary tags</Label>
-            <p className="text-[11px] text-muted-foreground font-sans">What a guest filters by. Shown on the card.</p>
-            <div className="mt-1.5 flex flex-wrap gap-1.5">
-              {DIET_TAGS.map((d) => (
-                <Chip key={d.key} on={diets.includes(d.key)} onClick={() => setDiets((p) => toggle(p, d.key))}>
-                  <span aria-hidden>{d.emoji}</span>{t(d.labelKey)}
-                </Chip>
-              ))}
-            </div>
-          </div>
-
-          {/* Allergens — safety information, deliberately separate */}
-          <div>
-            <Label className="text-xs text-muted-foreground">Allergens</Label>
-            <p className="text-[11px] text-muted-foreground font-sans">
-              Printed on the kitchen ticket and shown to the guest. Not the same as a dietary tag.
-            </p>
-            <div className="mt-1.5 flex flex-wrap gap-1.5">
-              {ALLERGENS.map((a) => (
-                <Chip key={a} on={allergens.includes(a)} onClick={() => setAllergens((p) => toggle(p, a))}>
-                  {a}
-                </Chip>
-              ))}
-            </div>
-          </div>
-
-          {/* Merchandising */}
-          <div>
-            <Label className="text-xs text-muted-foreground">Badges</Label>
-            <div className="mt-1.5 flex flex-wrap gap-1.5">
-              {MERCH_TAGS.map((m) => (
-                <Chip key={m.key} on={merch.includes(m.key)} onClick={() => setMerch((p) => toggle(p, m.key))}>
-                  {m.label}
-                </Chip>
-              ))}
-            </div>
-          </div>
-
-          {/* ---- Promotions ---- */}
-          {/* Hidden, not silently ignored, until the database can store them. */}
-          {!promoAvailable && (
-            <p className="rounded-lg bg-muted px-3 py-2 text-[11px] font-sans text-muted-foreground">
-              Sales, combos and featuring appear here once the database has the promotions migration (20261026100000).
-            </p>
-          )}
-          {promoAvailable && (
-          <PromoSection
-            id="sale"
-            title="Sale"
-            description="A lower price for a while. Guests see the menu price struck through and pay the sale price, only while it runs."
-            checked={sale.on}
-            onCheckedChange={(on) => setSale((s) => ({ ...s, on }))}
-          >
-            <div className="flex gap-1.5" role="group" aria-label="Kind of sale">
-              <Chip on={sale.kind === 'percent'} onClick={() => setSale((s) => ({ ...s, kind: 'percent' }))}>% off</Chip>
-              <Chip on={sale.kind === 'price'} onClick={() => setSale((s) => ({ ...s, kind: 'price' }))}>Sale price</Chip>
-            </div>
-            <div className="flex items-center gap-2">
-              <Input
-                value={sale.value}
-                onChange={(e) => setSale((s) => ({ ...s, value: e.target.value }))}
-                placeholder={sale.kind === 'percent' ? '20' : '14,40'}
-                inputMode="decimal"
-                aria-label={sale.kind === 'percent' ? 'Percent off' : 'Sale price in KM'}
-                className="w-28"
-              />
-              <span className="text-sm text-muted-foreground">{sale.kind === 'percent' ? '% off' : 'KM'}</span>
-            </div>
-            <div>
-              <Label className="text-xs text-muted-foreground">Label on the badge</Label>
-              <div className="mt-1.5 flex flex-wrap gap-1.5" role="group" aria-label="Sale label">
-                <Chip on={sale.label === ''} onClick={() => setSale((s) => ({ ...s, label: '' }))}>Just “−%”</Chip>
-                {SALE_LABELS.map((key) => (
-                  <Chip key={key} on={sale.label === key} onClick={() => setSale((s) => ({ ...s, label: key }))}>{SALE_LABEL_NAMES[key]}</Chip>
-                ))}
-              </div>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              <div>
-                <Label className="text-xs text-muted-foreground">Starts (empty = now)</Label>
-                <div className="mt-1 flex gap-1.5">
-                  <Input type="date" value={sale.startDate} onChange={(e) => setSale((s) => ({ ...s, startDate: e.target.value }))} aria-label="Sale starts on" className="min-w-0" />
-                  <Input type="time" value={sale.startTime} onChange={(e) => setSale((s) => ({ ...s, startTime: e.target.value }))} aria-label="Sale starts at" className="w-28" />
-                </div>
-              </div>
-              <div>
-                <Label className="text-xs text-muted-foreground">Ends (empty = until you end it)</Label>
-                <div className="mt-1 flex gap-1.5">
-                  <Input type="date" value={sale.endDate} onChange={(e) => setSale((s) => ({ ...s, endDate: e.target.value }))} aria-label="Sale ends on" className="min-w-0" />
-                  <Input type="time" value={sale.endTime} onChange={(e) => setSale((s) => ({ ...s, endTime: e.target.value }))} aria-label="Sale ends at" className="w-28" />
-                </div>
-              </div>
-            </div>
-            <div className="flex flex-wrap gap-1.5" role="group" aria-label="Quick end">
-              {saleEndPresets().map((p) => (
-                <Chip key={p.label} on={sale.endDate === p.date && sale.endTime === p.time} onClick={() => setSale((s) => ({ ...s, endDate: p.date, endTime: p.time }))}>
-                  {p.label}
-                </Chip>
-              ))}
-              {(sale.startDate || sale.endDate) && (
-                <Chip on={false} onClick={() => setSale((s) => ({ ...s, startDate: '', startTime: '', endDate: '', endTime: '' }))}>No dates</Chip>
-              )}
-            </div>
-            {preview && (
-              <p
-                data-testid="sale-preview"
-                aria-live="polite"
-                className={`rounded-lg px-3 py-2 text-sm font-sans font-semibold tabular-nums ${preview.tone === 'ok' ? 'bg-primary/10 text-primary' : 'bg-accent/10 text-accent'}`}
-              >
-                {preview.text}
-              </p>
-            )}
-            <p className="text-[11px] text-muted-foreground font-sans">Times are Sarajevo time.</p>
-          </PromoSection>
-          )}
-
-          {promoAvailable && (
-          <PromoSection
-            id="combo"
-            title="Combo"
-            description="Guests choose one dish for each part (a burger, a side, a drink). The price above becomes the combo price."
-            checked={comboOn}
-            onCheckedChange={setComboOn}
-          >
-            <ComboBuilder
-              slots={slots}
-              onChange={setSlots}
-              items={pickable}
-              sections={sections}
-              comboPrice={parsePrice(price)}
-              selfId={item?.id}
-              comboIds={comboIds}
-            />
-          </PromoSection>
-          )}
-
-          <div id="item-highlight" className="space-y-3">
-            <PromoSection
-              id="new"
-              title="Mark as new"
-              description="A “New” badge and a place in the “New at …” row on the home screen. It ends by itself."
-              checked={newOn}
-              onCheckedChange={(on) => { setNewOn(on); if (on && !newUntil) setNewUntil(defaultNewUntil()); }}
-            >
-              <div className="flex items-center gap-2">
-                <Label htmlFor="item-new-until" className="text-xs text-muted-foreground shrink-0">New until</Label>
-                <Input id="item-new-until" type="date" value={newUntil} onChange={(e) => setNewUntil(e.target.value)} className="w-44" />
-              </div>
-            </PromoSection>
-
-            {promoAvailable && (
-            <PromoSection
-              id="featured"
-              title="Feature on the home screen"
-              description={featuredFull
-                ? `Three dishes are featured already (${featuredOthers.map((f) => f.name).join(', ')}). Unpin one in Promotions first.`
-                : 'One of up to three large cards at the top of the menu, with a short line if you like.'}
-              checked={featuredOn}
-              onCheckedChange={setFeaturedOn}
-              disabled={!featuredOn && featuredFull}
-            >
-              <Input value={featuredNote} onChange={(e) => setFeaturedNote(e.target.value)} maxLength={80} placeholder="Short line (EN), e.g. Our classic since 2019" aria-label="Featured line (EN)" />
-              <div className="grid grid-cols-2 gap-2">
-                <Input value={featuredNoteBs} onChange={(e) => setFeaturedNoteBs(e.target.value)} maxLength={80} placeholder="Line (BS)" aria-label="Featured line (BS)" />
-                <Input value={featuredNoteAr} onChange={(e) => setFeaturedNoteAr(e.target.value)} maxLength={80} placeholder="Line (AR)" dir="rtl" aria-label="Featured line (AR)" />
-              </div>
-            </PromoSection>
-            )}
-          </div>
-
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <Label className="text-xs text-muted-foreground">Margin score (0–100)</Label>
-              <Input
-                type="number" min="0" max="100" step="1" value={margin}
-                onChange={(e) => setMargin(e.target.value)} className="mt-1"
-              />
-              {/* Internal. It breaks ties between two equally relevant
-                  suggestions; it never changes what a guest is told. */}
-              <p className="text-[11px] text-muted-foreground font-sans mt-1">
-                Internal only, never shown. Higher wins a tie between two equally good suggestions.
-              </p>
-            </div>
-            <div>
-              <Label className="text-xs text-muted-foreground">Prep minutes</Label>
-              <Input
-                type="number" min="0" max="240" step="1" placeholder="e.g. 12" value={prep}
-                onChange={(e) => setPrep(e.target.value)} className="mt-1"
-              />
-              <p className="text-[11px] text-muted-foreground font-sans mt-1">
-                Drives the guest's estimate and the kitchen's load forecast.
-              </p>
-            </div>
-          </div>
-
-          <div>
-            <Label className="text-xs text-muted-foreground">Only available between</Label>
-            <div className="mt-1.5 flex items-center gap-2">
-              <Input type="time" value={from} onChange={(e) => setFrom(e.target.value)} className="flex-1" aria-label="Available from" />
-              <span className="text-muted-foreground text-sm">and</span>
-              <Input type="time" value={to} onChange={(e) => setTo(e.target.value)} className="flex-1" aria-label="Available until" />
-              {(from || to) && (
-                <Button type="button" variant="ghost" size="sm" onClick={() => { setFrom(''); setTo(''); }}>
-                  Clear
-                </Button>
-              )}
-            </div>
-            <p className="text-[11px] text-muted-foreground font-sans mt-1">
-              Leave empty for all day. Breakfast items stop being orderable outside their window.
-            </p>
+              <Field label="Ingredient cost per portion (KM)" htmlFor="item-food-cost" help={costHelp}>
+                <Input
+                  id="item-food-cost"
+                  placeholder="e.g. 3,20"
+                  type="text"
+                  inputMode="decimal"
+                  autoComplete="off"
+                  value={cost}
+                  onChange={(e) => setCost(e.target.value)}
+                  aria-invalid={cost.trim() !== '' && parsePrice(cost) === null}
+                  className="h-11 tabular-nums sm:max-w-[16rem] md:h-10"
+                />
+              </Field>
+            </FormGroup>
           </div>
         </div>
 
-        {/* Pinned to the bottom of the dialog: on a phone Save was some
-            1,500px of scrolling below the price. */}
-        <DialogFooter className="sticky -bottom-6 -mx-6 -mb-6 px-6 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] bg-background border-t border-border flex-row gap-2">
-          <Button variant="outline" className="flex-1 sm:flex-none min-h-[44px]" onClick={() => onOpenChange(false)}>Cancel</Button>
-          <Button className="flex-1 sm:flex-none min-h-[44px]" onClick={save} disabled={saving || uploading}>
-            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : isEdit ? 'Save changes' : 'Add item'}
+        {/* Always in reach: on a phone Save was once some 1,500px of scrolling below the price. */}
+        <DialogFooter className="shrink-0 flex-row gap-2 border-t border-border bg-background px-5 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] sm:justify-end">
+          <Button variant="outline" className="min-h-[44px] flex-1 sm:flex-none" onClick={() => onOpenChange(false)}>Cancel</Button>
+          <Button className="min-h-[44px] flex-[2] gap-2 sm:min-w-[140px] sm:flex-none" onClick={save} disabled={saving || uploading}>
+            {saving ? <><Loader2 className="h-4 w-4 animate-spin" /> Saving…</> : isEdit ? 'Save changes' : 'Add dish'}
           </Button>
         </DialogFooter>
       </DialogContent>

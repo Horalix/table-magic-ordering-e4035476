@@ -1,16 +1,17 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { formatClock } from '@/lib/timing';
 import { Link, useOutletContext } from 'react-router-dom';
-import { motion } from 'framer-motion';
+import { motion, useReducedMotion } from 'framer-motion';
 import { supabase } from '@/integrations/supabase/client';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import {
-  DollarSign, ShoppingBag, Clock, TrendingUp, Timer, CreditCard, Hand, Users,
-  CheckCircle2, Circle, ArrowRight, Sparkles, X,
+  Wallet, ShoppingBag, Clock, TrendingUp, Timer, CreditCard, Hand, Users,
+  CheckCircle2, Circle, ArrowRight, Sparkles, X, Receipt,
 } from 'lucide-react';
-import { staggerContainer, fadeUp, useCountUp } from '@/lib/motion';
+import { AdminCard, AdminCardContent, AdminCardHeader, EmptyState, KpiCard, Stagger } from '@/components/admin/AdminCard';
+import CountUp from '@/components/admin/CountUp';
+import { money, moneyKM, whole } from '@/components/admin/admin-format';
 import { orderStatusLabel } from '@/components/staff/order-status';
 import { getSuggestionImpact, type SuggestionImpact } from '@/lib/menu-intelligence';
 import InsightCards from '@/components/admin/InsightCards';
@@ -59,8 +60,8 @@ const SetupChecklist = ({ counts, onDismiss }: { counts: SetupCounts; onDismiss:
   const completed = steps.filter((s) => s.done).length;
 
   return (
-    <Card className="mb-8 border-primary/20 bg-gradient-to-br from-primary/[0.04] to-transparent">
-      <CardContent className="p-5">
+    <AdminCard className="mb-6 border-primary/20 bg-gradient-to-br from-primary/[0.04] to-transparent">
+      <div className="p-5 sm:p-6">
         <div className="flex items-start justify-between gap-3 mb-4">
           <div className="flex items-center gap-2">
             <Sparkles className="w-5 h-5 text-primary" />
@@ -85,8 +86,8 @@ const SetupChecklist = ({ counts, onDismiss }: { counts: SetupCounts; onDismiss:
             <Link to="/admin/qr-codes">Print QR codes for your tables <ArrowRight className="w-3.5 h-3.5" /></Link>
           </Button>
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    </AdminCard>
   );
 };
 import type { Database } from '@/integrations/supabase/types';
@@ -119,36 +120,6 @@ interface ServiceTimings {
   oldestOpen: number | null;
 }
 
-/** Single stat tile — count-up animation + consistent elevation. */
-const StatCard = ({
-  label, value, format, icon: Icon, color,
-}: {
-  label: string;
-  value: number;
-  format: (n: number) => string;
-  icon: React.ElementType;
-  color: string;
-}) => {
-  const n = useCountUp(value);
-  return (
-    <motion.div variants={fadeUp}>
-      <Card className="border-border card-lux-hover">
-        <CardContent className="p-4 sm:p-6">
-          <div className="flex items-center justify-between gap-2">
-            <div className="min-w-0">
-              <p className="text-sm font-sans text-muted-foreground">{label}</p>
-              <p className="text-xl sm:text-2xl font-sans font-semibold text-foreground mt-1 tabular-nums">{format(n)}</p>
-            </div>
-            <div className={`hidden sm:flex w-10 h-10 rounded-lg bg-muted items-center justify-center shrink-0 ${color}`}>
-              <Icon className="w-5 h-5" />
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-    </motion.div>
-  );
-};
-
 /**
  * Are suggestions earning anything? One line for the owner, on the page they
  * open every day, with the detail one tap away. The figure is sales on lines
@@ -169,39 +140,53 @@ const SuggestionsCard = () => {
   if (failed) return null;
   const seen = impact?.seen ?? 0;
   return (
-    <Card className="border-border mb-8">
-      <CardContent className="p-4 sm:p-6 flex flex-wrap items-center justify-between gap-4">
-        <div className="min-w-0">
-          <p className="text-sm font-sans text-muted-foreground flex items-center gap-1.5">
-            <Sparkles className="w-4 h-4 text-primary" aria-hidden /> Suggestions · last 7 days
-          </p>
-          {!impact ? (
-            <Skeleton className="h-7 w-48 mt-2 rounded" />
-          ) : seen === 0 ? (
-            <p className="text-sm font-sans text-foreground mt-1.5">
-              None shown yet. They start with the first orders, using the house pairings.
-            </p>
-          ) : (
-            <p className="mt-1 font-sans text-foreground">
-              <span className="font-sans text-2xl font-semibold tabular-nums">{impact.attributed_revenue.toFixed(2)} KM</span>
-              <span className="text-sm text-muted-foreground ml-2">
-                from {impact.paid} added of {seen} shown
-                {impact.paid_acceptance_pct != null ? ` (${impact.paid_acceptance_pct}%)` : ''}
-              </span>
-            </p>
-          )}
+    <AdminCard className="mb-6">
+      <div className="p-5 sm:p-6 flex flex-wrap items-center justify-between gap-4">
+        <div className="flex min-w-0 items-start gap-3">
+          <span className="mt-px grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary" aria-hidden>
+            <Sparkles className="h-4 w-4" />
+          </span>
+          <div className="min-w-0">
+            <p className="text-[13px] font-sans font-medium text-muted-foreground">Suggestions · last 7 days</p>
+            {!impact ? (
+              <Skeleton className="h-7 w-48 mt-2 rounded" />
+            ) : seen === 0 ? (
+              <p className="text-sm font-sans text-foreground mt-1.5">
+                None shown yet. They start with the first orders, using the house pairings.
+              </p>
+            ) : (
+              <p className="mt-1 font-sans text-foreground">
+                <span className="text-[26px] font-semibold leading-tight tracking-tight">
+                  <CountUp value={impact.attributed_revenue} format={money} />
+                  <span className="ml-1 text-sm font-medium tracking-normal text-muted-foreground">KM</span>
+                </span>
+                <span className="text-sm text-muted-foreground ml-2">
+                  from {impact.paid} added of {seen} shown
+                  {impact.paid_acceptance_pct != null ? ` (${impact.paid_acceptance_pct}%)` : ''}
+                </span>
+              </p>
+            )}
+          </div>
         </div>
-        <Button asChild variant="outline" className="rounded-xl min-h-[44px]">
-          <Link to="/admin/menu-intelligence">See what works</Link>
+        <Button asChild variant="outline" className="rounded-xl min-h-[44px] gap-1.5">
+          <Link to="/admin/menu-intelligence">See what works <ArrowRight className="w-4 h-4" /></Link>
         </Button>
-      </CardContent>
-    </Card>
+      </div>
+    </AdminCard>
   );
+};
+
+/** An order's status pill: new is red, served is green, anything in between amber (as before). */
+const STATUS_TONE: Partial<Record<OrderStatus, string>> = {
+  pending: 'bg-destructive/10 text-destructive',
+  served: 'bg-primary/10 text-primary',
 };
 
 const AdminDashboard = () => {
   // The restaurant being looked at; null while the account's roles load.
   const venue = useOutletContext<AdminOutletContext | null>()?.venueSlug ?? null;
+  const reduceMotion = useReducedMotion();
+  const todayLabel = new Date(`${businessDayISO()}T12:00:00`).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({
     todayRevenue: 0,
@@ -327,19 +312,6 @@ const AdminDashboard = () => {
 
   const setupComplete = !!setup && setup.tables > 0 && setup.sections > 0 && setup.menuItems > 0 && setup.waiters > 0 && setup.assignments > 0;
 
-  const money = (n: number) => `${n.toFixed(2)} KM`;
-  const whole = (n: number) => Math.round(n).toString();
-
-  const statCards = [
-    { label: "Today's Revenue", value: stats.todayRevenue, format: money, icon: DollarSign, color: 'text-primary' },
-    { label: 'Total Orders', value: stats.totalOrders, format: whole, icon: ShoppingBag, color: 'text-accent' },
-    { label: 'Active Tables', value: stats.activeTables, format: whole, icon: Clock, color: 'text-primary' },
-    { label: 'Avg Order', value: stats.avgOrderValue, format: money, icon: TrendingUp, color: 'text-accent' },
-    { label: 'Bill Requests', value: stats.billRequests, format: whole, icon: CreditCard, color: 'text-primary' },
-    { label: 'Waiter Calls', value: stats.waiterCalls, format: whole, icon: Hand, color: 'text-accent' },
-    { label: 'Tables seated today', value: stats.guestCount, format: whole, icon: Users, color: 'text-primary' },
-  ];
-
   const timingRows = [
     { key: 'accept' as const, label: 'Kitchen accepted', hint: 'from reaching the kitchen' },
     { key: 'ready' as const, label: 'Food ready', hint: 'from reaching the kitchen' },
@@ -348,14 +320,17 @@ const AdminDashboard = () => {
 
   return (
     <div>
-      <motion.h1
-        initial={{ opacity: 0, y: 6 }}
+      <motion.div
+        initial={reduceMotion ? false : { opacity: 0, y: 6 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
-        className="font-serif text-3xl font-bold text-foreground mb-6"
+        className="mb-6"
       >
-        Dashboard
-      </motion.h1>
+        <h1 className="font-serif text-3xl font-bold text-foreground">Dashboard</h1>
+        <p className="text-sm text-muted-foreground font-sans mt-1">
+          {todayLabel} · today&apos;s trading day so far, completed sales only.
+        </p>
+      </motion.div>
 
       {setup && !dismissed && !setupComplete && (
         <SetupChecklist
@@ -365,28 +340,52 @@ const AdminDashboard = () => {
       )}
 
       {loading ? (
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-8">
-          {Array.from({ length: 7 }).map((_, i) => (
-            <Skeleton key={i} className="h-[92px] rounded-xl" />
-          ))}
+        <div className="space-y-3 sm:space-y-4 mb-8">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+            {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-[118px] rounded-2xl" />)}
+          </div>
+          <Skeleton className="h-[84px] rounded-2xl" />
         </div>
       ) : (
-        <motion.div
-          variants={staggerContainer(0.05)}
-          initial="hidden"
-          animate="show"
-          /* Two per row on a phone: one per row put seven tiles between the
-             manager and anything below them. */
-          className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-8"
-        >
-          {statCards.map((stat) => (
-            <StatCard key={stat.label} {...stat} />
-          ))}
-        </motion.div>
+        <div className="mb-8 space-y-3 sm:space-y-4">
+          {/* Two per row on a phone: one per row put seven tiles between the
+              manager and anything below them. */}
+          <Stagger className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+            <KpiCard icon={Wallet} label="Today's revenue" value={stats.todayRevenue} format={money} unit="KM" hint="since 05:00, tips included" />
+            <KpiCard icon={ShoppingBag} label="Orders" value={stats.totalOrders} format={whole} hint="completed sales" />
+            <KpiCard icon={TrendingUp} label="Average order" value={stats.avgOrderValue} format={money} unit="KM" hint="gross, per order" />
+            <KpiCard icon={Users} label="Tables seated today" value={stats.guestCount} format={whole} hint="sittings since 05:00" />
+          </Stagger>
+
+          {/* What needs someone now, apart from the day's totals. */}
+          <AdminCard className="grid grid-cols-3 divide-x divide-border/70">
+            {([
+              { label: 'Active tables', value: stats.activeTables, icon: Clock, alert: false },
+              { label: 'Bill requests', value: stats.billRequests, icon: CreditCard, alert: stats.billRequests > 0 },
+              { label: 'Waiter calls', value: stats.waiterCalls, icon: Hand, alert: stats.waiterCalls > 0 },
+            ]).map((live) => (
+              <div key={live.label} className="flex items-center gap-3 px-3 py-3.5 sm:px-5 sm:py-4 min-w-0">
+                <span
+                  className={`hidden sm:grid h-9 w-9 shrink-0 place-items-center rounded-full ${live.alert ? 'bg-accent/10 text-accent' : 'bg-muted text-muted-foreground'}`}
+                  aria-hidden
+                >
+                  <live.icon className="h-4 w-4" />
+                </span>
+                <div className="min-w-0">
+                  <p className="text-xs sm:text-[13px] font-sans font-medium text-muted-foreground truncate">{live.label}</p>
+                  <p className="mt-0.5 flex items-center gap-1.5 text-lg sm:text-xl font-sans font-semibold leading-tight text-foreground">
+                    <CountUp value={live.value} format={whole} />
+                    {live.alert && <span className="h-1.5 w-1.5 rounded-full bg-accent" aria-label="waiting" />}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </AdminCard>
+        </div>
       )}
 
       {/* The three things most worth doing this week, in KM. */}
-      <div className="mb-8">
+      <div className="mb-6">
         <InsightCards limit={3} showAllLink title="Top three things to do" />
       </div>
 
@@ -394,25 +393,20 @@ const AdminDashboard = () => {
 
       <SuggestionsCard />
 
-      <Card className="border-border mb-8">
-        <CardHeader>
-          <CardTitle className="font-serif text-lg flex items-center gap-2">
-            <Timer className="w-5 h-5 text-primary" />
-            Service times today
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
+      <AdminCard className="mb-6">
+        <AdminCardHeader icon={Timer} title="Service times today" description="Medians from the stage stamps, with the slowest tenth beside them." />
+        <AdminCardContent>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             {timingRows.map((row) => {
               const data = timings[row.key];
               return (
-                <div key={row.key} className="rounded-xl border border-border p-4">
-                  <p className="text-xs font-sans font-medium text-muted-foreground">{row.label}</p>
-                  <p className="font-sans text-2xl font-semibold text-foreground mt-1 tabular-nums">
-                    {data.median === null ? '—' : Math.round(data.median)}
-                    <span className="text-sm font-sans text-muted-foreground ml-1">min</span>
+                <div key={row.key} className="rounded-xl bg-muted/45 p-4">
+                  <p className="text-[13px] font-sans font-medium text-muted-foreground">{row.label}</p>
+                  <p className="font-sans text-[26px] font-semibold leading-none tracking-tight text-foreground mt-2">
+                    {data.median === null ? '—' : <CountUp value={data.median} format={whole} />}
+                    <span className="text-sm font-medium tracking-normal text-muted-foreground ml-1">min</span>
                   </p>
-                  <p className="text-xs font-sans text-muted-foreground mt-1">
+                  <p className="text-xs font-sans text-muted-foreground mt-2.5">
                     {/* The slow tail is what guests complain about; a median
                         alone hides it, and a mean alone is dragged by it. */}
                     {data.p90 === null ? row.hint : `slowest 10%: ${Math.round(data.p90)} min`}
@@ -435,14 +429,20 @@ const AdminDashboard = () => {
               </p>
             </div>
           )}
-        </CardContent>
-      </Card>
+        </AdminCardContent>
+      </AdminCard>
 
-      <Card className="border-border">
-        <CardHeader>
-          <CardTitle className="font-serif text-lg">Recent Orders</CardTitle>
-        </CardHeader>
-        <CardContent>
+      <AdminCard>
+        <AdminCardHeader
+          icon={Receipt}
+          title="Recent orders"
+          action={(
+            <Button asChild variant="ghost" size="sm" className="gap-1 text-xs">
+              <Link to="/admin/orders">All orders <ArrowRight className="w-3.5 h-3.5" /></Link>
+            </Button>
+          )}
+        />
+        <AdminCardContent className="pb-3 sm:pb-4">
           {loading ? (
             <div className="space-y-3">
               {Array.from({ length: 5 }).map((_, i) => (
@@ -456,34 +456,33 @@ const AdminDashboard = () => {
               ))}
             </div>
           ) : recentOrders.length === 0 ? (
-            <p className="text-muted-foreground font-sans text-sm py-4">No orders yet</p>
+            <EmptyState icon={Receipt} title="No orders yet" hint="Today's orders appear here the moment a table sends one." />
           ) : (
-            <div className="space-y-3">
+            <ul className="divide-y divide-border/70">
               {recentOrders.map((order) => (
-                <div key={order.id} className="flex items-center justify-between py-2 border-b border-border last:border-0">
-                  <div>
-                    <p className="text-sm font-sans font-medium text-foreground">
+                <li key={order.id} className="flex items-center gap-3 py-3">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-sans font-medium text-foreground truncate">
                       Table {order.table_sessions?.tables?.table_number}
-                      {order.guest_name && <span className="text-muted-foreground ml-2">- {order.guest_name}</span>}
+                      {order.guest_name && <span className="font-normal text-muted-foreground"> · {order.guest_name}</span>}
                     </p>
-                    <p className="text-xs text-muted-foreground">{formatClock(order.created_at)}</p>
+                    <p className="text-xs text-muted-foreground tabular-nums">{formatClock(order.created_at)}</p>
                   </div>
-                  <div className="text-right">
-                    <p className="text-sm font-sans font-semibold text-foreground tabular-nums">{Number(order.total).toFixed(2)} KM</p>
-                    <span className={`text-xs px-2 py-0.5 rounded-full ${
-                      order.status === 'pending' ? 'bg-destructive/10 text-destructive' :
-                      order.status === 'served' ? 'bg-primary/10 text-primary' :
-                      'bg-accent/10 text-accent'
-                    }`}>
+                  <span className={`hidden sm:inline-flex text-[11px] font-sans font-medium px-2 py-0.5 rounded-full ${STATUS_TONE[order.status] ?? 'bg-accent/10 text-accent'}`}>
+                    {orderStatusLabel(order.status)}
+                  </span>
+                  <div className="w-24 text-right">
+                    <p className="text-sm font-sans font-semibold text-foreground tabular-nums">{moneyKM(Number(order.total))}</p>
+                    <span className={`sm:hidden text-[11px] font-sans font-medium px-2 py-0.5 rounded-full ${STATUS_TONE[order.status] ?? 'bg-accent/10 text-accent'}`}>
                       {orderStatusLabel(order.status)}
                     </span>
                   </div>
-                </div>
+                </li>
               ))}
-            </div>
+            </ul>
           )}
-        </CardContent>
-      </Card>
+        </AdminCardContent>
+      </AdminCard>
     </div>
   );
 };

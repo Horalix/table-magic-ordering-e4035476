@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Clock, CheckCircle, ChefHat, Utensils, Receipt, CreditCard, Loader2, Users } from 'lucide-react';
+import { ArrowLeft, Clock, CheckCircle, ChefHat, Utensils, ReceiptText as Receipt, CreditCard, Loader2, Users } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -42,9 +42,11 @@ const RunningTabPage = () => {
   const token = searchParams.get('token');
 
   const statusConfig: Record<string, { icon: React.ReactNode; label: string; color: string }> = {
-    pending: { icon: <Clock className="w-3.5 h-3.5" />, label: t('status_pending'), color: 'bg-accent/10 text-accent' },
+    // The same word as the progress line above it ("Received"), not "Pending".
+    // Amber pills: ink text and an amber icon; amber text this small is under 4.5:1.
+    pending: { icon: <CheckCircle className="w-3.5 h-3.5" />, label: t('status_received'), color: 'bg-primary/10 text-primary' },
     confirmed: { icon: <CheckCircle className="w-3.5 h-3.5" />, label: t('status_confirmed'), color: 'bg-primary/10 text-primary' },
-    preparing: { icon: <ChefHat className="w-3.5 h-3.5" />, label: t('status_preparing'), color: 'bg-accent/10 text-accent' },
+    preparing: { icon: <ChefHat className="w-3.5 h-3.5 text-accent" />, label: t('status_preparing'), color: 'bg-accent/10 text-foreground' },
     ready: { icon: <CheckCircle className="w-3.5 h-3.5" />, label: t('status_ready'), color: 'bg-primary/10 text-primary' },
     served: { icon: <Utensils className="w-3.5 h-3.5" />, label: t('status_served'), color: 'bg-muted text-muted-foreground' },
     cancelled: { icon: <Clock className="w-3.5 h-3.5" />, label: t('status_cancelled'), color: 'bg-destructive/10 text-destructive' },
@@ -233,8 +235,8 @@ const RunningTabPage = () => {
                 <OrderEta orderId={activeOrder.id} active={activeOrder.status !== 'served'} />
               </div>
               {activeOrder.held && (
-                <p className="text-sm font-sans text-accent mb-2 flex items-center gap-1.5">
-                  <Clock className="w-3.5 h-3.5" aria-hidden /> {t('waiting_for_waiter_confirm')}
+                <p className="text-sm font-sans text-foreground mb-2 flex items-center gap-1.5">
+                  <Clock className="w-3.5 h-3.5 text-accent" aria-hidden /> {t('waiting_for_waiter_confirm')}
                 </p>
               )}
               {/* "Received" began when the order was placed; later stages have no
@@ -268,7 +270,7 @@ const RunningTabPage = () => {
               // A held order is `pending` too, but "Pending" would suggest the
               // kitchen has it. It is waiting for the waiter, and says so.
               const status = order.held
-                ? { icon: <Clock className="w-3.5 h-3.5" aria-hidden />, label: t('waiting_for_waiter_confirm'), color: 'bg-accent/10 text-accent' }
+                ? { icon: <Clock className="w-3.5 h-3.5 text-accent" aria-hidden />, label: t('waiting_for_waiter_confirm'), color: 'bg-accent/10 text-foreground' }
                 : statusConfig[order.status] || statusConfig.pending;
               const items = order.order_items || [];
               const waitTime = getWaitTime(order.created_at, order.status);
@@ -285,7 +287,7 @@ const RunningTabPage = () => {
                       </span>
                       {waitTime && <span className="text-xs font-sans text-muted-foreground">{waitTime}</span>}
                       {order.payment_method === 'card_online' && (
-                        <span className={`inline-flex items-center gap-1 text-xs font-sans font-semibold px-2 py-0.5 rounded-full ${order.payment_status === 'paid' ? 'bg-primary/10 text-primary' : 'bg-accent/10 text-accent'}`}>
+                        <span className={`inline-flex items-center gap-1 text-xs font-sans font-semibold px-2 py-0.5 rounded-full ${order.payment_status === 'paid' ? 'bg-primary/10 text-primary' : 'bg-accent/10 text-foreground'}`}>
                           <CreditCard className="w-3 h-3" aria-hidden />
                           {order.payment_status === 'paid' ? t('paid') : t('card_pending')}
                         </span>

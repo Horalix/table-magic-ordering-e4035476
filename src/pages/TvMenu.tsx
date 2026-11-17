@@ -33,6 +33,8 @@ import { LightLine, RuledTitle } from '@/components/vera/VeraMenu';
 import { COURSES, ROMAN, VERA, pick } from '@/components/vera/copy';
 import { getLocalizedDescription, getLocalizedName, localeLabels, useLanguageStore, useT, type Locale } from '@/lib/i18n';
 import { HOME_VENUE } from '@/lib/home-venue';
+import { DEMO_MODE } from '@/lib/demo-mode';
+import { DemoWordmark } from '@/demo/ui/Brand';
 import { useFullScreen, useTvApp } from '@/lib/full-screen';
 import { useLightOnly } from '@/lib/light-only';
 import { saleView } from '@/lib/promotions';
@@ -251,7 +253,13 @@ const TvMenu = () => {
                 </motion.section>
               ) : (
                 <motion.div key="waiting" className="absolute inset-0 flex items-center justify-center" exit={{ opacity: 0 }}>
-                  <span className="h-[72px] w-[72px] animate-spin rounded-full border-[6px] border-primary/20 border-t-primary" aria-hidden />
+                  {/* Loaded and still nothing to show (every dish hidden or sold out):
+                      words at reading distance, not a spinner that never stops. */}
+                  {data ? (
+                    <p className="max-w-[760px] px-[48px] text-center font-serif text-[56px] leading-[1.15] text-foreground">{t('tv_menu_updating')}</p>
+                  ) : (
+                    <span className="h-[72px] w-[72px] animate-spin motion-reduce:animate-none rounded-full border-[6px] border-primary/20 border-t-primary" aria-hidden />
+                  )}
                 </motion.div>
               )}
             </AnimatePresence>
@@ -289,7 +297,7 @@ const TvMenu = () => {
             )}
           </div>
           {/* La Soul's olive branch again, faint, at the other end of the screen. */}
-          {!VERA_HOME && (
+          {!VERA_HOME && !DEMO_MODE && (
             <img src="/brand/branch-white.webp" alt="" aria-hidden width={720} height={670} className="pointer-events-none select-none absolute -bottom-[110px] -end-[60px] w-[400px] rotate-180 opacity-[0.1]" />
           )}
           <div className="relative flex h-full items-center gap-[44px] px-[56px]">
@@ -321,6 +329,7 @@ const LaSoulHeader = () => {
   return (
     <header className="hero-depth relative h-[236px] shrink-0 overflow-hidden px-[56px] pb-[44px]" style={{ backgroundColor: 'hsl(140, 12%, 53%)' }}>
       {/* The olive branch from the logo, faint, as on the phone menu's band. */}
+      {!DEMO_MODE && (
       <img
         src="/brand/branch-white.webp"
         alt=""
@@ -329,9 +338,12 @@ const LaSoulHeader = () => {
         height={670}
         className="pointer-events-none select-none absolute -top-[96px] -end-[70px] w-[470px] opacity-[0.17] rtl:-scale-x-100"
       />
+      )}
       <div className="relative z-10 flex h-full items-center justify-between gap-[32px]">
         <h1 dir="ltr" className="min-w-0">
-          <img src="/brand/wordmark-white.webp" alt="La Soul" width={960} height={124} className="h-[68px] w-auto drop-shadow-[0_2px_4px_rgba(0,0,0,0.15)]" />
+          {DEMO_MODE
+            ? <DemoWordmark className="block text-[72px]" />
+            : <img src="/brand/wordmark-white.webp" alt="La Soul" width={960} height={124} className="h-[68px] w-auto drop-shadow-[0_2px_4px_rgba(0,0,0,0.15)]" />}
           <span className="mt-[18px] block ps-[4px] font-sans text-[26px] font-semibold uppercase tracking-[0.34em] text-white/90 rtl:tracking-normal rtl:text-[30px]">{t('menu')}</span>
         </h1>
         <p className="inline-flex shrink-0 items-center gap-[14px] rounded-full bg-white/15 px-[30px] py-[16px] font-sans text-[28px] font-semibold text-white">
@@ -489,7 +501,7 @@ const Photo = ({ slide, scale }: { slide: TvSlide<MenuItemRow>; scale: number })
     </span>
   ) : (
     <span className="hero-depth absolute inset-0 flex items-center justify-center" style={{ backgroundColor: 'hsl(140, 12%, 53%)' }}>
-      <img src="/brand/branch-white.webp" alt="" width={720} height={670} className="h-[70%] w-auto opacity-30" />
+      {!DEMO_MODE && <img src="/brand/branch-white.webp" alt="" width={720} height={670} className="h-[70%] w-auto opacity-30" />}
     </span>
   );
 };

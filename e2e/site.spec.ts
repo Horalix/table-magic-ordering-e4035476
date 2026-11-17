@@ -83,7 +83,7 @@ test.describe('website', () => {
     await expect(visit.getByRole('link', { name: '+387 33 877 779' })).toHaveAttribute('href', 'tel:+38733877779');
     await expect(visit.getByRole('link', { name: /Directions/ })).toHaveAttribute('href', 'https://maps.app.goo.gl/UrsoG5vew2FfwMt66');
     await expect(visit.getByText('Every day')).toBeAttached();
-    await expect(visit.getByText('11:00–21:00')).toBeAttached();
+    await expect(visit.getByText('09:00–23:00')).toBeAttached();
     await expect(visit.getByRole('link', { name: /Instagram/ })).toHaveAttribute('href', 'https://www.instagram.com/lasoul.bih');
     await expect(visit.getByText(/TBD|Facebook/)).toHaveCount(0);
   });
@@ -109,9 +109,10 @@ test.describe('website', () => {
     const place = graphs.flatMap((g) => JSON.parse(g)['@graph'] ?? [])
       .find((n: { '@type': unknown }) => Array.isArray(n['@type']) && (n['@type'] as string[]).includes('Restaurant'));
     expect(place.telephone).toBe('+38733877779');
-    expect(place.address.streetAddress).toBe('Butmirska cesta 16A | 16B');
+    // The two house numbers as an address reads; the page shows them as the owner writes them.
+    expect(place.address).toMatchObject({ streetAddress: 'Butmirska cesta 16A/16B', postalCode: '71210', addressLocality: 'Sarajevo' });
     expect(place.geo).toMatchObject({ latitude: 43.827548, longitude: 18.3103156 });
-    expect(place.openingHoursSpecification[0]).toMatchObject({ opens: '11:00', closes: '21:00' });
+    expect(place.openingHoursSpecification[0]).toMatchObject({ opens: '09:00', closes: '23:00' });
     await expect(page.locator('link[rel="canonical"]')).toHaveAttribute('href', /\/$/);
     await expect(page.locator('link[rel="alternate"][hreflang="bs"]')).toHaveAttribute('href', /\/bs\/$/);
     await expect(page.locator('meta[property="og:image"]')).toHaveAttribute('content', /^https:\/\/.+\/site\/og\.jpg$/);
@@ -208,14 +209,78 @@ test.describe('website', () => {
     await expect(page.locator('link[rel="canonical"]')).toHaveAttribute('href', /\/privacy\/$/);
   });
 
-  test('the menu names no other languages: one address serves all three', async ({ page }) => {
-    const menu = await (await page.request.get('/menu/lasoul/')).text();
-    expect(menu).toMatch(/<link rel="canonical" href="https:\/\/[^"]+\/menu\/lasoul\/" \/>/);
-    expect(menu).not.toContain('hreflang=');
-    await setLocale(page, 'bs');
-    await page.goto('/menu/lasoul/');
-    await expect(page.getByRole('button', { name: /Hrana|Food/ }).first()).toBeVisible();
-    await expect(page.locator('link[rel="alternate"][hreflang]')).toHaveCount(0);
+  // Every public page is in three languages, each at its own address (src/lib/seo/locale-path.ts).
+  const FAMILY = (path: string) => [['en', path], ['bs', `/bs${path}`], ['ar', `/ar${path}`], ['x-default', path]];
+
+  test('the menu is in three languages, each at its own address naming the other two', async ({ page }) => {
+    for (const [lang, address] of FAMILY('/menu/lasoul/').slice(0, 3)) {
+      const html = await (await page.request.get(address)).text();
+      expect(html).toContain(`<link rel="canonical" href="https://lasoul.net${address}" />`);
+      for (const [other, href] of FAMILY('/menu/lasoul/')) {
+        expect(html).toContain(`<link rel="alternate" hreflang="${other}" href="https://lasoul.net${href}" />`);
+      }
+      expect(html).toMatch(new RegExp(`<html lang="${lang}"${lang === 'ar' ? ' dir="rtl"' : ''}>`));
+    }
+    const bs = await (await page.request.get('/bs/menu/lasoul/')).text();
+    expect(bs).toContain('<title>Meni — La Soul, Sarajevo · Burgeri, kolači i kafa</title>');
+    expect(bs).toContain('<h1>La Soul — Meni</h1>');
+    expect(bs).toContain('<meta property="og:locale" content="bs_BA" />');
+  });
+
+  test('a Bosnian address opens in Bosnian whatever the phone saved, with the head its HTML had, and follows a change of language', async ({ page }) => {
+    await setLocale(page, 'en');
+    await page.goto('/bs/menu/lasoul/');
+    await expect(page.locator('html')).toHaveAttribute('lang', 'bs');
+    await expect(page.getByRole('button', { name: /Hrana/ }).first()).toBeVisible();
+    await expect(page).toHaveTitle('Meni — La Soul, Sarajevo · Burgeri, kolači i kafa');
+    await expect(page.locator('link[rel="canonical"]')).toHaveAttribute('href', 'https://lasoul.net/bs/menu/lasoul/');
+    await expect(page.locator('link[rel="alternate"][hreflang]')).toHaveCount(4);
+    await expect(page.locator('link[rel="alternate"][hreflang="ar"]')).toHaveAttribute('href', 'https://lasoul.net/ar/menu/lasoul/');
+    await expect(page.locator('meta[property="og:locale"]')).toHaveAttribute('content', 'bs_BA');
+
+    // Arabic: the address follows, query kept, the page turns right-to-left.
+    await page.goto('/bs/menu/lasoul/?from=test');
+    await page.getByRole('button', { name: LANGUAGE_BUTTON }).first().click();
+    await page.getByRole('menuitem', { name: 'العربية' }).click();
+    await expect(page).toHaveURL(/\/ar\/menu\/lasoul\/\?from=test$/);
+    await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
+    await expect(page.locator('link[rel="canonical"]')).toHaveAttribute('href', 'https://lasoul.net/ar/menu/lasoul/');
+    // English: the address without a prefix.
+    await page.getByRole('button', { name: LANGUAGE_BUTTON }).first().click();
+    await page.getByRole('menuitem', { name: 'English' }).click();
+    await expect(page).toHaveURL(/\/menu\/lasoul\/\?from=test$/);
+    await expect(page.locator('link[rel="canonical"]')).toHaveAttribute('href', 'https://lasoul.net/menu/lasoul/');
+  });
+
+  test('the booking page and the privacy notice are in three languages too', async ({ page }) => {
+    for (const path of ['/privacy/', '/reserve/']) {
+      for (const [lang, address] of FAMILY(path).slice(0, 3)) {
+        const html = await (await page.request.get(address)).text();
+        expect(html).toMatch(new RegExp(`<html lang="${lang}"`));
+      }
+    }
+    const privacy = await (await page.request.get('/ar/privacy/')).text();
+    expect(privacy).toContain('<link rel="canonical" href="https://lasoul.net/ar/privacy/" />');
+    expect(privacy).toContain('<link rel="alternate" hreflang="bs" href="https://lasoul.net/bs/privacy/" />');
+    await setLocale(page, 'en');
+    await page.goto('/bs/privacy/');
+    await expect(page.locator('html')).toHaveAttribute('lang', 'bs');
+    await expect(page.locator('link[rel="canonical"]')).toHaveAttribute('href', 'https://lasoul.net/bs/privacy/');
+  });
+
+  test('a dish opened from its Bosnian address opens in Bosnian on the Bosnian category page, its own address canonical', async ({ page }) => {
+    await page.route((url) => url.pathname.endsWith('/rest/v1/menu_items') && (url.searchParams.get('select') ?? '').includes('subcategories('), (route) =>
+      route.fulfill({
+        status: 200, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' },
+        body: JSON.stringify([{ id: 'item-burger', name: 'La Soul Burger', subcategories: { name: 'Burgers', categories: { name: 'Food' } } }]),
+      }));
+    await setLocale(page, 'en');
+    await page.goto('/bs/menu/lasoul/dish/la-soul-burger/');
+    await expect(page).toHaveURL(/\/bs\/menu\/lasoul\/food\/\?section=burgers&dish=item-burger$/);
+    await expect(page.getByRole('dialog')).toBeVisible();
+    await expect(page.locator('html')).toHaveAttribute('lang', 'bs');
+    await expect(page.locator('link[rel="canonical"]')).toHaveAttribute('href', 'https://lasoul.net/bs/menu/lasoul/dish/la-soul-burger/');
+    await expect(page.locator('link[rel="alternate"][hreflang="en"]')).toHaveAttribute('href', 'https://lasoul.net/menu/lasoul/dish/la-soul-burger/');
   });
 
   test('an address that is no page says so to search engines', async ({ page }) => {

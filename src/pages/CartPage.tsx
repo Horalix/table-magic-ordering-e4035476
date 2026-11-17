@@ -563,7 +563,7 @@ const CartPage = () => {
           {isLargeOrder && (
             <div className="mx-4 mt-3 p-3 rounded-xl border border-accent/20 bg-accent/5 flex items-center gap-3">
               <UtensilsCrossed className="w-4 h-4 text-accent flex-shrink-0" aria-hidden />
-              <p className="text-xs font-sans text-accent">{t('large_order_suggestion')}</p>
+              <p className="text-xs font-sans text-foreground">{t('large_order_suggestion')}</p>
             </div>
           )}
 

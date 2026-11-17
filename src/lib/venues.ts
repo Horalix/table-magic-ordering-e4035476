@@ -11,7 +11,8 @@
  * is not known yet is null and its part of the site stays hidden.
  */
 import { guestVenue } from './current-venue';
-import { HOME_VENUE } from './home-venue';
+import { DEMO_BUILD, DEMO_VENUE, HOME_VENUE } from './home-venue';
+import { DEMO_ICON, RESTAURANT, RESTAURANT_THEME_COLOR } from '../demo/brand';
 import { OWN_SITE_LIVE, VENUE_URLS } from './seo/site-url';
 
 export type Weekday = 'Monday' | 'Tuesday' | 'Wednesday' | 'Thursday' | 'Friday' | 'Saturday' | 'Sunday';
@@ -52,6 +53,16 @@ export interface Venue {
   reviewUrl: string | null;
   /** Live: has a menu and takes orders. Not live: the address answers "not found". */
   live: boolean;
+  /** Its postal code, where the owner has given one. */
+  postalCode?: string | null;
+  /** The municipality inside the city ("Ilidža"), where the owner has given one. */
+  municipality?: string | null;
+  /** The full Google Maps address of its listing (with its cid), for structured data; `mapsUrl` is the short one guests tap. */
+  mapsListingUrl?: string | null;
+  /** What guests ask before they come, as the owner confirmed it; null where not confirmed. */
+  amenities?: {
+    parking: boolean; terrace: boolean; wifi: boolean; childFriendly: boolean; takeaway: boolean; delivery: boolean;
+  } | null;
   /**
    * What a phone shows for it: the toolbar colour, the icon and name on the
    * home screen, and the app "Add to Home Screen" installs (its web manifest,
@@ -71,12 +82,15 @@ export interface Venue {
 }
 
 /*
- * La Soul's facts are from its own site (lasoul.net, October 2026) and its
- * Google Maps listing, "La Soul Cafe & Burger Boutique": hours 11:00–21:00,
- * Instagram @lasoul.bih, the pin below. Change them here and the website,
- * its structured data, the sitemap and llms.txt all follow.
+ * La Soul's facts were checked by the owner on 16 November 2026 against its
+ * Google Maps listing, "La Soul Cafe & Burger Boutique": open every day
+ * 09:00–23:00 (it was 11:00–21:00 on the old site), Butmirska cesta 16A | 16B,
+ * 71210 Ilidža, next to Hotel Hills, the pin below, Instagram @lasoul.bih, no
+ * Facebook; parking, a terrace, Wi-Fi, children welcome, takeaway, no
+ * delivery. Change them here and the website, its structured data, the
+ * sitemap and llms.txt all follow.
  */
-export const VENUES: Record<string, Venue> = {
+const REAL_VENUES: Record<string, Venue> = {
   lasoul: {
     slug: 'lasoul',
     dbId: 'a5000000-0000-4000-8000-000000000001',
@@ -90,11 +104,15 @@ export const VENUES: Record<string, Venue> = {
     country: 'BA',
     geo: { lat: 43.827548, lng: 18.3103156 },
     mapsUrl: 'https://maps.app.goo.gl/UrsoG5vew2FfwMt66',
-    hours: [{ days: EVERY_DAY, opens: '11:00', closes: '21:00' }],
+    hours: [{ days: EVERY_DAY, opens: '09:00', closes: '23:00' }],
     instagram: 'https://www.instagram.com/lasoul.bih',
     facebook: null,
     reviewUrl: 'https://share.google/al1h37etpg3lpIXGn',
     live: true,
+    postalCode: '71210',
+    municipality: 'Ilidža',
+    mapsListingUrl: 'https://www.google.com/maps?cid=11410642801355365872',
+    amenities: { parking: true, terrace: true, wifi: true, childFriendly: true, takeaway: true, delivery: false },
     // The manifest is generated from vite.config.ts (VitePWA).
     brand: { themeColor: '#7e9b79', manifest: '/manifest.webmanifest', waiterManifest: '/manifest-waiter.webmanifest', managerManifest: '/manifest-manager.webmanifest', managerTouchIcon: '/icons/manager-apple-touch-icon.png', icon: '/icons/icon-192.png', appleTouchIcon: '/icons/apple-touch-icon.png', headingFont: '/fonts/lora.woff2' },
   },
@@ -102,9 +120,12 @@ export const VENUES: Record<string, Venue> = {
    * Same owner, its own restaurant (docs/two-restaurants.md). Its menu and
    * photographs arrived on 30 October 2026, and its menu has been in the
    * database since that evening, so it is live: veraitalia.net links to its
-   * menu and search engines list it. It is in Sarajevo (the owner, 30 October
-   * 2026); its street address, phone, hours and listings have not arrived, so
-   * they are empty and the website shows none of them.
+   * menu and search engines list it. The owner gave its facts on 16 November
+   * 2026: Butmirska cesta 16B, 71210 Ilidža, in the same building as La Soul;
+   * La Soul's phone for now (it will change); parking, a terrace, Wi-Fi,
+   * children welcome, takeaway, no delivery. It is opening soon, so it has no
+   * hours yet and the website shows none; its Google listing is not verified
+   * yet, so there is no map link or pin; no Instagram or Facebook yet.
    *
    * Other businesses share the name (a handbag shop, a travel agency, Italian
    * food shops, restaurants abroad), so its other names carry the city: what
@@ -116,9 +137,9 @@ export const VENUES: Record<string, Venue> = {
     name: 'Vera Italia',
     alternateNames: ['Vera Italia Sarajevo', 'Ristorante Vera Italia', 'Vera Italia Cucina Italiana'],
     tagline: 'Cucina Italiana',
-    phone: '',
-    phoneHref: '',
-    address: '',
+    phone: '+387 33 877 779',
+    phoneHref: '+38733877779',
+    address: 'Butmirska cesta 16B',
     city: 'Sarajevo',
     country: 'BA',
     geo: null,
@@ -128,10 +149,47 @@ export const VENUES: Record<string, Venue> = {
     facebook: null,
     reviewUrl: null,
     live: true,
+    postalCode: '71210',
+    municipality: 'Ilidža',
+    mapsListingUrl: null,
+    amenities: { parking: true, terrace: true, wifi: true, childFriendly: true, takeaway: true, delivery: false },
     // Its headings are Cormorant Garamond in italic (src/index.css).
     brand: { themeColor: '#f4efe6', manifest: '/manifest-veraitalia.webmanifest', waiterManifest: '/manifest-waiter-veraitalia.webmanifest', managerManifest: '/manifest-manager-veraitalia.webmanifest', managerTouchIcon: '/brand/vera/manager-apple-touch-icon.png', icon: '/brand/vera/icon-192.png', appleTouchIcon: '/brand/vera/apple-touch-icon.png', headingFont: '/fonts/cormorant-italic.woff2' },
   },
 };
+
+/**
+ * The offline demo (docs/demo-mode.md) is one fictional restaurant; its names
+ * are in src/demo/brand.ts. It has no listing to review and no social pages,
+ * and its icon is drawn in the page, so nothing here points at a real venue.
+ */
+const DEMO_VENUES: Record<string, Venue> = {
+  [DEMO_VENUE]: {
+    slug: RESTAURANT.slug,
+    dbId: RESTAURANT.dbId,
+    name: RESTAURANT.name,
+    alternateNames: [],
+    tagline: RESTAURANT.tagline,
+    phone: RESTAURANT.phone,
+    phoneHref: RESTAURANT.phoneHref,
+    address: RESTAURANT.address,
+    city: RESTAURANT.city,
+    country: RESTAURANT.country,
+    geo: null,
+    mapsUrl: '',
+    hours: [{ days: EVERY_DAY, opens: '08:00', closes: '23:00' }],
+    instagram: null,
+    facebook: null,
+    reviewUrl: null,
+    live: true,
+    brand: {
+      themeColor: RESTAURANT_THEME_COLOR, manifest: '', waiterManifest: '', managerManifest: '', managerTouchIcon: DEMO_ICON,
+      icon: DEMO_ICON, appleTouchIcon: DEMO_ICON, headingFont: '/fonts/lora.woff2',
+    },
+  },
+};
+
+export const VENUES: Record<string, Venue> = DEMO_BUILD ? DEMO_VENUES : REAL_VENUES;
 
 /**
  * A restaurant shown in place on this build (VITE_PREVIEW_VENUES, a comma
@@ -150,7 +208,7 @@ export function venueByDbId(id: string | null | undefined): Venue | null {
 }
 
 /** The venue a table QR code, a bare /menu or an old link belongs to. */
-export const DEFAULT_VENUE = 'lasoul';
+export const DEFAULT_VENUE = DEMO_BUILD ? DEMO_VENUE : 'lasoul';
 
 export function venueBySlug(slug: string | undefined): Venue | null {
   const venue = slug ? VENUES[slug] : undefined;

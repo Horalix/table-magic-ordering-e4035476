@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { AlertTriangle, Calculator, Check, Search } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { AdminCard, AdminCardContent, AdminCardHeader, EmptyState } from '@/components/admin/AdminCard';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { supabase } from '@/integrations/supabase/client';
@@ -120,17 +120,16 @@ const DishCostEditor = ({ rows, onChanged }: {
   };
 
   return (
-    <Card id="costs" className="rounded-2xl border-border">
-      <CardHeader className="pb-3">
-        <CardTitle className="font-serif text-lg flex items-center gap-2">
-          <Calculator className="w-5 h-5 text-primary shrink-0" /> What each dish costs you
-        </CardTitle>
-        <p className="text-xs font-sans text-muted-foreground">
+    <AdminCard id="costs">
+      <AdminCardHeader
+        icon={Calculator}
+        title="What each dish costs you"
+        description={<>
           Type what the ingredients of one portion cost. Every margin on this page becomes exact for that dish instead of
           an estimate. The dishes that take the most money come first. Guests never see these.
-        </p>
-      </CardHeader>
-      <CardContent>
+        </>}
+      />
+      <AdminCardContent>
         {error ? (
           <div className="flex items-start gap-2 text-sm font-sans">
             <AlertTriangle className="w-4 h-4 text-destructive shrink-0 mt-0.5" />
@@ -139,7 +138,7 @@ const DishCostEditor = ({ rows, onChanged }: {
         ) : !dishes ? (
           <Skeleton className="h-40 rounded-2xl" />
         ) : dishes.length === 0 ? (
-          <p className="text-sm font-sans text-muted-foreground py-4 text-center">No dishes on the menu yet.</p>
+          <EmptyState icon={Calculator} title="No dishes on the menu yet." hint="Add dishes under Menu; each one gets a cost box here." />
         ) : (
           <>
             <div className="flex flex-wrap items-center gap-3 mb-2">
@@ -165,8 +164,8 @@ const DishCostEditor = ({ rows, onChanged }: {
             )}
           </>
         )}
-      </CardContent>
-    </Card>
+      </AdminCardContent>
+    </AdminCard>
   );
 };
 

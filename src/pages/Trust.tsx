@@ -5,7 +5,8 @@ import { ArrowLeft, ShieldCheck, Lock, CreditCard, Database, Share2, UserCheck, 
 import { staggerContainer, fadeUp } from '@/lib/motion';
 import { useLanguageStore, useT, type Locale } from '@/lib/i18n';
 import { usePageMeta } from '@/lib/seo/page-meta';
-import { PRIVACY_PATH, privacyCopy, privacyGraph, type PrivacySection } from '@/lib/privacy';
+import { PRIVACY_PATH, privacyCopy, type PrivacySection } from '@/lib/privacy';
+import { privacyPageGraph } from '@/lib/seo/privacy-page';
 import { HOME_VENUE } from '@/lib/home-venue';
 import { VENUES } from '@/lib/venues';
 
@@ -28,7 +29,7 @@ const Trust = () => {
   const locale = useLanguageStore((s) => s.locale);
   usePageMeta({
     title: pick(COPY.title, locale), description: pick(COPY.intro, locale), path: PRIVACY_PATH, locale,
-    jsonLd: privacyGraph(VENUE, locale),
+    jsonLd: privacyPageGraph(VENUE, locale),
   });
 
   return (

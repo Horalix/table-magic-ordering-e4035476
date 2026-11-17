@@ -62,6 +62,14 @@ http://menu.lasoul.net/*              https://lasoul.net/:splat                 
 # First, the photos' folder: no page, but Google lists it, so it goes home.
 /site                          /                                           301
 /site/                         /                                           301
+# A dish's address with no page (a dish added or removed since the last
+# publish): the app, so a new dish still opens, with "404 Not Found", so a
+# search engine drops a dish that is gone. Before /menu/*, which answers 200.
+# Every dish page the build wrote is a file, and a file wins over a rule that
+# is not forced, so those answer 200 (static-pages.ts, MISSING_DISH_ROUTES).
+/menu/:venue/dish/*            /index.html                                 404
+/bs/menu/:venue/dish/*         /index.html                                 404
+/ar/menu/:venue/dish/*         /index.html                                 404
 /bs                            /index.html                                 200
 /ar                            /index.html                                 200
 /veraitalia                    /index.html                                 200
@@ -75,6 +83,14 @@ http://menu.lasoul.net/*              https://lasoul.net/:splat                 
 /tv                            /index.html                                 200
 /reserve                       /index.html                                 200
 /reservation/*                 /index.html                                 200
+# The menu, the booking page and the privacy notice in Bosnian and Arabic
+# (src/lib/seo/locale-path.ts), wherever the build wrote no page.
+/bs/menu/*                     /index.html                                 200
+/bs/reserve                    /index.html                                 200
+/bs/privacy                    /index.html                                 200
+/ar/menu/*                     /index.html                                 200
+/ar/reserve                    /index.html                                 200
+/ar/privacy                    /index.html                                 200
 /admin                         /index.html                                 200
 /admin/*                       /index.html                                 200
 /kitchen                       /index.html                                 200

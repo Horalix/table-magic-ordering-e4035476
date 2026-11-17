@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, LayoutGrid } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { AdminCard, AdminCardContent, AdminCardHeader, EmptyState } from '@/components/admin/AdminCard';
 import { Skeleton } from '@/components/ui/skeleton';
 import MenuMatrixChart from '@/components/admin/MenuMatrixChart';
 import {
@@ -53,7 +53,7 @@ const Box = ({ q, rows }: { q: Exclude<Quadrant, 'insufficient'>; rows: MenuEngi
   const [open, setOpen] = useState(false);
   const visible = open ? rows : rows.slice(0, 6);
   return (
-    <section className={`rounded-2xl border p-4 ${BOX_TONE[q]}`} aria-label={QUADRANTS[q].label}>
+    <section className={`rounded-xl border p-4 ${BOX_TONE[q]}`} aria-label={QUADRANTS[q].label}>
       <div className="flex items-baseline justify-between gap-2">
         <h4 className="font-sans font-semibold text-foreground">{QUADRANTS[q].label}</h4>
         <span className="text-xs font-sans text-muted-foreground tabular-nums">{rows.length}</span>
@@ -108,17 +108,16 @@ const MenuEngineeringCard = ({ days = 28, data }: {
   const assumed = scoped.some((r) => r.availability_basis === 'assumed');
 
   return (
-    <Card id="engineering" className="rounded-2xl border-border">
-      <CardHeader className="pb-3">
-        <CardTitle className="font-serif text-lg flex items-center gap-2">
-          <LayoutGrid className="w-5 h-5 text-primary shrink-0" /> Menu engineering
-        </CardTitle>
-        <p className="text-xs font-sans text-muted-foreground">
+    <AdminCard id="engineering">
+      <AdminCardHeader
+        icon={LayoutGrid}
+        title="Menu engineering"
+        description={<>
           Each dish against the others of its kind, over the last {days} complete trading days. Popular means at
           least 70% of an equal share; high margin means at least the kind&apos;s average margin per portion.
-        </p>
-      </CardHeader>
-      <CardContent className="space-y-4">
+        </>}
+      />
+      <AdminCardContent className="space-y-4">
         {error ? (
           <div className="flex items-start gap-2 text-sm font-sans">
             <AlertTriangle className="w-4 h-4 text-destructive shrink-0 mt-0.5" />
@@ -129,7 +128,7 @@ const MenuEngineeringCard = ({ days = 28, data }: {
             {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-40 rounded-2xl" />)}
           </div>
         ) : rows.length === 0 ? (
-          <p className="text-sm font-sans text-muted-foreground py-4 text-center">No sales in this window yet.</p>
+          <EmptyState icon={LayoutGrid} title="No sales in this window yet." hint="Each dish takes its place in the matrix once it has sold." />
         ) : (
           <>
             <div className="flex flex-wrap gap-1.5" role="group" aria-label="Kind of dish">
@@ -195,8 +194,8 @@ const MenuEngineeringCard = ({ days = 28, data }: {
             </div>
           </>
         )}
-      </CardContent>
-    </Card>
+      </AdminCardContent>
+    </AdminCard>
   );
 };
 

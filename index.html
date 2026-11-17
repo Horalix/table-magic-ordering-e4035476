@@ -19,6 +19,19 @@
         document.documentElement.style.colorScheme = 'only light';
       })();
     </script>
+    <!--
+      Added to a phone's Home Screen, the site opens as an app: the menu for a
+      guest, the waiter screen from a waiter page, and "Manager" (the admin)
+      from an admin page. src/hooks/useVenue.ts swaps the name, the icon, the
+      manifest and the toolbar colour for the page in hand at the first
+      render, before anyone can reach Share → Add to Home Screen; on an admin
+      page it also adds the picture an iPhone shows while the app opens.
+
+      The status bar stays "default": dark clock and battery on the page's own
+      light surface (the admin's top bar and the menu are both light).
+      "black-translucent" would draw them white, unreadable on cream.
+    -->
+    <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="La Soul" />

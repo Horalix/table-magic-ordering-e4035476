@@ -92,7 +92,7 @@ Score, all normalised to 0–1 before weighting (weights configurable in
 | observed | 25% | lift from real baskets |
 | learned | 25% | smoothed acceptance, **per daypart** |
 | margin | 10% | `margin_score`, internal, never shown |
-| exploration | 15% | decays with impressions, hashed per session |
+| exploration | 15% | decays with impressions, hashed per session. **Keep it on:** in the offline simulator, switching it off cost about 15% of suggestion margin. (Under the opt-in learner v4 the dial instead sets how far P(taken) is drawn from its posterior — see *The learner* below.) |
 
 minus a **capacity penalty** — see below.
 
@@ -167,6 +167,27 @@ Since `20261031120000_reco_quality.sql` (tested in
   `reco_clash.venue_id`; empty means both), so a rule for Vera Italia never
   changes La Soul.
 
+### The learner: v3 (default) and v4 (opt-in)
+
+`restaurant_settings.reco_learner` chooses the ranker (`20261116130000_reco_learner_v4.sql`):
+
+- **`v3` (default)** — everything above, unchanged.
+- **`v4`** — the same ranker with P(taken) drawn from each candidate's
+  posterior (Thompson sampling, seeded per visit) instead of the novelty bonus,
+  and the posterior learned per guest language (en/bs/ar). Switch a restaurant
+  with `UPDATE public.restaurant_settings SET reco_learner = 'v4' WHERE venue_id = …;`
+  — a policy change, so the restaurant's running experiment closes and the
+  always-on check opens the next under `v4-thompson-context`.
+
+**Why v4 is off:** in the offline simulator (`supabase/tests/reco-simulator.test.ts`,
+La Soul's real menu, 3 seeds × 6 weeks × 36 tables a day) v4 earned **5% less
+margin per table** than v3 where tourists and locals differ in taste and **2%
+less** where they do not; at half strength −1% and −4%. It explores more than v3,
+and six weeks of one café is too little data per language for the context to pay
+that back. Every decision now records the guest's language anyway, so a later
+v4 can be judged on real per-language data. Full results:
+`pass2-scratch/reco/SIMULATION.md`; mechanism: [measuring-upsell.md §14](measuring-upsell.md).
+
 ## 6. Substitution
 
 `guest_get_substitutes(item_id)` — for when something has run out.
@@ -179,6 +200,12 @@ Third is a real outcome. An unrelated dish offered as a substitute is worse than
 an honest "sorry, that is off tonight".
 
 ## 7. Is any of it working?
+
+> **Since `20261116120000_reco_always_measured.sql` it is always measured.**
+> 10% of each restaurant's tables see no suggestions (an "Always-on check",
+> opened by itself), and `reco_profit_check()` / the admin card *Are
+> suggestions earning?* reports extra margin per week from the cautious end
+> of a 95% interval. See [measuring-upsell.md §13](measuring-upsell.md).
 
 > **The measurement described below has been substantially rebuilt.** It was
 > assigned per session but analysed per order, counted tips as uplift, and

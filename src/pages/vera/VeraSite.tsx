@@ -14,6 +14,9 @@ import { sectionSlug } from '@/lib/menu-sections';
 import { VENUES, menuCategoryPath, menuPath } from '@/lib/venues';
 import ReserveLink from '@/components/site/ReserveLink';
 import { useReservationsOffered } from '@/hooks/useReservationsOffered';
+import { RESERVE_PATH } from '@/lib/seo/reservations';
+import { rcopy } from '@/lib/reservation-copy';
+import { dropPoster } from '@/lib/seo/poster';
 import menuData from '../../../scripts/vera-italia/menu.json';
 
 /**
@@ -43,6 +46,8 @@ const RoomImage = ({ name, alt, sizes, className, priority }: { name: Room; alt:
       loading={priority ? 'eager' : 'lazy'}
       decoding="async"
       {...(priority ? { fetchpriority: 'high' } : {})}
+      // The first screen's photograph is in: the one the page's HTML came with has done its work (src/lib/seo/poster.ts).
+      onLoad={priority ? dropPoster : undefined}
       style={{ backgroundImage: `url(${r.blur})`, backgroundSize: 'cover' }}
       className={className}
     />
@@ -104,6 +109,9 @@ const VeraSite = ({ locale: pathLocale }: { locale?: Locale }) => {
     path: veraSitePath(shownLocale), locale: shownLocale, alternates: veraSiteAlternates(), jsonLd, image: VERA_OG_IMAGE,
   });
 
+  // Leaving for another page: the first screen's poster, were it still there, goes too.
+  useEffect(() => dropPoster, []);
+
   // The header sits on the photograph until the page moves, then on travertine.
   const [scrolled, setScrolled] = useState(false);
   useEffect(() => {
@@ -152,6 +160,16 @@ const VeraSite = ({ locale: pathLocale }: { locale?: Locale }) => {
                 {c(SITE.menuTitle)}
               </Link>
             )}
+            {/* Only while the restaurant takes requests online (Admin → Reservations). */}
+            {reservations && (
+              <Link
+                to={RESERVE_PATH}
+                data-testid="reserve-link"
+                className={`hidden sm:inline-flex items-center min-h-[40px] px-4 rounded-full text-[13px] font-sans font-semibold tracking-[0.08em] uppercase rtl:tracking-normal transition-colors ${scrolled ? 'text-foreground hover:bg-muted' : 'text-white hover:bg-white/10'}`}
+              >
+                {rcopy('title', locale)}
+              </Link>
+            )}
             <div className={scrolled ? '' : '[&_button]:text-white [&_button]:border-white/30'}>
               <LanguageSelector variant="site" />
             </div>
@@ -170,7 +188,19 @@ const VeraSite = ({ locale: pathLocale }: { locale?: Locale }) => {
             </h1>
             {venue.city && <p className="mt-7 vi-caps text-[hsl(var(--vi-glow))]/85">{c(SITE.place)}</p>}
             <p className={`${venue.city ? 'mt-3' : 'mt-7'} font-serif italic text-[22px] sm:text-2xl text-[hsl(var(--vi-glow))]`}>{c(SITE.heroLine)}</p>
-            <div className="mt-9">{menuCta(true)}</div>
+            <div className="mt-9 flex w-full max-w-[17rem] flex-col items-stretch gap-3 sm:w-auto sm:max-w-none sm:flex-row sm:items-center sm:justify-center">
+              {menuCta(true)}
+              {reservations && (
+                <Link
+                  to={RESERVE_PATH}
+                  data-testid="reserve-link"
+                  className="inline-flex items-center justify-center gap-2.5 min-h-[50px] px-7 rounded-[2px] border border-[hsl(var(--vi-glow))]/70 text-[hsl(var(--vi-glow))] vi-caps backdrop-blur-[2px] transition-colors hover:bg-[hsl(var(--vi-glow))] hover:text-foreground"
+                >
+                  <CalendarClock className="h-4 w-4" aria-hidden />
+                  {rcopy('title', locale)}
+                </Link>
+              )}
+            </div>
           </div>
           <a href="#benvenuti" aria-label={c(SITE.welcome)} className="absolute bottom-4 left-1/2 z-10 -translate-x-1/2 grid h-11 w-11 place-items-center text-white/70 hover:text-white">
             <ChevronDown className="h-6 w-6 animate-bounce" aria-hidden />
@@ -336,7 +366,7 @@ const VeraSite = ({ locale: pathLocale }: { locale?: Locale }) => {
             <ReserveLink
               venueSlug={venue.slug}
               locale={locale}
-              className="mt-8 inline-flex min-h-[48px] items-center gap-2.5 rounded-full border border-foreground/25 px-6 font-sans text-sm font-semibold tracking-[0.08em] uppercase rtl:tracking-normal text-foreground transition-colors hover:bg-foreground/5"
+              className="mt-9 inline-flex min-h-[50px] items-center gap-2.5 rounded-[2px] bg-foreground px-8 text-background vi-caps transition-colors hover:bg-foreground/85"
             >
               <CalendarClock className="h-4 w-4" aria-hidden />
             </ReserveLink>
@@ -349,6 +379,7 @@ const VeraSite = ({ locale: pathLocale }: { locale?: Locale }) => {
         <img src="/brand/vera/lockup-cream.webp" alt="Vera Italia" width={1158} height={806} className="mx-auto w-40 h-auto opacity-90" />
         <div className="mt-8 flex justify-center gap-6 font-sans text-[13px]">
           {venue.live && <Link to={menuPath('veraitalia')} className="hover:text-white">{c(SITE.menuTitle)}</Link>}
+          {reservations && <Link to={RESERVE_PATH} data-testid="reserve-link" className="hover:text-white">{rcopy('title', locale)}</Link>}
           <Link to="/privacy/" className="hover:text-white">{t('privacy_security')}</Link>
         </div>
         <p className="mt-6 vi-caps text-[hsl(var(--vi-glow))]/50">© {new Date().getFullYear()} Vera Italia{venue.city ? ` · ${c(PLACE.city)}, ${c(PLACE.country)}` : ''}</p>

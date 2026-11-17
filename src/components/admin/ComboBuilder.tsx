@@ -74,11 +74,11 @@ const ComboBuilder = ({
       ))}
 
       <div className="flex flex-wrap items-center gap-1.5">
-        <Button type="button" variant="outline" size="sm" className="gap-1" onClick={() => onChange([...slots, newSlot()])}>
+        <Button type="button" variant="outline" size="sm" className="min-h-[44px] gap-1 md:min-h-[36px]" onClick={() => onChange([...slots, newSlot()])}>
           <Plus className="w-3.5 h-3.5" /> Add a part
         </Button>
         {slots.length === 0 && SUGGESTED.slice(0, 4).map((label) => (
-          <Button key={label} type="button" variant="ghost" size="sm" onClick={() => onChange([...slots, newSlot(label)])}>
+          <Button key={label} type="button" variant="ghost" size="sm" className="min-h-[44px] md:min-h-[36px]" onClick={() => onChange([...slots, newSlot(label)])}>
             + {label}
           </Button>
         ))}
@@ -144,19 +144,19 @@ const SlotEditor = ({
           placeholder="Part name, e.g. Drink"
           aria-label={`Name of part ${index + 1}`}
           maxLength={40}
-          className="h-9 flex-1 min-w-0"
+          className="h-11 flex-1 min-w-0 md:h-9"
         />
-        <Button type="button" variant="ghost" size="icon" className="h-9 w-9" disabled={index === 0} aria-label={`Move ${name} up`} onClick={() => onMove(-1)}><ArrowUp className="w-4 h-4" /></Button>
-        <Button type="button" variant="ghost" size="icon" className="h-9 w-9" disabled={index === count - 1} aria-label={`Move ${name} down`} onClick={() => onMove(1)}><ArrowDown className="w-4 h-4" /></Button>
-        <Button type="button" variant="ghost" size="icon" className="h-9 w-9" aria-label={`Remove ${name}`} onClick={onRemove}><Trash2 className="w-4 h-4 text-destructive" /></Button>
+        <Button type="button" variant="ghost" size="icon" className="h-11 w-11 md:h-9 md:w-9" disabled={index === 0} aria-label={`Move ${name} up`} onClick={() => onMove(-1)}><ArrowUp className="w-4 h-4" /></Button>
+        <Button type="button" variant="ghost" size="icon" className="h-11 w-11 md:h-9 md:w-9" disabled={index === count - 1} aria-label={`Move ${name} down`} onClick={() => onMove(1)}><ArrowDown className="w-4 h-4" /></Button>
+        <Button type="button" variant="ghost" size="icon" className="h-11 w-11 md:h-9 md:w-9" aria-label={`Remove ${name}`} onClick={onRemove}><Trash2 className="w-4 h-4 text-destructive" /></Button>
       </div>
       {translations ? (
         <div className="grid grid-cols-2 gap-2">
-          <Input value={slot.label_bs} onChange={(e) => onChange({ label_bs: e.target.value })} placeholder="Name (BS), e.g. Piće" maxLength={40} className="h-8 text-xs" />
-          <Input value={slot.label_ar} onChange={(e) => onChange({ label_ar: e.target.value })} placeholder="Name (AR)" dir="rtl" maxLength={40} className="h-8 text-xs" />
+          <Input value={slot.label_bs} onChange={(e) => onChange({ label_bs: e.target.value })} placeholder="Name (BS), e.g. Piće" maxLength={40} className="h-11 text-base md:h-8 md:text-xs" />
+          <Input value={slot.label_ar} onChange={(e) => onChange({ label_ar: e.target.value })} placeholder="Name (AR)" dir="rtl" maxLength={40} className="h-11 text-base md:h-8 md:text-xs" />
         </div>
       ) : (
-        <button type="button" className="text-[11px] font-sans text-primary underline-offset-2 hover:underline" onClick={() => setTranslations(true)}>
+        <button type="button" className="min-h-[44px] text-xs font-sans text-primary underline-offset-2 hover:underline md:min-h-0" onClick={() => setTranslations(true)}>
           + Bosnian and Arabic names
         </button>
       )}
@@ -185,9 +185,9 @@ const SlotEditor = ({
                   inputMode="decimal"
                   aria-label={`Extra charge for ${it?.name ?? 'this dish'} in ${name}`}
                   aria-invalid={bad}
-                  className={`h-8 w-16 text-xs text-right ${bad ? 'border-destructive' : ''}`}
+                  className={`h-11 w-20 text-base text-right md:h-8 md:w-16 md:text-xs ${bad ? 'border-destructive' : ''}`}
                 />
-                <Button type="button" variant="ghost" size="icon" className="h-8 w-8" aria-label={`Remove ${it?.name ?? 'dish'} from ${name}`}
+                <Button type="button" variant="ghost" size="icon" className="h-11 w-11 md:h-8 md:w-8" aria-label={`Remove ${it?.name ?? 'dish'} from ${name}`}
                   onClick={() => onChange({ options: slot.options.filter((x) => x.item_id !== o.item_id) })}>
                   <X className="w-3.5 h-3.5" />
                 </Button>
@@ -207,14 +207,14 @@ const SlotEditor = ({
           onChange={(e) => setQuery(e.target.value)}
           placeholder={`Add a dish to ${name}…`}
           aria-label={`Add a dish to ${name}`}
-          className="h-9 pl-8 text-sm"
+          className="h-11 ps-8 text-base md:h-9 md:text-sm"
         />
       </div>
       {hits.length > 0 && (
         <ul className="rounded-md border border-border divide-y divide-border bg-card max-h-56 overflow-y-auto">
           {hits.map((i) => (
             <li key={i.id}>
-              <button type="button" className="w-full flex items-center justify-between gap-2 px-2.5 py-2 text-sm text-left hover:bg-muted/50"
+              <button type="button" className="w-full flex min-h-[44px] items-center justify-between gap-2 px-2.5 py-2 text-sm text-left hover:bg-muted/50"
                 onClick={() => { add([i.id]); setQuery(''); }}>
                 <span className="truncate">{i.name}</span>
                 <span className="text-xs text-muted-foreground tabular-nums shrink-0">{Number(i.price).toFixed(2)} KM</span>
@@ -227,7 +227,7 @@ const SlotEditor = ({
         <label className="text-[11px] text-muted-foreground font-sans shrink-0" htmlFor={`${slot.key}-section`}>or every dish in</label>
         <select
           id={`${slot.key}-section`}
-          className="h-8 flex-1 min-w-0 rounded-md border border-input bg-background px-2 text-xs"
+          className="h-11 flex-1 min-w-0 rounded-md border border-input bg-background px-2 text-base md:h-8 md:text-xs"
           value=""
           onChange={(e) => {
             const id = e.target.value;

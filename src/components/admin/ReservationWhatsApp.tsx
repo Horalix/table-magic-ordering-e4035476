@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
+import { TONE } from '@/components/staff/status-tone';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const untyped = supabase as unknown as { from: (table: string) => any };
@@ -101,19 +102,22 @@ const ReservationWhatsApp = ({ venueSlug }: { venueSlug: string }) => {
   const ready = report?.ready === true;
   const numberChanged = number.trim() !== (choices.reservations_whatsapp_admin ?? '');
 
-  const state = report === undefined ? { tone: 'text-muted-foreground', Icon: Loader2, text: 'Checking…' }
-    : !report?.configured ? { tone: 'text-muted-foreground', Icon: CircleDashed, text: 'Not connected yet' }
-    : !report.number ? { tone: 'text-amber-600', Icon: TriangleAlert, text: 'No number for this restaurant yet' }
-    : ready ? { tone: 'text-primary', Icon: CheckCircle2, text: 'Ready' }
-    : { tone: 'text-amber-600', Icon: CircleDashed, text: `${approved} of ${report.templates.length} messages approved` };
+  // The shared staff colours (status-tone.ts): ready is green, half-way is amber, not started is grey.
+  const state = report === undefined ? { tone: 'bg-muted text-muted-foreground', Icon: Loader2, text: 'Checking…' }
+    : !report?.configured ? { tone: 'bg-muted text-muted-foreground', Icon: CircleDashed, text: 'Not connected yet' }
+    : !report.number ? { tone: TONE.preparing.chip, Icon: TriangleAlert, text: 'No number for this restaurant yet' }
+    : ready ? { tone: TONE.ready.chip, Icon: CheckCircle2, text: 'Ready' }
+    : { tone: TONE.preparing.chip, Icon: CircleDashed, text: `${approved} of ${report.templates.length} messages approved` };
 
   return (
-    <div data-testid="reservation-whatsapp" className="rounded-xl border border-border/60 px-4 py-3 font-sans space-y-3">
-      <div className="flex items-center gap-3">
-        <MessageCircle className="w-5 h-5 shrink-0 text-primary" aria-hidden />
-        <p className="flex-1 min-w-0 text-sm font-semibold text-foreground">WhatsApp messages</p>
-        <span data-testid="whatsapp-state" className={`inline-flex items-center gap-1.5 text-xs font-medium ${state.tone}`}>
-          <state.Icon className={`w-3.5 h-3.5 ${report === undefined ? 'animate-spin' : ''}`} aria-hidden /> {state.text}
+    <div data-testid="reservation-whatsapp" className="rounded-xl border border-border/70 px-4 py-3.5 font-sans space-y-3">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary" aria-hidden>
+          <MessageCircle className="h-4 w-4" />
+        </span>
+        <p className="min-w-0 flex-1 text-sm font-semibold text-foreground">WhatsApp messages</p>
+        <span data-testid="whatsapp-state" className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium ${state.tone}`}>
+          <state.Icon className={`w-3.5 h-3.5 ${report === undefined ? 'animate-spin motion-reduce:animate-none' : ''}`} aria-hidden /> {state.text}
         </span>
       </div>
 
@@ -134,7 +138,7 @@ const ReservationWhatsApp = ({ venueSlug }: { venueSlug: string }) => {
             {rejected.length > 0 && ` Not approved: ${rejected.map((t) => `${t.name} (${t.language})`).join(', ')}.`}
           </p>
           {missing > 0 && (
-            <Button type="button" size="sm" onClick={() => void setUp()} disabled={busy !== null} className="gap-2">
+            <Button type="button" size="sm" onClick={() => void setUp()} disabled={busy !== null} className="h-11 gap-2 lg:h-9">
               {busy === 'setup' && <Loader2 className="w-3.5 h-3.5 animate-spin" />} Set up the messages
             </Button>
           )}

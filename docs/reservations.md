@@ -147,8 +147,9 @@ reservation: Apple allows web notifications only from a Home Screen app.
 2. Tap **Share**, then **Add to Home Screen**. The name is **Manager**.
 3. Open **Manager** from the Home Screen and sign in (the Home Screen app
    keeps its own sign-in).
-4. Go to **Reservations**, turn on **Alert this phone**, tap **Allow**, then
-   **Send a test** and lock the phone: it arrives within about ten seconds.
+4. Tap **Service**, then **Reservations**; turn on **Alert this phone**, tap
+   **Allow**, then **Send a test** and lock the phone: it arrives within about
+   ten seconds.
 5. Settings → Notifications → Manager: sounds and lock screen on. Focus
    modes silence it like any other app; allow Manager in the ones you use.
 
@@ -158,6 +159,52 @@ screen** / **Install app**. Then the same steps 3 and 4.
 There is no App Store app. One would need an Apple developer account, a Mac
 to build it and Apple's review; the Home Screen app needs none of that and
 rings the same way.
+
+**What makes it an app and not a web page** (`src/components/admin/nav/`,
+`src/hooks/useVenue.ts`):
+
+- **The admin tells the manager once.** In Safari on an iPhone the admin
+  shows a small card, "Put Manager on your Home Screen", with the two steps
+  and why; on Android and in Chrome on a computer the same card has an
+  **Install app** button (the browser's own install). Put away with the ✕ it
+  stays away on that device, and it is never shown inside the app. On a
+  phone, **More → Manager app** opens the page with every step at any time.
+- **It opens on the admin, not on a white flash.** On an admin page the
+  status bar and toolbar take the admin's background colour (both Manager
+  manifests say the same one), and an iPhone is given the picture it shows
+  while the app opens: the background with the Manager icon. The picture is
+  drawn for the screen in hand rather than shipped as a file per iPhone
+  model, so a new iPhone needs nothing. The status bar is the light one (dark
+  clock): every surface under it is light.
+- **The same navigation, sized for a thumb.** A bottom bar with Home,
+  Service, Menu, Reports and More; the pages of an area are chips under the
+  top bar. Service carries the number of guests waiting, and **the app's icon
+  carries the same number** (iPhone shows it once notifications are allowed).
+  Everything keeps clear of the notch and the home indicator.
+- **No browser around it, so the app has its own.** A Home Screen app cannot
+  be pulled down to refresh: the round arrow in the top bar loads the open
+  page again. It has no back button: the kitchen display and the floor
+  monitor (More → Other screens) open inside the app under a bar with
+  **‹ Admin**, which returns to where the manager was. In a browser those two
+  open in a new tab instead.
+- **The magnifier finds any page** by its name or by what the manager wants
+  to do ("printer", "price", "PIN", "close the day").
+- **A one-minute walkthrough, "What's new".** The first time an admin opens
+  the admin on a device after the November 2026 layout, eight short steps
+  point at the real things on their screen: the five areas and where the old
+  pages went, the search, Service and its waiting number, this app, the
+  floor monitor, What the app earned. Skip or Done and it does not come
+  back. To see it again: **More → What's new** on a phone, **What's new**
+  at the bottom of the sidebar on a laptop, or type "tour" in the search. To
+  send it to a manager, give them `lasoul.net/admin?tour=1`. To show a new
+  walkthrough after a later update, change the steps in
+  `src/components/admin/nav/whats-new.ts` and the version in
+  `whats-new-version.ts`; `e2e/admin-tour.spec.ts` holds it.
+
+`e2e/admin-speed.spec.ts` holds these in Chromium and WebKit with an iPhone
+profile, telling the page it was opened from the Home Screen. What only a
+real iPhone can show: the launch picture and the status bar's colour, the
+number on the icon, and the lock-screen alert itself.
 
 A request nobody answers is not declined by the system: it stays waiting, and
 reads **not answered in time** once its time has passed.

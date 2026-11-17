@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { formatStamp } from '@/lib/timing';
 import { Link, useLocation } from 'react-router-dom';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { AdminCard, AdminCardContent, AdminCardHeader, EmptyState, KpiCard, Stagger } from '@/components/admin/AdminCard';
+import { money } from '@/components/admin/admin-format';
 import PrepAccuracyPanel from '@/components/admin/PrepAccuracyPanel';
 import InsightCards from '@/components/admin/InsightCards';
 import MenuEngineeringCard from '@/components/admin/MenuEngineeringCard';
@@ -15,7 +16,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
   RefreshCw, TrendingUp, TrendingDown, Link2, Sparkles, Brain, AlertTriangle,
-  Coins, Eye, Plus, Info, CheckCircle2, Ban, ArrowRight,
+  Coins, Eye, Plus, Info, CheckCircle2, Ban, ArrowRight, LayoutGrid,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
@@ -53,35 +54,21 @@ const settle = <T,>(result: PromiseSettledResult<T>): Section<T> => (
 );
 
 const SectionError = ({ title, message }: { title: string; message: string }) => (
-  <Card className="border-destructive/30">
-    <CardContent className="p-4 flex items-start gap-2">
+  <AdminCard className="border-destructive/30">
+    <div className="p-5 flex items-start gap-2">
       <AlertTriangle className="w-5 h-5 text-destructive shrink-0 mt-0.5" />
       <div className="text-sm font-sans min-w-0">
         <p className="font-semibold text-foreground">Could not load {title}.</p>
         <p className="text-muted-foreground mt-0.5 break-words">{message}</p>
       </div>
-    </CardContent>
-  </Card>
+    </div>
+  </AdminCard>
 );
 
-const Stat = ({ icon: Icon, label, value, sub, tone = 'text-primary' }: {
-  icon: React.ElementType; label: string; value: string; sub?: React.ReactNode; tone?: string;
-}) => (
-  <Card className="border-border">
-    <CardContent className="p-5">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="text-sm font-sans text-muted-foreground">{label}</p>
-          <p className="text-2xl font-sans font-semibold text-foreground mt-1 tabular-nums">{value}</p>
-          {sub && <p className="text-xs font-sans text-muted-foreground mt-0.5 leading-snug">{sub}</p>}
-        </div>
-        <div className={`w-10 h-10 rounded-lg bg-muted grid place-items-center shrink-0 ${tone}`}>
-          <Icon className="w-5 h-5" />
-        </div>
-      </div>
-    </CardContent>
-  </Card>
-);
+/** A percentage for a KpiCard: counts up, or a dash when there is none. */
+const pctFigure = (n: number | null | undefined) => (n === null || n === undefined
+  ? { display: '—' }
+  : { value: Number(n), format: (v: number) => v.toFixed(1), unit: '%' });
 
 const STATUS_STYLE: Record<SuggestionStatus, { label: string; className: string }> = {
   strong:   { label: 'Strong',   className: 'bg-primary/10 text-primary' },
@@ -368,19 +355,14 @@ const AdminMenuIntelligence = () => {
       </div>
 
       {noData && !impact.error && !items.error && (
-        <Card className="border-border">
-          <CardContent className="p-5 flex items-start gap-3">
-            <Info className="w-5 h-5 text-accent shrink-0 mt-0.5" />
-            <div className="text-sm font-sans">
-              <p className="font-semibold text-foreground">Nothing to learn from yet.</p>
-              <p className="text-muted-foreground mt-1">
-                These numbers fill in as guests use the app. A pairing needs at least three tables
-                before the engine acts on it; acceptance needs about twenty impressions
-                per suggestion. Come back after a full service.
-              </p>
-            </div>
-          </CardContent>
-        </Card>
+        <AdminCard>
+          <EmptyState
+            icon={Info}
+            tone="accent"
+            title="Nothing to learn from yet."
+            hint="These numbers fill in as guests use the app. A pairing needs at least three tables before the engine acts on it; acceptance needs about twenty impressions per suggestion. Come back after a full service."
+          />
+        </AdminCard>
       )}
 
       <MenuIntelligenceSummary
@@ -415,21 +397,25 @@ const AdminMenuIntelligence = () => {
           {/* ---- Item funnel ---- */}
           {items.error ? <SectionError title="the per-dish figures" message={items.error} /> : (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <Card id="leaks" className="border-border">
-                <CardHeader className="pb-3">
-                  <CardTitle className="font-serif text-lg flex items-center gap-2">
-                    <TrendingDown className="w-5 h-5 text-destructive shrink-0" /> Looked at, not ordered
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
+              <AdminCard id="leaks">
+                <AdminCardHeader
+                  icon={TrendingDown}
+                  tone="destructive"
+                  title="Looked at, not ordered"
+                />
+                <AdminCardContent>
                   <p className="text-sm font-sans text-muted-foreground mb-3 leading-relaxed">
                     On the menu and available, looked at {LEAK_MIN_VIEWS}+ times, and fewer than one look in ten
                     became an order. Almost always the photo, the description or the price — rarely the dish.
                   </p>
                   {leaks.length === 0 ? (
-                    <p className="text-sm text-muted-foreground font-sans py-4 text-center">
-                      Nothing standing out. Needs {LEAK_MIN_VIEWS}+ views on an item to judge.
-                    </p>
+                    <EmptyState
+                      icon={CheckCircle2}
+                      tone="primary"
+                      title="Nothing standing out."
+                      hint={`Needs ${LEAK_MIN_VIEWS}+ views on an item to judge.`}
+                      className="py-8"
+                    />
                   ) : (
                     <ul className="divide-y divide-border">
                       {leaks.slice(0, 8).map((i) => (
@@ -442,18 +428,18 @@ const AdminMenuIntelligence = () => {
                       ))}
                     </ul>
                   )}
-                </CardContent>
-              </Card>
+                </AdminCardContent>
+              </AdminCard>
 
-              <Card className="border-border">
-                <CardHeader className="pb-3">
-                  <CardTitle className="font-serif text-lg flex items-center gap-2">
-                    <Eye className="w-5 h-5 text-accent shrink-0" /> Most looked at
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
+              <AdminCard>
+                <AdminCardHeader
+                  icon={Eye}
+                  tone="accent"
+                  title="Most looked at"
+                />
+                <AdminCardContent>
                   {mostViewed.every((i) => i.views === 0) ? (
-                    <p className="text-sm text-muted-foreground font-sans py-4 text-center">No views recorded yet.</p>
+                    <EmptyState icon={Eye} title="No views recorded yet." hint="Dishes appear here as guests open them on the menu." className="py-8" />
                   ) : (
                     <ul className="divide-y divide-border">
                       {mostViewed.filter((i) => i.views > 0).map((i) => (
@@ -466,24 +452,27 @@ const AdminMenuIntelligence = () => {
                       ))}
                     </ul>
                   )}
-                </CardContent>
-              </Card>
+                </AdminCardContent>
+              </AdminCard>
 
-              <Card className="border-border">
-                <CardHeader className="pb-3">
-                  <CardTitle className="font-serif text-lg flex items-center gap-2">
-                    <Ban className="w-5 h-5 text-muted-foreground shrink-0" /> Not selling at all
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
+              <AdminCard>
+                <AdminCardHeader
+                  icon={Ban}
+                  tone="muted"
+                  title="Not selling at all"
+                />
+                <AdminCardContent>
                   <p className="text-sm font-sans text-muted-foreground mb-3">
                     On the menu for the whole window, available, and never ordered. Dishes added more recently
                     are left out until they have had a fair chance. Cut, re-describe, or re-price.
                   </p>
                   {dead.length === 0 ? (
-                    <p className="text-sm text-muted-foreground font-sans py-4 text-center">
-                      Everything on the menu sold at least once.
-                    </p>
+                    <EmptyState
+                      icon={CheckCircle2}
+                      tone="primary"
+                      title="Everything on the menu sold at least once."
+                      className="py-8"
+                    />
                   ) : (
                     <ul className="divide-y divide-border">
                       {dead.slice(0, 10).map((i) => (
@@ -496,21 +485,21 @@ const AdminMenuIntelligence = () => {
                       ))}
                     </ul>
                   )}
-                </CardContent>
-              </Card>
+                </AdminCardContent>
+              </AdminCard>
             </div>
           )}
 
 
           {/* ---- Sold-out cost ---- */}
           {soldOut.error ? <SectionError title="sold-out figures" message={soldOut.error} /> : (soldOut.data?.length ?? 0) > 0 && (
-            <Card className="border-border">
-              <CardHeader className="pb-3">
-                <CardTitle className="font-serif text-lg flex items-center gap-2">
-                  <AlertTriangle className="w-5 h-5 text-accent shrink-0" /> What being sold out is costing
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
+            <AdminCard>
+              <AdminCardHeader
+                icon={AlertTriangle}
+                tone="accent"
+                title="What being sold out is costing"
+              />
+              <AdminCardContent>
                 <p className="text-sm font-sans text-muted-foreground mb-3">
                   Currently unavailable. The figure is what each dish took on a typical trading day while it was
                   selling — roughly what every further day without it forgoes, before counting guests who order
@@ -529,8 +518,8 @@ const AdminMenuIntelligence = () => {
                     </li>
                   ))}
                 </ul>
-              </CardContent>
-            </Card>
+              </AdminCardContent>
+            </AdminCard>
           )}
 
           <DishCostEditor rows={engineering.data} onChanged={() => void loadEngineering()} />
@@ -539,38 +528,37 @@ const AdminMenuIntelligence = () => {
         <TabsContent value="suggestions" forceMount className="mt-5 space-y-6 data-[state=inactive]:hidden focus-visible:outline-none">
           {/* ---- Is it earning its place? ---- */}
           {impact.error ? <SectionError title="suggestion figures" message={impact.error} /> : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              <Stat
+            <Stagger className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+              <KpiCard
                 icon={Coins}
                 label="Earned by suggestions (upper bound)"
-                value={km(im?.attributed_revenue)}
-                sub={`${pct(im?.uplift_pct)} of ${km(im?.net_sales ?? im?.total_revenue)} net sales`}
+                value={Number(im?.attributed_revenue ?? 0)}
+                format={money}
+                unit="KM"
+                hint={`${pct(im?.uplift_pct)} of ${km(im?.net_sales ?? im?.total_revenue)} net sales`}
               />
               {verified ? (
-                <Stat
+                <KpiCard
                   icon={Sparkles}
                   label="Suggestions taken and paid for"
-                  value={pct(im?.paid_acceptance_pct)}
-                  sub={`${im?.paid ?? 0} paid of ${im?.seen ?? 0} actually seen`}
-                  tone="text-accent"
+                  {...pctFigure(im?.paid_acceptance_pct)}
+                  hint={`${im?.paid ?? 0} paid of ${im?.seen ?? 0} actually seen`}
                 />
               ) : (
-                <Stat
+                <KpiCard
                   icon={Sparkles}
                   label="Suggestion taps"
-                  value={pct(im?.overall_acceptance_pct)}
-                  sub={`${im?.accepted ?? 0} taps of ${im?.shown ?? 0} shown — a tap is not a sale`}
-                  tone="text-accent"
+                  {...pctFigure(im?.overall_acceptance_pct)}
+                  hint={`${im?.accepted ?? 0} taps of ${im?.shown ?? 0} shown — a tap is not a sale`}
                 />
               )}
-              <Stat
+              <KpiCard
                 icon={Link2}
                 label="Orders that took one"
-                value={pct(im?.attach_rate_pct)}
-                sub={`${im?.orders_with_suggestion ?? 0} of ${im?.orders ?? 0} orders`}
-                tone="text-accent"
+                {...pctFigure(im?.attach_rate_pct)}
+                hint={`${im?.orders_with_suggestion ?? 0} of ${im?.orders ?? 0} orders`}
               />
-            </div>
+            </Stagger>
           )}
 
 
@@ -583,18 +571,14 @@ const AdminMenuIntelligence = () => {
             to order. It is an upper bound wearing the costume of a measurement.
           */}
           {holdout.error ? <SectionError title="the holdout comparison" message={holdout.error} /> : (
-            <Card className={
-              holdout.data?.status === 'positive' ? 'border-primary/40 bg-primary/5'
+            <AdminCard className={
+              holdout.data?.status === 'positive' ? 'border-primary/40 bg-primary/[0.04]'
                 : holdout.data?.status === 'negative' || holdout.data?.status === 'invalid_srm'
-                  ? 'border-destructive/40 bg-destructive/5'
-                  : 'border-border'
+                  ? 'border-destructive/40 bg-destructive/[0.04]'
+                  : ''
             }>
-              <CardHeader className="pb-3">
-                <CardTitle className="font-serif text-lg flex items-center gap-2">
-                  <Brain className="w-5 h-5 text-primary shrink-0" /> What are the suggestions actually worth?
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
+              <AdminCardHeader icon={Brain} title="What are the suggestions actually worth?" />
+              <AdminCardContent className="space-y-4">
                 {holdout.data
                   ? <HoldoutSummary holdout={holdout.data} />
                   : <Skeleton className="h-20 rounded-xl" />}
@@ -610,8 +594,8 @@ const AdminMenuIntelligence = () => {
                     recorded a head count.
                   </p>
                 )}
-              </CardContent>
-            </Card>
+              </AdminCardContent>
+            </AdminCard>
           )}
 
           {/*
@@ -620,8 +604,8 @@ const AdminMenuIntelligence = () => {
             gap overstates what suggestions did — by an unknown amount.
           */}
           {im && (
-            <Card className="border-border border-dashed">
-              <CardContent className="p-5 space-y-2">
+            <AdminCard className="border-dashed shadow-none">
+              <AdminCardContent className="pt-5 sm:pt-6 space-y-2">
                 <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
                   <p className="text-sm font-sans text-muted-foreground flex items-center gap-1.5">
                     <TrendingUp className="w-4 h-4 shrink-0" /> Order with a suggestion vs without
@@ -641,19 +625,17 @@ const AdminMenuIntelligence = () => {
                   whole line even when the guest would have ordered it anyway. The holdout above is the number to
                   trust.
                 </p>
-              </CardContent>
-            </Card>
+              </AdminCardContent>
+            </AdminCard>
           )}
 
           <RecoFunnelCard holdout={holdout.data} />
 
           {/* ---- Which surface earns its space ---- */}
           {placements.error ? <SectionError title="placements" message={placements.error} /> : (placements.data?.length ?? 0) > 0 && (
-            <Card className="border-border">
-              <CardHeader className="pb-3">
-                <CardTitle className="font-serif text-lg">Which suggestion spot earns its place</CardTitle>
-              </CardHeader>
-              <CardContent>
+            <AdminCard>
+              <AdminCardHeader icon={LayoutGrid} title="Which suggestion spot earns its place" />
+              <AdminCardContent>
                 <p className="text-sm font-sans text-muted-foreground mb-3">
                   The cart, the dish page and the after-meal prompt are three different products doing
                   three different jobs. One combined number hides which to invest in — and which to
@@ -673,19 +655,19 @@ const AdminMenuIntelligence = () => {
                     </div>
                   ))}
                 </div>
-              </CardContent>
-            </Card>
+              </AdminCardContent>
+            </AdminCard>
           )}
 
           {/* ---- What the engine is doing ---- */}
           {health.error ? <SectionError title="the engine's settings" message={health.error} /> : engine && (
-            <Card className="border-border">
-              <CardHeader className="pb-3">
-                <CardTitle className="font-serif text-lg flex items-center gap-2">
-                  <Brain className="w-5 h-5 text-accent shrink-0" /> How the engine decides
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
+            <AdminCard>
+              <AdminCardHeader
+                icon={Brain}
+                tone="accent"
+                title="How the engine decides"
+              />
+              <AdminCardContent className="space-y-4">
                 <p className="text-sm font-sans text-muted-foreground leading-relaxed">
                   Each candidate gets a score from four signals, then every guardrail is applied on top —
                   never a sold-out dish, never something already in the cart, never another item from the
@@ -738,22 +720,21 @@ const AdminMenuIntelligence = () => {
                     overtake your pairings — never the rules above.
                   </p>
                 )}
-              </CardContent>
-            </Card>
+              </AdminCardContent>
+            </AdminCard>
           )}
 
           {/* ---- Suggestion performance ---- */}
           {suggestions.error ? <SectionError title="suggestion performance" message={suggestions.error} /> : (
-            <Card className="border-border">
-              <CardHeader className="pb-3">
-                <CardTitle className="font-serif text-lg">Which suggestions work</CardTitle>
-                <p className="text-xs font-sans text-muted-foreground">{fixedWindowNote}</p>
-              </CardHeader>
-              <CardContent>
+            <AdminCard>
+              <AdminCardHeader icon={Sparkles} title="Which suggestions work" description={fixedWindowNote} />
+              <AdminCardContent>
                 {(suggestions.data?.length ?? 0) === 0 ? (
-                  <p className="text-sm text-muted-foreground font-sans py-6 text-center">
-                    No suggestion has been shown yet.
-                  </p>
+                  <EmptyState
+                    icon={Sparkles}
+                    title="No suggestion has been shown yet."
+                    hint="Each suggestion gets a row here once guests have seen it."
+                  />
                 ) : (
                   <div className="overflow-x-auto -mx-2 px-2">
                     <table className="w-full text-sm font-sans min-w-[720px]">
@@ -798,23 +779,22 @@ const AdminMenuIntelligence = () => {
                     </table>
                   </div>
                 )}
-              </CardContent>
-            </Card>
+              </AdminCardContent>
+            </AdminCard>
           )}
 
           {/* ---- Discovered pairings ---- */}
           {pairs.error ? <SectionError title="pairings" message={pairs.error} /> : (
-            <Card id="pairings" className="border-border">
-              <CardHeader className="pb-3">
-                <CardTitle className="font-serif text-lg flex items-center gap-2">
-                  <Link2 className="w-5 h-5 text-primary shrink-0" /> What actually goes together
-                </CardTitle>
-                <p className="text-xs font-sans text-muted-foreground">
+            <AdminCard id="pairings">
+              <AdminCardHeader
+                icon={Link2}
+                title="What actually goes together"
+                description={<>
                   Learned from tables as they order; last learned {when(engine?.learning?.last_learned_at ?? engine?.affinity_computed_at)},
                   {' '}last refreshed {when(engine?.learning?.refreshed_at ?? engine?.affinity_computed_at)}.
-                </p>
-              </CardHeader>
-              <CardContent>
+                </>}
+              />
+              <AdminCardContent>
                 <p className="text-sm font-sans text-muted-foreground mb-4 leading-relaxed">
                   Found in real orders, and already used by the suggestions — no need to add them.{' '}
                   <strong className="text-foreground">Lift</strong> is how much more
@@ -822,9 +802,11 @@ const AdminMenuIntelligence = () => {
                   chance. A popular item that appears in everything scores about 1.0 and is not a pairing.
                 </p>
                 {(pairs.data?.length ?? 0) === 0 ? (
-                  <p className="text-sm text-muted-foreground font-sans py-6 text-center">
-                    No pairings yet — a pair needs at least three tables, more often than chance.
-                  </p>
+                  <EmptyState
+                    icon={Link2}
+                    title="No pairings yet."
+                    hint="A pair needs at least three tables, more often than chance."
+                  />
                 ) : (
                   <ul className="divide-y divide-border">
                     {pairs.data?.map((p) => (
@@ -851,8 +833,8 @@ const AdminMenuIntelligence = () => {
                     ))}
                   </ul>
                 )}
-              </CardContent>
-            </Card>
+              </AdminCardContent>
+            </AdminCard>
           )}
 
         </TabsContent>

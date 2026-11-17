@@ -176,13 +176,15 @@ const WaiterLogin = () => {
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
           <img src={STAFF_BRAND.mark} alt={HOME.name} width={STAFF_BRAND.width} height={STAFF_BRAND.height} className="w-auto h-24 mx-auto mb-4 object-contain" />
-          <h1 className="font-serif text-2xl font-bold text-white">{forKitchen ? 'Kitchen Sign In' : 'Waiter Sign In'}</h1>
-          <p className="text-sm text-white/70 font-sans mt-1">
-            {linkedUsername ? 'Your username is filled in: type your password' : 'Use your username and password'}
-          </p>
+          <h1 className="font-serif text-2xl font-bold text-white">{forKitchen ? 'Kitchen sign in' : 'Waiter sign in'}</h1>
         </div>
 
         <form onSubmit={handleLogin} className="space-y-4 bg-card rounded-2xl p-6 shadow-xl">
+          {/* In the card, not on the backdrop: white at 70% on La Soul's sage
+              was 2.4:1, too faint to read on a phone outdoors. */}
+          <p className="text-sm text-muted-foreground font-sans -mt-1">
+            {linkedUsername ? 'Your username is filled in: type your password.' : 'Use your username and password.'}
+          </p>
           <div>
             <Label htmlFor="waiter-login-username" className="font-sans text-sm text-foreground">Username</Label>
             <div className="relative mt-1.5">
@@ -218,7 +220,6 @@ const WaiterLogin = () => {
                 type={showPassword ? 'text' : 'password'}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
                 required
                 autoFocus={!!linkedUsername}
                 autoComplete="current-password"
@@ -241,7 +242,7 @@ const WaiterLogin = () => {
             disabled={loading || !username || !password}
             className="w-full h-12 rounded-xl bg-primary text-primary-foreground font-sans font-semibold"
           >
-            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Sign In'}
+            {loading ? <><Loader2 className="w-4 h-4 animate-spin motion-reduce:animate-none mr-2" aria-hidden /> Signing in…</> : 'Sign in'}
           </Button>
           <p className="text-xs text-center text-muted-foreground font-sans">
             Forgot your password? Your manager gives you a new one in Admin → Waiters.
@@ -249,13 +250,13 @@ const WaiterLogin = () => {
           {!inWaiterApp() && !kitchenApp && (
             <>
               <p className="text-xs text-center text-muted-foreground font-sans">
-                Manager? <button type="button" onClick={() => navigate('/admin/login')} className="underline">Admin login</button>
+                Manager? <button type="button" onClick={() => navigate('/admin/login')} className="inline-block py-3 -my-3 underline underline-offset-2 font-medium text-foreground/80">Admin login</button>
               </p>
               {/* Pages of their own, outside the app (public/waiter-app/, public/kitchen-app/): plain links, not routes. */}
               <p className="text-xs text-center text-muted-foreground font-sans">
                 {forKitchen
-                  ? <>Android tablet? <a href="/kitchen-app/" className="underline">Get the kitchen app</a></>
-                  : <>Android tablet or phone? <a href="/waiter-app/" className="underline">Get the waiter app</a></>}
+                  ? <>Android tablet? <a href="/kitchen-app/" className="inline-block py-3 -my-3 underline underline-offset-2 font-medium text-foreground/80">Get the kitchen app</a></>
+                  : <>Android tablet or phone? <a href="/waiter-app/" className="inline-block py-3 -my-3 underline underline-offset-2 font-medium text-foreground/80">Get the waiter app</a></>}
               </p>
             </>
           )}

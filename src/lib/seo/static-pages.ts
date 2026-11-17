@@ -20,10 +20,15 @@ import type { Venue } from '../venues';
 import { CURATED_SIGNATURES } from '../../components/site/signature-list';
 import { absoluteUrl, SITE_URL } from './site-url';
 import type { SeoMenu, SeoMenuCategory, SeoMenuItem, SeoMenuSection } from './menu-data';
-import { categoryPath, dishPath, faqEntries, hoursDays, LOCALES, menuPath, OG_IMAGE_PATH, PRIVACY_PATH, sitePath } from './structured-data';
+import {
+  categoryPath, dishPath, faqEntries, hoursDays, LOCALES, menuPath, OG_IMAGE_PATH, PRIVACY_PATH, signatureHref, sitePath,
+} from './structured-data';
 import { orderingCopy, orderingOffered } from './ordering';
 import { RESERVE_PATH, reservationsOffered } from './reservations';
 import { rcopy } from '../reservation-copy';
+import { addressLocale, localePath, PREFIXED_LOCALES } from './locale-path';
+import { allergenName, kmPrice, pageT } from './page-copy';
+import SITE_IMAGES from '../../components/site/site-images.json';
 
 const OG_LOCALE: Record<Locale, string> = { en: 'en_GB', bs: 'bs_BA', ar: 'ar_AR' };
 const LANGUAGE_NAME: Record<Locale, string> = { en: 'English', bs: 'Bosanski', ar: 'العربية' };
@@ -91,26 +96,50 @@ export function headTags(p: PageHead): string {
 
 const st = (key: SiteKey, locale: Locale, vars?: Record<string, string | number>) => escapeHtml(siteT(key, locale, vars));
 
-const languageLinks = (current: Locale) =>
+/** This page in the other two languages: links a reader (and a crawler) can follow, each to its own address. */
+export const languageLinks = (path: string, current: Locale = addressLocale(path)) =>
   `<p>${LOCALES.map((l) => (l === current
     ? `<strong lang="${l}">${LANGUAGE_NAME[l]}</strong>`
-    : `<a href="${sitePath(l)}" hreflang="${l}" lang="${l}">${LANGUAGE_NAME[l]}</a>`)).join(' · ')}</p>`;
+    : `<a href="${localePath(path, l)}" hreflang="${l}" lang="${l}">${LANGUAGE_NAME[l]}</a>`)).join(' · ')}</p>`;
 
-const sectionHref = (venueSlug: string, category: string, section: string | null) => {
-  const base = categoryPath(venueSlug, category.toLowerCase());
-  return section ? `${base}?section=${encodeURIComponent(section.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''))}` : base;
-};
+/** "/menu/lasoul/" as the reader of a page in `locale` should follow it. */
+const at = (path: string, locale: Locale) => localePath(path, locale);
+
+/**
+ * A photograph in the HTML crawlers read: by address, never inlined, its
+ * size known, and every one lazy, the first too. This HTML is hidden the
+ * moment the app runs (`.js [data-prerender]{display:none}`), and a browser
+ * still fetches an eager <img> inside a hidden element: an eager first photo
+ * would be a download every visitor pays for and nobody sees. A lazy one in a
+ * hidden element is never fetched; crawlers and image search read its src.
+ */
+const img = (src: string, alt: string, width: number, height?: number) =>
+  `<img src="${escapeHtml(src)}" alt="${escapeHtml(alt)}" width="${width}"${height ? ` height="${height}"` : ''} loading="lazy" decoding="async" />`;
+
+/** A dish's square photo in a list (240 px). */
+const thumbImg = (src: string, alt: string) => img(src, alt, 240, 240);
+
+/** What a dish's photo shows, in the page's language. */
+const photoAlt = (venue: Venue, dish: string, locale: Locale) =>
+  pageT('photo_alt', locale, { dish, venue: venue.name, city: siteT('city', locale) });
+
+/** The home page's first photograph, at the smallest width its file comes in (src/components/site/site-images.json). */
+const HERO = (() => {
+  const hero = (SITE_IMAGES as Record<string, { width: number; height: number; widths: number[] }>)['hero-wide'];
+  const w = hero.widths[0];
+  return { src: `/site/hero-wide-${w}.webp`, width: w, height: Math.round((hero.height / hero.width) * w) };
+})();
 
 function visitBlock(venue: Venue, locale: Locale): string {
   const hours = (venue.hours ?? []).map((h) => `<li>${escapeHtml(hoursDays(h, locale))}: <time>${h.opens}</time>–<time>${h.closes}</time></li>`);
   return [
     `<section id="visit"><h2>${st('visit_title', locale)}</h2>`,
     `<p>${st('visit_sub', locale)}</p>`,
-    `<address>${escapeHtml(venue.name)}<br />${escapeHtml(venue.address)}<br />${escapeHtml(venue.city)}, Bosna i Hercegovina<br />`,
+    `<address>${escapeHtml(venue.name)}<br />${escapeHtml(venue.address)}<br />${venue.city === 'Sarajevo' ? st('city', locale) : escapeHtml(venue.city)}, ${escapeHtml(pageT('country', locale))}<br />`,
     `<a href="tel:${venue.phoneHref}">${escapeHtml(venue.phone)}</a></address>`,
     hours.length ? `<h3>${st('visit_hours', locale)}</h3><ul>${hours.join('')}</ul>` : '',
     // Only while a table can be asked for online (src/lib/seo/reservations.ts).
-    reservationsOffered() ? `<p><a href="${RESERVE_PATH}">${escapeHtml(rcopy('title', locale))}</a></p>` : '',
+    reservationsOffered() ? `<p><a href="${at(RESERVE_PATH, locale)}">${escapeHtml(rcopy('title', locale))}</a></p>` : '',
     `<p><a href="${escapeHtml(venue.mapsUrl)}">${st('visit_directions', locale)}</a>`,
     venue.instagram ? ` · <a href="${escapeHtml(venue.instagram)}">Instagram</a>` : '',
     venue.facebook ? ` · <a href="${escapeHtml(venue.facebook)}">Facebook</a>` : '',
@@ -118,25 +147,35 @@ function visitBlock(venue: Venue, locale: Locale): string {
   ].join('');
 }
 
-/** The website's home page, in one language, as plain HTML. */
-export function homeBody(venue: Venue, locale: Locale): string {
+/**
+ * The website's home page, in one language, as plain HTML: its words, links
+ * to the menu in the same language, and its photographs (the first screen's
+ * and each signature dish's) as real <img> for image search and for readers
+ * that run no script.
+ */
+export function homeBody(venue: Venue, locale: Locale, imageFor: (id: string) => string | null = () => null): string {
   const steps = ([1, 2, 3] as const).map((n) =>
     `<li><strong>${st(`step${n}_title` as SiteKey, locale)}</strong> — ${st(`step${n}_body` as SiteKey, locale)}</li>`).join('');
   const promise = (['halal', 'alcohol', 'fresh', 'allergens'] as const).map((k) =>
     `<li><strong>${st(`promise_${k}_title` as SiteKey, locale)}</strong> — ${st(`promise_${k}_body` as SiteKey, locale)}</li>`).join('');
-  const signatures = CURATED_SIGNATURES.map((d) =>
-    `<li><a href="${sectionHref(venue.slug, d.category, d.section)}">${escapeHtml(d.name[locale])}</a></li>`).join('');
+  const signatures = CURATED_SIGNATURES.map((d) => {
+    const photo = imageFor(d.id);
+    return `<li>${photo ? thumbImg(photo, photoAlt(venue, d.name[locale], locale)) : ''}`
+      + `<a href="${escapeHtml(signatureHref(venue.slug, d, locale))}">${escapeHtml(d.name[locale])}</a></li>`;
+  }).join('');
   const categories = (['drinks', 'food', 'desserts'] as const).map((c) =>
-    `<li><a href="${categoryPath(venue.slug, c)}">${st(`cat_${c}` as SiteKey, locale)}</a> — ${st(`cat_${c}_desc` as SiteKey, locale)}</li>`).join('');
+    `<li><a href="${at(categoryPath(venue.slug, c), locale)}">${st(`cat_${c}` as SiteKey, locale)}</a> — ${st(`cat_${c}_desc` as SiteKey, locale)}</li>`).join('');
+  const menu = at(menuPath(venue.slug), locale);
   const faq = faqEntries(venue, locale).map(({ q, a }) => `<dt>${escapeHtml(q)}</dt><dd>${escapeHtml(a)}</dd>`).join('');
   return [
     `<header><p><a href="${sitePath(locale)}">${escapeHtml(venue.name)}</a> — ${st('tagline', locale)}</p>`,
-    `<nav aria-label="${st('nav_label', locale)}"><a href="${menuPath(venue.slug)}">${st('nav_menu', locale)}</a> · <a href="#story">${st('nav_story', locale)}</a> · <a href="#faq">${st('faq_eyebrow', locale)}</a> · <a href="#visit">${st('nav_visit', locale)}</a></nav>`,
-    languageLinks(locale), `</header>`,
+    `<nav aria-label="${st('nav_label', locale)}"><a href="${menu}">${st('nav_menu', locale)}</a> · <a href="#story">${st('nav_story', locale)}</a> · <a href="#faq">${st('faq_eyebrow', locale)}</a> · <a href="#visit">${st('nav_visit', locale)}</a></nav>`,
+    languageLinks(sitePath(locale), locale), `</header>`,
     `<main>`,
     `<h1>${st('hero_title', locale)}</h1>`,
+    img(HERO.src, siteT('hero_alt', locale), HERO.width, HERO.height),
     `<p>${st(orderingCopy('hero_sub'), locale)}</p>`,
-    `<p><a href="${menuPath(venue.slug)}">${st('hero_cta', locale)}</a>${reservationsOffered() ? ` · <a href="${RESERVE_PATH}">${escapeHtml(rcopy('title', locale))}</a>` : ''}</p>`,
+    `<p><a href="${menu}">${st('hero_cta', locale)}</a>${reservationsOffered() ? ` · <a href="${at(RESERVE_PATH, locale)}">${escapeHtml(rcopy('title', locale))}</a>` : ''}</p>`,
     `<section id="story"><h2>${st('story_title', locale)}</h2><p>${st('story_p1', locale)}</p><p>${st('story_p2', locale)}</p></section>`,
     `<section><h2>${st('sig_title', locale)}</h2><p>${st('sig_sub', locale)}</p><ul>${signatures}</ul></section>`,
     `<section><h2>${st('menu_title', locale)}</h2><p>${st('menu_sub', locale)}</p><ul>${categories}</ul></section>`,
@@ -146,11 +185,11 @@ export function homeBody(venue: Venue, locale: Locale): string {
     `<section id="faq"><h2>${st('faq_title', locale)}</h2><dl>${faq}</dl></section>`,
     visitBlock(venue, locale),
     `</main>`,
-    `<footer><p>${st('footer_rights', locale, { year: new Date().getFullYear() })} · <a href="${PRIVACY_PATH}">${st('footer_privacy', locale)}</a></p></footer>`,
+    `<footer><p>${st('footer_rights', locale, { year: new Date().getFullYear() })} · <a href="${at(PRIVACY_PATH, locale)}">${st('footer_privacy', locale)}</a></p></footer>`,
   ].join('\n');
 }
 
-const price = (n: number) => `${n.toFixed(2)} KM`;
+const price = (n: number, locale: Locale = 'en') => kmPrice(n, locale);
 
 /**
  * A dish's title and description: its own page's (/menu/lasoul/dish/<slug>/,
@@ -158,7 +197,7 @@ const price = (n: number) => `${n.toFixed(2)} KM`;
  * from that address (src/pages/CategoryPage.tsx).
  */
 export function dishMeta(name: string, amount: number, description: string | null | undefined, locale: Locale, ordering: boolean = orderingOffered()) {
-  const vars = { dish: name, price: price(amount) };
+  const vars = { dish: name, price: price(amount, locale) };
   // The description as a sentence, then the template's own.
   const sentence = description ? `${description.replace(/\s+$/, '').replace(/([^.!?])$/, '$1.')} ` : '';
   return {
@@ -167,81 +206,99 @@ export function dishMeta(name: string, amount: number, description: string | nul
   };
 }
 
-/** A menu page — the whole menu, or one category — with every dish in all three languages. */
+/** A dish's other names, as one modest line: people search across languages. */
+function alsoCalled(item: SeoMenuItem, locale: Locale): string {
+  const others = LOCALES.filter((l) => l !== locale).map((l) => ({ l, name: item.names[l] }))
+    .filter(({ name }, n, all) => name !== item.names[locale] && all.findIndex((o) => o.name === name) === n);
+  if (!others.length) return '';
+  const names = others.map(({ l, name }) => `<span lang="${l}"${l === 'ar' ? ' dir="rtl"' : ''}>${escapeHtml(name)}</span>`).join(' · ');
+  return pageT('also_called', locale, { names });
+}
+
+/** The header every menu and dish page starts with, in its language, with the way to its other two versions. */
+function menuHeader(venue: Venue, locale: Locale, path: string, nav: string): string {
+  return [
+    `<header><p><a href="${sitePath(locale)}">${escapeHtml(venue.name)}</a> — ${st('tagline', locale)}, ${st('city', locale)}</p>`,
+    nav,
+    languageLinks(path, locale),
+    `</header>`,
+  ].join('\n');
+}
+
+/**
+ * A menu page — the whole menu, or one category — in one language: every
+ * dish's name, price and description in that language (English where a
+ * translation is missing: menu-data.ts), its square photo by address, and a
+ * link to its own page in the same language.
+ */
 export function menuBody(venue: Venue, menu: SeoMenu | null, locale: Locale, only?: SeoMenuCategory): string {
   const categories = menu ? (only ? [only] : menu.categories) : [];
+  const path = at(only ? categoryPath(venue.slug, only.slug) : menuPath(venue.slug), locale);
   const title = only
-    ? `${escapeHtml(only.names.en)} — ${escapeHtml(venue.name)}`
-    : `${escapeHtml(venue.name)} — ${st('nav_menu', 'en')}`;
+    ? `${escapeHtml(only.names[locale])} — ${escapeHtml(venue.name)}`
+    : `${escapeHtml(venue.name)} — ${st('nav_menu', locale)}`;
   const body = categories.map((c) => [
-    only ? '' : `<h2><a href="${categoryPath(venue.slug, c.slug)}">${escapeHtml(c.names.en)}</a> <span lang="bs">(${escapeHtml(c.names.bs)})</span> <span lang="ar" dir="rtl">${escapeHtml(c.names.ar)}</span></h2>`,
+    only ? '' : `<h2><a href="${at(categoryPath(venue.slug, c.slug), locale)}">${escapeHtml(c.names[locale])}</a></h2>`,
     ...c.sections.map((s) => [
-      `<section><h3>${escapeHtml(s.names.en)} <span lang="bs">(${escapeHtml(s.names.bs)})</span> <span lang="ar" dir="rtl">${escapeHtml(s.names.ar)}</span></h3><ul>`,
-      ...s.items.map((i) => [
-        `<li><strong><a href="${dishPath(venue.slug, i)}">${escapeHtml(i.names.en)}</a></strong> — ${price(i.price)}`,
-        i.names.bs !== i.names.en ? ` <span lang="bs">(${escapeHtml(i.names.bs)})</span>` : '',
-        i.names.ar !== i.names.en ? ` <span lang="ar" dir="rtl">${escapeHtml(i.names.ar)}</span>` : '',
-        i.descriptions.en ? `<br />${escapeHtml(i.descriptions.en)}` : '',
-        `</li>`,
-      ].join('')),
+      `<section><h3>${escapeHtml(s.names[locale])}</h3><ul>`,
+      ...s.items.map((i) => {
+        const photo = i.thumb ? thumbImg(i.thumb, photoAlt(venue, i.names[locale], locale)) : '';
+        return [
+          `<li>${photo}<strong><a href="${at(dishPath(venue.slug, i), locale)}">${escapeHtml(i.names[locale])}</a></strong> — ${price(i.price, locale)}`,
+          i.descriptions[locale] ? `<br />${escapeHtml(i.descriptions[locale] as string)}` : '',
+          `</li>`,
+        ].join('');
+      }),
       `</ul></section>`,
     ].join('')),
   ].join('\n')).join('\n');
   const otherCategories = (menu?.categories ?? []).filter((c) => c.id !== only?.id)
-    .map((c) => `<a href="${categoryPath(venue.slug, c.slug)}">${escapeHtml(c.names.en)}</a>`).join(' · ');
+    .map((c) => `<a href="${at(categoryPath(venue.slug, c.slug), locale)}">${escapeHtml(c.names[locale])}</a>`).join(' · ');
   return [
-    `<header><p><a href="/">${escapeHtml(venue.name)}</a> — ${st('tagline', 'en')}, ${escapeHtml(venue.city)}</p>`,
-    `<nav><a href="${menuPath(venue.slug)}">${st('nav_menu', 'en')}</a>${otherCategories ? ` · ${otherCategories}` : ''}</nav></header>`,
+    menuHeader(venue, locale, path,
+      `<nav><a href="${at(menuPath(venue.slug), locale)}">${st('nav_menu', locale)}</a>${otherCategories ? ` · ${otherCategories}` : ''}</nav>`),
     `<main><h1>${title}</h1>`,
-    `<p>${st('seo_menu_description', 'en')}</p>`,
-    `<p lang="bs">${st('seo_menu_description', 'bs')}</p>`,
-    `<p lang="ar" dir="rtl">${st('seo_menu_description', 'ar')}</p>`,
-    `<p>${st('fact_halal', 'en')} · ${st('fact_alcohol', 'en')} · ${escapeHtml('Prices in KM (BAM)')}</p>`,
-    body || `<p><a href="${menuPath(venue.slug)}">${st('hero_cta', locale)}</a></p>`,
+    `<p>${only ? st('seo_category_description', locale, { category: only.names[locale] }) : st('seo_menu_description', locale)}</p>`,
+    `<p>${st('fact_halal', locale)} · ${st('fact_alcohol', locale)} · ${escapeHtml(pageT('prices', locale))}</p>`,
+    body || `<p><a href="${at(menuPath(venue.slug), locale)}">${st('hero_cta', locale)}</a></p>`,
     `</main>`,
-    visitBlock(venue, 'en'),
+    visitBlock(venue, locale),
   ].join('\n');
 }
 
-const ALLERGEN_NAMES: Record<string, string> = {
-  gluten: 'gluten', dairy: 'milk and dairy', eggs: 'eggs', fish: 'fish', shellfish: 'shellfish',
-  nuts: 'tree nuts', peanuts: 'peanuts', soy: 'soy', sesame: 'sesame', celery: 'celery',
-  mustard: 'mustard', sulphites: 'sulphites', lupin: 'lupin', molluscs: 'molluscs',
-};
-
-/** One dish's page: names in three languages, photo, price, description, allergens, and its neighbours. */
-export function dishBody(venue: Venue, category: SeoMenuCategory, section: SeoMenuSection, item: SeoMenuItem): string {
-  const categoryHref = categoryPath(venue.slug, category.slug);
+/** One dish's page, in one language: its name, photo, price, description, allergens, and its neighbours. */
+export function dishBody(venue: Venue, category: SeoMenuCategory, section: SeoMenuSection, item: SeoMenuItem, locale: Locale = 'en'): string {
+  const categoryHref = at(categoryPath(venue.slug, category.slug), locale);
   const openHref = `${categoryHref}?section=${encodeURIComponent(section.names.en.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''))}&dish=${item.id}`;
   const facts = [
-    `<strong>${price(item.price)}</strong>`,
-    escapeHtml(siteT('fact_halal', 'en')),
-    escapeHtml(siteT('fact_alcohol', 'en')),
+    `<strong>${price(item.price, locale)}</strong>`,
+    st('fact_halal', locale),
+    st('fact_alcohol', locale),
     item.portionNote ? escapeHtml(item.portionNote) : '',
-    item.prepMinutes ? `ready in about ${item.prepMinutes} minutes` : '',
+    item.prepMinutes ? escapeHtml(pageT('ready_in', locale, { n: item.prepMinutes })) : '',
+    item.dietaryTags.includes('vegetarian') ? escapeHtml(pageT('vegetarian', locale)) : '',
   ].filter(Boolean).join(' · ');
   const allergens = item.allergens.length
-    ? `<p>Allergens: ${item.allergens.map((a) => escapeHtml(ALLERGEN_NAMES[a] ?? a)).join(', ')}. Please tell your waiter about any allergy.</p>`
+    ? `<p>${escapeHtml(pageT('allergens', locale, { list: item.allergens.map((a) => allergenName(a, locale)).join(', ') }))}</p>`
     : '';
   const neighbours = section.items.filter((i) => i.id !== item.id)
-    .map((i) => `<li><a href="${dishPath(venue.slug, i)}">${escapeHtml(i.names.en)}</a> — ${price(i.price)}</li>`).join('');
+    .map((i) => `<li><a href="${at(dishPath(venue.slug, i), locale)}">${escapeHtml(i.names[locale])}</a> — ${price(i.price, locale)}</li>`).join('');
+  const also = alsoCalled(item, locale);
+  const name = escapeHtml(item.names[locale]);
   return [
-    `<header><p><a href="/">${escapeHtml(venue.name)}</a> — ${st('tagline', 'en')}, ${escapeHtml(venue.city)}</p>`,
-    `<nav aria-label="Breadcrumb"><a href="/">${escapeHtml(venue.name)}</a> › <a href="${menuPath(venue.slug)}">${st('nav_menu', 'en')}</a> › <a href="${categoryHref}">${escapeHtml(category.names.en)}</a>${section.names.en !== category.names.en ? ` › ${escapeHtml(section.names.en)}` : ''}</nav></header>`,
+    menuHeader(venue, locale, at(dishPath(venue.slug, item), locale),
+      `<nav aria-label="${escapeHtml(pageT('breadcrumb', locale))}"><a href="${sitePath(locale)}">${escapeHtml(venue.name)}</a> › <a href="${at(menuPath(venue.slug), locale)}">${st('nav_menu', locale)}</a> › <a href="${categoryHref}">${escapeHtml(category.names[locale])}</a>${section.names.en !== category.names.en ? ` › ${escapeHtml(section.names[locale])}` : ''}</nav>`),
     `<main><article>`,
-    `<h1>${escapeHtml(item.names.en)}</h1>`,
-    item.names.bs !== item.names.en ? `<p lang="bs">${escapeHtml(item.names.bs)}</p>` : '',
-    item.names.ar !== item.names.en ? `<p lang="ar" dir="rtl">${escapeHtml(item.names.ar)}</p>` : '',
-    item.image ? `<img src="${item.image}" alt="${escapeHtml(item.names.en)} at ${escapeHtml(venue.name)}, ${escapeHtml(venue.city)}" width="768" loading="lazy" />` : '',
+    `<h1>${name}</h1>`,
+    also ? `<p>${also}</p>` : '',
+    item.image ? img(item.image, photoAlt(venue, item.names[locale], locale), 768) : '',
     `<p>${facts}</p>`,
-    item.descriptions.en ? `<p>${escapeHtml(item.descriptions.en)}</p>` : '',
-    item.descriptions.bs && item.descriptions.bs !== item.descriptions.en ? `<p lang="bs">${escapeHtml(item.descriptions.bs)}</p>` : '',
-    item.descriptions.ar && item.descriptions.ar !== item.descriptions.en ? `<p lang="ar" dir="rtl">${escapeHtml(item.descriptions.ar)}</p>` : '',
+    item.descriptions[locale] ? `<p>${escapeHtml(item.descriptions[locale] as string)}</p>` : '',
     allergens,
-    `<p><a href="${openHref}">Open ${escapeHtml(item.names.en)} on the menu</a> · <a href="${categoryHref}">All ${escapeHtml(category.names.en.toLowerCase())}</a></p>`,
-    neighbours ? `<section><h2>More ${escapeHtml(section.names.en.toLowerCase())} at ${escapeHtml(venue.name)}</h2><ul>${neighbours}</ul></section>` : '',
+    `<p><a href="${escapeHtml(openHref)}">${escapeHtml(pageT('open_on_menu', locale, { dish: item.names[locale] }))}</a> · <a href="${categoryHref}">${escapeHtml(pageT('all_of', locale, { category: category.names[locale] }))}</a></p>`,
+    neighbours ? `<section><h2>${escapeHtml(pageT('more_of', locale, { section: locale === 'en' ? section.names.en.toLowerCase() : section.names[locale], venue: venue.name }))}</h2><ul>${neighbours}</ul></section>` : '',
     `</article></main>`,
-    visitBlock(venue, 'en'),
+    visitBlock(venue, locale),
   ].join('\n');
 }
 
@@ -312,6 +369,11 @@ function factsMarkdown(venue: Venue): string {
   ].join('\n');
 }
 
+/** Every public page is in three languages; llms files say so once, and give the main pages' three addresses. */
+const LANGUAGES_LINE = 'Every page is in English, Bosnian and Arabic: the same address with /bs/ or /ar/ in front (dish pages too).';
+const inThree = (path: string) => (['en', 'bs', 'ar'] as Locale[])
+  .map((l) => `[${LANGUAGE_NAME[l]}](${absoluteUrl(localePath(path, l))})`).join(' · ');
+
 /** llms.txt: what an AI engine should know about La Soul, and where to read more. */
 export function llmsTxt(venue: Venue, menu: SeoMenu | null): string {
   const cats = (menu?.categories ?? []).map((c) =>
@@ -321,11 +383,10 @@ export function llmsTxt(venue: Venue, menu: SeoMenu | null): string {
     `> ${siteT(orderingCopy('seo_description'), 'en')}`, '',
     factsMarkdown(venue), '',
     '## Pages', '',
-    `- [Website (English)](${absoluteUrl('/')})`,
-    `- [Website (Bosnian)](${absoluteUrl(sitePath('bs'))})`,
-    `- [Website (Arabic)](${absoluteUrl(sitePath('ar'))})`,
-    `- [Full menu with prices](${absoluteUrl(menuPath(venue.slug))})`,
-    ...(reservationsOffered() ? [`- [Reserve a table](${absoluteUrl(RESERVE_PATH)}): ask online, the restaurant confirms`] : []),
+    LANGUAGES_LINE, '',
+    `- Website: ${inThree('/')}`,
+    `- Full menu with prices: ${inThree(menuPath(venue.slug))}`,
+    ...(reservationsOffered() ? [`- Reserve a table (ask online, the restaurant confirms): ${inThree(RESERVE_PATH)}`] : []),
     ...cats, '',
     '## Optional', '',
     `- [The whole menu as text](${absoluteUrl('/llms-full.txt')})`, '',
@@ -347,6 +408,7 @@ export function llmsFullTxt(venue: Venue, menu: SeoMenu | null): string {
     `# ${venue.name} — full menu and facts`, '',
     `> ${siteT(orderingCopy('seo_description'), 'en')}`, '',
     factsMarkdown(venue), '',
+    LANGUAGES_LINE, '',
     '## Questions', '', faq, '',
     `# Menu (prices in KM; everything halal and alcohol-free)`, '',
     dishes || `See ${absoluteUrl(menuPath(venue.slug))}`, '',
@@ -371,8 +433,26 @@ const rule = (from: string, to: string, status: string) => `${from.padEnd(22)} $
 export const APP_ROUTES = [
   '/bs', '/ar', '/veraitalia', '/menu', '/menu/*', '/cart', '/tab', '/table/*', '/start', '/privacy', '/tv',
   '/reserve', '/reservation/*',
+  // The same public pages in Bosnian and Arabic (./locale-path.ts), for an address the build wrote no page at.
+  ...PREFIXED_LOCALES.flatMap((l) => [`/${l}/menu/*`, `/${l}/reserve`, `/${l}/privacy`]),
   '/admin', '/admin/*', '/kitchen', '/waiter', '/waiter/*',
 ];
+
+/**
+ * A dish's address that has no page: the app, so a dish added since the last
+ * publish still opens for a person, but answered "404 Not Found", so a search
+ * engine does not keep a dish that is gone as a page (a "soft 404").
+ *
+ * Relied on (docs.netlify.com/manage/routing/redirects/rewrites-proxies/,
+ * "shadowing", and /redirect-options/ for custom 404s): rules are read top to
+ * bottom and the first that matches wins; a rule that is not forced ("!")
+ * applies only where no file exists, so every dish page the build wrote
+ * (…/dish/<slug>/index.html) is served as it is, with 200; and a rewrite to
+ * a page with status 404 serves that page with that status, as the last
+ * rule here has always done for every other unknown address. These come
+ * before "/menu/*", which would answer 200.
+ */
+export const MISSING_DISH_ROUTES = ['', ...PREFIXED_LOCALES.map((l) => `/${l}`)].map((p) => `${p}/menu/:venue/dish/*`);
 
 /**
  * The folder the websites' photos are in is no page. Google found it while
@@ -384,6 +464,7 @@ const PHOTO_FOLDER = ['/site', '/site/'];
 /** The rules every site's _redirects ends with: the photo folder home, the app at its own addresses, "not found" at any other. */
 export const appRedirects = (): string[] => [
   ...PHOTO_FOLDER.map((p) => rule(p, '/', '301')),
+  ...MISSING_DISH_ROUTES.map((p) => rule(p, '/index.html', '404')),
   ...APP_ROUTES.map((p) => rule(p, '/index.html', '200')),
   rule('/*', '/index.html', '404'),
 ];
@@ -401,6 +482,11 @@ export function ownSiteRedirects(slug: string, laSoulUrl: string): string {
     rule(`/${slug}/*`, '/', '301!'),
     rule('/menu/lasoul', `${laSoulUrl}/menu/lasoul/`, '301!'),
     rule('/menu/lasoul/*', `${laSoulUrl}/menu/lasoul/:splat`, '301!'),
+    // And its Bosnian and Arabic versions (./locale-path.ts).
+    ...PREFIXED_LOCALES.flatMap((l) => [
+      rule(`/${l}/menu/lasoul`, `${laSoulUrl}/${l}/menu/lasoul/`, '301!'),
+      rule(`/${l}/menu/lasoul/*`, `${laSoulUrl}/${l}/menu/lasoul/:splat`, '301!'),
+    ]),
     ...appRedirects(),
     '',
   ].join('\n');
@@ -418,6 +504,10 @@ export function forwardToOwnSite(slug: string, url: string): string {
     rule(`/${slug}/*`, `${url}/`, '301!'),
     rule(`/menu/${slug}`, `${url}/menu/${slug}/`, '301!'),
     rule(`/menu/${slug}/*`, `${url}/menu/${slug}/:splat`, '301!'),
+    ...PREFIXED_LOCALES.flatMap((l) => [
+      rule(`/${l}/menu/${slug}`, `${url}/${l}/menu/${slug}/`, '301!'),
+      rule(`/${l}/menu/${slug}/*`, `${url}/${l}/menu/${slug}/:splat`, '301!'),
+    ]),
     '',
   ].join('\n');
 }

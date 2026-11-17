@@ -110,55 +110,60 @@ const RefundDialog = ({ open, onOpenChange, order, onDone }: Props) => {
         </DialogHeader>
 
         <div className="space-y-3">
-          <div className="rounded-lg bg-muted px-3 py-2 text-sm font-sans">
-            <div className="flex justify-between"><span>Order total</span><span className="tabular-nums">{Number(order.total).toFixed(2)} KM</span></div>
+          <div className="rounded-xl border border-border/70 bg-muted/40 px-4 py-3 text-sm font-sans">
+            <div className="flex justify-between"><span className="text-muted-foreground">Order total</span><span className="tabular-nums">{Number(order.total).toFixed(2)} KM</span></div>
             {alreadyRefunded > 0 && (
-              <div className="flex justify-between text-muted-foreground">
+              <div className="mt-1 flex justify-between text-muted-foreground">
                 <span>Already refunded</span><span className="tabular-nums">−{alreadyRefunded.toFixed(2)} KM</span>
               </div>
             )}
-            <div className="flex justify-between font-semibold border-t border-border mt-1 pt-1">
-              <span>Refundable</span><span className="tabular-nums">{remaining.toFixed(2)} KM</span>
+            <div className="mt-2 flex justify-between border-t border-border/70 pt-2 font-semibold">
+              <span>Left to refund</span><span className="tabular-nums">{remaining.toFixed(2)} KM</span>
             </div>
           </div>
 
           <div>
-            <Label className="text-xs text-muted-foreground">Amount (KM)</Label>
+            <Label htmlFor="refund-amount" className="text-xs text-muted-foreground">Amount (KM)</Label>
             <Input
-              type="number" inputMode="decimal" min="0" step="0.01" max={remaining}
-              value={amount} onChange={(e) => setAmount(e.target.value)} className="mt-1"
+              id="refund-amount" type="number" inputMode="decimal" min="0" step="0.01" max={remaining}
+              value={amount} onChange={(e) => setAmount(e.target.value)} className="mt-1 h-11 tabular-nums"
             />
             {Number.isFinite(value) && value > remaining && (
-              <p className="text-xs text-destructive font-sans mt-1">
+              <p role="alert" className="text-xs text-destructive font-sans mt-1">
                 More than is left to refund on this order.
               </p>
             )}
           </div>
 
           <div>
-            <Label className="text-xs text-muted-foreground">How is the guest getting it back?</Label>
-            <div className="mt-1.5 space-y-1.5">
+            <p id="refund-method" className="text-xs font-medium text-muted-foreground">How is the guest getting it back?</p>
+            <div className="mt-1.5 space-y-1.5" role="group" aria-labelledby="refund-method">
               {METHODS.map((m) => (
                 <button
                   key={m.key}
                   type="button"
                   onClick={() => setMethod(m.key)}
                   aria-pressed={method === m.key}
-                  className={`w-full text-left rounded-lg border px-3 py-2 min-h-[52px] transition-colors ${
+                  className={`flex w-full items-start gap-3 text-start rounded-xl border px-3 py-2.5 min-h-[52px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
                     method === m.key ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted/50'
                   }`}
                 >
-                  <p className="text-sm font-sans font-medium">{m.label}</p>
-                  <p className="text-xs text-muted-foreground font-sans">{m.hint}</p>
+                  <span aria-hidden className={`mt-0.5 grid h-4 w-4 shrink-0 place-items-center rounded-full border ${method === m.key ? 'border-primary' : 'border-muted-foreground/40'}`}>
+                    {method === m.key && <span className="h-2 w-2 rounded-full bg-primary" />}
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block text-sm font-sans font-medium">{m.label}</span>
+                    <span className="block text-xs text-muted-foreground font-sans">{m.hint}</span>
+                  </span>
                 </button>
               ))}
             </div>
           </div>
 
           <div>
-            <Label className="text-xs text-muted-foreground">Reason</Label>
+            <Label htmlFor="refund-reason" className="text-xs text-muted-foreground">Reason</Label>
             <Textarea
-              value={reason} onChange={(e) => setReason(e.target.value)} rows={2} className="mt-1"
+              id="refund-reason" value={reason} onChange={(e) => setReason(e.target.value)} rows={2} className="mt-1"
               placeholder="e.g. dish sent back, wrong order, guest complaint"
             />
             {/* Goes into the audit log. A refund without a reason is
@@ -169,19 +174,19 @@ const RefundDialog = ({ open, onOpenChange, order, onDone }: Props) => {
           </div>
 
           <div>
-            <Label className="text-xs text-muted-foreground">Provider reference (optional)</Label>
+            <Label htmlFor="refund-reference" className="text-xs text-muted-foreground">Provider reference (optional)</Label>
             <Input
-              value={reference} onChange={(e) => setReference(e.target.value)} className="mt-1"
+              id="refund-reference" value={reference} onChange={(e) => setReference(e.target.value)} className="mt-1 h-11"
               placeholder="Terminal slip or provider refund id"
             />
           </div>
 
-          <label className="flex items-start gap-2 cursor-pointer">
+          <label className="flex items-start gap-3 cursor-pointer rounded-xl border border-border/70 px-3 py-2.5">
             <input
               type="checkbox"
               checked={markCompleted}
               onChange={(e) => setMarkCompleted(e.target.checked)}
-              className="mt-1 w-4 h-4"
+              className="mt-0.5 h-5 w-5 shrink-0 accent-[hsl(var(--primary))]"
             />
             <span className="text-sm font-sans">
               The money has already gone back
@@ -192,10 +197,10 @@ const RefundDialog = ({ open, onOpenChange, order, onDone }: Props) => {
           </label>
         </div>
 
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-          <Button onClick={submit} disabled={!valid || saving}>
-            {saving ? 'Recording…' : 'Record refund'}
+        <DialogFooter className="gap-2">
+          <Button variant="outline" onClick={() => onOpenChange(false)} className="h-11 lg:h-10">Cancel</Button>
+          <Button onClick={submit} disabled={!valid || saving} className="h-11 lg:h-10">
+            {saving ? 'Recording…' : `Record refund${Number.isFinite(value) && value > 0 && value <= remaining + 0.001 ? ` of ${value.toFixed(2)} KM` : ''}`}
           </Button>
         </DialogFooter>
       </DialogContent>

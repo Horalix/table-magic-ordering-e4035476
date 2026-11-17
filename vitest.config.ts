@@ -4,6 +4,8 @@ import path from "path";
 
 export default defineConfig({
   plugins: [react()],
+  // The app is not the offline demo under test (vite.config.ts sets this for builds).
+  define: { __TABLEFLOW_DEMO_BUILD__: "false" },
   test: {
     environment: "jsdom",
     globals: true,

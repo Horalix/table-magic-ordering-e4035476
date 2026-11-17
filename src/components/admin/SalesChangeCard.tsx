@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { AlertTriangle, TrendingDown, TrendingUp } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
-import { Card, CardContent } from '@/components/ui/card';
+import { AdminCard, DeltaChip } from '@/components/admin/AdminCard';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   CHANGE_TERM_LABELS, describeSalesChange, signedPct, type SalesDecomposition,
@@ -63,12 +63,12 @@ const SalesChangeCard = () => {
 
   if (error) {
     return (
-      <Card className="rounded-2xl border-destructive/30 mb-6">
-        <CardContent className="p-4 flex items-start gap-2">
+      <AdminCard className="border-destructive/30 mb-6">
+        <div className="p-5 flex items-start gap-2">
           <AlertTriangle className="w-5 h-5 text-destructive shrink-0 mt-0.5" />
           <p className="text-sm font-sans text-muted-foreground break-words">Could not work out why sales changed: {error}</p>
-        </CardContent>
-      </Card>
+        </div>
+      </AdminCard>
     );
   }
 
@@ -78,17 +78,17 @@ const SalesChangeCard = () => {
   const Icon = change !== null && change < 0 ? TrendingDown : TrendingUp;
 
   return (
-    <Card className="rounded-2xl border-border mb-6" aria-label="Why sales changed">
-      <CardContent className="p-4 sm:p-6 space-y-4">
+    <AdminCard className="mb-6" aria-label="Why sales changed">
+      <div className="p-5 sm:p-6 space-y-5">
         <div className="flex items-start gap-3">
-          <div className={`w-10 h-10 rounded-xl grid place-items-center shrink-0 ${change !== null && change < 0 ? 'bg-destructive/10 text-destructive' : 'bg-primary/10 text-primary'}`}>
-            <Icon className="w-5 h-5" />
+          <div className={`w-9 h-9 rounded-lg grid place-items-center shrink-0 ${change !== null && change < 0 ? 'bg-red-600/10 text-red-700' : 'bg-emerald-600/10 text-emerald-700'}`}>
+            <Icon className="w-[18px] h-[18px]" />
           </div>
           <div className="min-w-0">
-            <p className="text-xs font-sans text-muted-foreground">
+            <p className="text-xs font-sans font-medium text-muted-foreground">
               Last 7 complete trading days · {range(week.from, week.to)}
             </p>
-            <p className="font-sans text-base sm:text-lg font-semibold text-foreground leading-snug mt-0.5">
+            <p className="font-sans text-base sm:text-lg font-semibold text-foreground leading-snug mt-1">
               {describeSalesChange(week, 'last week')}
             </p>
             {month && (
@@ -100,13 +100,11 @@ const SalesChangeCard = () => {
         </div>
 
         {week.total.comparable && (
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-2 sm:pl-12">
             {week.total.terms.map((t) => (
-              <span key={t.key} className="inline-flex items-baseline gap-1.5 rounded-full border border-border px-3 py-1 text-xs font-sans">
+              <span key={t.key} className="inline-flex items-center gap-2 rounded-full border border-border/70 bg-background/60 py-1 pl-3 pr-1 text-xs font-sans">
                 <span className="text-muted-foreground">{CHANGE_TERM_LABELS[t.key] ?? t.key}</span>
-                <span className={`tabular-nums font-semibold ${Number(t.dlog) < 0 ? 'text-destructive' : 'text-foreground'}`}>
-                  {signedPct(Math.exp(Number(t.dlog)) - 1)}
-                </span>
+                <DeltaChip change={Math.exp(Number(t.dlog)) - 1} />
               </span>
             ))}
           </div>
@@ -116,23 +114,25 @@ const SalesChangeCard = () => {
             off Net sales, the column the card is about. */}
         {week.dayparts.length > 0 && (
           <div className="overflow-x-auto -mx-2 px-2">
-            <table className="w-full text-xs font-sans">
+            <table className="w-full text-[13px] font-sans">
               <thead>
-                <tr className="text-left uppercase tracking-wide text-muted-foreground border-b border-border">
-                  <th className="pb-1.5 font-medium">When</th>
-                  <th className="pb-1.5 font-medium text-right">Tables</th>
-                  <th className="pb-1.5 font-medium text-right">Last week</th>
-                  <th className="pb-1.5 font-medium text-right">Net sales</th>
+                <tr className="text-left text-[11px] uppercase tracking-wide text-muted-foreground border-b border-border/70">
+                  <th className="pb-2 font-medium">When</th>
+                  <th className="pb-2 font-medium text-right">Tables</th>
+                  <th className="pb-2 font-medium text-right">Last week</th>
+                  <th className="pb-2 font-medium text-right">Net sales</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-border">
+              <tbody className="divide-y divide-border/60">
                 {week.dayparts.map((p) => (
                   <tr key={p.daypart}>
-                    <td className="py-1.5">{DAYPART_LABEL[p.daypart] ?? p.daypart}</td>
-                    <td className="py-1.5 text-right tabular-nums">{p.visits}</td>
-                    <td className="py-1.5 text-right tabular-nums text-muted-foreground">{Math.round(Number(p.compare_visits))}</td>
-                    <td className="py-1.5 text-right tabular-nums">
-                      {p.change_pct === null || p.change_pct === undefined ? '—' : signedPct(Number(p.change_pct) / 100)}
+                    <td className="py-2">{DAYPART_LABEL[p.daypart] ?? p.daypart}</td>
+                    <td className="py-2 text-right tabular-nums">{p.visits}</td>
+                    <td className="py-2 text-right tabular-nums text-muted-foreground">{Math.round(Number(p.compare_visits))}</td>
+                    <td className="py-2 text-right">
+                      {p.change_pct === null || p.change_pct === undefined
+                        ? <span className="text-muted-foreground">—</span>
+                        : <DeltaChip change={Number(p.change_pct) / 100} label={signedPct(Number(p.change_pct) / 100)} />}
                     </td>
                   </tr>
                 ))}
@@ -146,8 +146,8 @@ const SalesChangeCard = () => {
           per item; the parts multiply back to the total exactly.
           {week.basis === 'visits' && ' Head counts are used once staff record them on at least 70% of tables.'}
         </p>
-      </CardContent>
-    </Card>
+      </div>
+    </AdminCard>
   );
 };
 

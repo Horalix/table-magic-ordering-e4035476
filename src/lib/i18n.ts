@@ -1,3 +1,5 @@
+import { DEMO_MODE } from './demo-mode';
+import { DEMO_STRINGS } from '../demo/strings';
 import { create } from 'zustand';
 import { useCallback, useMemo } from 'react';
 
@@ -62,10 +64,10 @@ applyDocumentLocale(initialLocale());
 const translations: Record<string, Record<Locale, string>> = {
   // Navigation & General
   'menu': { en: 'Menu', bs: 'Meni', ar: 'القائمة' },
-  'your_order': { en: 'Your Order', bs: 'Vaša narudžba', ar: 'طلبك' },
-  'your_tab': { en: 'Your Tab', bs: 'Vaš račun', ar: 'فاتورتك' },
+  'your_order': { en: 'Your order', bs: 'Vaša narudžba', ar: 'طلبك' },
+  'your_tab': { en: 'Your tab', bs: 'Vaš račun', ar: 'فاتورتك' },
   'table': { en: 'Table', bs: 'Sto', ar: 'الطاولة' },
-  'back_to_menu': { en: 'Back to Menu', bs: 'Nazad na meni', ar: 'العودة إلى القائمة' },
+  'back_to_menu': { en: 'Back to menu', bs: 'Nazad na meni', ar: 'العودة إلى القائمة' },
   'browse_menu': { en: 'Just browse the menu', bs: 'Pogledaj meni bez naručivanja', ar: 'تصفّح القائمة فقط' },
 
   // Ordering safely
@@ -124,27 +126,27 @@ const translations: Record<string, Record<Locale, string>> = {
   'desserts_desc': { en: 'A sweet finish', bs: 'Nešto slatko za kraj', ar: 'ختامها حلو' },
 
   // Cart
-  'place_order': { en: 'Place Order', bs: 'Naruči', ar: 'تقديم الطلب' },
-  'placing_order': { en: 'Placing Order...', bs: 'Naručujem...', ar: 'جارٍ تقديم الطلب...' },
+  'place_order': { en: 'Place order', bs: 'Naruči', ar: 'تقديم الطلب' },
+  'placing_order': { en: 'Placing order…', bs: 'Naručujem...', ar: 'جارٍ تقديم الطلب...' },
   'order_empty': { en: 'Your order is empty', bs: 'Vaša narudžba je prazna', ar: 'طلبك فارغ' },
   'browse_menu_to_add': { en: 'Browse the menu to add items', bs: 'Pogledajte meni i dodajte nešto.', ar: 'تصفّح القائمة لإضافة أصناف' },
   'total': { en: 'Total', bs: 'Ukupno', ar: 'المجموع' },
-  'view_order': { en: 'View Order', bs: 'Pogledaj narudžbu', ar: 'عرض الطلب' },
-  'view_your_tab': { en: 'View Your Tab', bs: 'Pogledaj račun', ar: 'عرض فاتورتك' },
+  'view_order': { en: 'View order', bs: 'Pogledaj narudžbu', ar: 'عرض الطلب' },
+  'view_your_tab': { en: 'View your tab', bs: 'Pogledaj račun', ar: 'عرض فاتورتك' },
   'add_to_order': { en: 'Add to order', bs: 'Dodaj u narudžbu', ar: 'أضف إلى الطلب' },
   'special_requests': { en: 'Special requests', bs: 'Posebni zahtjevi', ar: 'طلبات خاصة' },
   'special_requests_placeholder': { en: 'E.g. no onions, extra sauce...', bs: 'Npr. bez luka, više sosa…', ar: 'مثال: بدون بصل، صوص إضافي...' },
 
   // No-refund confirmation
-  'confirm_order': { en: 'Confirm Your Order', bs: 'Potvrdite narudžbu', ar: 'تأكيد طلبك' },
+  'confirm_order': { en: 'Confirm your order', bs: 'Potvrdite narudžbu', ar: 'تأكيد طلبك' },
   'no_refund_message': { en: 'Once placed, this order cannot be cancelled or refunded. Please review your items carefully.', bs: 'Nakon narudžbe, nije moguće otkazati ili vratiti novac. Molimo pažljivo pregledajte stavke.', ar: 'بمجرد تقديم الطلب، لا يمكن إلغاؤه أو استرداد المبلغ. يرجى مراجعة الأصناف بعناية.' },
-  'go_back': { en: 'Go Back', bs: 'Nazad', ar: 'رجوع' },
-  'confirm_and_order': { en: 'Confirm Order', bs: 'Potvrdi narudžbu', ar: 'تأكيد الطلب' },
+  'go_back': { en: 'Go back', bs: 'Nazad', ar: 'رجوع' },
+  'confirm_and_order': { en: 'Confirm order', bs: 'Potvrdi narudžbu', ar: 'تأكيد الطلب' },
 
   // Order Success
-  'order_confirmed': { en: 'Order Confirmed!', bs: 'Narudžba potvrđena!', ar: 'تم تأكيد الطلب!' },
+  'order_confirmed': { en: 'Order confirmed', bs: 'Narudžba potvrđena', ar: 'تم تأكيد الطلب' },
   'order_sent_kitchen': { en: 'Your order has been sent to the kitchen.', bs: 'Vaša narudžba je poslana u kuhinju.', ar: 'تم إرسال طلبك إلى المطبخ.' },
-  'order_more': { en: 'Order More', bs: 'Naruči više', ar: 'اطلب المزيد' },
+  'order_more': { en: 'Order more', bs: 'Naruči više', ar: 'اطلب المزيد' },
 
   // Browse / status / dietary (added features)
   'order_again': { en: 'Order again', bs: 'Naruči ponovo', ar: 'اطلب مرة أخرى' },
@@ -173,18 +175,18 @@ const translations: Record<string, Record<Locale, string>> = {
   'table_number_placeholder': { en: 'Table number', bs: 'Broj stola', ar: 'رقم الطاولة' },
 
   // Running Tab
-  'running_total': { en: 'Running Total', bs: 'Ukupni račun', ar: 'المجموع الجاري' },
+  'running_total': { en: 'Running total', bs: 'Ukupni račun', ar: 'المجموع الجاري' },
   'no_active_session': { en: 'You’re not at a table yet', bs: 'Još niste za stolom', ar: 'لم تنضمّ إلى طاولة بعد' },
   'scan_qr_tab': { en: 'Scan the QR code at your table to see your tab.', bs: 'Skenirajte QR kod na stolu da vidite račun.', ar: 'امسح رمز QR على طاولتك لمشاهدة فاتورتك.' },
   'no_orders_yet': { en: 'No orders yet', bs: 'Još nema narudžbi', ar: 'لا توجد طلبات بعد' },
   'browse_menu_start': { en: 'Browse the menu to get started.', bs: 'Pogledajte meni da započnete.', ar: 'تصفح القائمة للبدء.' },
-  'request_bill': { en: 'Request Bill', bs: 'Zatraži račun', ar: 'اطلب الفاتورة' },
+  'request_bill': { en: 'Request bill', bs: 'Zatraži račun', ar: 'اطلب الفاتورة' },
   'requesting': { en: 'Requesting...', bs: 'Šaljem zahtjev…', ar: 'جارٍ الطلب...' },
   'bill_requested': { en: 'Bill requested', bs: 'Račun zatražen', ar: 'تم طلب الفاتورة' },
   'server_notified': { en: 'Your server has been notified.', bs: 'Vaš konobar je obaviješten.', ar: 'تم إخطار النادل.' },
 
   // Call Waiter
-  'call_waiter': { en: 'Call Waiter', bs: 'Pozovi konobara', ar: 'استدعاء النادل' },
+  'call_waiter': { en: 'Call waiter', bs: 'Pozovi konobara', ar: 'استدعاء النادل' },
   'calling': { en: 'Calling...', bs: 'Pozivam...', ar: 'جارٍ الاستدعاء...' },
   'waiter_notified': { en: 'Waiter notified', bs: 'Konobar je obaviješten', ar: 'تم إخطار النادل' },
   // The call button once pressed: short, so the table row never wraps on a narrow phone.
@@ -207,11 +209,13 @@ const translations: Record<string, Record<Locale, string>> = {
   'setting_up_table': { en: 'Connecting you to your table…', bs: 'Povezujemo vas sa stolom…', ar: 'جارٍ ربطك بطاولتك…' },
   'invalid_qr': { en: 'Invalid QR code. Please ask your waiter for assistance.', bs: 'Nevažeći QR kod. Zamolite konobara za pomoć.', ar: 'رمز QR غير صالح. يرجى طلب المساعدة من النادل.' },
   'qr_expired': { en: 'This QR code is invalid or expired. Please ask your waiter to help you scan.', bs: 'Ovaj QR kod je nevažeći ili je istekao. Zamolite konobara za pomoć.', ar: 'رمز QR هذا غير صالح أو منتهي الصلاحية. اطلب من النادل المساعدة.' },
+  'table_open_failed_title': { en: 'Your table didn’t open', bs: 'Sto se nije otvorio', ar: 'لم تُفتح طاولتك' },
+  'tv_menu_updating': { en: 'The menu is being updated', bs: 'Meni se ažurira', ar: 'يجري تحديث القائمة' },
   'session_failed': { en: 'Could not start your session. Please try again.', bs: 'Nismo uspjeli otvoriti vaš sto. Pokušajte ponovo.', ar: 'تعذر بدء الجلسة. يرجى المحاولة مرة أخرى.' },
   'something_wrong': { en: 'Something went wrong. Please try scanning again.', bs: 'Nešto je pošlo naopako. Pokušajte ponovo skenirati.', ar: 'حدث خطأ ما. يرجى المحاولة مرة أخرى.' },
 
   // Guest name
-  'welcome': { en: 'Welcome!', bs: 'Dobrodošli!', ar: 'أهلاً وسهلاً!' },
+  'welcome': { en: 'Welcome', bs: 'Dobrodošli', ar: 'أهلاً وسهلاً' },
   'enter_your_name': { en: 'Enter your name', bs: 'Unesite svoje ime', ar: 'أدخل اسمك' },
   'name_placeholder': { en: 'Your name', bs: 'Vaše ime', ar: 'اسمك' },
   'continue': { en: 'Continue', bs: 'Nastavi', ar: 'متابعة' },
@@ -241,7 +245,7 @@ const translations: Record<string, Record<Locale, string>> = {
   // Review / Rating
   'how_was_experience': { en: 'How was your experience?', bs: 'Kako vam se svidjelo kod nas?', ar: 'كيف كانت تجربتك؟' },
   'rate_your_visit': { en: 'Tap a star to rate your visit', bs: 'Dodirnite zvjezdicu i ocijenite posjet', ar: 'اضغط على نجمة لتقييم زيارتك' },
-  'thank_you_feedback': { en: 'Thank you for your feedback!', bs: 'Hvala na ocjeni!', ar: 'شكراً لملاحظاتك!' },
+  'thank_you_feedback': { en: 'Thank you for your feedback', bs: 'Hvala na ocjeni', ar: 'شكراً لملاحظاتك' },
   'help_discover_venue': { en: 'Help others discover {name}', bs: 'Pomozite drugima da otkriju {name}', ar: 'ساعد الآخرين في اكتشاف {name}' },
   'leave_google_review': { en: 'Leave a Google Review', bs: 'Ostavite Google recenziju', ar: 'اترك تقييماً على Google' },
   'close': { en: 'Close', bs: 'Zatvori', ar: 'إغلاق' },
@@ -277,7 +281,7 @@ const translations: Record<string, Record<Locale, string>> = {
   'someone_wants_to_join': { en: 'Someone wants to join your table', bs: 'Neko se želi pridružiti vašem stolu', ar: 'شخص ما يريد الانضمام إلى طاولتك' },
   'accept': { en: 'Accept', bs: 'Prihvati', ar: 'قبول' },
   'decline': { en: 'Decline', bs: 'Odbij', ar: 'رفض' },
-  'join_approved': { en: "You’re in — welcome to the table!", bs: 'Ušli ste — dobrodošli za sto!', ar: 'تم قبولك — أهلاً بك على الطاولة!' },
+  'join_approved': { en: 'You’re in — welcome to the table', bs: 'Ušli ste — dobrodošli za sto', ar: 'تم قبولك — أهلاً بك على الطاولة' },
   'join_declined': { en: 'The table didn’t accept your request.', bs: 'Sto nije prihvatio vaš zahtjev.', ar: 'لم تقبل الطاولة طلبك.' },
   'joining_table': { en: 'Joining the table…', bs: 'Pridruživanje stolu…', ar: 'جارٍ الانضمام إلى الطاولة…' },
   'at_this_table': { en: 'At this table', bs: 'Za ovim stolom', ar: 'على هذه الطاولة' },
@@ -304,7 +308,7 @@ const translations: Record<string, Record<Locale, string>> = {
   // Card payment (Monri)
   'pay_by_card': { en: 'Pay by card', bs: 'Plati karticom', ar: 'الدفع بالبطاقة' },
   'paying': { en: 'Processing…', bs: 'Obrada…', ar: 'جارٍ المعالجة…' },
-  'payment_received': { en: 'Payment received — thank you!', bs: 'Plaćanje primljeno — hvala!', ar: 'تم استلام الدفعة — شكراً!' },
+  'payment_received': { en: 'Payment received — thank you', bs: 'Plaćanje primljeno — hvala', ar: 'تم استلام الدفعة — شكراً' },
   'payment_failed': { en: 'Payment could not be processed. Please try again.', bs: 'Plaćanje nije uspjelo. Pokušajte ponovo.', ar: 'تعذّر إتمام الدفع. يرجى المحاولة مرة أخرى.' },
   'payment_declined': { en: 'Card declined. Try another card or call a waiter.', bs: 'Kartica odbijena. Probajte drugu karticu ili pozovite konobara.', ar: 'تم رفض البطاقة. جرّب بطاقة أخرى أو استدعِ النادل.' },
   'secure_payment_monri': { en: 'Secure payment processed by Monri', bs: 'Sigurno plaćanje putem Monrija', ar: 'دفع آمن عبر Monri' },
@@ -463,7 +467,7 @@ const translations: Record<string, Record<Locale, string>> = {
   'stage_received_line': { en: 'The kitchen has your order', bs: 'Kuhinja je primila Vašu narudžbu', ar: 'وصل طلبك إلى المطبخ' },
   'stage_preparing_line': { en: 'Being prepared now', bs: 'Upravo se priprema', ar: 'يُحضَّر الآن' },
   'stage_ready_line': { en: 'Ready — on its way to you', bs: 'Spremno — stiže do Vas', ar: 'جاهز — في الطريق إليك' },
-  'stage_served_line': { en: 'Enjoy!', bs: 'Prijatno!', ar: 'بالهناء والشفاء!' },
+  'stage_served_line': { en: 'Enjoy your meal', bs: 'Prijatno', ar: 'بالهناء والشفاء' },
 
   // ---- Promotions: sales, combos, what's new, featured
   'sale_badge': { en: 'Sale', bs: 'Akcija', ar: 'تخفيض' },
@@ -507,6 +511,9 @@ const translations: Record<string, Record<Locale, string>> = {
 };
 
 /** Read-only view of the table, for the completeness tests. */
+// The offline demo's fictional restaurant says its own things (docs/demo-mode.md).
+if (DEMO_MODE) Object.assign(translations, DEMO_STRINGS);
+
 export const translationTable: Readonly<typeof translations> = translations;
 
 export type Vars = Record<string, string | number>;

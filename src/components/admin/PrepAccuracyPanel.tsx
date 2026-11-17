@@ -3,7 +3,7 @@ import { toast } from 'sonner';
 import { Timer } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { AdminCard, AdminCardContent, AdminCardHeader } from '@/components/admin/AdminCard';
 import { refreshPrepStats } from '@/lib/staff-api';
 
 /**
@@ -77,13 +77,12 @@ const PrepAccuracyPanel = () => {
   const measured = rows.filter((r) => r.samples >= 5).length;
 
   return (
-    <Card className="border-border">
-      <CardHeader className="pb-3">
-        <CardTitle className="font-serif text-lg flex items-center gap-2">
-          <Timer className="w-5 h-5 text-primary" /> Are our prep times honest?
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
+    <AdminCard>
+      <AdminCardHeader
+        icon={Timer}
+        title="Are our prep times honest?"
+      />
+      <AdminCardContent className="space-y-4">
         <p className="text-sm font-sans text-muted-foreground leading-relaxed">
           Every wait time a guest sees is built on these. The kitchen board now records when each
           line was started and when it went up, so the menu setting can be checked against what
@@ -134,8 +133,8 @@ const PrepAccuracyPanel = () => {
         <Button variant="outline" size="sm" onClick={recompute} disabled={busy}>
           {busy ? 'Recomputing…' : 'Recompute from the last 30 days'}
         </Button>
-      </CardContent>
-    </Card>
+      </AdminCardContent>
+    </AdminCard>
   );
 };
 

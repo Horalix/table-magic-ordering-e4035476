@@ -2,9 +2,9 @@ import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react'
 import { Link } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { SHOW_DELETED } from '@/lib/menu-bin';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, LayoutGroup } from 'framer-motion';
 import {
-  BellRing, Check, ChefHat, CreditCard, CupSoda, Hand, Keyboard, LayoutList, Maximize2, Minimize2, Printer, RotateCcw,
+  BellRing, Check, ChefHat, CupSoda, Hand, Keyboard, LayoutList, Maximize2, Minimize2, Printer, Receipt, RotateCcw,
   Settings, Volume2, VolumeX, WifiOff, X,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -41,6 +41,9 @@ import AllDayPanel from '@/components/staff/AllDayPanel';
 import FreeTableDialog from '@/components/staff/FreeTableDialog';
 import HeldOrdersCard from '@/components/staff/HeldOrdersCard';
 import { useStaffDocument } from '@/components/staff/useStaffDocument';
+import { TONE, type StaffTone } from '@/components/staff/status-tone';
+import { ArrivalGlow, TickingCount } from '@/components/staff/StaffMotion';
+import { springPill } from '@/lib/motion';
 import { useLearningHeartbeat } from '@/hooks/useLearningHeartbeat';
 import { useStaffVenue } from '@/hooks/useStaffVenue';
 import {
@@ -177,17 +180,95 @@ const HARD_ROW_CAP = 300;
  * and a column nobody moves cards out of is a column that collects them. New
  * therefore holds both.
  */
-const KANBAN: { key: string; statuses: OrderStatus[]; label: string; dot: string }[] = [
-  { key: 'new', statuses: ['pending', 'confirmed'], label: 'New', dot: 'bg-destructive' },
-  { key: 'preparing', statuses: ['preparing'], label: 'Preparing', dot: 'bg-accent' },
-  { key: 'ready', statuses: ['ready'], label: 'Ready', dot: 'bg-primary' },
+const KANBAN: { key: string; statuses: OrderStatus[]; label: string; tone: StaffTone }[] = [
+  { key: 'new', statuses: ['pending', 'confirmed'], label: 'New', tone: 'new' },
+  { key: 'preparing', statuses: ['preparing'], label: 'Preparing', tone: 'preparing' },
+  { key: 'ready', statuses: ['ready'], label: 'Ready', tone: 'ready' },
 ];
+
+/** A quiet status word in the header line: text, no pill. Problems get a pill (`HeaderAlert`). */
+const HeaderNote = ({ children, title, role }: { children: React.ReactNode; title?: string; role?: string }) => (
+  <span role={role} title={title} className="inline-flex items-center gap-1.5 text-xs font-sans text-muted-foreground whitespace-nowrap">
+    {children}
+  </span>
+);
+
+/** Something in the header that needs a person: a tinted pill in the state's colour. */
+const HeaderAlert = ({ tone, children, title, role }: { tone: 'late' | 'preparing'; children: React.ReactNode; title?: string; role?: string }) => (
+  <span role={role} title={title} className={`inline-flex items-center gap-1 text-xs font-sans font-semibold px-2 py-0.5 rounded-full whitespace-nowrap ${TONE[tone].chip}`}>
+    {children}
+  </span>
+);
 
 const STATIONS: { key: StationFilter; label: string }[] = [
   { key: 'all', label: 'All' },
   { key: 'kitchen', label: 'Kitchen' },
   { key: 'bar', label: 'Bar' },
 ];
+
+/** A segmented control: a soft well with the chosen option lifted out of it. */
+const SEGMENTED = 'inline-flex items-center gap-0.5 rounded-full bg-muted p-[3px]';
+
+/**
+ * One option of a segmented control. The lifted pill slides to the option
+ * tapped (no movement with reduce motion), so the change is seen, not inferred.
+ */
+const SegmentButton = ({ group, active, onClick, children }: {
+  group: string; active: boolean; onClick: () => void; children: React.ReactNode;
+}) => (
+  <button
+    type="button"
+    onClick={onClick}
+    aria-pressed={active}
+    className={`relative px-3.5 min-h-[44px] min-w-[44px] rounded-full text-sm font-sans transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+      active ? 'text-foreground font-semibold' : 'text-muted-foreground font-medium hover:text-foreground'
+    }`}
+  >
+    {active && (
+      <motion.span
+        layoutId={`kds-segment-${group}`}
+        aria-hidden
+        className="absolute inset-0 rounded-full bg-card shadow-[0_1px_2px_hsl(150_10%_15%/0.14),0_0_0_1px_hsl(150_10%_15%/0.05)]"
+        transition={springPill}
+      />
+    )}
+    <span className="relative inline-flex items-center gap-1.5">{children}</span>
+  </button>
+);
+
+/** A call or bill this recent glows once when it appears; older ones are just there. */
+const isFresh = (at: string) => Date.now() - new Date(at).getTime() < 20_000;
+
+/**
+ * A waiter call or bill request in the strip over the board: the table, what
+ * it wants and for how long, and the one button that clears it.
+ */
+const FloorAlertChip = ({ tone, icon, what, table, detail, fresh, children }: {
+  tone: 'calling' | 'bill';
+  icon: React.ReactNode;
+  what: string;
+  table: number;
+  detail: React.ReactNode;
+  fresh: boolean;
+  children: React.ReactNode;
+}) => (
+  <motion.div
+    layout="position"
+    initial={{ opacity: 0, scale: 0.94 }}
+    animate={{ opacity: 1, scale: 1 }}
+    exit={{ opacity: 0, scale: 0.94, transition: { duration: 0.16 } }}
+    transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+    className={`relative flex items-center gap-2.5 pl-1.5 pr-1 py-1 rounded-full border bg-card shadow-lux min-h-[52px] ${TONE[tone].border}`}
+  >
+    {fresh && <ArrivalGlow tone={tone} className="rounded-full" />}
+    <span className={`w-10 h-10 rounded-full grid place-items-center shrink-0 ${TONE[tone].solid}`} aria-hidden>{icon}</span>
+    <span className="leading-tight pr-1">
+      <span className="block text-base font-sans font-bold text-foreground">Table {table}</span>
+      <span className={`block text-xs font-sans font-medium ${TONE[tone].text}`}>{what} · {detail}</span>
+    </span>
+    {children}
+  </motion.div>
+);
 
 /** Live "n minutes ago", off the shared clock rather than a per-row timer. */
 const Ago = ({ at }: { at: string }) => {
@@ -211,7 +292,8 @@ const UndoLastChip = ({ bump, windowSeconds, onUndo }: { bump: LastBump; windowS
     <button
       type="button"
       onClick={onUndo}
-      className="inline-flex items-center gap-1.5 text-xs font-sans font-semibold px-3 min-h-[32px] rounded-full bg-foreground text-background hover:opacity-90"
+      // Chip-sized in the status line, thumb-sized to tap: the ::before takes it to 44px.
+      className="relative inline-flex items-center gap-1.5 text-xs font-sans font-semibold px-3 min-h-[32px] rounded-full bg-foreground text-background hover:opacity-90 before:absolute before:inset-x-0 before:-inset-y-1.5 before:content-['']"
       aria-label={`Undo: table ${bump.table} ${what}, ${left} seconds left`}
     >
       <RotateCcw className="w-3.5 h-3.5" /> Undo: T{bump.table} {what} <span className="tabular-nums opacity-70">{left}s</span>
@@ -238,6 +320,8 @@ const KitchenDisplay = () => {
   const [fresh, setFresh] = useState<FreshOrder[]>([]);
   /** The ticket the keyboard / bump bar is on. */
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  /** A ticket the banner's "Show" just brought into view: it glows again. */
+  const [spotlight, setSpotlight] = useState<{ id: string; at: number } | null>(null);
   const [showKeys, setShowKeys] = useState(false);
   const [lastBump, setLastBump] = useState<LastBump | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -1171,6 +1255,8 @@ const KitchenDisplay = () => {
   }, [orders, station]);
   useReminderChime(soundEnabled && fresh.length > 0, useCallback(() => { playNewOrderAlert(); }, []), 30_000);
   const freshIds = useMemo(() => new Set(fresh.map((f) => f.id)), [fresh]);
+  /** Every ticket on the board, for a card leaving a column: moving, or leaving the board? */
+  const visibleIds = useMemo(() => new Set(visible.map((o) => o.id)), [visible]);
 
   /** The tickets the keyboard walks, in the order the board draws them. */
   const sequence = useMemo(() => (view === 'active' ? boardSequence(visible) : []), [visible, view]);
@@ -1247,6 +1333,23 @@ const KitchenDisplay = () => {
     window.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
   };
 
+  /**
+   * The banner's "Show": new tickets join the end of New, which on a busy
+   * board is below the fold. Scrolls the newest into view and lights it up;
+   * it does not select it or touch the order.
+   */
+  const showNewest = () => {
+    const newest = fresh[fresh.length - 1];
+    if (!newest) return;
+    const ticket = document.getElementById(`ticket-${newest.id}`);
+    if (!ticket) return;
+    // Its top just under the sticky header (and the banner in it), like a column jump.
+    const top = ticket.getBoundingClientRect().top + window.scrollY - (headerRef.current?.offsetHeight ?? 0) - 12;
+    const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    window.scrollTo({ top: Math.max(0, top), behavior: reduce ? 'auto' : 'smooth' });
+    setSpotlight({ id: newest.id, at: Date.now() });
+  };
+
   const renderCard = (order: KitchenOrder, showStatus: boolean) => (
     <KitchenOrderCard
       key={order.id}
@@ -1257,6 +1360,7 @@ const KitchenDisplay = () => {
       failedPrint={failedPrints.includes(order.id)}
       printStates={showStatus ? [] : printStatesFor(order)}
       isNew={!showStatus && freshIds.has(order.id)}
+      spotlight={!showStatus && spotlight?.id === order.id ? spotlight.at : undefined}
       selected={!showStatus && selectedId === order.id}
       slot={showStatus ? undefined : sequence.findIndex((o) => o.id === order.id) + 1 || undefined}
       onBumpItem={bumpItem}
@@ -1296,49 +1400,55 @@ const KitchenDisplay = () => {
         */}
         <div className="flex items-center justify-between px-4 py-3 sm:px-6 sm:py-4 gap-x-4 gap-y-2 flex-wrap">
           <div className="flex-1 basis-80 min-w-0">
-            <h1 className="font-serif text-2xl font-bold text-foreground">
+            <h1 className="font-serif text-2xl font-bold tracking-tight text-foreground leading-tight">
               {station === 'bar' ? 'Bar Display' : station === 'kitchen' ? 'Kitchen Display' : 'Kitchen & Bar'}
               {venueName && <span className="ml-2 align-middle text-sm font-sans font-medium text-muted-foreground">{venueName}</span>}
             </h1>
-            <div className="flex items-center gap-2 flex-wrap">
-              <p className="text-sm text-muted-foreground font-sans">{visible.length} {visible.length === 1 ? 'order' : 'orders'}</p>
+            {/* One line of status. What is fine is said quietly, in words;
+                only what needs a person gets a pill — so a pill always means
+                "look at me", instead of nine of them meaning nothing. */}
+            <div className="mt-1 flex items-center gap-x-3.5 gap-y-1.5 flex-wrap">
+              <p className="text-sm text-foreground/80 font-sans font-medium tabular-nums">{visible.length} {visible.length === 1 ? 'order' : 'orders'}</p>
 
               <ConnectionPill state={connection} />
 
               {/* Backlog in minutes, which is the unit a cook thinks in. */}
               {load
                 .filter((l) => (station === 'all' ? l.open_items > 0 : l.station === station))
-                .map((l) => (
-                  <span
-                    key={l.station}
-                    className={`inline-flex items-center gap-1 text-[11px] font-sans font-medium px-2 py-0.5 rounded-full ${
-                      Number(l.load_factor) >= 2 ? 'bg-destructive/10 text-destructive'
-                        : Number(l.load_factor) >= 1 ? 'bg-accent/10 text-accent'
-                          : 'bg-muted text-muted-foreground'
-                    }`}
-                    title="Outstanding prep, against the configured capacity"
-                  >
-                    {l.station}: {Math.round(Number(l.backlog_minutes))} min
-                    {Number(l.load_factor) >= 1 && ' behind'}
-                  </span>
-                ))}
+                .map((l) => {
+                  const words = <>{l.station === 'bar' ? 'Bar' : l.station === 'kitchen' ? 'Kitchen' : l.station}: {Math.round(Number(l.backlog_minutes))} min{Number(l.load_factor) >= 1 && ' behind'}</>;
+                  const title = 'Outstanding prep, against the configured capacity';
+                  return Number(l.load_factor) >= 1
+                    ? <HeaderAlert key={l.station} tone={Number(l.load_factor) >= 2 ? 'late' : 'preparing'} title={title}>{words}</HeaderAlert>
+                    : (
+                      <HeaderNote key={l.station} title={title}>
+                        {l.station === 'bar' ? <CupSoda className="w-3 h-3" aria-hidden /> : <ChefHat className="w-3 h-3" aria-hidden />}
+                        {words}
+                      </HeaderNote>
+                    );
+                })}
 
               {/* Network printers, by name. An offline one is loud: the next
                   ticket for its station would otherwise vanish silently — this
                   tablet only takes over if it is set up to print. */}
               {myPrinters.map((p) => {
                 const summary = printerSummary(p);
-                return (
+                const title = p.last_status ? `Printer status: ${p.last_status}` : `${p.name}: ${summary.label}`;
+                return summary.tone === 'ok' ? (
+                  <HeaderNote key={p.id} role="status" title={title}>
+                    <Printer className="w-3 h-3" aria-hidden />
+                    {p.name}<span className="sr-only">: {summary.label}</span>
+                    <Check className={`w-3 h-3 -ml-0.5 ${TONE.ready.text}`} strokeWidth={3} aria-hidden />
+                  </HeaderNote>
+                ) : (
                   <span
                     key={p.id}
                     role="status"
-                    className={`inline-flex items-center gap-1 text-[11px] font-sans font-semibold px-2 py-0.5 rounded-full ${
-                      summary.tone === 'ok' ? 'bg-primary/10 text-primary' : 'bg-destructive text-destructive-foreground'
-                    }`}
-                    title={p.last_status ? `Printer status: ${p.last_status}` : undefined}
+                    className="inline-flex items-center gap-1 text-xs font-sans font-semibold px-2 py-0.5 rounded-full bg-destructive text-destructive-foreground whitespace-nowrap"
+                    title={title}
                   >
                     <Printer className="w-3 h-3" /> {p.name}: {summary.label}
-                    {p.waiting > 0 && summary.tone !== 'ok' && ` · ${p.waiting} waiting`}
+                    {p.waiting > 0 && ` · ${p.waiting} waiting`}
                   </span>
                 );
               })}
@@ -1354,25 +1464,23 @@ const KitchenDisplay = () => {
                   PRINTER STUCK{printQueue.pending > 0 ? ` — ${printQueue.pending} waiting` : ''} · Retry
                 </button>
               ) : (btName || isPrinter) && (
-                <span className="inline-flex items-center gap-1 text-[11px] font-sans font-medium text-primary">
-                  <span className="w-1.5 h-1.5 rounded-full bg-primary breathe" /> <Printer className="w-3 h-3" />
+                <HeaderNote>
+                  <span className={`w-1.5 h-1.5 rounded-full breathe ${TONE.ready.dot}`} aria-hidden /> <Printer className="w-3 h-3" aria-hidden />
                   {btName ? `Printing · ${btName}` : 'Printing on this device'}
                   {/* Never call an unverifiable write "printed" without saying so. */}
-                  {btName && (isDirectConnected() || !printerStatusCapable()) && <span className="text-muted-foreground"> (unverified)</span>}
-                  {printQueue.state === 'printing' && <span className="text-muted-foreground"> · {printQueue.current}</span>}
-                </span>
+                  {btName && (isDirectConnected() || !printerStatusCapable()) && <span> (unverified)</span>}
+                  {printQueue.state === 'printing' && <span> · {printQueue.current}</span>}
+                </HeaderNote>
               )}
 
               {printQueue.state !== 'stuck' && printQueue.lastError && (
-                <span className="inline-flex items-center gap-1 text-[11px] font-sans font-medium px-2 py-0.5 rounded-full bg-destructive/10 text-destructive">
-                  {printQueue.lastError}
-                </span>
+                <HeaderAlert tone="late">{printQueue.lastError}</HeaderAlert>
               )}
 
               {failedPrints.length > 0 && (
-                <span className="inline-flex items-center gap-1 text-[11px] font-sans font-medium px-2 py-0.5 rounded-full bg-destructive/10 text-destructive">
+                <HeaderAlert tone="late">
                   <Printer className="w-3 h-3" /> {failedPrints.length} ticket{failedPrints.length === 1 ? '' : 's'} failed to print
-                </span>
+                </HeaderAlert>
               )}
 
               {/* Never show an unmuted speaker over a context the browser has
@@ -1382,66 +1490,56 @@ const KitchenDisplay = () => {
                 // invisible ::before takes the hit area to 44px tall.
                 <button
                   onClick={testSound}
-                  className="relative inline-flex items-center gap-1 text-[11px] font-sans font-medium px-2 py-0.5 rounded-full bg-destructive/10 text-destructive hover:bg-destructive/20 transition-colors before:absolute before:inset-x-0 before:-inset-y-3 before:content-['']"
+                  className={`relative inline-flex items-center gap-1 text-xs font-sans font-semibold px-2 py-0.5 rounded-full ${TONE.late.chip} hover:bg-[hsl(0_72%_50%/0.18)] transition-colors before:absolute before:inset-x-0 before:-inset-y-3 before:content-['']`}
                 >
                   <VolumeX className="w-3 h-3" /> Sound blocked — tap to enable
                 </button>
               )}
 
               {truncated && (
-                <span className="inline-flex items-center gap-1 text-[11px] font-sans font-medium px-2 py-0.5 rounded-full bg-accent/10 text-accent">
+                <HeaderAlert tone="preparing">
                   Showing the newest {HARD_ROW_CAP} — some orders are not on screen
-                </span>
+                </HeaderAlert>
               )}
 
               {/* The last bump, one tap from being taken back. */}
               {lastBump && <UndoLastChip bump={lastBump} windowSeconds={undoSeconds} onUndo={() => { void undoLast(); }} />}
 
               {wake === 'unsupported' && (
-                <span
-                  className="inline-flex items-center gap-1 text-[11px] font-sans font-medium px-2 py-0.5 rounded-full bg-accent/10 text-accent"
+                <HeaderAlert
+                  tone="preparing"
                   title="This browser cannot keep the screen on. Set the tablet's screen timeout to Never, or keep it charging with 'stay awake' on."
                 >
                   Screen may sleep — set the tablet to never sleep
-                </span>
+                </HeaderAlert>
               )}
             </div>
           </div>
-
           <div className="flex gap-2 items-center w-full md:w-auto whitespace-nowrap overflow-x-auto scrollbar-hide md:flex-wrap md:overflow-visible [&>*]:shrink-0">
             {/* Station first: it changes what this whole screen means. */}
-            <div className="inline-flex rounded-full border border-border overflow-hidden" role="group" aria-label="Station">
+            <div className={SEGMENTED} role="group" aria-label="Station">
               {STATIONS.map((s) => (
-                <button
+                <SegmentButton
                   key={s.key}
+                  group="station"
+                  active={station === s.key}
                   onClick={() => { setStation(s.key); localStorage.setItem('kitchen:station', s.key); }}
-                  aria-pressed={station === s.key}
-                  className={`px-3 min-h-[44px] min-w-[44px] text-sm font-sans transition-colors ${
-                    station === s.key ? 'bg-foreground text-background' : 'bg-card text-muted-foreground hover:text-foreground'
-                  }`}
                 >
-                  {s.key === 'bar' ? <span className="inline-flex items-center gap-1"><CupSoda className="w-3.5 h-3.5" />{s.label}</span> : s.label}
-                </button>
+                  {s.key === 'bar' && <CupSoda className="w-3.5 h-3.5" />}{s.label}
+                </SegmentButton>
               ))}
             </div>
 
             {/* Second, so it is on screen on a phone, where this row scrolls. */}
-            <div className="inline-flex rounded-full border border-border overflow-hidden" role="group" aria-label="View">
+            <div className={SEGMENTED} role="group" aria-label="View">
               {([
                 { key: 'active', label: 'Board' },
                 { key: 'allday', label: 'All day' },
                 { key: 'history', label: 'History' },
               ] as const).map((v) => (
-                <button
-                  key={v.key}
-                  onClick={() => setView(v.key)}
-                  aria-pressed={view === v.key}
-                  className={`px-3 min-h-[44px] text-sm font-sans transition-colors ${
-                    view === v.key ? 'bg-foreground text-background' : 'bg-card text-muted-foreground hover:text-foreground'
-                  }`}
-                >
-                  {v.key === 'allday' ? <span className="inline-flex items-center gap-1"><LayoutList className="w-3.5 h-3.5" />{v.label}</span> : v.label}
-                </button>
+                <SegmentButton key={v.key} group="view" active={view === v.key} onClick={() => setView(v.key)}>
+                  {v.key === 'allday' && <LayoutList className="w-3.5 h-3.5" />}{v.label}
+                </SegmentButton>
               ))}
             </div>
 
@@ -1449,7 +1547,7 @@ const KitchenDisplay = () => {
               <select
                 value={sectionFilter}
                 onChange={(e) => { setSectionFilter(e.target.value); localStorage.setItem('kitchen:section', e.target.value); }}
-                className="rounded-full border border-border bg-card px-3 text-base md:text-sm font-sans min-h-[44px]"
+                className="rounded-full border-0 bg-muted px-3.5 text-base md:text-sm font-sans font-medium text-foreground/80 min-h-[44px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 aria-label="Filter by section"
               >
                 <option value="all">All sections</option>
@@ -1461,7 +1559,7 @@ const KitchenDisplay = () => {
               variant={isPrinter ? 'default' : 'ghost'}
               size="sm"
               onClick={() => { const next = !isPrinter; setIsPrinter(next); localStorage.setItem('kitchen:isPrinter', String(next)); toast.success(next ? 'This device will auto-print new orders' : 'Auto-print off for this device'); }}
-              className="rounded-full min-h-[44px] min-w-[44px] gap-1.5 text-xs font-sans"
+              className="rounded-full min-h-[44px] min-w-[44px] gap-1.5 text-sm font-sans font-medium"
               aria-label="Use this device as the ticket printer"
               title="Auto-print new orders from this device"
             >
@@ -1490,7 +1588,7 @@ const KitchenDisplay = () => {
               variant="ghost"
               size="sm"
               onClick={testSound}
-              className="rounded-full font-sans min-h-[44px] text-xs"
+              className="rounded-full font-sans font-medium min-h-[44px] text-sm text-muted-foreground hover:text-foreground"
               title="Play a test tone so you know alerts will be heard"
             >
               Test sound
@@ -1521,27 +1619,37 @@ const KitchenDisplay = () => {
         {/* A new order is impossible to miss: a banner that flashes, a chime
             that repeats until someone says "got it" or starts cooking. Inside
             the sticky header, so a cook scrolled down the board sees it too —
-            below it, it scrolled away with the page. */}
+            below it, it scrolled away with the page. In the colour of "new",
+            like the ticket it announces. */}
         <AnimatePresence>
           {fresh.length > 0 && view === 'active' && (
             <motion.div
-              initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
+              initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8, transition: { duration: 0.16 } }}
+              transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
               role="alert"
               aria-live="assertive"
-              className="mx-4 sm:mx-6 mb-3 rounded-xl bg-primary text-primary-foreground px-4 py-3 flex items-center gap-3 shadow-lux-lg kds-flash"
+              className={`mx-4 sm:mx-6 mb-3 rounded-2xl ${TONE.new.solid} pl-3 pr-2 py-2 flex items-center gap-3 shadow-lux-lg kds-flash`}
             >
-              <BellRing className="w-7 h-7 shrink-0" aria-hidden />
+              <span className="w-11 h-11 rounded-xl bg-white/15 grid place-items-center shrink-0" aria-hidden>
+                <BellRing className="w-6 h-6" />
+              </span>
               <div className="min-w-0 flex-1">
                 <p className="font-sans font-bold text-lg leading-tight">
                   {fresh.length === 1 ? 'New order' : `${fresh.length} new orders`}
                 </p>
-                <p className="text-sm font-sans opacity-90 truncate">
+                <p className="text-sm font-sans text-white/85 truncate tabular-nums">
                   {fresh.map((f) => `Table ${f.table}${f.code ? ` #${f.code}` : ''}`).join(' · ')}
                 </p>
               </div>
               <Button
+                onClick={showNewest}
+                className="min-h-[52px] px-5 rounded-xl bg-white/15 text-white hover:bg-white/25 font-sans font-semibold text-base shadow-none"
+              >
+                Show
+              </Button>
+              <Button
                 onClick={() => setFresh([])}
-                className="min-h-[52px] px-6 rounded-xl bg-primary-foreground text-primary hover:bg-primary-foreground/90 font-sans font-bold text-base"
+                className="min-h-[52px] px-6 rounded-xl bg-white text-[hsl(214_62%_34%)] hover:bg-white/90 font-sans font-bold text-base shadow-sm"
               >
                 Got it
               </Button>
@@ -1567,73 +1675,105 @@ const KitchenDisplay = () => {
       <HeldOrdersCard soundEnabled={soundEnabled} className="mx-4 sm:mx-6 mt-3" onChanged={refetchOrders} />
 
       {/* Calls and bill requests share one strip: on a tablet two stacked
-          strips pushed the first ticket below the fold. */}
-      <AnimatePresence>
+          strips pushed the first ticket below the fold. Each chip says what it
+          is (icon, word, colour — violet for a call, ink for a bill, as on
+          every staff screen), so the strip needs no headings. */}
+      <AnimatePresence initial={false}>
         {(waiterCalls.length > 0 || billRequests.length > 0) && (
-          <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="border-b border-border overflow-hidden">
+          <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="border-b border-border/70 overflow-hidden">
             <div className="px-4 sm:px-6 py-2.5 flex flex-wrap items-center gap-2">
-              {waiterCalls.length > 0 && (
-                <p className="text-xs font-sans font-semibold text-accent uppercase tracking-wider flex items-center gap-1.5 mr-1">
-                  <Hand className="w-4 h-4" /> Waiter Calls ({waiterCalls.length})
-                </p>
-              )}
-              {waiterCalls.map((call) => (
-                <motion.div key={call.id} initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="flex items-center gap-2 pl-4 pr-1 py-1 rounded-full bg-accent/15 border border-accent/25 min-h-[52px]">
-                  <span className="text-base font-sans font-bold text-accent">Table {call.table_number}</span>
-                  <span className="text-sm text-accent/80 font-sans">
-                    <Ago at={call.created_at} />
-                    {call.status === 'acknowledged' && (
-                      <> · <Going name={(call.acknowledged_by && staffNames[call.acknowledged_by]) || 'Someone'} since={call.acknowledged_at} /></>
-                    )}
-                  </span>
-                  <button
-                    onClick={() => resolveWaiterCall(call.id)}
-                    disabled={clearing.has(call.id)}
-                    className="w-11 h-11 rounded-full bg-accent/20 flex items-center justify-center hover:bg-accent/40 disabled:opacity-50 transition-colors"
-                    aria-label="Resolve call"
+              <AnimatePresence initial={false}>
+                {waiterCalls.map((call) => (
+                  <FloorAlertChip
+                    key={call.id}
+                    tone="calling"
+                    icon={<Hand className="w-4 h-4" />}
+                    what="Waiter call"
+                    fresh={isFresh(call.created_at)}
+                    table={call.table_number}
+                    detail={<>
+                      <Ago at={call.created_at} />
+                      {call.status === 'acknowledged' && (
+                        <> · <Going name={(call.acknowledged_by && staffNames[call.acknowledged_by]) || 'Someone'} since={call.acknowledged_at} /></>
+                      )}
+                    </>}
                   >
-                    <X className="w-5 h-5 text-accent" />
-                  </button>
-                </motion.div>
-              ))}
-              {billRequests.length > 0 && (
-                <p className={`text-xs font-sans font-semibold text-primary uppercase tracking-wider flex items-center gap-1.5 mr-1 ${waiterCalls.length > 0 ? 'sm:ml-3' : ''}`}>
-                  <CreditCard className="w-4 h-4" /> Bill Requests ({billRequests.length})
-                </p>
-              )}
-              {billRequests.map((req) => (
-                <motion.div key={req.id} initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="flex items-center gap-2 pl-4 pr-1 py-1 rounded-full bg-primary/15 border border-primary/25 min-h-[52px]">
-                  <span className="text-base font-sans font-bold text-primary">Table {req.table_number}</span>
-                  <span className="text-sm text-primary/80 font-sans">
-                    <Ago at={req.created_at} />
-                    {req.status === 'acknowledged' && (
-                      <> · <Going name={(req.acknowledged_by && staffNames[req.acknowledged_by]) || 'Someone'} since={req.acknowledged_at} /></>
-                    )}
-                  </span>
-                  <button
-                    onClick={() => setFreeing(req)}
-                    className="w-11 h-11 rounded-full bg-primary/20 flex items-center justify-center hover:bg-primary/40 transition-colors"
-                    aria-label="Resolve bill request"
+                    <button
+                      onClick={() => resolveWaiterCall(call.id)}
+                      disabled={clearing.has(call.id)}
+                      className="w-11 h-11 rounded-full bg-[hsl(266_46%_54%/0.12)] text-[hsl(266_44%_40%)] flex items-center justify-center hover:bg-[hsl(266_46%_54%/0.24)] disabled:opacity-50 transition-colors"
+                      aria-label="Resolve call"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+                  </FloorAlertChip>
+                ))}
+                {billRequests.map((req) => (
+                  <FloorAlertChip
+                    key={req.id}
+                    tone="bill"
+                    icon={<Receipt className="w-4 h-4" />}
+                    what="Wants the bill"
+                    fresh={isFresh(req.created_at)}
+                    table={req.table_number}
+                    detail={<>
+                      <Ago at={req.created_at} />
+                      {req.status === 'acknowledged' && (
+                        <> · <Going name={(req.acknowledged_by && staffNames[req.acknowledged_by]) || 'Someone'} since={req.acknowledged_at} /></>
+                      )}
+                    </>}
                   >
-                    <Check className="w-5 h-5 text-primary" />
-                  </button>
-                </motion.div>
-              ))}
+                    <button
+                      onClick={() => setFreeing(req)}
+                      className="w-11 h-11 rounded-full bg-[hsl(210_16%_26%/0.08)] text-[hsl(210_18%_24%)] flex items-center justify-center hover:bg-[hsl(210_16%_26%/0.16)] transition-colors"
+                      aria-label="Resolve bill request"
+                    >
+                      <Check className="w-5 h-5" />
+                    </button>
+                  </FloorAlertChip>
+                ))}
+              </AnimatePresence>
             </div>
           </motion.div>
         )}
       </AnimatePresence>
-
       {/* Larger than the guests' notice: read from arm's length. */}
       <MenuOnlyNotice audience="kitchen" outerClassName="px-4 pt-4" className="text-base" />
 
       {view === 'allday' && <AllDayPanel station={station} onChanged={fetchOrders} />}
 
-      {view !== 'allday' && visible.length === 0 && (
-        <div className="flex flex-col items-center justify-center py-20">
-          <ChefHat className="w-12 h-12 text-muted-foreground mb-4" />
-          <p className="text-muted-foreground font-sans">
+      {/* Before the first load, an empty board is "not known", not "quiet":
+          a cook trusts "No orders waiting". So it says it is loading, or that
+          it could not load, and only then that there is nothing to cook. */}
+      {view !== 'allday' && visible.length === 0 && lastLoadedAt === null && !loadError && (
+        <div className="p-4 sm:px-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-5 gap-y-4" aria-busy="true" aria-label="Loading the board">
+          {[0, 1, 2].map((i) => (
+            <div key={i} className={`space-y-3 ${i > 0 ? 'hidden md:block' : ''}`}>
+              <div className="h-4 w-24 rounded-full bg-muted animate-pulse motion-reduce:animate-none" />
+              <div className="h-56 rounded-2xl border border-border bg-card animate-pulse motion-reduce:animate-none" />
+            </div>
+          ))}
+        </div>
+      )}
+      {view !== 'allday' && visible.length === 0 && lastLoadedAt === null && loadError && (
+        <div className="flex flex-col items-center justify-center py-20 px-6 text-center">
+          <span className="w-16 h-16 rounded-full bg-destructive/10 grid place-items-center mb-4" aria-hidden>
+            <WifiOff className="w-7 h-7 text-destructive" />
+          </span>
+          <p className="font-serif text-xl font-semibold text-foreground">The board has not loaded yet</p>
+          <p className="mt-1 max-w-sm text-sm font-sans text-muted-foreground">Orders are safe on the server. They show here as soon as the connection is back.</p>
+        </div>
+      )}
+      {view !== 'allday' && visible.length === 0 && lastLoadedAt !== null && (
+        <div className="flex flex-col items-center justify-center py-20 px-6 text-center">
+          <span className="w-16 h-16 rounded-full bg-muted grid place-items-center mb-4" aria-hidden>
+            {station === 'bar' && !historyView ? <CupSoda className="w-7 h-7 text-muted-foreground" /> : <ChefHat className="w-7 h-7 text-muted-foreground" />}
+          </span>
+          <p className="font-serif text-xl font-semibold text-foreground">
             {historyView ? 'Nothing served yet' : station === 'bar' ? 'No drinks waiting' : 'No orders waiting'}
+          </p>
+          <p className="mt-1 max-w-sm text-sm font-sans text-muted-foreground">
+            {historyView ? 'Served and voided orders show here.' : 'A new order shows here with a chime.'}
           </p>
         </div>
       )}
@@ -1649,29 +1789,44 @@ const KitchenDisplay = () => {
           1fr row takes New's extra height, so Ready starts right after
           Preparing); a phone stacks all three and gets a bar that jumps to
           each, with its count. */}
+      {/* One layout group for the three columns: a ticket that is started or
+          readied travels to its new column (KitchenOrderCard's layoutId), and
+          the tickets it leaves behind close up smoothly. `custom` tells a card
+          leaving a column whether it is moving (instant, its twin flies) or
+          leaving the board (it fades). The board's first paint does not animate. */}
       {view === 'active' && visible.length > 0 && (
-        <div className="p-4 pb-24 md:pb-4 grid grid-cols-1 md:grid-cols-2 md:grid-rows-[auto_1fr] lg:grid-cols-3 lg:grid-rows-none gap-4 items-start">
-          {KANBAN.map((col) => {
-            const colOrders = visible.filter((o) => col.statuses.includes(o.status));
-            return (
-              <div key={col.key} id={`kds-column-${col.key}`} className={`min-w-0 ${col.key === 'new' ? 'md:row-span-2 lg:row-span-1' : ''}`}>
-                <div className="flex items-center gap-2 mb-3 px-1">
-                  <span className={`w-2 h-2 rounded-full ${col.dot}`} />
-                  <h2 className="font-serif text-sm font-bold uppercase tracking-wide text-foreground/80">{col.label}</h2>
-                  <span className="text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground tabular-nums">{colOrders.length}</span>
-                </div>
-                <div className="space-y-3">
-                  <AnimatePresence>{colOrders.map((o) => renderCard(o, false))}</AnimatePresence>
-                  {colOrders.length === 0 && (
-                    <div className="rounded-xl border border-dashed border-border/50 py-8 text-center text-xs text-muted-foreground/60 font-sans">
-                      Empty
-                    </div>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-        </div>
+        <LayoutGroup id="kds-board">
+          <div className="p-4 sm:px-6 pb-24 md:pb-6 grid grid-cols-1 md:grid-cols-2 md:grid-rows-[auto_1fr] lg:grid-cols-3 lg:grid-rows-none gap-x-5 gap-y-4 items-start">
+            {KANBAN.map((col) => {
+              const colOrders = visible.filter((o) => col.statuses.includes(o.status));
+              return (
+                <section
+                  key={col.key}
+                  id={`kds-column-${col.key}`}
+                  aria-label={`${col.label}: ${colOrders.length}`}
+                  className={`min-w-0 ${col.key === 'new' ? 'md:row-span-2 lg:row-span-1' : ''}`}
+                >
+                  <div className="flex items-center gap-2.5 mb-3 px-1">
+                    <span className={`w-2.5 h-2.5 rounded-full ${TONE[col.tone].dot}`} aria-hidden />
+                    <h2 className="font-sans text-[13px] font-semibold uppercase tracking-[0.1em] text-foreground/75">{col.label}</h2>
+                    <span className={`min-w-[1.75rem] text-center text-xs font-sans font-bold px-2 py-0.5 rounded-full ${colOrders.length > 0 ? TONE[col.tone].chip : 'bg-muted text-muted-foreground'}`}>
+                      <TickingCount value={colOrders.length} />
+                    </span>
+                    <span className={`flex-1 h-px ml-1 ${colOrders.length > 0 ? 'bg-border' : 'bg-border/60'}`} aria-hidden />
+                  </div>
+                  <div className="relative space-y-3">
+                    <AnimatePresence initial={false} mode="popLayout" custom={visibleIds}>{colOrders.map((o) => renderCard(o, false))}</AnimatePresence>
+                    {colOrders.length === 0 && (
+                      <div className="rounded-2xl border border-dashed border-border py-9 text-center text-sm text-muted-foreground font-sans">
+                        {col.key === 'new' ? 'Nothing new' : col.key === 'preparing' ? 'Nothing cooking' : 'Nothing at the pass'}
+                      </div>
+                    )}
+                  </div>
+                </section>
+              );
+            })}
+          </div>
+        </LayoutGroup>
       )}
 
       {view === 'active' && visible.length > 0 && (
@@ -1687,10 +1842,10 @@ const KitchenDisplay = () => {
                 onClick={() => jumpToColumn(col.key)}
                 className="min-h-[52px] flex items-center justify-center gap-1.5 text-sm font-sans font-semibold"
               >
-                <span className={`w-2 h-2 rounded-full ${col.dot}`} aria-hidden />
+                <span className={`w-2 h-2 rounded-full ${TONE[col.tone].dot}`} aria-hidden />
                 {col.label}{' '}
-                <span className="text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground tabular-nums">
-                  {visible.filter((o) => col.statuses.includes(o.status)).length}
+                <span className={`text-xs px-2 py-0.5 rounded-full ${TONE[col.tone].chip}`}>
+                  <TickingCount value={visible.filter((o) => col.statuses.includes(o.status)).length} />
                 </span>
               </button>
             ))}

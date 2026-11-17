@@ -28,6 +28,7 @@ export const OWN_SITE_LIVE: Record<string, boolean> = {
 };
 
 /** This build's own address: every canonical link, the sitemap, structured data and llms.txt point at it. */
-export const SITE_URL = VENUE_URLS[HOME_VENUE];
+/** The offline demo's restaurant (docs/demo-mode.md) has no site: there it is wherever the demo is open. */
+export const SITE_URL = VENUE_URLS[HOME_VENUE] ?? (typeof location === 'undefined' ? '' : location.origin);
 
 export const absoluteUrl = (path: string) => `${SITE_URL}${path.startsWith('/') ? path : `/${path}`}`;

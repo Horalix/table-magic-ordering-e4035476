@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Activity, AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { Activity, AlertTriangle, CheckCircle2, TrendingDown, TrendingUp } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { AdminCard, AdminCardContent, AdminCardHeader, DeltaChip } from '@/components/admin/AdminCard';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   describeAnomaly, describePace, describeStation,
@@ -53,13 +53,16 @@ const ServiceHealthCard = () => {
   const allQuiet = !!anomalies && !!stations && flaggedDays.length === 0 && slow.length === 0 && !pace?.alert;
 
   return (
-    <Card className="rounded-2xl border-border mb-8" aria-label="Is today normal">
-      <CardHeader className="pb-3">
-        <CardTitle className="font-serif text-lg flex items-center gap-2">
-          <Activity className="w-5 h-5 text-primary shrink-0" /> Is today normal?
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-3">
+    <AdminCard className="mb-6" aria-label="Is today normal">
+      <AdminCardHeader
+        icon={Activity}
+        title="Is today normal?"
+        description="Today against the same weekday, and the kitchen and bar against their own usual."
+        action={pace && pace.pace !== null && pace.status !== 'learning' && pace.status !== 'too_early' && (
+          <DeltaChip change={Number(pace.pace) - 1} label={`${Math.round(Number(pace.pace) * 100)}% of usual`} className="text-xs px-2 py-1" />
+        )}
+      />
+      <AdminCardContent className="space-y-2.5">
         {!anomalies && !stations && !error ? (
           <Skeleton className="h-20 rounded-xl" />
         ) : (
@@ -70,17 +73,22 @@ const ServiceHealthCard = () => {
               </p>
             )}
 
-            {flaggedDays.map((d) => (
-              <div key={d.day} className="flex items-start gap-2 rounded-xl border border-destructive/25 bg-destructive/5 px-3 py-2">
-                <AlertTriangle className="w-4 h-4 text-destructive shrink-0 mt-0.5" />
-                <p className="text-sm font-sans text-foreground">{describeAnomaly(d)}</p>
-              </div>
-            ))}
+            {/* An unusual day either way is worth a look; the arrow says which way it went. */}
+            {flaggedDays.map((d) => {
+              const below = d.net < Number(d.median);
+              const Dir = below ? TrendingDown : TrendingUp;
+              return (
+                <div key={d.day} className="flex items-start gap-2.5 rounded-xl bg-muted/45 px-3.5 py-2.5">
+                  <Dir className={`w-4 h-4 shrink-0 mt-0.5 ${below ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400'}`} aria-hidden />
+                  <p className="text-sm font-sans text-foreground">{describeAnomaly(d)}</p>
+                </div>
+              );
+            })}
 
             {(stations?.now ?? []).map((s) => (
               <div
                 key={s.station}
-                className={`flex items-start gap-2 rounded-xl px-3 py-2 ${s.alert ? 'border border-destructive/25 bg-destructive/5' : 'bg-muted/40'}`}
+                className={`flex items-start gap-2.5 rounded-xl px-3.5 py-2.5 ${s.alert ? 'border border-destructive/25 bg-destructive/5' : 'bg-muted/45'}`}
               >
                 {s.alert
                   ? <AlertTriangle className="w-4 h-4 text-destructive shrink-0 mt-0.5" />
@@ -99,8 +107,8 @@ const ServiceHealthCard = () => {
             )}
           </>
         )}
-      </CardContent>
-    </Card>
+      </AdminCardContent>
+    </AdminCard>
   );
 };
 

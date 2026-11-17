@@ -23,8 +23,8 @@ All at **lasoul.net** (the old address, lasoulapp.netlify.app, still works).
 Add your screen to the phone's home screen so it opens like an app.
 
 Forgot your password? Ask the manager: they give you a new one. When someone
-leaves, the manager removes them under **Waiters**, or the owner under
-**Team → Remove**. Their sign-in stops working at once.
+leaves, the manager removes them under **Setup → Waiters**, or the owner under
+**Setup → Team → Remove**. Their sign-in stops working at once.
 
 ---
 
@@ -38,24 +38,32 @@ Every staff screen says so in a bar at the top: **Menu only is on.** While it
 is there, an empty phone, floor or kitchen screen is normal. Nothing is broken.
 
 When the owner decides to take orders through the app, the manager turns it
-off in **Admin → Ordering & service**. The bar disappears from every screen by
+off in the admin, under **Setup → Ordering & service**. The bar disappears from every screen by
 itself, and the rest of this guide applies.
 
 ---
 
 ## The manager's admin, day to day
 
-On a phone the tabs at the bottom are **Dashboard**, **Menu**, **QR Codes** and
-**Orders**; everything else is under **More**.
+The admin has five areas: **Home**, **Service**, **Menu**, **Reports** and
+**Setup**. On a laptop they are down the left side. On a phone they are the bar
+at the bottom, with Setup under **More**. Open an area and its pages are the
+tabs across the top. The magnifier (Ctrl K on a laptop) finds any page: type
+what you want, for example "printer" or "PIN".
 
-- **Menu** — tap a price to change it. When something runs out, switch it to
+The first time you open the admin after the update, a one-minute tour called
+**What’s new** shows where everything is. To see it again: **What’s new** at the
+bottom of the left side on a laptop, **More → What’s new** on a phone, or type
+"tour" in the search.
+
+- **Menu → Dishes** — tap a price to change it. When something runs out, switch it to
   **Sold out**: guests see it greyed at once. The list **Sold out right now**
   at the top reminds you what to put back; tap a dish there when it is back.
-- **QR Codes** — the room code says **Scan for the menu** and keeps working
+- **Setup → QR codes** — the room code says **Scan for the menu** and keeps working
   when ordering is turned on, so it is printed once. **Replace code…** stops
   every printed room code at once: only if someone has copied your code. It
   asks before it does anything.
-- **Ordering & service** — the **Menu only** switch, and later the switches
+- **Setup → Ordering & service** — the **Menu only** switch, and later the switches
   for taking orders.
 - If a page says it **could not be loaded**, nothing is lost: check the
   internet and tap **Try again**.
@@ -65,7 +73,7 @@ On a phone the tabs at the bottom are **Dashboard**, **Menu**, **QR Codes** and
 ## Before every service
 
 **Manager**
-- **Tonight’s waiters**: tap each section and the waiters who cover it → **Done**. Do it
+- **Service → Tonight’s waiters**: tap each section and the waiters who cover it → **Done**. Do it
   every day (once ordering is on). If it is not done, every table shows up under *No waiter yet*.
 
 **Waiters**
@@ -346,11 +354,11 @@ connection is back.
 
 ## Closing — the manager
 
-1. **Daily Report**: read *Needs attention before close* — money still owed,
+1. **Reports → Daily report**: read *Needs attention before close* — money still owed,
    card payments that were started and never finished, payment problems,
    refunds.
 2. Every app order is rung into the **fiscal POS** as always — the app is not
-   a fiscal device. Then in **Orders**: **Mark fiscalized** → *Fiscal receipt
+   a fiscal device. Then in **Service → Orders**: **Mark fiscalized** → *Fiscal receipt
    number* → **Record receipt**.
 3. Count the drawer against **Cash**, the terminal batch against **POS
    terminal** — each on its own.

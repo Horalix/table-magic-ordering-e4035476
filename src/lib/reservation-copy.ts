@@ -198,6 +198,11 @@ const COPY = {
   fact_party: { en: 'Up to {count} guests', bs: 'Do {count} osoba', ar: 'حتى {count} أشخاص' },
   fact_free: { en: 'Free to reserve', bs: 'Rezervacija je besplatna', ar: 'الحجز مجاني' },
   summary: { en: 'You are asking for', bs: 'Tražite', ar: 'طلبك' },
+  // The booking page's look: the small label over its title, the heading over the name and number, the way to the menu.
+  eyebrow: { en: 'Reservations', bs: 'Rezervacije', ar: 'الحجوزات' },
+  details: { en: 'Your details', bs: 'Vaši podaci', ar: 'بياناتك' },
+  see_menu: { en: 'See the menu', bs: 'Pogledajte meni', ar: 'عرض قائمة الطعام' },
+  photo_alt: { en: 'A table at {venue}', bs: 'Sto u {venue}', ar: 'طاولة في {venue}' },
   // The guest's own page: where the request stands, and what to keep once it is confirmed.
   step_sent: { en: 'Request sent', bs: 'Zahtjev poslan', ar: 'أُرسل الطلب' },
   step_answer: { en: 'The restaurant answers', bs: 'Restoran odgovara', ar: 'المطعم يرد' },

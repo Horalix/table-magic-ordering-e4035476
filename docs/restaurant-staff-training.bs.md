@@ -26,7 +26,7 @@ Sve je na **lasoul.net** (stara adresa, lasoulapp.netlify.app, i dalje radi).
 Dodajte svoj ekran na početni ekran telefona, pa će se otvarati kao aplikacija.
 
 Zaboravili ste lozinku? Pitajte menadžera: on vam da novu. Kad neko ode,
-menadžer ga ukloni u **Waiters**, ili vlasnik u **Team → Remove**. Njegova
+menadžer ga ukloni u **Setup → Waiters**, ili vlasnik u **Setup → Team → Remove**. Njegova
 prijava odmah prestaje raditi.
 
 ---
@@ -43,23 +43,31 @@ traka tu, prazan telefon, ekran za salu ili kuhinjski ekran je normalan.
 Ništa nije pokvareno.
 
 Kad vlasnik odluči da se narudžbe primaju preko aplikacije, menadžer to
-isključi u **Admin → Ordering & service**. Traka sama nestane sa svih ekrana i
+isključi u adminu, pod **Setup → Ordering & service**. Traka sama nestane sa svih ekrana i
 tada važi ostatak ovog vodiča.
 
 ---
 
 ## Admin za menadžera, iz dana u dan
 
-Na telefonu su dole kartice **Dashboard**, **Menu**, **QR Codes** i
-**Orders**; sve ostalo je pod **More**.
+Admin ima pet oblasti: **Home**, **Service**, **Menu**, **Reports** i
+**Setup**. Na laptopu su s lijeve strane. Na telefonu su u traci na dnu, a
+Setup je pod **More**. Kad otvorite oblast, njene stranice su kartice na vrhu.
+Lupa (Ctrl K na laptopu) nalazi svaku stranicu: upišite šta vam treba, na
+primjer „printer“ ili „PIN“.
 
-- **Menu** — dodirnite cijenu da je promijenite. Kad nešto nestane, uključite
+Kad prvi put otvorite admin nakon ažuriranja, kratki vodič **What’s new** za
+jednu minutu pokaže gdje je šta. Da ga vidite ponovo: **What’s new** na dnu
+lijeve strane na laptopu, **More → What’s new** na telefonu, ili upišite
+„tour“ u pretragu.
+
+- **Menu → Dishes** — dodirnite cijenu da je promijenite. Kad nešto nestane, uključite
   **Sold out**: gosti to odmah vide posivljeno. Lista **Sold out right now**
   na vrhu podsjeća šta treba vratiti; dodirnite jelo tu kad ga opet ima.
-- **QR Codes** — kod za salu kaže **Scan for the menu** i radi i kad se
+- **Setup → QR codes** — kod za salu kaže **Scan for the menu** i radi i kad se
   uključe narudžbe, pa se štampa samo jednom. **Replace code…** odmah gasi sve
   odštampane kodove za salu: samo ako je neko kopirao vaš kod. Prvo pita.
-- **Ordering & service** — prekidač **Menu only**, a kasnije i prekidači za
+- **Setup → Ordering & service** — prekidač **Menu only**, a kasnije i prekidači za
   primanje narudžbi.
 - Ako stranica kaže da se **could not be loaded**, ništa nije izgubljeno:
   provjerite internet i dodirnite **Try again**.
@@ -69,7 +77,7 @@ Na telefonu su dole kartice **Dashboard**, **Menu**, **QR Codes** i
 ## Prije svake smjene
 
 **Menadžer**
-- **Tonight’s waiters**: dodirnite svaku sekciju i konobare koji je pokrivaju → **Done**.
+- **Service → Tonight’s waiters**: dodirnite svaku sekciju i konobare koji je pokrivaju → **Done**.
   Svaki dan (kad se uključe narudžbe). Ako se to ne uradi, svaki sto se pojavljuje pod *No waiter yet*.
 
 **Konobari**
@@ -365,11 +373,11 @@ veza vrati.
 
 ## Zatvaranje — menadžer
 
-1. **Daily Report**: pročitajte *Needs attention before close* — novac koji se
+1. **Reports → Daily report**: pročitajte *Needs attention before close* — novac koji se
    još duguje, plaćanja karticom koja su počela i nisu završena, problemi s
    plaćanjem, povrati novca.
 2. Svaka narudžba iz aplikacije otkuca se na **fiskalnoj kasi** kao i uvijek —
-   aplikacija nije fiskalni uređaj. Zatim u **Orders**: **Mark fiscalized** →
+   aplikacija nije fiskalni uređaj. Zatim u **Service → Orders**: **Mark fiscalized** →
    *Fiscal receipt number* → **Record receipt**.
 3. Kasu (gotovinu) uporedite s **Cash**, presjek terminala s **POS terminal** —
    svako posebno.

@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { Check, ChevronDown, Copy, Loader2, MoreHorizontal, Plus, Printer, RefreshCw, Trash2, Wifi } from 'lucide-react';
-import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -13,6 +12,9 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
   AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import { AdminCard, AdminCardContent, AdminCardHeader, EmptyState } from '@/components/admin/AdminCard';
+import { TONE, type StaffTone } from '@/components/staff/status-tone';
+import { cn } from '@/lib/utils';
 import {
   addPrinter, deletePrinter, listPrinters, pollUrl, requestTestPrint, rotatePollToken, updatePrinter,
   type PrinterRow, type PrinterStation,
@@ -31,12 +33,66 @@ import { printerSummary, type Tone } from '@/lib/print-routing';
 const STATION_LABEL: Record<PrinterStation, string> = { kitchen: 'Kitchen', bar: 'Bar', all: 'Kitchen + bar' };
 const PROTOCOL_LABEL = { star_cloudprnt: 'Star CloudPRNT', epson_sdp: 'Epson Server Direct Print' } as const;
 
-const TONE_DOT: Record<Tone, string> = {
-  ok: 'bg-primary', busy: 'bg-accent', bad: 'bg-destructive animate-pulse', idle: 'bg-muted-foreground/50',
-};
-const TONE_TEXT: Record<Tone, string> = {
-  ok: 'text-primary', busy: 'text-accent', bad: 'text-destructive', idle: 'text-muted-foreground',
-};
+/**
+ * Element ids the Printing page and the tablet guide scroll to (the add
+ * form's name field, this card). Written out there too: a component file
+ * that exports constants loses fast refresh.
+ */
+const ADD_PRINTER_INPUT_ID = 'add-printer-name';
+const NETWORK_PRINTERS_ID = 'network-printers';
+
+/** A printer's state in the staff screens' colours: green fine, amber busy, red wrong, grey idle. */
+const PRINT_TONE: Record<Tone, StaffTone> = { ok: 'ready', busy: 'preparing', bad: 'late', idle: 'served' };
+
+/** Seen in the last minute: the same test the printer health check uses. */
+const isOnline = (p: Pick<PrinterRow, 'last_seen_at'>) =>
+  !!p.last_seen_at && Date.now() - new Date(p.last_seen_at).getTime() < 60_000;
+
+/**
+ * One row of choices, one tap each, the choice always visible. Buttons with
+ * aria-pressed in a labelled group, which the tests and screen readers use.
+ */
+export const Segmented = <T extends string | number>({ value, options, onChange, label, className }: {
+  value: T;
+  options: { value: NoInfer<T>; label: React.ReactNode }[];
+  onChange: (v: NoInfer<T>) => void;
+  label: string;
+  className?: string;
+}) => (
+  <div role="group" aria-label={label} className={cn('inline-flex max-w-full gap-1 rounded-lg bg-muted/70 p-1', className)}>
+    {options.map((o) => {
+      const on = value === o.value;
+      return (
+        <button
+          key={String(o.value)}
+          type="button"
+          aria-pressed={on}
+          onClick={() => onChange(o.value)}
+          className={cn(
+            'flex-1 whitespace-nowrap rounded-md px-3 h-10 sm:h-8 text-sm font-sans font-medium tabular-nums transition-colors',
+            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+            on ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground',
+          )}
+        >
+          {o.label}
+        </button>
+      );
+    })}
+  </div>
+);
+
+/** A state as a word in a soft pill with its dot: never colour alone. */
+export const StatePill = ({ tone, children, pulse = false, className, ...rest }: React.HTMLAttributes<HTMLSpanElement> & {
+  tone: StaffTone; pulse?: boolean;
+}) => (
+  <span
+    className={cn('inline-flex max-w-full items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-sans font-medium leading-5', TONE[tone].chip, className)}
+    {...rest}
+  >
+    <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', TONE[tone].dot, pulse && 'animate-pulse motion-reduce:animate-none')} aria-hidden />
+    <span className="min-w-0 truncate">{children}</span>
+  </span>
+);
 
 const CopyUrl = ({ url }: { url: string }) => {
   const [copied, setCopied] = useState(false);
@@ -50,20 +106,20 @@ const CopyUrl = ({ url }: { url: string }) => {
     }
   };
   return (
-    <div className="flex items-stretch gap-2">
-      <code className="flex-1 min-w-0 text-xs bg-muted/60 border border-border rounded-lg px-3 py-2 font-mono break-all select-all">{url}</code>
-      <Button type="button" variant="outline" size="sm" onClick={copy} className="shrink-0 gap-1.5 min-h-[40px]">
-        {copied ? <Check className="w-3.5 h-3.5 text-primary" /> : <Copy className="w-3.5 h-3.5" />}{copied ? 'Copied' : 'Copy'}
+    <div className="flex flex-col gap-2 sm:flex-row sm:items-stretch">
+      <code className="min-w-0 flex-1 select-all break-all rounded-lg border border-border bg-card px-3 py-2.5 font-mono text-xs leading-relaxed">{url}</code>
+      <Button type="button" variant="outline" onClick={copy} className="h-11 shrink-0 gap-1.5 self-start sm:h-auto lg:min-h-[40px] sm:self-stretch">
+        {copied ? <Check className="h-4 w-4 text-primary" /> : <Copy className="h-4 w-4" />}{copied ? 'Copied' : 'Copy'}
       </Button>
     </div>
   );
 };
 
 const Steps = ({ steps }: { steps: React.ReactNode[] }) => (
-  <ol className="space-y-2">
+  <ol className="space-y-3">
     {steps.map((step, i) => (
-      <li key={i} className="flex gap-3 text-sm font-sans text-muted-foreground leading-relaxed">
-        <span className="shrink-0 w-6 h-6 rounded-full bg-primary/15 text-primary text-xs font-bold flex items-center justify-center">{i + 1}</span>
+      <li key={i} className="flex gap-3 text-sm font-sans leading-relaxed text-muted-foreground">
+        <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-primary/10 text-xs font-semibold tabular-nums text-primary" aria-hidden>{i + 1}</span>
         <span className="min-w-0 pt-0.5">{step}</span>
       </li>
     ))}
@@ -75,24 +131,18 @@ const Setup = ({ printer }: { printer: PrinterRow }) => {
   const url = pollUrl(printer.poll_token);
   const b = (s: string) => <span className="font-medium text-foreground">{s}</span>;
   return (
-    <div className="space-y-3 rounded-xl border border-border bg-muted/20 p-3">
+    <div className="mt-3 space-y-4 rounded-xl bg-muted/40 p-4 sm:ms-[52px]">
       <div>
-        <p className="text-xs font-sans font-semibold uppercase tracking-wide text-muted-foreground mb-1.5">This printer’s address</p>
+        <p className="mb-1.5 text-xs font-sans font-medium text-muted-foreground">This printer’s address</p>
         <CopyUrl url={url} />
-        <p className="text-[11px] text-muted-foreground mt-1">Keep it private: anyone with this address can read this printer’s tickets. “New address” below replaces it.</p>
+        <p className="mt-1.5 text-xs font-sans leading-relaxed text-muted-foreground">Keep it private: anyone with this address can read this printer’s tickets. “New address” below replaces it.</p>
       </div>
-      <div className="inline-flex rounded-full border border-border overflow-hidden" role="group" aria-label="Printer brand">
-        {(['star', 'epson'] as const).map((key) => (
-          <button
-            key={key}
-            type="button"
-            aria-pressed={brand === key}
-            onClick={() => setBrand(key)}
-            className={`px-3 min-h-[40px] text-sm font-sans ${brand === key ? 'bg-foreground text-background' : 'bg-card text-muted-foreground'}`}
-          >
-            {key === 'star' ? 'Star' : 'Epson'}
-          </button>
-        ))}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+        <p className="text-xs font-sans font-medium text-muted-foreground">Steps for</p>
+        <Segmented
+          label="Printer brand" value={brand} onChange={setBrand}
+          options={[{ value: 'star', label: 'Star' }, { value: 'epson', label: 'Epson' }]}
+        />
       </div>
       {brand === 'star' ? (
         <Steps steps={[
@@ -109,7 +159,7 @@ const Setup = ({ printer }: { printer: PrinterRow }) => {
           <>Come back here: the printer shows {b('Online')} within a few seconds. Press {b('Test print')}.</>,
         ]} />
       )}
-      <p className="text-[11px] text-muted-foreground font-sans">
+      <p className="text-xs font-sans leading-relaxed text-muted-foreground">
         Works with Star TSP143IV, mC-Print3 (CloudPRNT) and Epson TM-m30III, TM-T88VII, TM-m50 (Server Direct Print).
         An Epson TM-T20 cannot poll — use it from a tablet instead (below).
       </p>
@@ -125,12 +175,19 @@ const PrinterCard = ({ printer, onChanged }: { printer: PrinterRow; onChanged: (
   const [confirmNewAddress, setConfirmNewAddress] = useState(false);
   const summary = printerSummary({
     enabled: printer.enabled,
-    online: !!printer.last_seen_at && Date.now() - new Date(printer.last_seen_at).getTime() < 60_000,
+    online: isOnline(printer),
     last_seen_at: printer.last_seen_at,
     last_error: printer.last_error,
   });
   const testPending = !!printer.test_requested_at
     && (!printer.last_test_printed_at || printer.last_test_printed_at < printer.test_requested_at);
+  // "Offline — last seen 4 min ago": the state in the pill, the detail beside it.
+  const [stateWord, ...detail] = summary.label.split(' — ');
+  const facts = [
+    printer.protocol ? PROTOCOL_LABEL[printer.protocol] : 'Waiting for the printer to call in',
+    printer.last_status ? `status ${printer.last_status}` : null,
+    printer.plain_text ? 'plain text mode' : null,
+  ].filter(Boolean).join(' · ');
 
   const act = async (label: string, fn: () => Promise<void>) => {
     setBusy(true);
@@ -140,37 +197,37 @@ const PrinterCard = ({ printer, onChanged }: { printer: PrinterRow; onChanged: (
   };
 
   return (
-    <div className="rounded-xl border border-border bg-card p-3 sm:p-4 space-y-3" data-testid="cloud-printer">
+    <li className="py-4 first:pt-0" data-testid="cloud-printer">
       <div className="flex items-start gap-3">
-        <span className={`mt-1.5 w-2.5 h-2.5 rounded-full shrink-0 ${TONE_DOT[summary.tone]}`} aria-hidden />
+        <span className="mt-0.5 hidden h-10 w-10 shrink-0 place-items-center rounded-xl bg-muted text-muted-foreground sm:grid" aria-hidden>
+          <Printer className="h-[18px] w-[18px]" />
+        </span>
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2 flex-wrap">
-            <p className="font-sans font-semibold text-foreground">{printer.name}</p>
-            <span className="text-[11px] font-sans px-1.5 py-0.5 rounded bg-muted text-muted-foreground">{STATION_LABEL[printer.station]}</span>
-            <span className="text-[11px] font-sans px-1.5 py-0.5 rounded bg-muted text-muted-foreground">{printer.paper_width} mm</span>
+          <p className="truncate font-sans font-semibold text-foreground">{printer.name}</p>
+          <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
+            <span role="status" className={cn('inline-flex min-w-0 max-w-full flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs font-sans', TONE[PRINT_TONE[summary.tone]].text)}>
+              <StatePill tone={PRINT_TONE[summary.tone]} pulse={summary.tone === 'bad'}>{stateWord}</StatePill>
+              {detail.length > 0 && <span className="min-w-0 break-words">{detail.join(' — ')}</span>}
+            </span>
+            <span className="text-xs font-sans text-muted-foreground">{STATION_LABEL[printer.station]} · <span className="tabular-nums">{printer.paper_width} mm</span></span>
           </div>
-          <p className={`text-sm font-sans ${TONE_TEXT[summary.tone]}`} role="status">{summary.label}</p>
-          <p className="text-xs text-muted-foreground font-sans">
-            {printer.protocol ? PROTOCOL_LABEL[printer.protocol] : 'Waiting for the printer to call in'}
-            {printer.last_status ? ` · status ${printer.last_status}` : ''}
-            {printer.plain_text ? ' · plain text mode' : ''}
-          </p>
+          <p className="mt-1 text-xs font-sans text-muted-foreground break-words">{facts}</p>
         </div>
-        <div className="flex items-center gap-1 shrink-0">
+        <div className="flex shrink-0 items-center gap-1">
           <Button
-            variant="outline" size="sm" className="gap-1.5 min-h-[40px]" disabled={busy || !printer.enabled}
+            variant="outline" className="h-11 gap-1.5 px-3 lg:h-10" disabled={busy || !printer.enabled}
             onClick={() => act('Test print', async () => {
               await requestTestPrint(printer.id);
               toast.success(`${printer.name} prints a test page on its next call — within about 10 seconds`);
             })}
           >
-            {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Printer className="w-4 h-4" />}
+            {busy ? <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" /> : <Printer className="h-4 w-4" />}
             {testPending ? 'Test sent…' : 'Test print'}
           </Button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="min-h-[40px] min-w-[40px]" aria-label={`More for ${printer.name}`}>
-                <MoreHorizontal className="w-4 h-4" />
+              <Button variant="ghost" size="icon" className="h-11 w-11 lg:h-10 lg:w-10" aria-label={`More for ${printer.name}`}>
+                <MoreHorizontal className="h-4 w-4" />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-60">
@@ -180,7 +237,7 @@ const PrinterCard = ({ printer, onChanged }: { printer: PrinterRow; onChanged: (
                 onValueChange={(v) => act('Station', () => updatePrinter(printer.id, { station: v as PrinterStation }))}
               >
                 {(Object.keys(STATION_LABEL) as PrinterStation[]).map((s) => (
-                  <DropdownMenuRadioItem key={s} value={s} className="min-h-[40px]">{STATION_LABEL[s]} tickets</DropdownMenuRadioItem>
+                  <DropdownMenuRadioItem key={s} value={s} className="min-h-[44px] lg:min-h-[40px]">{STATION_LABEL[s]} tickets</DropdownMenuRadioItem>
                 ))}
               </DropdownMenuRadioGroup>
               <DropdownMenuSeparator />
@@ -188,33 +245,33 @@ const PrinterCard = ({ printer, onChanged }: { printer: PrinterRow; onChanged: (
                 value={String(printer.paper_width)}
                 onValueChange={(v) => act('Paper', () => updatePrinter(printer.id, { paper_width: Number(v) as 58 | 80 }))}
               >
-                <DropdownMenuRadioItem value="80" className="min-h-[40px]">80 mm paper</DropdownMenuRadioItem>
-                <DropdownMenuRadioItem value="58" className="min-h-[40px]">58 mm paper</DropdownMenuRadioItem>
+                <DropdownMenuRadioItem value="80" className="min-h-[44px] lg:min-h-[40px]">80 mm paper</DropdownMenuRadioItem>
+                <DropdownMenuRadioItem value="58" className="min-h-[44px] lg:min-h-[40px]">58 mm paper</DropdownMenuRadioItem>
               </DropdownMenuRadioGroup>
               <DropdownMenuSeparator />
               <DropdownMenuCheckboxItem
                 checked={printer.plain_text}
                 onCheckedChange={(v) => act('Plain text', () => updatePrinter(printer.id, { plain_text: !!v }))}
-                className="min-h-[40px]"
+                className="min-h-[44px] lg:min-h-[40px]"
               >
                 Plain text (if tickets print garbled)
               </DropdownMenuCheckboxItem>
               <DropdownMenuCheckboxItem
                 checked={printer.enabled}
                 onCheckedChange={(v) => act('Enable', () => updatePrinter(printer.id, { enabled: !!v }))}
-                className="min-h-[40px]"
+                className="min-h-[44px] lg:min-h-[40px]"
               >
                 Printing on
               </DropdownMenuCheckboxItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem
-                className="min-h-[40px] gap-2"
+                className="min-h-[44px] gap-2 lg:min-h-[40px]"
                 onSelect={() => setConfirmNewAddress(true)}
               >
-                <RefreshCw className="w-4 h-4" /> New address
+                <RefreshCw className="h-4 w-4" /> New address
               </DropdownMenuItem>
-              <DropdownMenuItem className="min-h-[40px] gap-2 text-destructive focus:text-destructive" onSelect={() => setConfirmDelete(true)}>
-                <Trash2 className="w-4 h-4" /> Remove printer
+              <DropdownMenuItem className="min-h-[44px] gap-2 text-destructive focus:text-destructive lg:min-h-[40px]" onSelect={() => setConfirmDelete(true)}>
+                <Trash2 className="h-4 w-4" /> Remove printer
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -225,9 +282,10 @@ const PrinterCard = ({ printer, onChanged }: { printer: PrinterRow; onChanged: (
         type="button"
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
-        className="flex items-center gap-1 text-sm font-sans font-medium text-primary min-h-[36px]"
+        className="mt-1 inline-flex min-h-[44px] items-center gap-1 rounded-md text-sm font-sans font-medium text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:ms-[52px] lg:min-h-[36px]"
       >
-        {open ? 'Hide setup' : 'Address & setup steps'} <ChevronDown className={`w-4 h-4 transition-transform ${open ? 'rotate-180' : ''}`} />
+        {open ? 'Hide setup' : 'Address & setup steps'}
+        <ChevronDown className={cn('h-4 w-4 transition-transform motion-reduce:transition-none', open && 'rotate-180')} aria-hidden />
       </button>
       {open && <Setup printer={printer} />}
 
@@ -274,7 +332,7 @@ const PrinterCard = ({ printer, onChanged }: { printer: PrinterRow; onChanged: (
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
+    </li>
   );
 };
 
@@ -302,39 +360,41 @@ const AddPrinter = ({ existing, onAdded }: { existing: PrinterRow[]; onAdded: ()
   };
 
   return (
-    <div className="rounded-xl border border-dashed border-border p-3 sm:p-4 space-y-3">
-      <p className="text-sm font-sans font-semibold text-foreground">Add a network printer</p>
-      <div className="grid gap-2 sm:grid-cols-[1fr_auto_auto_auto] items-center">
-        <Input value={name} onChange={(e) => setName(e.target.value)} aria-label="Printer name" className="h-11" maxLength={60} />
-        <div className="inline-flex rounded-full border border-border overflow-hidden" role="group" aria-label="Prints">
-          {(Object.keys(STATION_LABEL) as PrinterStation[]).map((s) => (
-            <button
-              key={s} type="button" aria-pressed={station === s} onClick={() => setStation(s)}
-              className={`px-3 min-h-[44px] text-sm font-sans ${station === s ? 'bg-foreground text-background' : 'bg-card text-muted-foreground'}`}
-            >
-              {STATION_LABEL[s]}
-            </button>
-          ))}
+    <div className={cn('space-y-3', existing.length > 0 && 'border-t border-border/70 pt-5')}>
+      <div>
+        <p className="text-sm font-sans font-semibold text-foreground">Add a network printer</p>
+        <p className="mt-0.5 text-xs font-sans text-muted-foreground">Name it after where it stands, pick what it prints, then paste the address it gets into the printer.</p>
+      </div>
+      <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto_auto_auto] lg:items-center">
+        <Input
+          id={ADD_PRINTER_INPUT_ID} value={name} onChange={(e) => setName(e.target.value)}
+          aria-label="Printer name" className="h-11" maxLength={60}
+        />
+        <div className="flex flex-wrap items-center gap-2 lg:contents">
+          <Segmented
+            label="Prints" value={station} onChange={setStation}
+            options={(Object.keys(STATION_LABEL) as PrinterStation[]).map((s) => ({ value: s, label: STATION_LABEL[s] }))}
+          />
+          <Segmented
+            label="Paper width" value={paper} onChange={setPaper}
+            options={([80, 58] as const).map((w) => ({ value: w, label: `${w} mm` }))}
+          />
         </div>
-        <div className="inline-flex rounded-full border border-border overflow-hidden" role="group" aria-label="Paper width">
-          {([80, 58] as const).map((w) => (
-            <button
-              key={w} type="button" aria-pressed={paper === w} onClick={() => setPaper(w)}
-              className={`px-3 min-h-[44px] text-sm font-sans tabular-nums ${paper === w ? 'bg-foreground text-background' : 'bg-card text-muted-foreground'}`}
-            >
-              {w} mm
-            </button>
-          ))}
-        </div>
-        <Button onClick={add} disabled={busy || !name.trim()} className="min-h-[44px] gap-1.5">
-          {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />} Add printer
+        <Button onClick={add} disabled={busy || !name.trim()} className="h-11 gap-1.5 lg:h-10">
+          {busy ? <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" /> : <Plus className="h-4 w-4" />} Add printer
         </Button>
       </div>
     </div>
   );
 };
 
-const CloudPrinters = () => {
+export interface CloudPrintersState {
+  /** null until the first load has answered. */
+  printers: PrinterRow[] | null;
+  error: string | null;
+}
+
+const CloudPrinters = ({ onChange }: { onChange?: (state: CloudPrintersState) => void }) => {
   const [printers, setPrinters] = useState<PrinterRow[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -355,22 +415,24 @@ const CloudPrinters = () => {
     return () => clearInterval(id);
   }, [load]);
 
-  return (
-    <Card>
-      <CardContent className="p-4 sm:p-5 space-y-4">
-        <div>
-          <h2 className="font-serif text-lg font-semibold text-foreground flex items-center gap-2">
-            <Wifi className="w-5 h-5 text-primary" /> Network printers
-            <span className="text-[10px] font-sans font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-primary text-primary-foreground">Recommended</span>
-          </h2>
-          <p className="text-xs text-muted-foreground font-sans mt-1">
-            The printer fetches its own tickets from the internet — no tablet has to stay on, paired or awake.
-            One per station (kitchen, bar), or one for both.
-          </p>
-        </div>
+  // The page's setup steps read the same list: one load, two views of it.
+  useEffect(() => { onChange?.({ printers, error: loadError }); }, [printers, loadError, onChange]);
 
+  return (
+    <AdminCard id={NETWORK_PRINTERS_ID} className="scroll-mt-6">
+      <AdminCardHeader
+        icon={Wifi}
+        title={(
+          <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            Network printers
+            <span className="rounded-full bg-primary/10 px-2 py-0.5 font-sans text-[11px] font-semibold leading-4 text-primary">Recommended</span>
+          </span>
+        )}
+        description="The printer fetches its own tickets over the internet, so no tablet has to stay on, paired or awake. One per station (kitchen, bar), or one for both."
+      />
+      <AdminCardContent className="space-y-4">
         {loadError && (
-          <p className="text-xs font-sans text-destructive" role="alert">
+          <p role="alert" className="rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm font-sans text-destructive">
             {/relation|does not exist|schema cache/i.test(loadError)
               ? 'Network printers need the 20261026120000_cloud_printers migration to be applied first.'
               : loadError}
@@ -378,15 +440,34 @@ const CloudPrinters = () => {
         )}
 
         {printers === null ? (
-          <Skeleton className="h-24 w-full rounded-xl" />
-        ) : (
-          <div className="space-y-3">
-            {printers.map((p) => <PrinterCard key={p.id} printer={p} onChanged={load} />)}
-            <AddPrinter existing={printers} onAdded={load} />
+          <div className="space-y-3" aria-hidden>
+            {[0, 1].map((i) => (
+              <div key={i} className="flex items-center gap-3">
+                <Skeleton className="hidden h-10 w-10 rounded-xl sm:block" />
+                <div className="flex-1 space-y-2"><Skeleton className="h-4 w-40" /><Skeleton className="h-3 w-56" /></div>
+                <Skeleton className="h-10 w-28 rounded-md" />
+              </div>
+            ))}
           </div>
+        ) : (
+          <>
+            {printers.length > 0 ? (
+              <ul className="divide-y divide-border/70" aria-label="Network printers">
+                {printers.map((p) => <PrinterCard key={p.id} printer={p} onChanged={load} />)}
+              </ul>
+            ) : !loadError && (
+              <EmptyState
+                icon={Printer}
+                className="py-6"
+                title="No network printer yet"
+                hint="Add one below. It gets its own address to paste into the printer, and shows Online here once it calls in."
+              />
+            )}
+            <AddPrinter existing={printers} onAdded={load} />
+          </>
         )}
-      </CardContent>
-    </Card>
+      </AdminCardContent>
+    </AdminCard>
   );
 };
 
