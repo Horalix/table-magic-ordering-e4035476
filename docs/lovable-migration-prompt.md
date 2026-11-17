@@ -2,12 +2,28 @@
 
 Copy everything between the rules into Lovable. Nothing else needs to be said.
 
-## Next: suggestions that are always measured, and the v4 ranker (two migrations, no function)
+## Next: nothing is pending (17 November 2026)
 
-Send this once `main` has the design pass (PR #41) merged; the runner is
-pinned to its merge commit 286639b. Nothing needs deploying and no key is
-involved. Until it is applied the admin's "What the app earned" card shows
-nothing and suggestions work exactly as they do today.
+Every migration in `supabase/migrations/` is applied. `docs/migration-runner.sql`
+is pinned to the last two (below); do not send it again. When a new migration
+is merged, regenerate it with `node scripts/migration-runner.mjs --from
+<timestamp> --commit <sha of main>` and put its prompt here.
+
+## Done: suggestions that are always measured, and the v4 ranker (17 November 2026)
+
+Applied by Lovable on 17 November 2026 (the runner pinned to 286639b, the
+design pass): both blocks, the first together with the holdout set to 0 in
+one query. Every check matched: both restaurants `reco_auto_holdout_pct = 0`
+and `reco_learner = v3`, no experiment open, four new columns, eleven
+functions and the table present, no grant to guests beyond
+`guest_get_recommendations`, the job `lasoul-reco-measuring` active. Its tool
+did not print an `UPDATE 2` count; the check shows both at 0. Lovable also
+committed its own records (`drizzle/migrations/0014`, `0015`) and the
+regenerated `src/integrations/supabase/types.ts`, and added a one-line
+`declare const __TABLEFLOW_DEMO_BUILD__` to `src/lib/home-venue.ts` (harmless:
+it makes the build scripts' type check pass). Suggestions rank exactly as
+before; measuring is **off** until an admin presses **Measure with 1 table in
+10** (Reports → What the app earned). What was sent:
 
 - **`20261116120000_reco_always_measured.sql`**: one new setting per
   restaurant, `reco_auto_holdout_pct` (the share of new tables that see no
