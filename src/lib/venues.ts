@@ -62,7 +62,11 @@ export interface Venue {
   /** What guests ask before they come, as the owner confirmed it; null where not confirmed. */
   amenities?: {
     parking: boolean; terrace: boolean; wifi: boolean; childFriendly: boolean; takeaway: boolean; delivery: boolean;
+    /** Where the owner said more: the Wi-Fi is free, the entrance has no step, there is a toilet for guests. */
+    freeWifi?: boolean; wheelchairEntrance?: boolean; restroom?: boolean;
   } | null;
+  /** How guests can pay, in schema.org's words ("Cash, Credit Card, Debit Card"), where the owner has said. */
+  paymentAccepted?: string | null;
   /**
    * What a phone shows for it: the toolbar colour, the icon and name on the
    * home screen, and the app "Add to Home Screen" installs (its web manifest,
@@ -123,9 +127,14 @@ const REAL_VENUES: Record<string, Venue> = {
    * menu and search engines list it. The owner gave its facts on 16 November
    * 2026: Butmirska cesta 16B, 71210 Ilidža, in the same building as La Soul;
    * La Soul's phone for now (it will change); parking, a terrace, Wi-Fi,
-   * children welcome, takeaway, no delivery. It is opening soon, so it has no
-   * hours yet and the website shows none; its Google listing is not verified
-   * yet, so there is no map link or pin; no Instagram or Facebook yet.
+   * children welcome, takeaway, no delivery. On 17 November 2026 the owner
+   * added: cash, credit and debit cards; a toilet for guests; free Wi-Fi; a
+   * step-free entrance. The pin is its Google Business Profile's, set on the
+   * building on 16 November (a few metres from La Soul's). Google verified the
+   * listing on 17 November 2026: its map link is the listing's own (cid), and
+   * its review link the profile's "Ask for reviews" link. It is opening soon,
+   * so it has no hours yet and the website shows none; no Instagram or
+   * Facebook yet.
    *
    * Other businesses share the name (a handbag shop, a travel agency, Italian
    * food shops, restaurants abroad), so its other names carry the city: what
@@ -142,17 +151,21 @@ const REAL_VENUES: Record<string, Venue> = {
     address: 'Butmirska cesta 16B',
     city: 'Sarajevo',
     country: 'BA',
-    geo: null,
-    mapsUrl: '',
+    geo: { lat: 43.827664, lng: 18.3102937 },
+    mapsUrl: 'https://maps.google.com/?cid=16021552868687464448',
     hours: null,
     instagram: null,
     facebook: null,
-    reviewUrl: null,
+    reviewUrl: 'https://g.page/r/CQDIQcBy_VfeEBM/review',
     live: true,
     postalCode: '71210',
     municipality: 'Ilidža',
-    mapsListingUrl: null,
-    amenities: { parking: true, terrace: true, wifi: true, childFriendly: true, takeaway: true, delivery: false },
+    mapsListingUrl: 'https://maps.google.com/?cid=16021552868687464448',
+    amenities: {
+      parking: true, terrace: true, wifi: true, childFriendly: true, takeaway: true, delivery: false,
+      freeWifi: true, wheelchairEntrance: true, restroom: true,
+    },
+    paymentAccepted: 'Cash, Credit Card, Debit Card',
     // Its headings are Cormorant Garamond in italic (src/index.css).
     brand: { themeColor: '#f4efe6', manifest: '/manifest-veraitalia.webmanifest', waiterManifest: '/manifest-waiter-veraitalia.webmanifest', managerManifest: '/manifest-manager-veraitalia.webmanifest', managerTouchIcon: '/brand/vera/manager-apple-touch-icon.png', icon: '/brand/vera/icon-192.png', appleTouchIcon: '/brand/vera/apple-touch-icon.png', headingFont: '/fonts/cormorant-italic.woff2' },
   },

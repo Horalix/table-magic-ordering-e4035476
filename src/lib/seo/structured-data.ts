@@ -79,6 +79,7 @@ export const placeWithin = (venue: Venue) => (venue.municipality
 
 const AMENITIES: Record<string, string> = {
   parking: 'Parking', terrace: 'Terrace', wifi: 'Wi-Fi', childFriendly: 'Children welcome', takeaway: 'Takeaway', delivery: 'Delivery',
+  freeWifi: 'Free Wi-Fi', wheelchairEntrance: 'Wheelchair-accessible entrance', restroom: 'Restroom',
 };
 
 /** What the owner confirmed it has, and has not (schema.org Place.amenityFeature); nothing when not confirmed. */

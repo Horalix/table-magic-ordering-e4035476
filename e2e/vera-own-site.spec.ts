@@ -18,9 +18,15 @@ test.describe('Vera Italia’s own site', () => {
     await page.goto('/');
     await expect(page.getByRole('heading', { level: 1, name: 'Vera Italia' })).toBeVisible();
     // Where it is, on the photograph and in the visit section; "Opening soon" no longer.
-    await expect(page.getByText('Italian restaurant · Sarajevo')).toBeVisible();
+    await expect(page.getByText('Italian restaurant · Ilidža, Sarajevo')).toBeVisible();
     // The street the owner gave on 16 November 2026 (src/lib/venues.ts): La Soul's building, its own door.
     await expect(page.getByRole('heading', { level: 2, name: 'Butmirska cesta 16B' })).toBeAttached();
+    await expect(page.getByTestId('vera-place-line')).toHaveText('71210 Ilidža, Sarajevo, Bosnia and Herzegovina');
+    await expect(page.getByText('Our opening hours will be here very soon.')).toBeAttached();
+    // The questions its FAQPage data answers are on the page too, where guests and Google read them.
+    await expect(page.getByRole('heading', { level: 2, name: 'Before you come' })).toBeAttached();
+    await expect(page.getByText('Can I pay by card at Vera Italia?')).toBeAttached();
+    await expect(page.getByText('Is the entrance at Vera Italia step-free?')).toBeAttached();
     await expect(page.getByText('Opening soon')).toHaveCount(0);
     await expect(page.locator('html')).toHaveAttribute('data-venue', 'veraitalia');
     await expect(page.getByRole('img', { name: 'La Soul' })).toHaveCount(0);
@@ -45,7 +51,9 @@ test.describe('Vera Italia’s own site', () => {
     const home = await (await page.request.get('/')).text();
     expect(home).toContain('<title>Vera Italia — Italian Restaurant &amp; Pizza in Sarajevo</title>');
     expect(home).toContain('<meta name="geo.placename" content="Sarajevo" />');
-    expect(await (await page.request.get('/bs/')).text()).toContain('<title>Vera Italia — italijanski restoran i pizza u Sarajevu</title>');
+    // The pin of its Google Business Profile, on the building.
+    expect(home).toContain('<meta name="geo.position" content="43.827664;18.3102937" />');
+    expect(await (await page.request.get('/bs/')).text()).toContain('<title>Vera Italia — italijanski restoran i picerija u Sarajevu</title>');
     expect(home).toContain('<link rel="canonical" href="https://veraitalia.net/" />');
     expect(home).not.toContain('<title>La Soul');
 

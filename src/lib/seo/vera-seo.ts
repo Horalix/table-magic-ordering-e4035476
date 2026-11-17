@@ -4,10 +4,11 @@
  *
  * Built only from what is real — its menu (scripts/vera-italia/menu.json),
  * its own words (src/components/vera/copy.ts) and the facts in
- * src/lib/venues.ts. A fact the owner has not given yet (the address, the
- * hours, the phone, its profiles) is left out everywhere, and appears
- * everywhere — structured data, pages, FAQ, llms.txt — the day it is filled
- * in. Nothing of La Soul's is claimed for it (no "halal", no "burgers").
+ * src/lib/venues.ts. A fact the owner has not given yet (on 17 November 2026:
+ * the hours, its own phone, its Google Maps and review links, its profiles)
+ * is left out everywhere, and appears everywhere — structured data, pages,
+ * FAQ, llms.txt — the day it is filled in. Nothing of La Soul's is claimed
+ * for it (no "halal", no "burgers").
  *
  * The build writes these pages (scripts/seo-prerender.ts); the website
  * (src/pages/vera/VeraSite.tsx) puts the same structured data on the page.
@@ -152,6 +153,23 @@ export function veraPriceRange(m: SeoMenu): string {
   return range(m.categories.flatMap((c) => itemsOf(c, false)), 'en');
 }
 
+/** Its postal code and municipality ("71210 Ilidža"), as the owner gave them and its data says them; empty when not given. */
+const localArea = (v: Venue) => [v.postalCode, v.municipality].filter(Boolean).join(' ');
+
+/** What a guest asks before coming, in one line for AI assistants: only what the owner confirmed. */
+function goodToKnow(a: NonNullable<Venue['amenities']>): string {
+  return [
+    a.takeaway ? 'takeaway' : 'no takeaway',
+    a.delivery ? 'delivery' : 'no delivery',
+    a.wifi && (a.freeWifi ? 'free Wi-Fi' : 'Wi-Fi'),
+    a.wheelchairEntrance && 'step-free (wheelchair-accessible) entrance',
+    a.restroom && 'toilet for guests',
+    a.parking && 'parking',
+    a.terrace && 'a terrace',
+    a.childFriendly && 'children welcome',
+  ].filter(Boolean).join('; ');
+}
+
 // ---- questions and answers ----------------------------------------------------
 
 export interface Faq { q: string; a: string }
@@ -179,7 +197,7 @@ export function veraFaq(m: SeoMenu, locale: Locale): Faq[] {
   // The street once the owner gives it; until then the city and the country.
   const comma = locale === 'ar' ? '، ' : ', ';
   const whereAnswer = v.address
-    ? `${v.address}${comma}${PLACE.city[locale]}${comma}${PLACE.country[locale]}.`
+    ? `${[v.address, localArea(v), PLACE.city[locale], PLACE.country[locale]].filter(Boolean).join(comma)}.`
     : `${upper(PLACE.inCity[locale])}${comma}${PLACE.country[locale]}.`;
 
   type Asked = 'what' | 'apart' | 'pizza' | 'pizzaIn' | 'veg' | 'price' | 'order' | 'table' | 'where' | 'when' | 'call';
@@ -284,13 +302,15 @@ export function veraRestaurantNode(m: SeoMenu, locale: Locale, reservations: boo
     ...(v.city ? { disambiguatingDescription: WHICH_ONE[locale] } : {}),
     description: SITE.seoDescription[locale],
     slogan: SITE.heroLine[locale],
-    url: absoluteUrl(veraSitePath(locale)),
+    // One entity on every page (@id), so one address for it: the site's own root, whatever the page's language.
+    url: absoluteUrl(veraSitePath('en')),
     image: [VERA_OG_IMAGE, ...ROOM_IMAGES, ...dishImages].map(absoluteUrl),
     logo: absoluteUrl(LOGO),
     servesCuisine: ['Italian', 'Neapolitan pizza', 'Pizza', 'Pasta', 'Risotto'],
-    hasMenu: menuUrl(),
+    hasMenu: menuUrl(locale),
     priceRange: veraPriceRange(m),
     currenciesAccepted: 'BAM',
+    ...(v.paymentAccepted ? { paymentAccepted: v.paymentAccepted } : {}),
     availableLanguage: ['bs', 'en', 'ar'],
     ...(v.phoneHref ? { telephone: v.phoneHref } : {}),
     // Only while a table can be asked for online (src/lib/seo/reservations.ts).
@@ -344,7 +364,8 @@ const courseNode = (c: SeoMenuCategory, locale: Locale = 'en') => ({
 export function veraMenuNode(m: SeoMenu, only?: SeoMenuCategory, locale: Locale = 'en') {
   return {
     '@type': 'Menu',
-    '@id': `${menuUrl(locale)}#menu`,
+    // A course page's menu is its own entity: the full menu's @id would give one id two names and two urls.
+    '@id': `${only ? courseUrl(only, locale) : menuUrl(locale)}#menu`,
     name: only ? `Vera Italia — ${only.names[locale]}` : pick(VERA.menuTitle, locale),
     url: only ? courseUrl(only, locale) : menuUrl(locale),
     inLanguage: locale,
@@ -437,7 +458,7 @@ function visitFacts(locale: Locale): string {
   const v = vera();
   const p = (c: Record<Locale, string>) => h(c[locale] ?? c.en);
   return v.address
-    ? `<address>${h(v.name)}<br />${h(v.address)}, ${p(PLACE.city)}, ${p(PLACE.country)}${v.phone ? `<br /><a href="tel:${h(v.phoneHref)}">${h(v.phone)}</a>` : ''}</address>`
+    ? `<address>${h(v.name)}<br />${[h(v.address), h(localArea(v)), p(PLACE.city), p(PLACE.country)].filter(Boolean).join(', ')}${v.phone ? `<br /><a href="tel:${h(v.phoneHref)}">${h(v.phone)}</a>` : ''}</address>${v.hours?.length ? '' : `<p>${p(SITE.hoursSoon)}</p>`}`
     : v.city
       ? `<p>${p(PLACE.city)}, ${p(PLACE.country)}. ${p(SITE.visitSoon)}</p>`
       : `<p>${p(SITE.openingSoon)}. ${p(SITE.visitSoon)}</p>`;
@@ -644,9 +665,14 @@ export function veraLlms(m: SeoMenu): { short: string; full: string } {
     orderingOffered()
       ? `- Ordering: from the table, by scanning the code on it; pay the waiter`
       : `- Menu: scan the code on the table to see it; the waiter takes the order and is paid at the table`,
-    v.address ? `- Address: ${v.address}, ${where}` : v.city ? `- Where: ${where} (street address to be announced)` : '- Address: to be announced',
+    v.address ? `- Address: ${[v.address, localArea(v), where].filter(Boolean).join(', ')}` : v.city ? `- Where: ${where} (street address to be announced)` : '- Address: to be announced',
     v.hours?.length ? `- Hours: ${v.hours.map((x) => `${x.days.join(', ')} ${x.opens}–${x.closes}`).join('; ')}` : '- Hours: to be announced',
     v.phone ? `- Phone: ${v.phone}` : '',
+    v.geo ? `- Coordinates: ${v.geo.lat}, ${v.geo.lng}` : '',
+    v.mapsListingUrl || v.mapsUrl ? `- Google Maps: ${v.mapsListingUrl || v.mapsUrl}` : '',
+    v.reviewUrl ? `- Google reviews: ${v.reviewUrl}` : '',
+    v.paymentAccepted ?`- Payment: ${v.paymentAccepted.toLowerCase().replace(/ card/g, ' cards')}` : '',
+    v.amenities ? `- Good to know: ${goodToKnow(v.amenities)}` : '',
     reservationsOffered()
       ? `- Reservations: ask for a table online at ${absoluteUrl(RESERVE_PATH)} (a day, a time, the number of guests); the restaurant confirms each request itself, usually within minutes; free, and can be cancelled`
       : '',

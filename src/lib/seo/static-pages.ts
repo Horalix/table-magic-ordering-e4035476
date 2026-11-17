@@ -491,10 +491,13 @@ export function ownSiteRedirects(slug: string, laSoulUrl: string): string {
     `# ${slug}'s own site. Written by scripts/seo-prerender.ts; La Soul's site uses public/_redirects.`,
     rule(`/${slug}`, '/', '301!'),
     rule(`/${slug}/*`, '/', '301!'),
+    // "/menu" alone is its menu (it answered with the home page, a second copy of it).
+    rule('/menu', `/menu/${slug}/`, '301!'),
     rule('/menu/lasoul', `${laSoulUrl}/menu/lasoul/`, '301!'),
     rule('/menu/lasoul/*', `${laSoulUrl}/menu/lasoul/:splat`, '301!'),
     // And its Bosnian and Arabic versions (./locale-path.ts).
     ...PREFIXED_LOCALES.flatMap((l) => [
+      rule(`/${l}/menu`, `/${l}/menu/${slug}/`, '301!'),
       rule(`/${l}/menu/lasoul`, `${laSoulUrl}/${l}/menu/lasoul/`, '301!'),
       rule(`/${l}/menu/lasoul/*`, `${laSoulUrl}/${l}/menu/lasoul/:splat`, '301!'),
     ]),

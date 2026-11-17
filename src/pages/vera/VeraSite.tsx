@@ -9,12 +9,12 @@ import roomImages from '@/components/vera/room-images.json';
 import { useLanguageStore, useT, type Locale } from '@/lib/i18n';
 import { HOME_VENUE } from '@/lib/home-venue';
 import { usePageMeta } from '@/lib/seo/page-meta';
-import { VERA_OG_IMAGE, veraSeoMenu, veraSiteAlternates, veraSiteGraph, veraSitePath } from '@/lib/seo/vera-seo';
+import { VERA_OG_IMAGE, veraFaq, veraSeoMenu, veraSiteAlternates, veraSiteGraph, veraSitePath } from '@/lib/seo/vera-seo';
 import { sectionSlug } from '@/lib/menu-sections';
 import { VENUES, menuCategoryPath, menuPath } from '@/lib/venues';
 import ReserveLink from '@/components/site/ReserveLink';
 import { useReservationsOffered } from '@/hooks/useReservationsOffered';
-import { RESERVE_PATH } from '@/lib/seo/reservations';
+import { RESERVE_PATH, homeReserveFaq } from '@/lib/seo/reservations';
 import { rcopy } from '@/lib/reservation-copy';
 import { dropPoster } from '@/lib/seo/poster';
 import menuData from '../../../scripts/vera-italia/menu.json';
@@ -104,6 +104,11 @@ const VeraSite = ({ locale: pathLocale }: { locale?: Locale }) => {
   // That a table can be asked for online: only while the restaurant takes requests there (src/lib/seo/reservations.ts).
   const reservations = useReservationsOffered('veraitalia');
   const jsonLd = useMemo(() => veraSiteGraph(SEO_MENU, shownLocale, reservations), [shownLocale, reservations]);
+  // Exactly the FAQPage's questions (veraSiteGraph), so what the data says is what the page shows.
+  const faq = useMemo(() => [...veraFaq(SEO_MENU, shownLocale), ...(reservations ? [homeReserveFaq(shownLocale)] : [])], [shownLocale, reservations]);
+  const comma = shownLocale === 'ar' ? '، ' : ', ';
+  const placeLine = [[venue.postalCode, venue.municipality].filter(Boolean).join(' '), pick(PLACE.city, shownLocale), pick(PLACE.country, shownLocale)]
+    .filter(Boolean).join(comma);
   usePageMeta({
     title: pick(SITE.seoTitle, shownLocale), description: pick(SITE.seoDescription, shownLocale),
     path: veraSitePath(shownLocale), locale: shownLocale, alternates: veraSiteAlternates(), jsonLd, image: VERA_OG_IMAGE,
@@ -347,6 +352,9 @@ const VeraSite = ({ locale: pathLocale }: { locale?: Locale }) => {
             {venue.address ? (
               <>
                 <h2 className="mt-5 font-serif italic text-4xl font-light">{venue.address}</h2>
+                {/* The rest of the address as its Google listing and its data say it: postal code, municipality, city, country. */}
+                <p className="mt-3 font-sans text-sm text-muted-foreground" data-testid="vera-place-line">{placeLine}</p>
+                {!venue.hours?.length && <p className="mt-5 font-serif italic text-xl text-muted-foreground">{c(SITE.hoursSoon)}</p>}
                 <div className="mt-8 flex flex-col items-center gap-3 font-sans text-sm">
                   {venue.hours?.map((h) => (
                     <span key={h.days.join()} className="inline-flex items-center gap-2"><Clock className="h-4 w-4 text-primary" aria-hidden />{h.opens}–{h.closes}</span>
@@ -370,6 +378,29 @@ const VeraSite = ({ locale: pathLocale }: { locale?: Locale }) => {
             >
               <CalendarClock className="h-4 w-4" aria-hidden />
             </ReserveLink>
+          </Reveal>
+        </section>
+
+        {/* ---- Questions ------------------------------------------------- */}
+        {/* The same questions and answers as its FAQPage data, on the page where guests, Google and AI assistants read them. */}
+        <section id="questions" aria-labelledby="questions-title" className="px-5 sm:px-8 pb-24 sm:pb-32">
+          <Reveal className="mx-auto max-w-2xl">
+            <div className="text-center">
+              <Caps>{c(SITE.faqCaps)}</Caps>
+              <Rule />
+              <h2 id="questions-title" className="mt-5 font-serif italic text-4xl font-light">{c(SITE.faqTitle)}</h2>
+            </div>
+            <div className="mt-10 divide-y divide-border border-y border-border text-start">
+              {faq.map(({ q, a }) => (
+                <details key={q} className="group py-5" data-testid="vera-faq-item">
+                  <summary className="flex min-h-[44px] cursor-pointer list-none items-center justify-between gap-4 font-serif text-xl [&::-webkit-details-marker]:hidden">
+                    {q}
+                    <ChevronDown className="h-4 w-4 shrink-0 text-primary transition-transform group-open:rotate-180" aria-hidden />
+                  </summary>
+                  <p className="mt-3 font-sans text-[15px] leading-relaxed text-muted-foreground">{a}</p>
+                </details>
+              ))}
+            </div>
           </Reveal>
         </section>
       </main>
