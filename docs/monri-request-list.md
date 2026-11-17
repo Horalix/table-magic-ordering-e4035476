@@ -86,13 +86,13 @@ contract; and a test of the integration in the sandbox.
 
 ## Message to send
 
-**English**
+**English** (a shorter version of the Bosnian one below)
 
 > Subject: Online card payments for La Soul and Vera Italia (Sarajevo): Monri Components, test access and Apple Pay / Google Pay
 >
 > Hello,
 >
-> We run two restaurants in Sarajevo, La Soul (lasoul.net) and Vera Italia (veraitalia.net). Guests scan a QR code at the table, order on their phone, and we would like them to pay by card on the same phone. We already have a Monri POS terminal; this request is for **online (card-not-present)** payments.
+> We run two restaurants in Sarajevo, La Soul (lasoul.net) and Vera Italia (veraitalia.net). Guests scan a QR code at the table, order on their phone, and we would like them to pay by card on the same phone. We already take cards on a physical POS terminal; this request is for **online (card-not-present)** payments.
 >
 > The integration is already built on Monri Components (the card field in our page), the Payments API (`/v2/payment/new`) and your callback. For each restaurant (or one account for both domains, if that is easier for you) we need:
 >
@@ -107,26 +107,42 @@ contract; and a test of the integration in the sandbox.
 >
 > Thank you,
 
-**Bosanski**
+**Bosanski** (ovo je poruka za slanje; popuniti uglaste zagrade)
 
-> Predmet: Online plaćanje karticom za La Soul i Vera Italia (Sarajevo): Monri Components, test pristup i Apple Pay / Google Pay
+> Predmet: Zahtjev za online prihvatanje kartica (Monri Components): La Soul i Vera Italia, Sarajevo
 >
 > Poštovani,
 >
-> Imamo dva restorana u Sarajevu: La Soul (lasoul.net) i Vera Italia (veraitalia.net). Gosti skeniraju QR kod na stolu, naruče na svom telefonu i željeli bismo da mogu platiti karticom na istom telefonu. Već imamo Monri POS terminal; ovaj zahtjev je za **online plaćanje (card-not-present)**.
+> Ja sam [ime i prezime], [funkcija] u [naziv firme], vlasniku restorana La Soul (lasoul.net) i Vera Italia (veraitalia.net) u Sarajevu. Naši gosti skeniraju QR kod na stolu, naručuju na vlastitom telefonu i željeli bismo da mogu odmah platiti karticom na istom telefonu. Karticu već primamo na fizičkom POS terminalu; ovaj zahtjev se odnosi na **online (card-not-present)** plaćanje.
 >
-> Integracija je već izrađena na Monri Components (polje za karticu u našoj stranici), Payments API-ju (`/v2/payment/new`) i vašem callbacku. Za svaki restoran (ili jedan račun za obje domene, ako vam je lakše) trebamo:
+> Integracija je već izrađena i čeka vaše podatke: koristimo **Monri Components** (polje za karticu u našoj stranici, sa 3-D Secure), **Payments API** (`/v2/payment/new`) i vaš **callback**. Podaci kartice ne dolaze na naše servere.
 >
-> 1. Online trgovački račun (MID) i test podatke, merchant key i authenticity token, a zatim produkcijske.
-> 2. Potvrdu da je Monri Components dostupan na našem ugovoru i koji obrazac PCI usklađenosti trebamo popuniti.
-> 3. Registrovan naš callback URL: https://jgxnvrrphxnmzongtmzs.supabase.co/functions/v1/monri-webhook (i adrese s kojih šaljete callback, ako ih objavljujete).
-> 4. Valutu BAM, iznose u feninzima i uključen 3-D Secure 2.
-> 5. Test kartice za uspjeh, odbijanje i neuspjelu 3-D Secure autentifikaciju, te način da testiramo povrat novca.
-> 6. Vaše naknade, rokove isplate, postupak povrata i chargebacka te dnevni izvještaj o isplatama (datoteka ili API).
-> 7. Šta provjeravate na web stranici prije puštanja u produkciju (uslovi, politika povrata, privatnost, podaci o firmi, logotipi) i koje kartice su pokrivene.
-> 8. **Apple Pay i Google Pay:** mogu li se koristiti sa Monri Components, bez ulaska u PCI DSS opseg? Ako mogu, šta vam treba od nas (verifikacija domena lasoul.net i veraitalia.net za Apple Pay, zahtjev za Google Pay) i kako ih testiramo?
+> Molimo vas za sljedeće, za svaki restoran (ili jedan ugovor za obje domene, ako vam tako odgovara):
+>
+> **Račun i pristup**
+> 1. Otvaranje online (e-commerce) računa sa vlastitim MID-om i listu dokumenata koje trebamo dostaviti.
+> 2. Test (sandbox) podatke, `merchant key` i `authenticity token`, a nakon odobrenja produkcijske.
+> 3. Potvrdu da su Monri Components i Payments API uključeni na našem ugovoru i koji PCI obrazac (SAQ) trebamo popuniti.
+> 4. Registraciju naše callback adrese: https://jgxnvrrphxnmzongtmzs.supabase.co/functions/v1/monri-webhook, i adrese s kojih šaljete callback, ako ih objavljujete.
+> 5. Valutu BAM, iznose u feninzima i uključen 3-D Secure 2.
+> 6. Test kartice (uspjeh, odbijanje, neuspjeh 3-D Secure) i način da u testu izvršimo povrat.
+> 7. Radi li Components samo na unaprijed prijavljenim domenama, i daje li se odobrenje za produkciju po domeni (lasoul.net, veraitalia.net)?
+>
+> **Uslovi**
+> 8. Cjenovnik: naknade po brendu kartice, po transakciji, mjesečne, minimalne i za povrat.
+> 9. Rok isplate na naš račun te postupak povrata i chargebacka.
+> 10. Dnevni izvještaj o isplatama (datoteka ili API).
+> 11. Potvrdu da se naplata vrši odmah (purchase) i kako radite povrat dijela iznosa.
+> 12. Šta provjeravate na web stranici prije puštanja u produkciju (uslovi korištenja, politika povrata, privatnost, podaci o firmi, kontakt, cijene u KM, logotipi) i koje kartice pokrivate.
+>
+> **Apple Pay i Google Pay**
+> 13. Mogu li se Apple Pay i Google Pay koristiti u sklopu Monri Components, bez da mi ulazimo u PCI DSS opseg? Ako mogu: šta vam treba od nas (za Apple Pay verifikacija domena lasoul.net i veraitalia.net, za Google Pay zahtjev i objava kod Google-a) i kako ih testiramo? Ako je moguće samo preko vaše forme za plaćanje, recite nam kako ta opcija izgleda.
+>
+> Rado ćemo se čuti i telefonom.
 >
 > Hvala unaprijed,
+> [ime i prezime], [funkcija]
+> [naziv firme], [telefon], [email]
 
 ---
 
