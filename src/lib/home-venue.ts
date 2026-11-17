@@ -16,6 +16,9 @@
  * So set it in the build's environment (the Netlify site's settings, or
  * before the command), not in a .env file, which the build step never reads.
  */
+// This module is also checked by build scripts without the app's ambient types.
+declare const __TABLEFLOW_DEMO_BUILD__: boolean | undefined;
+
 const HOMES = ['lasoul', 'veraitalia'];
 
 /**
