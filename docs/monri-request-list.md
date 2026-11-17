@@ -168,7 +168,7 @@ contract; and a test of the integration in the sandbox.
 
 **Konobar.** Ne upisuje ništa za plaćanje karticom na telefonu: na stolu vidi oznaku **Paid online**. Ako pokuša upisati gotovinu za takvu narudžbu, aplikacija kaže **Already paid online — don't take money for this order**. Narudžbe koje gost plaća za stolom i dalje vidi kao **Owes · cash** ili **Owes · bring terminal**, pa ih konobar upisuje kao **Paid cash** ili **Paid on terminal**, kao danas. Ako kartica bude odbijena, narudžba ostaje van kuhinje, a gost može ponoviti ili preći na plaćanje za stolom; ako je gost ipak platio u prostoriji, konobar upiše plaćanje na stolu.
 
-**Račun stola.** U račun ulaze samo narudžbe koje su u kuhinji i nisu već plaćene; otkazane, nedovršene i neuspjele kartične narudžbe ne ulaze.
+**Račun stola.** Ono što stol još duguje ne uključuje otkazane narudžbe, kartične koje još čekaju plaćanje ili su neuspjele, niti one koje su već plaćene (online, gotovinom ili terminalom) ili vraćene. Stol koji još duguje novac aplikacija ne dozvoljava osloboditi i kaže koliko duguje. Gostov "račun" na telefonu prikazuje sve valjane narudžbe, plaćene označene kao plaćene.
 
 **Menadžer.** U Daily reportu su **kartica online**, **gotovina** i **POS terminal** odvojeni, jer se isplaćuju iz tri različita mjesta. Iznos "plaćeno online" mora biti jednak Monrijevom dnevnom izvještaju. Nule moraju biti: "stuck payments" (plaćanje počelo, nikad završeno) i "callback problems" (Monri poslao drugačiji iznos ili valutu). **Povrat** na karticu se prvo radi u Monrijevom panelu, a zatim ga menadžer upiše u aplikaciji; aplikacija ne šalje povrat Monriju sama.
 
