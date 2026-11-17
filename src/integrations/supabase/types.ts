@@ -212,6 +212,7 @@ export type Database = {
       }
       experiments: {
         Row: {
+          auto: boolean
           created_at: string
           ended_at: string | null
           holdout_pct: number
@@ -223,6 +224,7 @@ export type Database = {
           venue_id: string
         }
         Insert: {
+          auto?: boolean
           created_at?: string
           ended_at?: string | null
           holdout_pct: number
@@ -234,6 +236,7 @@ export type Database = {
           venue_id?: string
         }
         Update: {
+          auto?: boolean
           created_at?: string
           ended_at?: string | null
           holdout_pct?: number
@@ -1646,6 +1649,7 @@ export type Database = {
           created_at: string
           experiment_id: string | null
           id: string
+          language: string | null
           placement: string
           policy_version: string
           recommendation_type: string | null
@@ -1662,6 +1666,7 @@ export type Database = {
           created_at?: string
           experiment_id?: string | null
           id?: string
+          language?: string | null
           placement: string
           policy_version: string
           recommendation_type?: string | null
@@ -1678,6 +1683,7 @@ export type Database = {
           created_at?: string
           experiment_id?: string | null
           id?: string
+          language?: string | null
           placement?: string
           policy_version?: string
           recommendation_type?: string | null
@@ -1932,8 +1938,10 @@ export type Database = {
           print_paper_width: number
           print_show_prices: boolean
           reco_alcohol_from: string
+          reco_auto_holdout_pct: number
           reco_exploration: number
           reco_holdout_pct: number
+          reco_learner: string
           reco_min_acceptance: number
           reco_retire_after_impressions: number
           reco_sampling_enabled: boolean
@@ -1991,8 +1999,10 @@ export type Database = {
           print_paper_width?: number
           print_show_prices?: boolean
           reco_alcohol_from?: string
+          reco_auto_holdout_pct?: number
           reco_exploration?: number
           reco_holdout_pct?: number
+          reco_learner?: string
           reco_min_acceptance?: number
           reco_retire_after_impressions?: number
           reco_sampling_enabled?: boolean
@@ -2050,8 +2060,10 @@ export type Database = {
           print_paper_width?: number
           print_show_prices?: boolean
           reco_alcohol_from?: string
+          reco_auto_holdout_pct?: number
           reco_exploration?: number
           reco_holdout_pct?: number
+          reco_learner?: string
           reco_min_acceptance?: number
           reco_retire_after_impressions?: number
           reco_sampling_enabled?: boolean
@@ -2614,6 +2626,47 @@ export type Database = {
             columns: ["sub_b"]
             isOneToOne: false
             referencedRelation: "subcategories"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      suggestion_context_stats: {
+        Row: {
+          accepted: number
+          context: string
+          placement: string
+          recommended_item_id: string
+          scope: string
+          shown: number
+          source_item_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          accepted?: number
+          context: string
+          placement: string
+          recommended_item_id: string
+          scope: string
+          shown?: number
+          source_item_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          accepted?: number
+          context?: string
+          placement?: string
+          recommended_item_id?: string
+          scope?: string
+          shown?: number
+          source_item_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "suggestion_context_stats_recommended_item_id_fkey"
+            columns: ["recommended_item_id"]
+            isOneToOne: false
+            referencedRelation: "menu_items"
             referencedColumns: ["id"]
           },
         ]
@@ -4112,6 +4165,7 @@ export type Database = {
         }[]
       }
       reco_holdout_comparison: { Args: { _days?: number }; Returns: Json }
+      reco_keep_measuring: { Args: never; Returns: Json }
       reco_kind: {
         Args: {
           _name: string
@@ -4136,6 +4190,7 @@ export type Database = {
           tables: number
         }[]
       }
+      reco_learner_for: { Args: { _venue: string }; Returns: string }
       reco_learning_keys: {
         Args: { _items: string[] }
         Returns: {
@@ -4146,6 +4201,25 @@ export type Database = {
       }
       reco_now: { Args: never; Returns: string }
       reco_policy_version: { Args: never; Returns: string }
+      reco_policy_version_for: { Args: { _venue: string }; Returns: string }
+      reco_posterior_v4: {
+        Args: {
+          _daypart: string
+          _item_id: string
+          _lang: string
+          _placement: string
+          _seed: string
+          _source_item_id: string
+        }
+        Returns: {
+          alpha: number
+          beta: number
+          mean: number
+          sd: number
+          z: number
+        }[]
+      }
+      reco_profit_check: { Args: { _days?: number }; Returns: Json }
       reco_rank_scored: {
         Args: {
           _cart_item_ids?: string[]
@@ -4177,6 +4251,84 @@ export type Database = {
           reason: string
           recommendation_type: string
           score: number
+          source_item_id: string
+          suggested_quantity: number
+        }[]
+      }
+      reco_rank_scored_v3: {
+        Args: {
+          _cart_item_ids?: string[]
+          _cart_quantities?: number[]
+          _exclude_allergens?: string[]
+          _language?: string
+          _limit?: number
+          _placement?: string
+          _session_id?: string
+        }
+        Returns: {
+          curated_score: number
+          dietary_tags: string[]
+          evidence: number
+          explore: number
+          explore_room: number
+          grp: string
+          id: string
+          image_url: string
+          kind: string
+          learned_score: number
+          name: string
+          name_ar: string
+          name_bs: string
+          observed_score: number
+          ord: number
+          p_accept: number
+          price: number
+          reason: string
+          recommendation_type: string
+          score: number
+          source_item_id: string
+          suggested_quantity: number
+        }[]
+      }
+      reco_rank_scored_v4: {
+        Args: {
+          _cart_item_ids?: string[]
+          _cart_quantities?: number[]
+          _exclude_allergens?: string[]
+          _language?: string
+          _limit?: number
+          _placement?: string
+          _session_id?: string
+        }
+        Returns: {
+          base_accept: number
+          cm_factor: number
+          coef_cur: number
+          coef_val: number
+          curated_score: number
+          dietary_tags: string[]
+          evidence: number
+          explore: number
+          explore_room: number
+          grp: string
+          id: string
+          image_url: string
+          kind: string
+          learned_score: number
+          name: string
+          name_ar: string
+          name_bs: string
+          observed_score: number
+          ord: number
+          p_accept: number
+          p_k: number
+          p_mean: number
+          p_sd: number
+          price: number
+          reason: string
+          recommendation_type: string
+          score: number
+          score_fixed: number
           source_item_id: string
           suggested_quantity: number
         }[]
@@ -4233,6 +4385,10 @@ export type Database = {
       refresh_prep_stats: { Args: { _days?: number }; Returns: number }
       refresh_session_affinity: {
         Args: { _days?: number; _min_pair_sessions?: number }
+        Returns: number
+      }
+      refresh_suggestion_context_stats: {
+        Args: { _days?: number }
         Returns: number
       }
       refresh_suggestion_priors: { Args: never; Returns: number }
@@ -4302,6 +4458,7 @@ export type Database = {
       run_daily_maintenance: { Args: never; Returns: Json }
       run_scheduled_learning_refresh: { Args: never; Returns: Json }
       run_scheduled_maintenance: { Args: never; Returns: Json }
+      run_scheduled_reco_measuring: { Args: never; Returns: Json }
       run_scheduled_reservation_sweep: { Args: never; Returns: Json }
       run_scheduled_table_close: { Args: never; Returns: Json }
       sales_analytics: { Args: { _from?: string; _to?: string }; Returns: Json }
@@ -4388,6 +4545,7 @@ export type Database = {
         }
         Returns: Json
       }
+      set_reco_auto_holdout: { Args: { _pct: number }; Returns: Json }
       shift_close_for: {
         Args: { _day?: string; _venue?: string }
         Returns: Json

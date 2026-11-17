@@ -75,7 +75,11 @@ const appleTouch = () => /iPad|iPhone|iPod/.test(navigator.userAgent) || (naviga
  * (src/components/admin/nav/launch-image.ts).
  *
  * All of it is on the page from the first render, long before anyone can
- * reach Share → Add to Home Screen, which reads the page as it is then.
+ * reach Share → Add to Home Screen, which reads the page as it is then. An
+ * iPhone, though, reads the manifest, name and icon once, from the HTML it
+ * was sent, so an admin's addresses are sent manager-shell.html, which names
+ * the Manager's already (scripts/seo-prerender.ts, managerShell); this keeps
+ * them right as the app moves between pages.
  */
 export function VenueTheme() {
   const { pathname } = useLocation();

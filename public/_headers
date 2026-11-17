@@ -13,14 +13,17 @@
 /manifest-waiter-veraitalia.webmanifest
   Content-Type: application/manifest+json
 
-# Vera Italia's own app, and the Manager and TV apps (also octet-stream before).
-/manifest-veraitalia.webmanifest
-  Content-Type: application/manifest+json
-
+# The same for every other manifest in public/ (the Manager app's, the TV's, Vera
+# Italia's): without it Netlify answers application/octet-stream, as it did for
+# the two above before they were listed. src/lib/seo/manager-shell.test.ts
+# keeps each manifest in public/ here.
 /manifest-manager.webmanifest
   Content-Type: application/manifest+json
 
 /manifest-manager-veraitalia.webmanifest
+  Content-Type: application/manifest+json
+
+/manifest-veraitalia.webmanifest
   Content-Type: application/manifest+json
 
 /manifest-tv-lasoul.webmanifest
@@ -28,6 +31,11 @@
 
 /manifest-tv-veraitalia.webmanifest
   Content-Type: application/manifest+json
+
+# The admin's first page (scripts/seo-prerender.ts, managerShell): a file of its
+# own, but never a search result; asked again every time, like index.html.
+/manager-shell.html
+  X-Robots-Tag: noindex, nofollow
 
 # How long a browser keeps a file. Netlify's default is "max-age=0,
 # must-revalidate": ask again every time. That stays for everything that

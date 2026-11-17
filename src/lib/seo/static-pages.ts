@@ -461,11 +461,22 @@ export const MISSING_DISH_ROUTES = ['', ...PREFIXED_LOCALES.map((l) => `/${l}`)]
  */
 const PHOTO_FOLDER = ['/site', '/site/'];
 
+/**
+ * The admin's own first page (scripts/seo-prerender.ts, managerShell). A
+ * phone reads what "Add to Home Screen" installs from the HTML it is sent,
+ * before any code runs, and an iPhone reads it once. The app's index.html is
+ * the guests' (the menu's manifest, "La Soul"), so an app added from an admin
+ * page opened the menu. The admin's addresses are answered this page instead:
+ * the same app, but naming the Manager manifest, icon and name from the start.
+ */
+export const MANAGER_SHELL = '/manager-shell.html';
+const isAdminRoute = (route: string) => route === '/admin' || route.startsWith('/admin/');
+
 /** The rules every site's _redirects ends with: the photo folder home, the app at its own addresses, "not found" at any other. */
 export const appRedirects = (): string[] => [
   ...PHOTO_FOLDER.map((p) => rule(p, '/', '301')),
   ...MISSING_DISH_ROUTES.map((p) => rule(p, '/index.html', '404')),
-  ...APP_ROUTES.map((p) => rule(p, '/index.html', '200')),
+  ...APP_ROUTES.map((p) => rule(p, isAdminRoute(p) ? MANAGER_SHELL : '/index.html', '200')),
   rule('/*', '/index.html', '404'),
 ];
 

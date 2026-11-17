@@ -38,8 +38,8 @@ import {
   categoryPath, dishGraph, dishPath, homeGraph, LOCALES, menuGraph, menuPath, restaurantNode, sitePath,
 } from '../src/lib/seo/structured-data';
 import {
-  dishBody, dishMeta, escapeHtml, forwardToOwnSite, headTags, homeBody, llmsFullTxt, llmsTxt, menuBody, ownSiteRedirects, robotsTxt,
-  sitemapXml, type SitemapEntry,
+  dishBody, dishMeta, escapeHtml, forwardToOwnSite, headTags, homeBody, llmsFullTxt, llmsTxt, MANAGER_SHELL, menuBody, ownSiteRedirects,
+  robotsTxt, sitemapXml, type SitemapEntry,
 } from '../src/lib/seo/static-pages';
 import { languageAlternates, localePath, unprefixed } from '../src/lib/seo/locale-path';
 import { menuFaq, setSiteFacts, SITE_FACTS_PATH } from '../src/lib/seo/menu-faq';
@@ -87,6 +87,28 @@ export function withBrand(html: string, venue: Venue): string {
     .replace(/preload\('hero-wide'[^\n]*\n\s*preload\('hero-tall'[^\n]*/, (asked) => (venue.slug === 'veraitalia'
       ? "preload('vera/room-2', [640, 960, 1280, 1600, 2400], 'all');"
       : asked));
+}
+
+/**
+ * The admin's first page: the app's own index.html, but naming the Manager app
+ * from the first byte (static-pages.ts, MANAGER_SHELL; Netlify answers /admin
+ * and /admin/* with it). "Add to Home Screen" reads the web manifest, the
+ * name and the icon from the HTML it is sent, and an iPhone reads them once,
+ * before VenueTheme (src/hooks/useVenue.ts) has run; the guests' index.html
+ * named the menu's manifest, so the app an admin added opened the menu. This
+ * names the Manager's: `start_url` is /admin. Nothing of the home page
+ * (the poster, the prerendered body) is in it, and it is nobody's search
+ * result. `themeColor` is the admin's background, the Manager manifest's.
+ */
+export function managerShell(template: string, venue: Venue, themeColor: string = venue.brand.themeColor): string {
+  return withBrand(template, venue)
+    .replace(/(<meta name="theme-color" content=")[^"]*/, `$1${themeColor}`)
+    .replace(/(<meta name="apple-mobile-web-app-title" content=")[^"]*/, '$1Manager')
+    .replace(/(<link rel="apple-touch-icon" href=")[^"]*/, `$1${venue.brand.managerTouchIcon}`)
+    .replace(/(<link rel="manifest" href=")[^"]*/, `$1${venue.brand.managerManifest}`)
+    .replace(/\s*<title>[\s\S]*?<\/title>/, '')
+    .replace(/\s*<meta (?:name|property)="(?:description|author|og:[^"]+|twitter:[^"]+)"[^>]*>/g, '')
+    .replace('</head>', `    <title>${escapeHtml(venue.name)} Manager</title>\n    <meta name="robots" content="noindex, nofollow" />\n  </head>`);
 }
 
 /*
@@ -219,6 +241,13 @@ export function seoPrerender(): Plugin {
         venue: HOME_VENUE, ordering: orderingOffered(), reservations: reservationsOffered(), builtAt: new Date().toISOString(),
         ...(asked ? { api: env.VITE_SUPABASE_URL, publishableKey: env.VITE_SUPABASE_PUBLISHABLE_KEY } : {}),
       })));
+      // The admin's own first page, for this site's restaurant (managerShell above): what an app added from an admin page installs.
+      const managerVenue = VENUES[HOME_VENUE] ?? venue;
+      const managerManifestFile = path.join(config.root, 'public', managerVenue.brand.managerManifest.replace(/^\//, ''));
+      const managerTheme = existsSync(managerManifestFile)
+        ? (JSON.parse(readFileSync(managerManifestFile, 'utf8')) as { theme_color?: string }).theme_color
+        : undefined;
+      writeFileSync(path.join(outDir, MANAGER_SHELL.replace(/^\//, '')), managerShell(template, managerVenue, managerTheme));
       const manifestPath = path.join(config.root, 'src', 'lib', 'image-manifest.json');
       const manifest: Record<string, { widths?: number[]; v?: string }> = existsSync(manifestPath) ? JSON.parse(readFileSync(manifestPath, 'utf8')) : {};
       const imageFor = (id: string) => {

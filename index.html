@@ -27,6 +27,12 @@
       render, before anyone can reach Share → Add to Home Screen; on an admin
       page it also adds the picture an iPhone shows while the app opens.
 
+      That swap is too late for an iPhone, which reads the manifest, name and
+      icon once, from the HTML it is sent: the admin's addresses are answered
+      manager-shell.html instead of this file (public/_redirects;
+      scripts/seo-prerender.ts, managerShell), a copy that names the Manager's
+      from the first byte. Without it the app an admin added opened the menu.
+
       The status bar stays "default": dark clock and battery on the page's own
       light surface (the admin's top bar and the menu are both light).
       "black-translucent" would draw them white, unreadable on cream.

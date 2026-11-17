@@ -2,12 +2,178 @@
 
 Copy everything between the rules into Lovable. Nothing else needs to be said.
 
-## Next: WhatsApp messages about reservations (one migration, one new function)
+## Next: nothing is pending (17 November 2026)
 
-Send this once `main` has `feature/reservation-whatsapp` merged (the runner
-is pinned to its commit 277cd3f). It can be sent before or after the four
-WhatsApp secrets are set (docs/whatsapp-messages.md): the function reads them
-whenever it runs, and until they are set nothing is sent and nothing fails.
+Every migration in `supabase/migrations/` is applied. `docs/migration-runner.sql`
+is pinned to the last two (below); do not send it again. When a new migration
+is merged, regenerate it with `node scripts/migration-runner.mjs --from
+<timestamp> --commit <sha of main>` and put its prompt here.
+
+## Done: suggestions that are always measured, and the v4 ranker (17 November 2026)
+
+Applied by Lovable on 17 November 2026 (the runner pinned to 286639b, the
+design pass): both blocks, the first together with the holdout set to 0 in
+one query. Every check matched: both restaurants `reco_auto_holdout_pct = 0`
+and `reco_learner = v3`, no experiment open, four new columns, eleven
+functions and the table present, no grant to guests beyond
+`guest_get_recommendations`, the job `lasoul-reco-measuring` active. Its tool
+did not print an `UPDATE 2` count; the check shows both at 0. Lovable also
+committed its own records (`drizzle/migrations/0014`, `0015`) and the
+regenerated `src/integrations/supabase/types.ts`, and added a one-line
+`declare const __TABLEFLOW_DEMO_BUILD__` to `src/lib/home-venue.ts` (harmless:
+it makes the build scripts' type check pass). Suggestions rank exactly as
+before; measuring is **off** until an admin presses **Measure with 1 table in
+10** (Reports → What the app earned). What was sent:
+
+- **`20261116120000_reco_always_measured.sql`**: one new setting per
+  restaurant, `reco_auto_holdout_pct` (the share of new tables that see no
+  suggestions, so what suggestions earn can be measured; the file's default is
+  10), the functions that keep that check running and that read what the
+  suggestions added per table in margin (`reco_profit_check`), and a job every
+  15 minutes (`lasoul-reco-measuring`, pg_cron). **The default of 10 would, at
+  the job's first run, hide suggestions from one table in ten at both
+  restaurants. That is a business decision the owner has not made, so this
+  prompt sets it to 0 (off) in the same query as the migration.** The owner
+  turns it on later in the admin card (Reports, "What the app earned") or with
+  `set_reco_auto_holdout`.
+- **`20261116130000_reco_learner_v4.sql`**: the Thompson-sampling ranker and
+  the guest's language on every suggestion decision. `reco_learner` defaults to
+  `v3`, so **the ranking guests see does not change**; v4 stays off (in the
+  offline simulator it earned 2 to 5% less margin per table). It replaces
+  `guest_get_recommendations` and a few helpers with versions that run the old
+  ranker exactly when `reco_learner = 'v3'`. Needs the first file applied.
+- No menu, order, payment, staff or analytics rows change. Nothing in either
+  file adds a foreign key to `auth.users`; the second calls `auth.uid()` once,
+  inside a function, as existing ones do. Both are safe to run again.
+- Safe at any hour. If you would rather not touch live ordering while a
+  restaurant is open, send it after La Soul closes at 23:00.
+
+---
+
+> **Task: apply two migrations with `docs/migration-runner.sql`, in order, and
+> set one restaurant setting to 0 in the same query as the first. Do not
+> retype the migration files and do not write any other SQL that changes data,
+> schema or permissions. No Edge Function needs deploying.**
+>
+> Make sure your checkout is the latest `main`.
+>
+> Nothing in the migrations adds a foreign key to `auth.users`: user ids are
+> plain uuids. If your schema rules object to anything in the files, stop
+> before Step 1 and quote the line.
+>
+> 1. Before anything changes, run this read-only and paste the raw output of
+>    each, as its own query. It is the baseline to compare with at the end:
+>    ```sql
+>    SELECT v.slug, rs.reco_holdout_pct, rs.recommendations_enabled
+>      FROM public.restaurant_settings rs JOIN public.venues v ON v.id = rs.venue_id ORDER BY v.slug;
+>    SELECT id, name, policy_version, holdout_pct, venue_id, ended_at
+>      FROM public.experiments WHERE ended_at IS NULL;
+>    ```
+> 2. Run `docs/migration-runner.sql` step by step, each step as its own query:
+>    Step 0 (pg_net installed), Step 1 (queue the downloads, expect 2 rows),
+>    Step 2 (expect 2 rows, all `arrived_exactly = true`), then Step 3.
+> 3. Step 3, block **1 of 2**, together with the statement below, **as one
+>    query, in this order, so that both commit together** (if your tool does
+>    not already run one query as one transaction, wrap them in `BEGIN;` …
+>    `COMMIT;`). The block is the one in `docs/migration-runner.sql`, unchanged;
+>    the statement is exactly:
+>    ```sql
+>    UPDATE public.restaurant_settings SET reco_auto_holdout_pct = 0 WHERE reco_auto_holdout_pct <> 0;
+>    ```
+>    It is the only SQL you write. It must not run later than the block: the
+>    block starts a job that, at its next run, would otherwise open a check
+>    that hides suggestions from 10% of tables. Expect `UPDATE 2`.
+> 4. Step 3, block **2 of 2**, as its own query (it is 100 KB; give it a
+>    moment). If either block fails, stop and report the exact error; a failed
+>    block changes nothing.
+> 5. Check, read-only, each as its own query, and paste the raw output of each.
+>    None of them calls a function of the migrations:
+>    ```sql
+>    SELECT v.slug, rs.reco_auto_holdout_pct, rs.reco_learner, rs.reco_holdout_pct, rs.recommendations_enabled
+>      FROM public.restaurant_settings rs JOIN public.venues v ON v.id = rs.venue_id ORDER BY v.slug;
+>    SELECT id, name, policy_version, holdout_pct, auto, venue_id, ended_at
+>      FROM public.experiments WHERE ended_at IS NULL OR auto;
+>    SELECT table_name || '.' || column_name AS added FROM information_schema.columns
+>     WHERE table_schema = 'public'
+>       AND ((table_name = 'restaurant_settings' AND column_name IN ('reco_auto_holdout_pct', 'reco_learner'))
+>         OR (table_name = 'experiments' AND column_name = 'auto')
+>         OR (table_name = 'recommendation_decisions' AND column_name = 'language')) ORDER BY 1;
+>    SELECT to_regprocedure('public.reco_keep_measuring()') IS NOT NULL AS keep_measuring,
+>           to_regprocedure('public.run_scheduled_reco_measuring()') IS NOT NULL AS scheduled,
+>           to_regprocedure('public.set_reco_auto_holdout(integer)') IS NOT NULL AS set_holdout,
+>           to_regprocedure('public.reco_profit_check(integer)') IS NOT NULL AS profit_check,
+>           to_regprocedure('public.reco_policy_version_for(uuid)') IS NOT NULL AS policy_for,
+>           to_regprocedure('public.reco_learner_for(uuid)') IS NOT NULL AS learner_for,
+>           to_regprocedure('public.reco_posterior_v4(uuid,text,uuid,text,text,text)') IS NOT NULL AS posterior,
+>           to_regprocedure('public.reco_rank_scored_v3(uuid[],text,text,integer,uuid,text[],integer[])') IS NOT NULL AS ranker_v3,
+>           to_regprocedure('public.reco_rank_scored_v4(uuid[],text,text,integer,uuid,text[],integer[])') IS NOT NULL AS ranker_v4,
+>           to_regclass('public.suggestion_context_stats') IS NOT NULL AS context_stats,
+>           (SELECT prosrc LIKE '%reco_learner_for%' FROM pg_proc
+>             WHERE oid = to_regprocedure('public.reco_rank_scored(uuid[],text,text,integer,uuid,text[],integer[])')) AS ranker_follows_setting;
+>    SELECT has_function_privilege('anon', 'public.reco_profit_check(integer)', 'EXECUTE') AS guests_can_read_profit,
+>           has_function_privilege('anon', 'public.set_reco_auto_holdout(integer)', 'EXECUTE') AS guests_can_set_holdout,
+>           has_function_privilege('anon', 'public.reco_keep_measuring()', 'EXECUTE') AS guests_can_start_measuring,
+>           has_function_privilege('authenticated', 'public.run_scheduled_reco_measuring()', 'EXECUTE') AS users_can_run_schedule,
+>           has_function_privilege('anon', 'public.guest_get_recommendations(uuid,text,uuid[],text,text,integer,text[],text[],uuid[],integer[])', 'EXECUTE') AS guests_get_suggestions,
+>           has_table_privilege('anon', 'public.suggestion_context_stats', 'SELECT') AS guests_can_read_stats;
+>    SELECT tablename, cmd, roles FROM pg_policies WHERE tablename = 'suggestion_context_stats' ORDER BY 1, 2;
+>    SELECT count(*) AS stats FROM public.suggestion_context_stats;
+>    SELECT jobname, schedule, active FROM cron.job WHERE jobname = 'lasoul-reco-measuring';
+>    ```
+>    Expected, in order: two rows, `lasoul` and `veraitalia`, each with
+>    `reco_auto_holdout_pct = 0`, `reco_learner = v3`, and `reco_holdout_pct`
+>    and `recommendations_enabled` the same as in your baseline. The same
+>    experiments as in your baseline (probably none), none with
+>    `auto = true`. Four rows: `experiments.auto`,
+>    `recommendation_decisions.language`,
+>    `restaurant_settings.reco_auto_holdout_pct`,
+>    `restaurant_settings.reco_learner`. Eleven `true`. `false`, `false`,
+>    `false`, `false`, `true`, `false`. One policy: `suggestion_context_stats`,
+>    `SELECT`, `{authenticated}`. `0`. One row: `lasoul-reco-measuring`,
+>    `*/15 * * * *`, `true`. If the last query alone is refused (no leave to
+>    read `cron.job`), say so and go on. If anything else differs, and above
+>    all if an experiment with `auto = true` exists, stop and paste what you
+>    got; do not fix it yourself.
+> 6. Change no file by hand and deploy no function.
+>
+> Do not call `reco_keep_measuring`, `run_scheduled_reco_measuring`,
+> `set_reco_auto_holdout`, `refresh_suggestion_context_stats`,
+> `refresh_menu_intelligence`, `maybe_enable_sampling`, `stop_experiment` or
+> `guest_get_recommendations`: each writes. Do not change `reco_learner`
+> (v4 stays off), `reco_holdout_pct` or any row of `experiments`, and do not
+> touch the `lasoul-reco-measuring` job. Do not grant anything.
+>
+> Files your schema-change tool writes by itself are fine (its own migration
+> record, a regenerated `src/integrations/supabase/types.ts`, `.lovable`
+> notes). Edit no other file by hand. Do not create or change any user
+> account, password or credential, do not place an order, call a waiter or ask
+> for a bill, and do not enable online card payments.
+
+---
+
+### After it applies
+
+Wait until Netlify has published `main` (it has, for the design pass). In the
+admin, **Reports → What the app earned** now shows the margin card: it says
+*too early* until enough tables have been measured, and measuring is **off**
+(0%): "Every table sees suggestions right now; nothing new is being measured."
+To start measuring, an admin presses **Measure with 1 table in 10** there (one
+table in ten then sees no suggestions, which is what makes the comparison
+fair); **Pause measuring** puts it back to 0. Viewing the card never starts
+anything. v4 is switched on per restaurant only by
+`UPDATE public.restaurant_settings SET reco_learner = 'v4' WHERE venue_id = …`,
+which is not recommended before the margin card says suggestions earn something.
+
+---
+
+## Done: WhatsApp messages about reservations (13 November 2026)
+
+Applied by Lovable on 13 November 2026 (the runner pinned to 277cd3f): the
+migration, then `reservation-messages` deployed; its `GET` answers
+`{"configured":false,"templates":14}` until the four WhatsApp secrets are set.
+It could be sent before or after the secrets (docs/whatsapp-messages.md): the
+function reads them whenever it runs, and until they are set nothing is sent
+and nothing fails. What was sent:
 
 - **The migration** (`20261114090000_reservation_messages.sql`): each
   restaurant's choices on `restaurant_settings` (send guests a WhatsApp
