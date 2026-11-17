@@ -127,3 +127,57 @@ contract; and a test of the integration in the sandbox.
 > 8. **Apple Pay i Google Pay:** mogu li se koristiti sa Monri Components, bez ulaska u PCI DSS opseg? Ako mogu, šta vam treba od nas (verifikacija domena lasoul.net i veraitalia.net za Apple Pay, zahtjev za Google Pay) i kako ih testiramo?
 >
 > Hvala unaprijed,
+
+---
+
+## Na bosanskom: šta tražimo od Monrija i kako će raditi u našem sistemu
+
+### 1. Šta tačno tražimo od Monrija
+
+**Račun i pristup**
+
+1. **Online račun (e-commerce / card-not-present, WebPay)** sa vlastitim MID-om, za svaki restoran (La Soul, lasoul.net; Vera Italia, veraitalia.net) ili jedan ugovor za obje domene, kako Monri preferira. POS terminal ne vrijedi za online plaćanje.
+2. **Test (sandbox) pristup**: `merchant key` i `authenticity token` za test, a poslije odobrenja iste podatke za produkciju.
+3. Potvrdu da su na našem ugovoru **Monri Components** (polje za karticu u našoj stranici) i **Payments API** (`/v2/payment/new`), i koji **PCI obrazac** popunjavamo (očekujemo SAQ A, jer podaci kartice nikad ne dolaze na naše servere).
+4. **Registraciju naše callback adrese**: `https://jgxnvrrphxnmzongtmzs.supabase.co/functions/v1/monri-webhook`, i adrese s kojih Monri šalje, ako ih objavljuje.
+5. **Valuta BAM**, iznosi u feninzima (×100), **3-D Secure 2** uključen.
+6. **Test kartice**: uspjeh, odbijena kartica, neuspjeh 3-D Secure, i način da u testu uradimo **povrat**.
+7. Da li Monri **ograničava domene** na kojima radi Components i da li se odobrenje za produkciju daje po domeni (imamo dvije).
+
+**Novac**
+
+8. **Naknade** (po brendu kartice, po transakciji, mjesečno, minimum, povrati), **rok isplate** na naš račun, te **povrat i chargeback** postupak.
+9. **Dnevni izvještaj o isplatama** (datoteka ili API): poredimo ga sa našim Daily reportom (`paid_online`).
+10. Potvrdu da naplata ide **odmah (purchase)**, kako je napravljeno, i kako se radi povrat dijela iznosa.
+
+**Web stranica**
+
+11. **Šta Monri provjerava na stranici** prije produkcije (uslovi korištenja, politika povrata i otkazivanja, privatnost, podaci o firmi, kontakt, cijene u KM, logotipi kartica i 3-D Secure) i **koje kartice** pokrivaju (Visa, Mastercard, Maestro, domaće).
+
+**Telefon kao novčanik**
+
+12. **Apple Pay i Google Pay**: mogu li raditi sa Monri Components, bez ulaska u PCI DSS opseg? Ako mogu: šta treba od nas (za Apple Pay verifikacija domena lasoul.net i veraitalia.net i ko drži Apple merchant ID; za Google Pay zahtjev prema Monriju i objava kod Google-a) i kako ih testiramo. Po Monrijevom vodiču za Google Pay: zahtjev ide na support@monri.com; preko njihove forme dobije se Google Pay kartica bez razvoja s naše strane; preko API-ja ulazimo u PCI DSS opseg i treba nam certifikat.
+
+**Šta će Monri tražiti od nas** (njihova lista ima prednost; tražiti je): izvod iz sudskog registra i porezne brojeve firme, lične podatke vlasnika, račun za isplatu, adrese web stranica i šta se prodaje, očekivani mjesečni promet i prosječan račun, ugovor, i test integracije u sandboxu.
+
+### 2. Kako će raditi u sistemu (kako je već napravljeno)
+
+**Gost, na svom telefonu za stolom.** Skenira QR kod, naruči, na plaćanju bira **Plati odmah karticom** (uz izbor napojnice, koja postoji samo za karticu) ili **Ili platite za stolom** (gotovina ili terminal). Kod kartice se narudžba otvara kao `awaiting_payment`: **kuhinja je još ne vidi**, ništa se ne štampa. Polje za karticu i 3-D Secure su Monrijevi; podaci kartice ne dolaze na naše servere. Gost vidi **Plaćanje primljeno** tek kad naša baza to potvrdi, a ne kad mu to javi preglednik. Ako potvrda kasni više od 25 sekundi, piše "još potvrđujemo, ne plaćajte ponovo".
+
+**Potvrda od Monrija.** Monri šalje callback na našu funkciju. Ona provjeri potpis, iznos i valutu. Samo kad je sve tačno, narudžba postaje **plaćena** i ide u kuhinju **tačno jednom** (tiket i štampa). Dupli callback, pogrešan iznos ili pogrešna valuta ne puštaju narudžbu u kuhinju i vide se u "needs attention".
+
+**Konobar.** Ne upisuje ništa za plaćanje karticom na telefonu: na stolu vidi oznaku **Paid online**. Ako pokuša upisati gotovinu za takvu narudžbu, aplikacija kaže **Already paid online — don't take money for this order**. Narudžbe koje gost plaća za stolom i dalje vidi kao **Owes · cash** ili **Owes · bring terminal**, pa ih konobar upisuje kao **Paid cash** ili **Paid on terminal**, kao danas. Ako kartica bude odbijena, narudžba ostaje van kuhinje, a gost može ponoviti ili preći na plaćanje za stolom; ako je gost ipak platio u prostoriji, konobar upiše plaćanje na stolu.
+
+**Račun stola.** U račun ulaze samo narudžbe koje su u kuhinji i nisu već plaćene; otkazane, nedovršene i neuspjele kartične narudžbe ne ulaze.
+
+**Menadžer.** U Daily reportu su **kartica online**, **gotovina** i **POS terminal** odvojeni, jer se isplaćuju iz tri različita mjesta. Iznos "plaćeno online" mora biti jednak Monrijevom dnevnom izvještaju. Nule moraju biti: "stuck payments" (plaćanje počelo, nikad završeno) i "callback problems" (Monri poslao drugačiji iznos ili valutu). **Povrat** na karticu se prvo radi u Monrijevom panelu, a zatim ga menadžer upiše u aplikaciji; aplikacija ne šalje povrat Monriju sama.
+
+**Fiskalni račun.** Online plaćanje ne briše obavezu fiskalnog računa: i dalje ga izdaje restoranov certificirani fiskalni uređaj (vidi `docs/fiscalization-bih.md`). Aplikacija kasi pokazuje sto, stavke, iznos, napojnicu i način plaćanja.
+
+### 3. Šta se mora odlučiti
+
+1. Jedna firma ili dvije (jedan ugovor ili dva): odlučuje o ugovoru i računima.
+2. **Plaća li gost svaku rundu pri naručivanju (kako je napravljeno) ili cijeli račun na kraju s telefona.** Cijeli račun na kraju **nije napravljen**: danas na kraju gost traži račun i konobar naplaćuje. To bi trebalo graditi posebno.
+3. Apple Pay / Google Pay: zavisi od odgovora Monrija (tačka 12).
+4. Ko na kasi kuca fiskalni račun za online plaćanja i kako se to označava.
+5. Online plaćanje ostaje **isključeno** dok svih 16 sandbox slučajeva iz `docs/monri-go-live.md` ne prođe.
