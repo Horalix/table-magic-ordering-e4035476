@@ -13,6 +13,22 @@
 /manifest-waiter-veraitalia.webmanifest
   Content-Type: application/manifest+json
 
+# Vera Italia's own app, and the Manager and TV apps (also octet-stream before).
+/manifest-veraitalia.webmanifest
+  Content-Type: application/manifest+json
+
+/manifest-manager.webmanifest
+  Content-Type: application/manifest+json
+
+/manifest-manager-veraitalia.webmanifest
+  Content-Type: application/manifest+json
+
+/manifest-tv-lasoul.webmanifest
+  Content-Type: application/manifest+json
+
+/manifest-tv-veraitalia.webmanifest
+  Content-Type: application/manifest+json
+
 # How long a browser keeps a file. Netlify's default is "max-age=0,
 # must-revalidate": ask again every time. That stays for everything that
 # names other files or must change the moment a deploy does — index.html and

@@ -214,10 +214,13 @@ describe('Vera Italia on its own site (veraitalia.net)', () => {
     expect(own).toEqual([
       ['/veraitalia', '/', '301!'],
       ['/veraitalia/*', '/', '301!'],
+      ['/menu', '/menu/veraitalia/', '301!'],
       ['/menu/lasoul', 'https://lasoul.net/menu/lasoul/', '301!'],
       ['/menu/lasoul/*', 'https://lasoul.net/menu/lasoul/:splat', '301!'],
+      ['/bs/menu', '/bs/menu/veraitalia/', '301!'],
       ['/bs/menu/lasoul', 'https://lasoul.net/bs/menu/lasoul/', '301!'],
       ['/bs/menu/lasoul/*', 'https://lasoul.net/bs/menu/lasoul/:splat', '301!'],
+      ['/ar/menu', '/ar/menu/veraitalia/', '301!'],
       ['/ar/menu/lasoul', 'https://lasoul.net/ar/menu/lasoul/', '301!'],
       ['/ar/menu/lasoul/*', 'https://lasoul.net/ar/menu/lasoul/:splat', '301!'],
       // Last: every rule above must win over the app's addresses and "not found".

@@ -10,7 +10,7 @@ import VERA_MENU from '../../../scripts/vera-italia/menu.json';
 import { VENUES } from '../venues';
 import { assignDishSlugs } from './menu-data';
 import { LOCALES } from './structured-data';
-import { km, veraFaq, veraLlms, veraPages, veraPriceRange, veraSeoMenu, veraSiteGraph } from './vera-seo';
+import { km, veraFaq, veraLlms, veraMenuNode, veraPages, veraPriceRange, veraSeoMenu, veraSiteGraph } from './vera-seo';
 import { dishMeta } from '../../components/vera/copy';
 
 const menu = veraSeoMenu();
@@ -82,11 +82,35 @@ describe('Vera Italia’s questions and answers', () => {
 
   it('give its street and phone as the owner gave them (16 November 2026), and no hours before it opens', () => {
     const faq = veraFaq(menu, 'en');
-    expect(faq.find(({ q }) => q === 'Where is Vera Italia?')?.a).toBe('Butmirska cesta 16B, Sarajevo, Bosnia and Herzegovina.');
+    expect(faq.find(({ q }) => q === 'Where is Vera Italia?')?.a).toBe('Butmirska cesta 16B, 71210 Ilidža, Sarajevo, Bosnia and Herzegovina.');
     expect(faq.map(({ q }) => q)).not.toContain('When is Vera Italia open?');
     const restaurant = typed(veraSiteGraph(menu, 'en'), 'Restaurant');
-    expect(restaurant).toMatchObject({ telephone: '+38733877779', address: { streetAddress: 'Butmirska cesta 16B', addressLocality: 'Sarajevo', addressCountry: 'BA' } });
+    expect(restaurant).toMatchObject({ telephone: '+38733877779', address: { streetAddress: 'Butmirska cesta 16B', postalCode: '71210', addressLocality: 'Sarajevo', addressCountry: 'BA' } });
     expect(restaurant).not.toHaveProperty('openingHoursSpecification');
+  });
+
+  it('give what the owner added on 17 November 2026: the pin, cards and cash, free Wi-Fi, a step-free entrance, a toilet', () => {
+    const restaurant = typed(veraSiteGraph(menu, 'en'), 'Restaurant');
+    expect(restaurant).toMatchObject({
+      geo: { '@type': 'GeoCoordinates', latitude: 43.827664, longitude: 18.3102937 },
+      paymentAccepted: 'Cash, Credit Card, Debit Card',
+    });
+    const features = (restaurant.amenityFeature as { name: string; value: boolean }[]).filter((f) => f.value).map((f) => f.name);
+    expect(features).toEqual(expect.arrayContaining(['Free Wi-Fi', 'Wheelchair-accessible entrance', 'Restroom', 'Takeaway']));
+    const en = Object.fromEntries(veraFaq(menu, 'en').map(({ q, a }) => [q, a]));
+    expect(en['Can I pay by card at Vera Italia?']).toBe('Yes: credit cards and debit cards, and cash.');
+    expect(en['Is the entrance at Vera Italia step-free?']).toBe('Yes, the entrance has no step, so it is wheelchair-accessible.');
+    expect(en['Is there Wi-Fi at Vera Italia?']).toBe('Yes, there is free Wi-Fi for guests.');
+    expect(veraFaq(menu, 'bs').map(({ q }) => q)).toEqual(expect.arrayContaining(['Mogu li u Vera Italia platiti karticom?', 'Ima li Vera Italia ulaz bez stepenica?']));
+    expect(veraFaq(menu, 'ar').map(({ q }) => q)).toEqual(expect.arrayContaining(['هل يمكنني الدفع بالبطاقة في Vera Italia؟', 'هل مدخل Vera Italia بلا درج؟']));
+  });
+
+  it('keep one restaurant entity with one address, and give a course page its own menu id', () => {
+    const urls = (['en', 'bs', 'ar'] as const).map((l) => typed(veraSiteGraph(menu, l), 'Restaurant').url);
+    expect(new Set(urls).size).toBe(1);
+    const course = menu.categories[0];
+    expect(veraMenuNode(menu, course, 'en')['@id']).not.toBe(veraMenuNode(menu, undefined, 'en')['@id']);
+    expect(veraMenuNode(menu, course, 'en')['@id']).toMatch(new RegExp(`/menu/veraitalia/${course.slug}/#menu$`));
   });
 });
 
@@ -101,7 +125,7 @@ describe('Vera Italia’s facts, once given', () => {
       hours: [{ days: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'], opens: '12:00', closes: '23:00' }],
     });
     const faq = veraFaq(menu, 'en');
-    expect(faq.find(({ q }) => q === 'Where is Vera Italia?')?.a).toBe('Ulica 1, Sarajevo, Bosnia and Herzegovina.');
+    expect(faq.find(({ q }) => q === 'Where is Vera Italia?')?.a).toBe('Ulica 1, 71210 Ilidža, Sarajevo, Bosnia and Herzegovina.');
     expect(faq.find(({ q }) => q === 'When is Vera Italia open?')?.a).toBe('Every day, 12:00–23:00.');
     expect(veraFaq(menu, 'bs').find(({ q }) => q === 'Kada radi Vera Italia?')?.a).toBe('Svaki dan, 12:00–23:00.');
     const restaurant = typed(veraSiteGraph(menu, 'en'), 'Restaurant');
@@ -227,8 +251,9 @@ describe('Vera Italia’s pages', () => {
   it('say "Italian restaurant in Sarajevo" in their titles, and no longer "Opening soon"', () => {
     const site = pages.find((p) => p.path === '/veraitalia/')!;
     expect(site.head.title).toBe('Vera Italia — Italian Restaurant & Pizza in Sarajevo');
-    expect(site.body).toContain('<p>Italian restaurant · Sarajevo</p>');
-    expect(site.body).toContain('Butmirska cesta 16B, Sarajevo, Bosnia and Herzegovina');
+    expect(site.body).toContain('<p>Italian restaurant · Ilidža, Sarajevo</p>');
+    expect(site.body).toContain('Butmirska cesta 16B, 71210 Ilidža, Sarajevo, Bosnia and Herzegovina');
+    expect(site.body).toContain('<p>Our opening hours will be here very soon.</p>');
     expect(site.body).not.toContain('Opening soon');
     expect(pages.find((p) => p.path === '/menu/veraitalia/')?.head.title).toBe('Menu — Vera Italia, Italian Restaurant in Sarajevo');
     expect(pages.find((p) => p.path === '/menu/veraitalia/pizza-napoletana/')?.head.title).toBe('Pizza Napoletana in Sarajevo — Vera Italia');
@@ -239,8 +264,11 @@ describe('Vera Italia’s pages', () => {
     expect(short).toMatch(/^# Vera Italia\n/);
     expect(short.includes('- Status: opening soon')).toBe(!VENUES.veraitalia.live);
     expect(short).toContain('- What: an Italian restaurant in Sarajevo, Bosnia and Herzegovina — ');
-    expect(short).toContain('- Address: Butmirska cesta 16B, Sarajevo, Bosnia and Herzegovina');
+    expect(short).toContain('- Address: Butmirska cesta 16B, 71210 Ilidža, Sarajevo, Bosnia and Herzegovina');
     expect(short).toContain('- Hours: to be announced');
+    expect(short).toContain('- Coordinates: 43.827664, 18.3102937');
+    expect(short).toContain('- Payment: cash, credit cards, debit cards');
+    expect(short).toContain('- Good to know: takeaway; no delivery; free Wi-Fi; step-free (wheelchair-accessible) entrance; toilet for guests; parking; a terrace; children welcome');
     expect(short).toContain('### What sets Vera Italia apart from other Italian restaurants in Sarajevo?');
     for (const r of rows) expect(full).toContain(`[${r.name}](`);
     expect(full).toContain('Truffle Pizza](https://');

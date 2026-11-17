@@ -111,7 +111,7 @@ export const COURSES: Record<string, { picture: string; cover: string; line: Cop
 export const SITE = {
   seoTitle: {
     en: 'Vera Italia — Italian Restaurant & Pizza in Sarajevo',
-    bs: 'Vera Italia — italijanski restoran i pizza u Sarajevu',
+    bs: 'Vera Italia — italijanski restoran i picerija u Sarajevu',
     ar: 'Vera Italia — مطعم إيطالي وبيتزا في سراييفو',
   },
   seoDescription: {
@@ -120,7 +120,7 @@ export const SITE = {
     ar: 'Vera Italia مطعم إيطالي في سراييفو: بيتزا نابوليتانية من الفرن ذي القبة، باستا وريزوتو بصلصات حريرية، بوراتا وكمأة سوداء.',
   },
   /** Under the name on the photograph. */
-  place: { en: 'Italian restaurant · Sarajevo', bs: 'Italijanski restoran · Sarajevo', ar: 'مطعم إيطالي · سراييفو' },
+  place: { en: 'Italian restaurant · Ilidža, Sarajevo', bs: 'Italijanski restoran · Ilidža, Sarajevo', ar: 'مطعم إيطالي · سراييفو' },
   heroLine: { en: 'Pizza napoletana · Pasta · Risotto', bs: 'Pizza napoletana · Pasta · Risotto', ar: 'بيتزا نابوليتانية · باستا · ريزوتو' },
   viewMenu: { en: 'View the menu', bs: 'Pogledajte meni', ar: 'عرض القائمة' },
   openingSoon: { en: 'Opening soon', bs: 'Uskoro otvaramo', ar: 'نفتتح قريبًا' },
@@ -181,4 +181,13 @@ export const SITE = {
     bs: 'Tačna adresa i radno vrijeme bit će ovdje vrlo brzo.',
     ar: 'سنضيف عنواننا الكامل ومواعيد العمل هنا قريبًا جدًا.',
   },
+  /** Under the address while there are no hours yet: the same promise, for the hours alone. */
+  hoursSoon: {
+    en: 'Our opening hours will be here very soon.',
+    bs: 'Radno vrijeme bit će ovdje vrlo brzo.',
+    ar: 'سنضيف مواعيد العمل هنا قريبًا جدًا.',
+  },
+  /** The questions guests ask before they come, shown on the page (the same answers as its FAQPage data). */
+  faqCaps: { en: 'Domande', bs: 'Domande', ar: 'أسئلة' },
+  faqTitle: { en: 'Before you come', bs: 'Prije nego što dođete', ar: 'قبل زيارتكم' },
 } satisfies Record<string, Copy>;

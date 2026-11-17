@@ -60,11 +60,56 @@ const AWAY: Record<Locale, { q: (v: string) => string; a: (takeaway: boolean, de
   },
 };
 
+/** Where the owner said the Wi-Fi is free: the same question, a fuller answer. */
+const FREE_WIFI: Record<Locale, string> = {
+  en: 'Yes, there is free Wi-Fi for guests.',
+  bs: 'Da, za goste ima besplatan Wi-Fi.',
+  ar: 'نعم، تتوفر خدمة واي فاي مجانية للضيوف.',
+};
+
+/** The entrance, where the owner said it has no step. */
+const STEP_FREE: Copy = {
+  en: (v) => ({ q: `Is the entrance at ${v} step-free?`, a: 'Yes, the entrance has no step, so it is wheelchair-accessible.' }),
+  bs: (v) => ({ q: `Ima li ${v} ulaz bez stepenica?`, a: 'Da, ulaz je bez stepenica i pristupačan je za invalidska kolica.' }),
+  ar: (v) => ({ q: `هل مدخل ${v} بلا درج؟`, a: 'نعم، المدخل بلا درج، ويمكن الدخول إليه بالكرسي المتحرك.' }),
+};
+
+/** "Can I pay by card?", answered from `paymentAccepted` (schema.org's words: Cash, Credit Card, Debit Card). */
+const PAY: Record<Locale, { q: (v: string) => string; a: (cash: boolean, credit: boolean, debit: boolean) => string }> = {
+  en: {
+    q: (v) => `Can I pay by card at ${v}?`,
+    a: (cash, credit, debit) => {
+      const cards = [credit && 'credit cards', debit && 'debit cards'].filter(Boolean).join(' and ');
+      return cards ? `Yes: ${cards}${cash ? ', and cash' : ''}.` : 'No, cash only.';
+    },
+  },
+  bs: {
+    q: (v) => `Mogu li u ${LOCATIVE[v] ?? v} platiti karticom?`,
+    a: (cash, credit, debit) => {
+      const cards = [credit && 'kreditnim', debit && 'debitnim'].filter(Boolean).join(' i ');
+      return cards ? `Da: ${cards} karticama${cash ? ', a i gotovinom' : ''}.` : 'Ne, samo gotovinom.';
+    },
+  },
+  ar: {
+    q: (v) => `هل يمكنني الدفع بالبطاقة في ${v}؟`,
+    a: (cash, credit, debit) => {
+      const cards = [credit && 'بطاقات الائتمان', debit && 'بطاقات الخصم'].filter(Boolean).join(' و');
+      return cards ? `نعم: ${cards}${cash ? '، والدفع نقدًا أيضًا' : ''}.` : 'لا، الدفع نقدًا فقط.';
+    },
+  },
+};
+
 /** The questions the owner's confirmed amenities answer, in one language; none when not confirmed. */
 export function amenityFaq(venue: Venue, locale: Locale): AmenityAnswer[] {
   const a = venue.amenities;
   if (!a) return [];
-  const out = (['parking', 'terrace', 'wifi', 'childFriendly'] as const).filter((k) => a[k]).map((k) => YES[k][locale](venue.name));
+  const out = (['parking', 'terrace', 'wifi', 'childFriendly'] as const).filter((k) => a[k]).map((k) => {
+    const answer = YES[k][locale](venue.name);
+    return k === 'wifi' && a.freeWifi ? { ...answer, a: FREE_WIFI[locale] } : answer;
+  });
   out.push({ q: AWAY[locale].q(venue.name), a: AWAY[locale].a(a.takeaway, a.delivery) });
+  if (a.wheelchairEntrance) out.push(STEP_FREE[locale](venue.name));
+  const pay = venue.paymentAccepted;
+  if (pay) out.push({ q: PAY[locale].q(venue.name), a: PAY[locale].a(/\bCash\b/.test(pay), /Credit Card/.test(pay), /Debit Card/.test(pay)) });
   return out;
 }
