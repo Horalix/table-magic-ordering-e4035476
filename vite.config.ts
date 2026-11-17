@@ -67,7 +67,8 @@ export default defineConfig(({ mode }) => ({
       manifest: manifestFor(mode),
       workbox: {
         globPatterns: ["**/*.{js,css,html,woff2}"],
-        globIgnores: ["**/menu/**"], // huge optimized image set — runtime-cache instead
+        // The menu's huge optimized image set is runtime-cached instead; the admin's first page is left to the network, as the admin is (navigateFallbackDenylist).
+        globIgnores: ["**/menu/**", "**/manager-shell.html"],
         maximumFileSizeToCacheInBytes: 3 * 1024 * 1024,
         cleanupOutdatedCaches: true,
         // Takes over from a version too old to take this one (public/sw-rescue.js);
