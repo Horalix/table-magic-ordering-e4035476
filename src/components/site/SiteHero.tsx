@@ -1,12 +1,15 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ArrowRight, MapPin } from 'lucide-react';
+import { ArrowRight, CalendarClock, MapPin } from 'lucide-react';
 import { easeEnter } from '@/lib/motion';
 import { useSiteT } from '@/lib/site-i18n';
 import { orderingCopy } from '@/lib/seo/ordering';
+import { RESERVE_PATH } from '@/lib/seo/reservations';
+import { rcopy } from '@/lib/reservation-copy';
 import { menuPath, type Venue } from '@/lib/venues';
 import { siteImage, siteSrc, siteSrcSet } from './site-image-data';
+import { dropPoster } from '@/lib/seo/poster';
 
 /**
  * Art direction, in three layouts:
@@ -27,9 +30,15 @@ const enter = (delay: number) => ({
   transition: { duration: 0.9, ease: easeEnter, delay },
 });
 
-/** `ordering`: whether the table takes orders now (src/lib/seo/ordering.ts). */
-const SiteHero = ({ venue, ordering }: { venue: Venue; ordering: boolean }) => {
-  const { st } = useSiteT();
+/**
+ * `ordering`: whether the table takes orders now (src/lib/seo/ordering.ts).
+ * `reservations`: whether a table can be asked for online now; then the second
+ * button is "Reserve a table" (src/lib/seo/reservations.ts), and "Find us"
+ * stays one tap away in the header and at the foot of the page.
+ */
+const SiteHero = ({ venue, ordering, reservations = false }: { venue: Venue; ordering: boolean; reservations?: boolean }) => {
+  const { st, locale } = useSiteT();
+  const second = 'inline-flex h-[52px] items-center gap-2 rounded-full border border-ls-forest/20 bg-ls-cream/60 px-4 text-[14.5px] font-semibold sm:px-5 sm:text-[15px] text-ls-forest backdrop-blur-sm transition-colors hover:border-ls-forest/40 hover:bg-ls-cream focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ls-sage-deep focus-visible:ring-offset-2 focus-visible:ring-offset-ls-cream';
   const wide = siteImage('hero-wide');
   const tall = siteImage('hero-tall');
   const [loaded, setLoaded] = useState(false);
@@ -52,7 +61,8 @@ const SiteHero = ({ venue, ordering }: { venue: Venue; ordering: boolean }) => {
             loading="eager"
             decoding="async"
             {...({ fetchpriority: 'high' } as Record<string, string>)}
-            onLoad={() => setLoaded(true)}
+            // The photograph the page's HTML came with (src/lib/seo/poster.ts) has done its work.
+            onLoad={() => { setLoaded(true); dropPoster(); }}
             className="absolute inset-0 h-full w-full object-cover object-[50%_0%] rtl:-scale-x-100 sm:object-[88%_50%] lg:object-[100%_50%]"
             style={loaded ? undefined : { backgroundColor: '#EFE9DD' }}
           />
@@ -92,13 +102,17 @@ const SiteHero = ({ venue, ordering }: { venue: Venue; ordering: boolean }) => {
               {st('hero_cta')}
               <ArrowRight className="h-4 w-4 transition-transform duration-300 group-hover:translate-x-0.5 rtl:-scale-x-100 rtl:group-hover:-translate-x-0.5" aria-hidden />
             </Link>
-            <a
-              href="#visit"
-              className="inline-flex h-[52px] items-center gap-2 rounded-full border border-ls-forest/20 bg-ls-cream/60 px-4 text-[14.5px] font-semibold sm:px-5 sm:text-[15px] text-ls-forest backdrop-blur-sm transition-colors hover:border-ls-forest/40 hover:bg-ls-cream focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ls-sage-deep focus-visible:ring-offset-2 focus-visible:ring-offset-ls-cream"
-            >
-              <MapPin className="h-4 w-4 text-ls-sage-deep" aria-hidden />
-              {st('hero_find')}
-            </a>
+            {reservations ? (
+              <Link to={RESERVE_PATH} data-testid="reserve-link" className={second}>
+                <CalendarClock className="h-4 w-4 text-ls-sage-deep" aria-hidden />
+                {rcopy('title', locale)}
+              </Link>
+            ) : (
+              <a href="#visit" className={second}>
+                <MapPin className="h-4 w-4 text-ls-sage-deep" aria-hidden />
+                {st('hero_find')}
+              </a>
+            )}
           </motion.div>
           <motion.ul {...enter(0.36)} className="mt-10 hidden items-center gap-x-6 gap-y-2 text-[13px] font-medium text-ls-forest/75 lg:flex">
             {(['fact_halal', 'fact_alcohol', 'fact_fresh'] as const).map((k) => (

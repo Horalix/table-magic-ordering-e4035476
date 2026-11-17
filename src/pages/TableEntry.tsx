@@ -3,9 +3,10 @@ import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { duration, easeEnter } from '@/lib/motion';
 import { useCartStore } from '@/lib/cart-store';
-import { Loader2, AlertCircle, Users } from 'lucide-react';
+import { AlertCircle, ScanLine, Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import GuestNameModal from '@/components/guest/GuestNameModal';
+import BrandEmblem from '@/components/BrandEmblem';
 import { useT } from '@/lib/i18n';
 import { menuPath, menuHome } from '@/lib/venues';
 import { guestVenue, rememberGuestVenue } from '@/lib/current-venue';
@@ -223,17 +224,25 @@ const TableEntry = () => {
 
   if (phase === 'loading') {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-center" role="status">
-          <Loader2 className="w-8 h-8 animate-spin text-primary mx-auto" aria-hidden />
-          <p className="text-muted-foreground font-sans mt-4 text-sm">{t('setting_up_table')}</p>
+      // The restaurant's mark where the welcome screen will put it, breathing,
+      // and a quiet line under it: no spinner, and nothing jumps when the
+      // name question takes its place.
+      <div className="min-h-screen bg-background flex flex-col items-center justify-center px-6 pb-[12vh]">
+        <div className="w-full max-w-sm text-center" role="status">
+          <div className="mx-auto mb-7 w-20 h-20 rounded-[1.4rem] bg-card grid place-items-center shadow-[0_1px_2px_rgba(0,0,0,0.05),0_18px_40px_-18px_rgba(0,0,0,0.3)] ring-1 ring-border/50 animate-pulse motion-reduce:animate-none">
+            <BrandEmblem className="w-14 h-14" />
+          </div>
+          <p className="text-muted-foreground font-sans text-sm">{t('setting_up_table')}</p>
+          <div className="mx-auto mt-5 h-1 w-28 overflow-hidden rounded-full bg-muted" aria-hidden>
+            <div className="h-full w-1/3 rounded-full bg-primary/60 animate-[progress-indeterminate_1.2s_ease-in-out_infinite] motion-reduce:animate-none" />
+          </div>
         </div>
       </div>
     );
   }
 
   if (phase === 'name') {
-    return <GuestNameModal onSubmit={handleNameSubmit} />;
+    return <GuestNameModal onSubmit={handleNameSubmit} table={tableNumber} />;
   }
 
   if (phase === 'waiting') {
@@ -253,7 +262,9 @@ const TableEntry = () => {
           </div>
           <h2 className="font-serif text-2xl font-bold text-foreground">{t('waiting_to_join')}</h2>
           <p className="text-muted-foreground font-sans text-sm mt-2 leading-relaxed">{t('waiting_to_join_sub')}</p>
-          <Loader2 className="w-5 h-5 animate-spin text-primary/60 mx-auto mt-6" aria-hidden />
+          <div className="mx-auto mt-6 h-1 w-28 overflow-hidden rounded-full bg-muted" aria-hidden>
+            <div className="h-full w-1/3 rounded-full bg-primary/60 animate-[progress-indeterminate_1.2s_ease-in-out_infinite] motion-reduce:animate-none" />
+          </div>
           <button
             onClick={() => navigate(menuPath())}
             className="mt-8 text-xs text-muted-foreground underline underline-offset-4 font-sans"
@@ -272,15 +283,15 @@ const TableEntry = () => {
           <div className="w-16 h-16 rounded-full bg-destructive/10 flex items-center justify-center mx-auto mb-4">
             <AlertCircle className="w-8 h-8 text-destructive" />
           </div>
-          <h2 className="font-serif text-xl font-bold text-foreground">{t('join_declined')}</h2>
-          <div className="mt-6 flex flex-col gap-2">
+          <h1 className="font-serif text-2xl font-bold text-foreground">{t('join_declined')}</h1>
+          <div className="mt-7 flex flex-col gap-2.5">
             <Button
               onClick={() => { if (sessionId) { setPhase('waiting'); createJoinRequest(sessionId, nameRef.current); } }}
-              className="rounded-full"
+              className="w-full h-12 rounded-2xl font-sans font-semibold"
             >
               {t('try_again')}
             </Button>
-            <Button onClick={() => navigate(menuPath())} variant="outline" className="rounded-full">
+            <Button onClick={() => navigate(menuPath())} variant="outline" className="w-full h-12 rounded-2xl font-sans font-semibold bg-transparent">
               {t('browse_menu')}
             </Button>
           </div>
@@ -289,15 +300,17 @@ const TableEntry = () => {
     );
   }
 
-  // error
+  // error: a short title, the reason under it, and the one thing the guest can do now.
+  // Calm, not an alarm: nothing is wrong with the guest, and the waiter can help.
   return (
     <div className="min-h-screen bg-background flex items-center justify-center px-6">
-      <div className="text-center max-w-sm">
-        <div className="w-16 h-16 rounded-full bg-destructive/10 flex items-center justify-center mx-auto mb-4">
-          <AlertCircle className="w-8 h-8 text-destructive" />
+      <div className="text-center max-w-sm w-full" role="alert">
+        <div className="w-16 h-16 rounded-full bg-muted grid place-items-center mx-auto mb-5">
+          <ScanLine className="w-7 h-7 text-foreground/70" aria-hidden />
         </div>
-        <h2 className="font-serif text-xl font-bold text-foreground">{error}</h2>
-        <Button onClick={() => navigate(menuPath())} variant="outline" className="mt-6 rounded-full">
+        <h1 className="font-serif text-2xl font-bold text-foreground">{t('table_open_failed_title')}</h1>
+        <p className="mt-2 text-[15px] font-sans text-muted-foreground leading-relaxed">{error}</p>
+        <Button onClick={() => navigate(menuPath())} className="mt-7 w-full h-12 rounded-2xl font-sans font-semibold">
           {t('browse_menu')}
         </Button>
       </div>

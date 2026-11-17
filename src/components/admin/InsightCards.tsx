@@ -1,8 +1,8 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
-import { AlertTriangle, ArrowRight, Check, Lightbulb, Pencil, Pin, Plus, RotateCcw, Trash2, Undo2 } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { AlertTriangle, ArrowRight, Check, CheckCircle2, Lightbulb, Pencil, Pin, Plus, RotateCcw, Trash2, Undo2 } from 'lucide-react';
+import { AdminCard, AdminCardContent, AdminCardHeader, EmptyState } from '@/components/admin/AdminCard';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
@@ -61,7 +61,7 @@ const InsightCard = ({ insight, onAct, onUndo, busy, done }: {
   /** What was done from this card, this visit. */
   done?: ActionDone;
 }) => (
-  <li className={`rounded-2xl border bg-card p-4 transition-colors ${done ? 'border-primary/40 bg-primary/[0.04]' : 'border-border'}`}>
+  <li className={`rounded-xl border p-4 sm:p-5 transition-colors ${done ? 'border-primary/40 bg-primary/[0.04]' : 'border-border/70 bg-card hover:border-border'}`}>
     <div className="flex flex-wrap items-center gap-2 mb-1.5">
       <span className={`text-[11px] font-sans font-semibold px-2 py-0.5 rounded-full ${KIND_TONE[insight.kind] ?? 'bg-muted text-muted-foreground'}`}>
         {KIND_LABEL[insight.kind] ?? insight.kind}
@@ -184,24 +184,21 @@ const InsightCards = ({
   const shown = insights ? (limit ? insights.slice(0, limit) : insights) : null;
 
   return (
-    <Card id={id} className="rounded-2xl border-border">
-      <CardHeader className="pb-3">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <CardTitle className="font-serif text-lg flex items-center gap-2">
-            <Lightbulb className="w-5 h-5 text-primary shrink-0" /> {title}
-          </CardTitle>
-          {showAllLink && insights && insights.length > (limit ?? 0) && (
-            <Button asChild variant="ghost" size="sm" className="gap-1 text-xs">
-              <Link to="/admin/menu-intelligence#insights">All {insights.length} <ArrowRight className="w-3.5 h-3.5" /></Link>
-            </Button>
-          )}
-        </div>
-        <p className="text-xs font-sans text-muted-foreground">
+    <AdminCard id={id}>
+      <AdminCardHeader
+        icon={Lightbulb}
+        title={title}
+        description={<>
           Only what passed its test and is worth {INSIGHT_MIN_KM_PER_WEEK} KM a week or more, in margin after
           ingredient cost. Last {days} complete trading days.
-        </p>
-      </CardHeader>
-      <CardContent>
+        </>}
+        action={showAllLink && insights && insights.length > (limit ?? 0) && (
+          <Button asChild variant="ghost" size="sm" className="gap-1 text-xs">
+            <Link to="/admin/menu-intelligence#insights">All {insights.length} <ArrowRight className="w-3.5 h-3.5" /></Link>
+          </Button>
+        )}
+      />
+      <AdminCardContent>
         {error ? (
           <div className="flex items-start gap-2 text-sm font-sans">
             <AlertTriangle className="w-4 h-4 text-destructive shrink-0 mt-0.5" />
@@ -209,13 +206,15 @@ const InsightCards = ({
           </div>
         ) : !shown ? (
           <div className="space-y-3">
-            {Array.from({ length: limit ?? 3 }).map((_, i) => <Skeleton key={i} className="h-28 rounded-2xl" />)}
+            {Array.from({ length: limit ?? 3 }).map((_, i) => <Skeleton key={i} className="h-28 rounded-xl" />)}
           </div>
         ) : shown.length === 0 ? (
-          <p className="text-sm font-sans text-muted-foreground py-4 text-center">
-            Nothing worth your time right now. A card appears here once something clears its test and is
-            worth at least {INSIGHT_MIN_KM_PER_WEEK} KM a week.
-          </p>
+          <EmptyState
+            icon={CheckCircle2}
+            tone="primary"
+            title="Nothing worth your time right now."
+            hint={`A card appears here once something clears its test and is worth at least ${INSIGHT_MIN_KM_PER_WEEK} KM a week.`}
+          />
         ) : (
           <ul className="space-y-3" aria-label={title}>
             {shown.map((i) => (
@@ -233,8 +232,8 @@ const InsightCards = ({
         {trendsFailed && (
           <p className="text-[11px] font-sans text-muted-foreground mt-3">Rising and falling dishes could not be checked this time.</p>
         )}
-      </CardContent>
-    </Card>
+      </AdminCardContent>
+    </AdminCard>
   );
 };
 

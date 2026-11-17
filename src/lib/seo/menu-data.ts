@@ -22,6 +22,8 @@ export interface SeoMenuItem {
   price: number;
   /** Site-relative image path when the dish has a local photo. */
   image: string | null;
+  /** A small square of the same photo (240 px), for a list of dishes: the menu and category pages. */
+  thumb: string | null;
   /** Allergen codes as the menu stores them: gluten, dairy, eggs… */
   allergens: string[];
   dietaryTags: string[];
@@ -73,6 +75,7 @@ export function assignDishSlugs(items: { id: string; name: string }[]): Map<stri
 export function buildSeoMenu(
   categories: CategoryRow[], subcategories: SubcategoryRow[], items: ItemRow[],
   imageFor: (id: string) => string | null = () => null,
+  thumbFor: (id: string) => string | null = () => null,
 ): SeoMenu {
   const slugs = assignDishSlugs(items);
   return {
@@ -90,6 +93,7 @@ export function buildSeoMenu(
           descriptions: { en: i.description, bs: i.description_bs || i.description, ar: i.description_ar || i.description },
           price: Number(i.price),
           image: imageFor(i.id),
+          thumb: thumbFor(i.id),
           allergens: i.allergens ?? [],
           dietaryTags: i.dietary_tags ?? [],
           portionNote: i.portion_note ?? null,
@@ -103,6 +107,7 @@ export function buildSeoMenu(
 /** Fetch the menu from the database's public API; null when it cannot be had in time. */
 export async function fetchSeoMenu(
   url: string, key: string, imageFor?: (id: string) => string | null, timeoutMs = 10_000,
+  thumbFor?: (id: string) => string | null,
 ): Promise<SeoMenu | null> {
   const headers: Record<string, string> = { apikey: key };
   if (key.startsWith('eyJ')) headers.Authorization = `Bearer ${key}`;
@@ -117,7 +122,7 @@ export async function fetchSeoMenu(
       get<SubcategoryRow[]>('subcategories?select=id,category_id,name,name_bs,name_ar,sort_order'),
       get<ItemRow[]>('menu_items?select=id,subcategory_id,name,name_bs,name_ar,description,description_bs,description_ar,price,sort_order,allergens,dietary_tags,portion_note,prep_minutes&is_available=eq.true'),
     ]);
-    const menu = buildSeoMenu(cats, subs, items, imageFor);
+    const menu = buildSeoMenu(cats, subs, items, imageFor, thumbFor);
     return menu.categories.length ? menu : null;
   } catch {
     return null;

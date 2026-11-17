@@ -13,13 +13,15 @@ import type { ConnectionState } from '@/lib/realtime';
  * says what the app is doing about it rather than only that something is wrong.
  */
 const ConnectionPill = ({ state, className = '' }: { state: ConnectionState; className?: string }) => {
+  // Healthy is quiet — a dot and a word, no pill — so the header's pills are
+  // only ever things that need a person. Losing the connection is one of them.
   const style =
-    state === 'live' ? 'bg-primary/10 text-primary'
-      : state === 'connecting' ? 'bg-muted text-muted-foreground'
-        : 'bg-destructive/10 text-destructive';
+    state === 'live' ? 'text-muted-foreground px-0'
+      : state === 'connecting' ? 'bg-muted text-muted-foreground px-2'
+        : 'bg-destructive/10 text-destructive px-2';
 
   const dot =
-    state === 'live' ? 'bg-primary breathe'
+    state === 'live' ? 'bg-[hsl(150_50%_40%)] breathe'
       : state === 'connecting' ? 'bg-muted-foreground'
         : 'bg-destructive animate-pulse';
 
@@ -35,7 +37,7 @@ const ConnectionPill = ({ state, className = '' }: { state: ConnectionState; cla
       // Short enough to stay on one line next to a name on a phone; the
       // tooltip and screen readers still get what the screen is doing.
       title={state === 'reconnecting' ? 'Live updates dropped — refreshing every 15 seconds until they are back' : undefined}
-      className={`inline-flex items-center gap-1 whitespace-nowrap text-xs font-sans font-semibold px-2 py-0.5 rounded-full ${style} ${className}`}
+      className={`inline-flex items-center gap-1.5 whitespace-nowrap text-xs font-sans font-semibold py-0.5 rounded-full ${style} ${className}`}
     >
       <span className={`w-1.5 h-1.5 rounded-full ${dot}`} aria-hidden />
       {label}

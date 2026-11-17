@@ -33,7 +33,7 @@ test.describe('menu and discovery', () => {
     await expect(page).toHaveURL(/\/menu\/lasoul\/food\/\?section=burgers$/);
     await expect(page.getByRole('heading', { level: 2, name: /Burgers|Burgeri/ })).toBeVisible();
     await page.goto('/menu/italiaverde');
-    await expect(page.getByRole('link', { name: /Back to Menu|Nazad na meni/ })).toBeVisible();
+    await expect(page.getByRole('link', { name: /Back to menu|Nazad na meni/i })).toBeVisible();
   });
 
   // Netlify redirects these on a first visit, but on a phone that had opened
@@ -245,7 +245,7 @@ test.describe('adding to the order', () => {
     // Screen readers hear the count and the total.
     await expect(page.getByRole('status').filter({ hasText: /Added La Soul Burger\. 1 item, 18\.00\sKM|Dodano: La Soul Burger/ })).toHaveCount(1);
     // Then it goes back to saying what it does.
-    await expect(page.getByRole('button', { name: /View Order|Pogledaj narudžbu/ })).toBeVisible({ timeout: 4_000 });
+    await expect(page.getByRole('button', { name: /View order|Pogledaj narudžbu/i })).toBeVisible({ timeout: 4_000 });
   });
 
   test('adding from the dish sheet closes it and lands in the cart bar', async ({ page }) => {
@@ -282,7 +282,11 @@ test.describe('checkout', () => {
     await expect(page.getByRole('button', { name: /No tip|Bez napojnice/ })).toHaveCount(0);
     // The confirmation must show the real amount, not a cleared cart's zero.
     await expect(page.getByText('18.00 KM')).toBeVisible();
-    await expect(page.getByText(/We’ll bring it to table 7|za sto 7/)).toBeVisible();
+    // Where it is going: since the 2026-11-15 "order sent" redesign the receipt
+    // card names the table (it used to be a sentence, "We’ll bring it to table 7").
+    const receipt = page.getByRole('status').filter({ hasText: /To pay|Za platiti/ });
+    await expect(receipt.locator('dt', { hasText: /^(Table|Sto)$/ })).toBeVisible();
+    await expect(receipt.locator('dd', { hasText: /^7$/ })).toBeVisible();
     expect(state.placedOrders).toHaveLength(1);
     expect(state.placedOrders[0].payment_method).toBe('cash');
     // Nothing has been paid yet, and the screen must not say otherwise.

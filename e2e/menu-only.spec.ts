@@ -50,7 +50,7 @@ test.describe('a restaurant that shows its menu only', () => {
     await answered;
     await expect(page.getByRole('heading', { name: /Food|Hrana/ }).first()).toBeVisible();
     await page.waitForTimeout(300);
-    await expect(page.getByRole('button', { name: /Call Waiter|Pozovi konobara/ })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: /Call waiter|Pozovi konobara/i })).toHaveCount(0);
     await expect(page.getByText(/Table 7|Sto 7/)).toHaveCount(0);
 
     await page.goto('/menu/lasoul/food/');

@@ -27,6 +27,18 @@ const S = {
   nav_story: { en: 'Our story', bs: 'Naša priča', ar: 'قصتنا' },
   nav_visit: { en: 'Visit', bs: 'Posjetite nas', ar: 'زورونا' },
   header_cta: { en: 'View menu', bs: 'Pogledaj meni', ar: 'عرض القائمة' },
+  // Only while the restaurant takes table requests online (src/lib/seo/reservations.ts).
+  header_reserve: { en: 'Reserve', bs: 'Rezervacija', ar: 'احجز' },
+  reserve_eyebrow: { en: 'Reservations', bs: 'Rezervacije', ar: 'الحجوزات' },
+  reserve_title: { en: 'A table, ready when you arrive', bs: 'Sto koji vas čeka', ar: 'طاولة بانتظارك' },
+  reserve_sub: {
+    en: 'Pick a day and a time online. We answer every request ourselves, usually within minutes.',
+    bs: 'Izaberite dan i vrijeme online. Na svaki zahtjev odgovaramo lično, obično za nekoliko minuta.',
+    ar: 'اختر اليوم والوقت عبر الإنترنت. نرد على كل طلب بأنفسنا، وغالباً خلال دقائق.',
+  },
+  reserve_fact_fast: { en: 'An answer within minutes', bs: 'Odgovor za nekoliko minuta', ar: 'رد خلال دقائق' },
+  reserve_fact_free: { en: 'Free to reserve', bs: 'Rezervacija je besplatna', ar: 'الحجز مجاني' },
+  reserve_or_call: { en: 'or call {phone}', bs: 'ili pozovite {phone}', ar: 'أو اتصل على {phone}' },
 
   // Hero
   tagline: { en: 'Cake & Burger Boutique', bs: 'Cake & Burger Boutique', ar: 'بوتيك الكيك والبرغر' },

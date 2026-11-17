@@ -2,6 +2,7 @@ import React from 'react';
 import { Banknote, CreditCard } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { km, type TablePaymentMethod } from '@/lib/staff-api';
+import { TONE } from '@/components/staff/status-tone';
 
 /**
  * The second step of every in-room payment.
@@ -40,7 +41,9 @@ const PaymentConfirm = ({
   <div
     role="alertdialog"
     aria-label={`Confirm payment for table ${tableNumber}`}
-    className="rounded-xl border-2 border-destructive/50 bg-destructive/5 p-3"
+    // In the ink of the bill, framed heavier than the card: a step that needs
+    // reading. Not red: on a staff screen red means late, and nothing is wrong.
+    className={`rounded-xl border-2 p-3 bg-[hsl(210_16%_26%/0.04)] ${TONE.bill.border}`}
   >
     <p className="text-base font-sans font-semibold text-foreground flex items-center gap-2">
       {method === 'cash' ? <Banknote className="w-5 h-5 shrink-0" /> : <CreditCard className="w-5 h-5 shrink-0" />}

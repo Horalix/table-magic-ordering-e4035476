@@ -1,17 +1,22 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Download, Printer, CalendarDays, DollarSign, ShoppingBag, CreditCard, Banknote, Smartphone, Coins, TrendingUp, AlertTriangle, Check, Clock } from 'lucide-react';
-import { useCountUp } from '@/lib/motion';
+import { Download, Printer, CalendarDays, Wallet, ShoppingBag, CreditCard, Banknote, Smartphone, Coins, TrendingUp, AlertTriangle, Check, Clock, BarChart3 } from 'lucide-react';
+import { Link, useOutletContext } from 'react-router-dom';
+import { cn } from '@/lib/utils';
+import CountUp from '@/components/admin/CountUp';
+import { AdminPageHeader, AdminSection } from '@/components/admin/AdminPage';
 import { dayReconciliation, type DayReconciliation } from '@/lib/staff-api';
 import ShiftClosePanel from '@/components/admin/ShiftClosePanel';
 import PrepForecastCard from '@/components/admin/PrepForecastCard';
 import { businessDayISO, businessDayRange } from '@/lib/reporting';
-import { useOutletContext } from 'react-router-dom';
 import type { AdminOutletContext } from '@/components/admin/AdminLayout';
+import { AdminCard, AdminCardContent, AdminCardHeader, EmptyState, Stagger } from '@/components/admin/AdminCard';
+import AdminBarChart from '@/components/admin/AdminBarChart';
+import { compact, moneyKM, money, whole } from '@/components/admin/admin-format';
+import { salesByHour, trimQuietHours } from '@/components/admin/sales-by-hour';
 
 interface DayOrder {
   id: string;
@@ -39,22 +44,6 @@ const NON_SALE_STATUSES = ['awaiting_payment', 'payment_failed', 'cancelled'];
  * night.
  */
 const todayISO = () => businessDayISO();
-const km = (n: number) => `${n.toFixed(2)} KM`;
-
-const Stat = ({ icon: Icon, label, value, sub, color = 'text-primary' }: { icon: React.ElementType; label: string; value: string; sub?: string; color?: string }) => (
-  <Card className="border-border card-lux-hover">
-    <CardContent className="p-5">
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-sm font-sans text-muted-foreground">{label}</p>
-          <p className="text-2xl font-sans font-semibold text-foreground mt-1 tabular-nums">{value}</p>
-          {sub && <p className="text-xs font-sans text-muted-foreground mt-0.5">{sub}</p>}
-        </div>
-        <div className={`w-10 h-10 rounded-lg bg-muted flex items-center justify-center ${color}`}><Icon className="w-5 h-5" /></div>
-      </div>
-    </CardContent>
-  </Card>
-);
 
 const AdminReports = () => {
   // This restaurant's name on the export, not always La Soul's.
@@ -105,7 +94,11 @@ const AdminReports = () => {
     };
   }, [orders]);
 
-  const grossAnim = useCountUp(s.gross);
+  // The chart's hours run as the trading day did (05:00 first), trimmed to
+  // the service; its highlighted bar is the hour the Orders card names.
+  const hourly = useMemo(() => trimQuietHours(salesByHour(orders)), [orders]);
+  const busiest = hourly.findIndex((h) => h.hour === s.peakHour);
+  const dayName = new Date(`${date}T12:00:00`).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
 
   const exportCsv = () => {
     const rows = [
@@ -144,123 +137,232 @@ const AdminReports = () => {
     document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
   };
 
-  const maxHour = Math.max(...s.byHour, 1);
+  // What to settle before signing off, in the order a manager deals with it.
+  const attention: { key: string; icon: React.ElementType; tone: 'warn' | 'danger' | 'quiet'; text: React.ReactNode }[] = [];
+  if (s.unfiscalized > 0) attention.push({
+    key: 'fiscal', icon: AlertTriangle, tone: 'warn',
+    text: <><strong className="font-semibold tabular-nums">{s.unfiscalized}</strong> order{s.unfiscalized === 1 ? '' : 's'} not yet marked fiscalized. Ring them into the POS, then mark them under <Link to="/admin/orders" className="font-medium underline underline-offset-2 hover:text-foreground print:no-underline">Orders</Link>.</>,
+  });
+  if (recon) {
+    if (recon.outstanding > 0) attention.push({
+      key: 'owed', icon: Clock, tone: 'warn',
+      text: <><strong className="font-semibold tabular-nums">{moneyKM(recon.outstanding)}</strong> still owed across {recon.outstanding_orders} order{recon.outstanding_orders === 1 ? '' : 's'}. Collect or write off.</>,
+    });
+    if (recon.stuck_payments > 0) attention.push({
+      key: 'stuck', icon: AlertTriangle, tone: 'danger',
+      text: <><strong className="font-semibold tabular-nums">{recon.stuck_payments}</strong> card payment{recon.stuck_payments === 1 ? '' : 's'} started and never resolved ({moneyKM(recon.stuck_amount)}). Those orders never reached the kitchen.</>,
+    });
+    if (recon.callback_problems > 0) attention.push({
+      key: 'callback', icon: AlertTriangle, tone: 'danger',
+      text: <><strong className="font-semibold tabular-nums">{recon.callback_problems}</strong> provider callback{recon.callback_problems === 1 ? '' : 's'} rejected for a wrong amount, wrong currency, or unknown order. Raise with Monri.</>,
+    });
+    if (recon.refunded > 0) attention.push({
+      key: 'refunded', icon: Coins, tone: 'quiet',
+      text: <><strong className="font-semibold tabular-nums">{moneyKM(recon.refunded)}</strong> refunded on this day.</>,
+    });
+  }
+  const showAttention = attention.length > 0 || s.count > 0;
+  const isToday = date === todayISO();
 
   return (
-    <div>
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
-        <h1 className="font-serif text-3xl font-bold text-foreground">Daily Report</h1>
-        <div className="flex items-center gap-2 flex-wrap">
-          {date !== todayISO() && <Button variant="outline" size="sm" onClick={() => setDate(todayISO())} className="gap-1.5"><CalendarDays className="w-4 h-4" /> Today</Button>}
-          <Input type="date" value={date} max={todayISO()} onChange={(e) => setDate(e.target.value)} className="h-9 w-[150px]" />
-          <Button variant="outline" size="sm" onClick={exportCsv} className="gap-1.5"><Download className="w-4 h-4" /> CSV</Button>
-          <Button variant="outline" size="sm" onClick={() => window.print()} className="gap-1.5 no-print"><Printer className="w-4 h-4" /> Print</Button>
-        </div>
-      </div>
+    // The global print sheet hides everything but QR stickers; this page
+    // opts back in so Print gives a clean A4 of the day's figures.
+    <div className="print:visible print:text-black print:[&_*]:visible">
+      <AdminPageHeader
+        className="print:!block print:mb-4"
+        eyebrow={isToday ? `Today · ${dayName}` : dayName}
+        title="Daily report"
+        description="Close the trading day: what was sold, how it was paid, and what to settle before you sign off. Trading day 05:00 to 05:00, completed sales only."
+        actions={(
+          <div className="no-print flex w-full flex-wrap items-center gap-2 sm:w-auto">
+            <label className="sr-only" htmlFor="report-day">Day</label>
+            <Input
+              id="report-day" type="date" value={date} max={todayISO()}
+              onChange={(e) => { if (e.target.value) setDate(e.target.value); }}
+              className="h-11 min-w-0 flex-1 text-base sm:h-10 sm:w-[160px] sm:flex-none sm:text-sm"
+            />
+            {!isToday && (
+              <Button variant="outline" onClick={() => setDate(todayISO())} className="h-11 gap-1.5 sm:h-10">
+                <CalendarDays className="h-4 w-4" aria-hidden /> Today
+              </Button>
+            )}
+            <Button variant="outline" onClick={exportCsv} className="h-11 gap-1.5 sm:h-10">
+              <Download className="h-4 w-4" aria-hidden /> CSV
+            </Button>
+            <Button variant="outline" onClick={() => window.print()} className="h-11 gap-1.5 sm:h-10">
+              <Printer className="h-4 w-4" aria-hidden /> Print
+            </Button>
+          </div>
+        )}
+      />
 
       {loading ? (
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-[92px] rounded-xl" />)}
+        <div className="space-y-8" aria-busy="true" aria-label="Loading the report">
+          <Skeleton className="h-[230px] rounded-2xl lg:h-[200px]" />
+          <Skeleton className="h-[290px] rounded-2xl sm:h-[150px]" />
+          <Skeleton className="h-[120px] rounded-2xl" />
+          <Skeleton className="h-[360px] rounded-2xl" />
         </div>
       ) : (
-        <>
-          {s.count > 0 && (
-            s.unfiscalized > 0 ? (
-              <div className="mb-4 flex items-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm font-sans text-amber-700 dark:text-amber-400">
-                <AlertTriangle className="w-4 h-4 shrink-0" />
-                {s.unfiscalized} order{s.unfiscalized === 1 ? '' : 's'} not yet marked fiscalized — ring them into the POS, then mark them under Orders.
+        <Stagger className="space-y-8">
+          {/* ---- The day's totals: the figure the manager came for ---- */}
+          <section aria-label="The day's totals">
+            <AdminCard className="overflow-hidden print:shadow-none">
+              <div className="grid lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
+                <div className="p-5 sm:p-7">
+                  <p className="flex items-center gap-2 text-[13px] font-sans font-medium text-muted-foreground">
+                    <Wallet className="h-4 w-4" aria-hidden /> Gross sales
+                  </p>
+                  <p className="mt-3 font-sans text-[2.75rem] font-semibold leading-none tracking-tight text-foreground tabular-nums sm:text-6xl">
+                    <CountUp value={s.gross} format={money} />
+                    <span className="ms-2 text-lg font-medium tracking-normal text-muted-foreground sm:text-xl">KM</span>
+                  </p>
+                  <p className="mt-4 text-sm font-sans leading-relaxed text-muted-foreground">
+                    {s.count === 0
+                      ? 'No completed sales on this day.'
+                      : <>From {whole(s.count)} completed order{s.count === 1 ? '' : 's'}{s.peakHour >= 0 && <>, busiest at {String(s.peakHour).padStart(2, '0')}:00</>}.</>}
+                  </p>
+                </div>
+                <dl className="grid grid-cols-3 divide-x divide-border/70 border-t border-border/70 lg:grid-cols-1 lg:divide-x-0 lg:divide-y lg:border-s lg:border-t-0">
+                  <TotalStat icon={ShoppingBag} label="Orders" value={whole(s.count)} hint="completed" />
+                  <TotalStat icon={TrendingUp} label="Average order" value={money(s.avg)} unit="KM" hint="gross, per order" />
+                  <TotalStat icon={Coins} label="Tips" value={money(s.tips)} unit="KM" hint="for the staff, on top" />
+                </dl>
               </div>
-            ) : (
-              <div className="mb-4 flex items-center gap-2 rounded-xl border border-primary/20 bg-primary/5 px-4 py-3 text-sm font-sans text-primary">
-                <Check className="w-4 h-4 shrink-0" /> All orders fiscalized.
-              </div>
-            )
-          )}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-            <Stat icon={DollarSign} label="Gross sales" value={km(grossAnim)} sub={`${s.count} orders`} />
-            <Stat icon={Coins} label="Tips" value={km(s.tips)} color="text-accent" />
-            <Stat icon={TrendingUp} label="Average order" value={km(s.avg)} color="text-accent" />
-            <Stat icon={ShoppingBag} label="Orders" value={String(s.count)} sub={s.peakHour >= 0 ? `Busiest: ${s.peakHour}:00` : undefined} />
-          </div>
+            </AdminCard>
+          </section>
 
-          {/* Three settlement channels, never merged: they reconcile against
-              the online gateway, the cash drawer and the POS terminal batch. */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-            <Card className="border-border"><CardContent className="p-5">
-              <div className="flex items-center gap-2 mb-1"><CreditCard className="w-4 h-4 text-primary" /><p className="font-sans font-semibold text-foreground">Card online</p></div>
-              <p className="text-2xl font-sans font-semibold tabular-nums">{km(recon?.paid_online ?? s.cardPaidSum)}</p>
-              <p className="text-xs text-muted-foreground font-sans mt-1">confirmed paid · {s.cardCount} chose card</p>
-            </CardContent></Card>
-            <Card className="border-border"><CardContent className="p-5">
-              <div className="flex items-center gap-2 mb-1"><Banknote className="w-4 h-4 text-muted-foreground" /><p className="font-sans font-semibold text-foreground">Cash</p></div>
-              <p className="text-2xl font-sans font-semibold tabular-nums">{km(recon?.paid_cash ?? 0)}</p>
-              <p className="text-xs text-muted-foreground font-sans mt-1">recorded by staff · match the drawer</p>
-            </CardContent></Card>
-            <Card className="border-border"><CardContent className="p-5">
-              <div className="flex items-center gap-2 mb-1"><Smartphone className="w-4 h-4 text-muted-foreground" /><p className="font-sans font-semibold text-foreground">POS terminal</p></div>
-              <p className="text-2xl font-sans font-semibold tabular-nums">{km(recon?.paid_pos_terminal ?? 0)}</p>
-              <p className="text-xs text-muted-foreground font-sans mt-1">match the terminal batch</p>
-            </CardContent></Card>
-          </div>
+          {/* ---- Three settlement channels, never merged: they reconcile
+              against the online gateway, the cash drawer and the POS
+              terminal batch. ---- */}
+          <AdminSection title="How it was paid" titleId="report-paid" description="Check each against its own source before you close.">
+            <AdminCard className="overflow-hidden print:shadow-none">
+              <dl className="grid grid-cols-1 divide-y divide-border/70 sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+                <Channel icon={CreditCard} label="Card online" value={recon?.paid_online ?? s.cardPaidSum} hint={`Confirmed paid · ${s.cardCount} chose card`} />
+                <Channel icon={Banknote} label="Cash" value={recon?.paid_cash ?? 0} hint="Recorded by staff · match the drawer" />
+                <Channel icon={Smartphone} label="POS terminal" value={recon?.paid_pos_terminal ?? 0} hint="Match the terminal batch" />
+              </dl>
+            </AdminCard>
+          </AdminSection>
 
-          {recon && (recon.outstanding > 0 || recon.stuck_payments > 0 || recon.callback_problems > 0 || recon.refunded > 0) && (
-            <Card className="border-border mb-6">
-              <CardHeader><CardTitle className="font-serif text-lg">Needs attention before close</CardTitle></CardHeader>
-              <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm font-sans">
-                {recon.outstanding > 0 && (
-                  <div className="flex items-start gap-2">
-                    <Clock className="w-4 h-4 text-accent mt-0.5 shrink-0" />
-                    <span><strong className="tabular-nums">{km(recon.outstanding)}</strong> still owed across {recon.outstanding_orders} order{recon.outstanding_orders === 1 ? '' : 's'} — collect or write off.</span>
-                  </div>
+          {/* ---- What to settle before signing off ---- */}
+          {showAttention && (
+            <AdminSection
+              title="Needs attention before close"
+              titleId="report-attention"
+              description={attention.length > 0
+                ? `${attention.length} thing${attention.length === 1 ? '' : 's'} to look at. None of them stops you closing.`
+                : undefined}
+            >
+              <AdminCard className="print:shadow-none">
+                {attention.length > 0 && (
+                  <ul className="divide-y divide-border/70">
+                    {attention.map((a) => (
+                      <li key={a.key} className="flex items-start gap-3 px-5 py-4 text-sm font-sans leading-relaxed text-foreground sm:px-6">
+                        <span
+                          className={cn(
+                            'grid h-7 w-7 shrink-0 place-items-center rounded-full',
+                            a.tone === 'danger' && 'bg-destructive/10 text-destructive',
+                            a.tone === 'warn' && 'bg-amber-500/10 text-amber-700 dark:text-amber-400',
+                            a.tone === 'quiet' && 'bg-muted text-muted-foreground',
+                          )}
+                          aria-hidden
+                        >
+                          <a.icon className="h-3.5 w-3.5" />
+                        </span>
+                        <span className="min-w-0 pt-[3px]">{a.text}</span>
+                      </li>
+                    ))}
+                  </ul>
                 )}
-                {recon.stuck_payments > 0 && (
-                  <div className="flex items-start gap-2">
-                    <AlertTriangle className="w-4 h-4 text-destructive mt-0.5 shrink-0" />
-                    <span><strong>{recon.stuck_payments}</strong> card payment{recon.stuck_payments === 1 ? '' : 's'} started and never resolved ({km(recon.stuck_amount)}). Those orders never reached the kitchen.</span>
-                  </div>
+                {s.count > 0 && s.unfiscalized === 0 && (
+                  <p className={cn('flex items-center gap-3 px-5 py-4 text-sm font-sans text-muted-foreground sm:px-6', attention.length > 0 && 'border-t border-border/70')}>
+                    <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-primary/10 text-primary" aria-hidden>
+                      <Check className="h-3.5 w-3.5" />
+                    </span>
+                    <span>All orders fiscalized.{attention.length === 0 && ' Nothing owed, nothing stuck.'}</span>
+                  </p>
                 )}
-                {recon.callback_problems > 0 && (
-                  <div className="flex items-start gap-2">
-                    <AlertTriangle className="w-4 h-4 text-destructive mt-0.5 shrink-0" />
-                    <span><strong>{recon.callback_problems}</strong> provider callback{recon.callback_problems === 1 ? '' : 's'} rejected for a wrong amount, wrong currency, or unknown order. Raise with Monri.</span>
-                  </div>
-                )}
-                {recon.refunded > 0 && (
-                  <div className="flex items-start gap-2">
-                    <Coins className="w-4 h-4 text-muted-foreground mt-0.5 shrink-0" />
-                    <span><strong className="tabular-nums">{km(recon.refunded)}</strong> refunded today.</span>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+              </AdminCard>
+            </AdminSection>
           )}
 
+          {/* ---- Sign off ---- */}
           <ShiftClosePanel day={date} recon={recon} />
 
-          <Card className="border-border">
-            <CardHeader><CardTitle className="font-serif text-lg">Sales by hour</CardTitle></CardHeader>
-            <CardContent>
+          {/* ---- The day in detail ---- */}
+          <AdminCard className="print:break-inside-avoid print:shadow-none">
+            <AdminCardHeader
+              icon={BarChart3}
+              title="Sales by hour"
+              description={busiest >= 0
+                ? <>Gross sales in each hour of the day. Busiest {hourly[busiest].label}: {moneyKM(hourly[busiest].sales)} from {hourly[busiest].orders} order{hourly[busiest].orders === 1 ? '' : 's'}.</>
+                : 'Gross sales in each hour of the day.'}
+            />
+            <AdminCardContent>
               {s.count === 0 ? (
-                <p className="text-sm text-muted-foreground font-sans py-6 text-center">No orders on this day.</p>
+                <EmptyState
+                  icon={Clock}
+                  title="No orders on this day."
+                  hint="Each hour's sales appear here as orders come in."
+                  className="h-[240px] py-0"
+                />
               ) : (
-                <div className="flex items-end gap-1 h-32">
-                  {s.byHour.map((v, h) => (
-                    <div key={h} className="flex-1 flex flex-col items-center justify-end gap-1" title={`${h}:00 — ${km(v)}`}>
-                      <div className="w-full rounded-t bg-primary/70" style={{ height: `${(v / maxHour) * 100}%`, minHeight: v > 0 ? 2 : 0 }} />
-                      {h % 3 === 0 && <span className="text-[9px] text-muted-foreground tabular-nums">{h}</span>}
-                    </div>
-                  ))}
-                </div>
+                <AdminBarChart
+                  data={hourly.map((h) => ({ label: h.label, value: h.sales, long: `${h.label} · ${h.orders} order${h.orders === 1 ? '' : 's'}` }))}
+                  name="gross"
+                  format={moneyKM}
+                  axisFormat={compact}
+                  highlight={busiest}
+                  height={240}
+                  summary={`Gross sales by hour on ${dayName}.`}
+                />
               )}
-            </CardContent>
-          </Card>
+            </AdminCardContent>
+          </AdminCard>
 
           {/* Tomorrow's prep, withheld unless it beats "same as last week". */}
           <PrepForecastCard />
-        </>
+        </Stagger>
       )}
     </div>
   );
 };
+
+/** One of the three smaller totals beside gross sales. */
+const TotalStat = ({ icon: Icon, label, value, unit, hint }: {
+  icon: React.ElementType; label: string; value: string; unit?: string; hint: string;
+}) => (
+  <div className="min-w-0 px-3 py-4 sm:px-5 lg:flex lg:items-center lg:justify-between lg:gap-4 lg:px-6 lg:py-0">
+    <dt className="flex min-w-0 items-center gap-1.5 text-xs font-sans font-medium text-muted-foreground sm:text-[13px]">
+      <Icon className="hidden h-3.5 w-3.5 shrink-0 sm:block" aria-hidden />
+      <span className="truncate">{label}</span>
+    </dt>
+    <dd className="mt-1.5 lg:mt-0 lg:text-end">
+      <span className="block whitespace-nowrap font-sans text-base font-semibold leading-tight text-foreground tabular-nums sm:text-xl">
+        {value}{unit && <span className="ms-1 text-xs font-medium text-muted-foreground sm:text-sm">{unit}</span>}
+      </span>
+      <span className="mt-0.5 hidden text-xs font-sans text-muted-foreground sm:block">{hint}</span>
+    </dd>
+  </div>
+);
+
+/** A settlement channel: what the system recorded, and what to check it against. */
+const Channel = ({ icon: Icon, label, value, hint }: { icon: React.ElementType; label: string; value: number; hint: string }) => (
+  <div className="flex items-center gap-4 px-5 py-4 sm:block sm:px-6 sm:py-5">
+    <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-muted text-muted-foreground sm:mb-3 sm:h-8 sm:w-8" aria-hidden>
+      <Icon className="h-4 w-4" />
+    </span>
+    <div className="min-w-0 flex-1">
+      <dt className="text-[13px] font-sans font-medium text-muted-foreground">{label}</dt>
+      <dd className="mt-1">
+        <span className="block font-sans text-xl font-semibold leading-tight tracking-tight text-foreground tabular-nums sm:text-[26px]">
+          {money(value)}<span className="ms-1 text-sm font-medium tracking-normal text-muted-foreground">KM</span>
+        </span>
+        <span className="mt-1 block text-xs font-sans leading-snug text-muted-foreground">{hint}</span>
+      </dd>
+    </div>
+  </div>
+);
 
 export default AdminReports;

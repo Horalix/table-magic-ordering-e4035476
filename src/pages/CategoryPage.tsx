@@ -20,7 +20,7 @@ import { useT, useLanguageStore, getLocalizedName, getLocalizedDescription, useI
 import { useSessionHeartbeat } from '@/hooks/useSessionHeartbeat';
 import { duration, easeEnter, exitTransition, springPill, springSheet } from '@/lib/motion';
 import { DIET_TAGS, DIET_BY_KEY, getItemTags, matchesDietFilter, useDietFilterStore } from '@/lib/dietary';
-import { merchBadges, unorderableReason, windowLabel } from '@/lib/availability';
+import { MERCH_LABELS, merchBadges, unorderableReason, windowLabel } from '@/lib/availability';
 import { categoryPath, sectionSlug } from '@/lib/menu-sections';
 import { PriceTag, SaleBadge, NewBadge, ComboBadge } from '@/components/guest/PriceTag';
 import { useComboMap } from '@/lib/promotions-api';
@@ -118,15 +118,22 @@ const CategoryTabs = ({ categories, current, locale, label, onSelect, printed = 
         })}
       </div>
     ) : (
-    <div className="grid gap-0.5 p-1 rounded-full bg-muted/70" style={{ gridTemplateColumns: `repeat(${categories.length}, minmax(0, 1fr))` }}>
+    /* Up to four categories share the width equally. More than that cannot
+        be read at a fifth of a phone's width each ("B…", "S…"), so they keep
+        their own width and the row scrolls, with the open one brought into view. */
+    <div
+      className={`gap-0.5 p-1 rounded-full bg-muted/70 ${categories.length > 4 ? 'flex overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [mask-image:linear-gradient(to_right,transparent,#000_18px,#000_calc(100%-18px),transparent)]' : 'grid'}`}
+      style={categories.length > 4 ? undefined : { gridTemplateColumns: `repeat(${categories.length}, minmax(0, 1fr))` }}
+    >
       {categories.map((c) => {
         const active = c.name === current;
         return (
           <button
             key={c.id}
+            ref={active && categories.length > 4 ? (el) => el?.scrollIntoView({ block: 'nearest', inline: 'center' }) : undefined}
             onClick={() => { if (!active) onSelect(c); }}
             aria-current={active ? 'page' : undefined}
-            className={`relative h-11 px-1.5 rounded-full text-[13px] font-sans font-semibold transition-colors tap-sm ${active ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+            className={`relative h-11 rounded-full text-[13px] font-sans font-semibold transition-colors tap-sm ${categories.length > 4 ? 'shrink-0 px-3.5 whitespace-nowrap' : 'px-1.5'} ${active ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
           >
             {active && <motion.span layoutId="category-tab" transition={springPill} className="absolute inset-0 rounded-full bg-card shadow-sm" />}
             <span className="relative z-10 block truncate">{getLocalizedName(c, locale)}</span>
@@ -672,7 +679,10 @@ const CategoryPage = () => {
     const marketing = fresh ? null
       : merchBadges({ merchandising_tags: (item.merchandising_tags ?? []).filter((tag) => tag !== 'new') })[0] ?? null;
     const section = isSearch ? subNameById.get(item.subcategory_id || '') : undefined;
-    const popular = !blocked && !fresh && !marketing && popularIds.has(item.id);
+    // A dish tagged "Popular" by hand and one that is popular by its sales look
+    // the same: one word, one style, on every card.
+    const taggedPopular = !fresh && (item.merchandising_tags ?? []).find((tag) => tag !== 'new' && MERCH_LABELS[tag]) === 'popular';
+    const popular = !blocked && !fresh && (taggedPopular || (!marketing && popularIds.has(item.id)));
     if (!blocked && !sale && !combo && !fresh && !marketing && !popular && !section) return null;
     return (
       <div className="flex items-center gap-1.5 flex-wrap mt-1">
@@ -680,9 +690,10 @@ const CategoryPage = () => {
         {sale && <SaleBadge label={item.sale_label} percentOff={sale.percentOff} />}
         {combo && !blocked && <ComboBadge />}
         {fresh && <NewBadge />}
-        {!blocked && marketing && <span className="text-xs font-sans font-semibold text-primary">{marketing}</span>}
+        {!blocked && marketing && !taggedPopular && <span className="text-xs font-sans font-semibold text-primary">{marketing}</span>}
         {popular && (
-          <span className="inline-flex items-center gap-1 text-xs font-sans font-semibold text-accent">
+          // text-primary, not the gold accent: gold at this size is under 4.5:1 on the card.
+          <span className="inline-flex items-center gap-1 text-xs font-sans font-semibold text-primary">
             <Star className="w-3 h-3 fill-current" aria-hidden /> {t('popular')}
           </span>
         )}

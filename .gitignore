@@ -50,3 +50,6 @@ assets/pitch/
 assets/site-src/
 assets/vera-photos/
 assets/category-photos/
+
+# The offline demo build (npm run build:demo, docs/demo-mode.md)
+dist-demo

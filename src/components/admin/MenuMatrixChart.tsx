@@ -5,6 +5,7 @@ import {
   CartesianGrid, Cell, ReferenceArea, ReferenceLine, ResponsiveContainer, Scatter, ScatterChart, Tooltip, XAxis, YAxis, ZAxis,
 } from 'recharts';
 import { Button } from '@/components/ui/button';
+import { CHART } from '@/components/admin/chart-style';
 import { editDishLink } from '@/lib/insight-actions';
 import { menuClassLabel, QUADRANTS, type MenuEngineeringRow, type Quadrant } from '@/lib/menu-intelligence';
 import { marginPct, MATRIX_MAX, matrixPoints, priceNudge, type MatrixPoint } from '@/lib/menu-matrix';
@@ -33,7 +34,7 @@ const Hover = ({ active, payload }: { active?: boolean; payload?: { payload: Mat
   const p = active ? payload?.[0]?.payload : undefined;
   if (!p) return null;
   return (
-    <div className="rounded-xl border border-border bg-background px-3 py-2 shadow-lux text-xs font-sans">
+    <div className="rounded-xl border border-border/80 bg-popover px-3 py-2 shadow-lux-lg text-xs font-sans">
       <p className="font-semibold text-foreground text-sm">{p.name}</p>
       <p className="text-muted-foreground">{QUADRANTS[p.quadrant].label} · {menuClassLabel(p.row.menu_class).toLowerCase()}</p>
       <p className="text-foreground mt-1 tabular-nums">Keeps {km(p.row.unit_cm)} a portion · {p.row.units_per_week.toFixed(0)} a week</p>
@@ -54,7 +55,7 @@ const MenuMatrixChart = ({ rows, menuClass }: { rows: MenuEngineeringRow[]; menu
       <div
         role="img"
         aria-label={`Menu map: ${counts.star ?? 0} stars, ${counts.plowhorse ?? 0} plowhorses, ${counts.puzzle ?? 0} puzzles, ${counts.dog ?? 0} dogs`}
-        className="relative h-[280px] sm:h-[340px] rounded-2xl border border-border bg-muted/20"
+        className="relative h-[280px] sm:h-[340px] rounded-xl border border-border/70 bg-muted/20"
       >
         {/* The four boxes, named where they are. */}
         <span className="pointer-events-none absolute right-3 top-2 text-[11px] font-sans font-semibold uppercase tracking-wide text-primary">Stars</span>
@@ -63,7 +64,7 @@ const MenuMatrixChart = ({ rows, menuClass }: { rows: MenuEngineeringRow[]; menu
         <span className="pointer-events-none absolute left-12 bottom-9 text-[11px] font-sans font-semibold uppercase tracking-wide text-destructive">Dogs</span>
         <ResponsiveContainer width="100%" height="100%">
           <ScatterChart margin={{ top: 22, right: 14, bottom: 6, left: 0 }}>
-            <CartesianGrid stroke="hsl(var(--border))" strokeDasharray="2 4" />
+            <CartesianGrid stroke={CHART.grid} />
             <ReferenceArea x1={1} x2={MATRIX_MAX} y1={1} y2={MATRIX_MAX} fill="hsl(var(--primary))" fillOpacity={0.05} />
             <ReferenceArea x1={0} x2={1} y1={0} y2={1} fill="hsl(var(--destructive))" fillOpacity={0.04} />
             <XAxis
@@ -102,7 +103,7 @@ const MenuMatrixChart = ({ rows, menuClass }: { rows: MenuEngineeringRow[]; menu
       </p>
 
       {chosen && (
-        <div data-testid="matrix-dish" className="mt-3 rounded-2xl border border-border bg-card p-4">
+        <div data-testid="matrix-dish" className="mt-3 rounded-xl border border-border/80 bg-card p-4 shadow-lux">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0">
               <p className="font-serif text-lg font-semibold text-foreground leading-tight">{chosen.name}</p>

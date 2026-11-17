@@ -5,8 +5,11 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:demo": "vite --mode demo",
     "build": "node scripts/image-versions.mjs && vite build",
     "build:dev": "node scripts/image-versions.mjs && vite build --mode development",
+    "build:demo": "node scripts/image-versions.mjs && vite build --mode demo",
+    "preview:demo": "vite preview --mode demo",
     "lint": "eslint .",
     "typecheck": "tsc -p tsconfig.app.json --noEmit",
     "preview": "vite preview",

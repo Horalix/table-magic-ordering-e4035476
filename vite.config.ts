@@ -6,6 +6,7 @@ import { componentTagger } from "lovable-tagger";
 import { VitePWA } from "vite-plugin-pwa";
 import { seoPrerender } from "./scripts/seo-prerender";
 import { menuDataCacheKey } from "./src/lib/current-venue";
+import { demoBuild } from "./scripts/demo-build";
 
 /**
  * The app a phone installs. Vera Italia's own site (veraitalia.net) is this
@@ -32,8 +33,18 @@ const manifestFor = (mode: string) => (homeVenue(mode) === "veraitalia"
   ? JSON.parse(readFileSync(path.resolve(__dirname, "public/manifest-veraitalia.webmanifest"), "utf8"))
   : LA_SOUL_MANIFEST);
 
+/**
+ * The offline demo (docs/demo-mode.md): `vite --mode demo`, or any mode with
+ * VITE_DEMO_MODE=true in the environment. It starts from src/demo/entry.ts,
+ * has no service worker and no search-engine pages, and builds to dist-demo.
+ */
+const isDemo = (mode: string) => mode === "demo" || process.env.VITE_DEMO_MODE === "true"
+  || loadEnv(mode, process.cwd(), "VITE_").VITE_DEMO_MODE === "true";
+
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({
+  // A constant in every build, so the normal build drops everything demo mode guards (src/lib/home-venue.ts).
+  define: { __TABLEFLOW_DEMO_BUILD__: JSON.stringify(isDemo(mode)) },
   server: {
     host: "::",
     port: 8080,
@@ -44,9 +55,10 @@ export default defineConfig(({ mode }) => ({
   plugins: [
     react(),
     mode === "development" && componentTagger(),
+    isDemo(mode) && demoBuild(),
     // Real HTML for crawlers that run no JavaScript, robots.txt, sitemap.xml, llms.txt.
-    seoPrerender(),
-    VitePWA({
+    !isDemo(mode) && seoPrerender(),
+    !isDemo(mode) && VitePWA({
       // Registered and updated by src/lib/app-update.ts, which applies a new
       // version at a safe moment instead of leaving the old one on screen.
       registerType: "prompt",
@@ -62,7 +74,8 @@ export default defineConfig(({ mode }) => ({
         // shows waiters' lock-screen alerts and opens the waiter screen from one (public/sw-push.js).
         importScripts: ["sw-rescue.js", "sw-push.js"],
         navigateFallback: "index.html",
-        navigateFallbackDenylist: [/^\/admin/, /^\/kitchen/, /^\/waiter/],
+        // The download pages are files of their own (public/waiter-app/ … /kitchen-app/, /manager-app/, /apps/): left to the network, not answered with the app.
+        navigateFallbackDenylist: [/^\/admin/, /^\/kitchen/, /^\/waiter/, /^\/manager-app/, /^\/apps(\/|$)/],
         runtimeCaching: [
           {
             urlPattern: ({ url }) => url.pathname.startsWith("/menu/") && url.pathname.endsWith(".webp"),
@@ -101,9 +114,14 @@ export default defineConfig(({ mode }) => ({
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
+      // The demo has no service worker: what registers one does nothing there.
+      ...(isDemo(mode) ? { "virtual:pwa-register": path.resolve(__dirname, "./src/demo/pwa-register-stub.ts") } : {}),
     },
   },
+  // The demo's database (PGlite) runs in a module worker and ships its own WebAssembly.
+  ...(isDemo(mode) ? { worker: { format: "es" as const }, optimizeDeps: { exclude: ["@electric-sql/pglite"] } } : {}),
   build: {
+    ...(isDemo(mode) ? { outDir: "dist-demo" } : {}),
     rollupOptions: {
       output: {
         manualChunks(id) {

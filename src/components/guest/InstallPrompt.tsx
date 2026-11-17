@@ -61,9 +61,9 @@ const InstallPrompt = () => {
     <div className="flex items-center justify-center gap-2 pt-2">
       <button
         onClick={install}
-        className="inline-flex items-center gap-1.5 text-xs font-sans font-medium text-primary px-3 py-2 rounded-full bg-primary/10 hover:bg-primary/15 transition-colors tap-sm min-h-[44px]"
+        className="inline-flex items-center gap-1.5 text-xs font-sans font-semibold text-foreground px-3 py-2 rounded-full bg-primary/10 hover:bg-primary/15 transition-colors tap-sm min-h-[44px]"
       >
-        <Download className="w-3.5 h-3.5" aria-hidden /> {t('install_app')}
+        <Download className="w-3.5 h-3.5 text-primary" aria-hidden /> {t('install_app')}
       </button>
       <button
         onClick={dismiss}

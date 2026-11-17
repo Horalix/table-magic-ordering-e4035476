@@ -1,12 +1,15 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { AdminCard, AdminCardContent, AdminCardHeader, EmptyState, KpiCard, Stagger } from '@/components/admin/AdminCard';
+import { AdminPageHeader, AdminSection } from '@/components/admin/AdminPage';
+import { money, moneyKM, whole } from '@/components/admin/admin-format';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { AlertTriangle, CheckCircle2, Eye, HelpCircle, Sparkles, TrendingDown, TrendingUp } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Eye, FlaskConical, HelpCircle, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
 import type { HoldoutComparison } from '@/lib/menu-intelligence';
+import RecoProfitCard from '@/components/admin/RecoProfitCard';
 
 /**
  * What did this app earn us?
@@ -25,7 +28,7 @@ import type { HoldoutComparison } from '@/lib/menu-intelligence';
  *      causal answer — never instead of it.
  */
 
-const km = (n: number | null | undefined) => `${Number(n ?? 0).toFixed(2)} KM`;
+const km = (n: number | null | undefined) => moneyKM(Number(n ?? 0));
 
 /** The holdout read. One shared type with Menu Intelligence, so the two pages cannot drift apart. */
 type Causal = HoldoutComparison;
@@ -119,52 +122,66 @@ const AdminImpact = () => {
   const c = data?.causal;
   const looked = lookedAt ?? data?.looked_at_not_ordered ?? [];
 
+  const tone = c?.status === 'positive' ? 'border-primary/30 bg-primary/5'
+    : c?.status === 'negative' || c?.status === 'invalid_srm' ? 'border-destructive/40 bg-destructive/5'
+      : '';
+  const lead = 'mt-2 max-w-2xl text-sm font-sans leading-relaxed text-muted-foreground text-pretty';
+  const headline = 'font-serif text-2xl font-bold leading-tight text-balance sm:text-3xl';
+
   return (
     <div>
-      <div className="flex items-center justify-between mb-6 flex-wrap gap-2">
-        <div>
-          <h1 className="font-serif text-3xl font-bold text-foreground">What the app earned</h1>
-          <p className="text-sm text-muted-foreground font-sans">
-            Measured against tables that were shown no suggestions at all.
-          </p>
-        </div>
-        <Select value={String(days)} onValueChange={(v) => setDays(Number(v))}>
-          <SelectTrigger className="w-[150px]"><SelectValue /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="7">Last 7 days</SelectItem>
-            <SelectItem value="30">Last 30 days</SelectItem>
-            <SelectItem value="90">Last 90 days</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
+      <AdminPageHeader
+        title="What the app earned"
+        description="Measured against tables that were shown no suggestions at all."
+        loading={loading && !!data}
+        actions={(
+          <Select value={String(days)} onValueChange={(v) => setDays(Number(v))}>
+            <SelectTrigger className="h-11 w-[160px] rounded-xl text-base sm:text-sm" aria-label="Period"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="7">Last 7 days</SelectItem>
+              <SelectItem value="30">Last 30 days</SelectItem>
+              <SelectItem value="90">Last 90 days</SelectItem>
+            </SelectContent>
+          </Select>
+        )}
+      />
+
+      {/* Margin per week against the always-on check (20261116120000_reco_always_measured.sql);
+          renders nothing on a database without that migration. */}
+      <RecoProfitCard days={days} />
 
       {error && (
-        <Card className="border-destructive/40 mb-4">
-          <CardContent className="p-4">
-            <p className="text-sm font-sans text-destructive">Could not load: {error}</p>
-          </CardContent>
-        </Card>
+        <AdminCard className="mb-4 border-destructive/40" role="alert">
+          <AdminCardContent className="pt-5">
+            <p className="flex items-start gap-2 text-sm font-sans text-destructive">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden /> Could not load: {error}
+            </p>
+            <Button variant="outline" className="mt-3 h-11" onClick={() => void load()}>Try again</Button>
+          </AdminCardContent>
+        </AdminCard>
       )}
 
-      {loading ? (
-        <div className="space-y-4">{[1, 2, 3].map((i) => <Skeleton key={i} className="h-40 w-full rounded-xl" />)}</div>
+      {loading && !data ? (
+        <div className="space-y-4" aria-busy="true" aria-label="Loading">
+          <Skeleton className="h-52 w-full rounded-2xl" />
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4">
+            {[1, 2, 3].map((i) => <Skeleton key={i} className="h-[104px] rounded-2xl" />)}
+          </div>
+          <Skeleton className="h-40 w-full rounded-2xl" />
+        </div>
       ) : data && c ? (
-        <div className="space-y-4">
+        <div className={`space-y-6 transition-opacity ${loading ? 'opacity-60' : ''}`}>
           {/* ---- The headline ---- */}
-          <Card className={
-            c.status === 'positive' ? 'border-primary/40 bg-primary/5'
-              : c.status === 'negative' ? 'border-destructive/40 bg-destructive/5'
-                : c.status === 'invalid_srm' ? 'border-destructive/40'
-                  : 'border-border'
-          }>
-            <CardContent className="p-6">
+          <AdminCard className={tone}>
+            <AdminCardContent className="pt-5 sm:pt-6">
               {c.status === 'positive' && (
                 <>
-                  <p className="font-sans text-4xl font-semibold text-foreground tabular-nums">
+                  <p className="text-[13px] font-sans font-medium text-muted-foreground">Cautious estimate</p>
+                  <p className="mt-1 font-sans text-4xl font-semibold leading-none tracking-tight text-foreground tabular-nums sm:text-5xl">
                     {km(c.conservative_monthly_value)}
                     <span className="text-lg font-sans font-normal text-muted-foreground"> a month</span>
                   </p>
-                  <p className="text-sm font-sans text-muted-foreground mt-2 max-w-2xl">
+                  <p className={lead}>
                     Tables shown suggestions spend <strong className="text-foreground">{km(c.difference)}</strong> more
                     per visit, in net sales (items, excluding tips), than tables shown none. The figure above is the
                     cautious one — it uses the low end of the likely range ({km(c.ci_low)} to {km(c.ci_high)} per
@@ -179,8 +196,8 @@ const AdminImpact = () => {
 
               {c.status === 'negative' && (
                 <>
-                  <p className="font-serif text-3xl font-bold text-destructive">Suggestions are costing you money</p>
-                  <p className="text-sm font-sans text-muted-foreground mt-2 max-w-2xl">
+                  <p className={`${headline} text-destructive`}>Suggestions are costing you money</p>
+                  <p className={lead}>
                     Tables shown suggestions spend <strong className="text-foreground">{km(Math.abs(Number(c.difference ?? 0)))}</strong> LESS
                     per visit, by more than chance explains. Worth turning the suggestions off and reviewing the
                     worst-performing pairs before leaving this running.
@@ -190,8 +207,8 @@ const AdminImpact = () => {
 
               {c.status === 'no_measurable_effect' && (
                 <>
-                  <p className="font-serif text-3xl font-bold text-foreground">No measurable effect</p>
-                  <p className="text-sm font-sans text-muted-foreground mt-2 max-w-2xl">
+                  <p className={`${headline} text-foreground`}>No measurable effect</p>
+                  <p className={lead}>
                     There is enough data now, and the gap between the two groups is inside what chance alone
                     produces ({km(c.ci_low)} to {km(c.ci_high)} per visit — the range includes zero). That is a real
                     finding, not a missing one: right now suggestions are neither helping nor hurting.
@@ -201,8 +218,8 @@ const AdminImpact = () => {
 
               {c.status === 'too_early' && (
                 <>
-                  <p className="font-serif text-3xl font-bold text-foreground">Still gathering data</p>
-                  <p className="text-sm font-sans text-muted-foreground mt-2 max-w-2xl">
+                  <p className={`${headline} text-foreground`}>Still gathering data</p>
+                  <p className={lead}>
                     {c.with_suggestions?.sessions ?? 0} visits with suggestions, {c.holdout?.sessions ?? 0} without.
                     {c.power?.ready && c.power.days_remaining != null && (
                       <> At the current rate you can expect a usable answer in
@@ -215,10 +232,10 @@ const AdminImpact = () => {
 
               {c.status === 'invalid_srm' && (
                 <>
-                  <p className="font-serif text-3xl font-bold text-destructive flex items-center gap-2">
-                    <AlertTriangle className="w-7 h-7" /> The experiment is not sound
+                  <p className={`${headline} flex items-center gap-2 text-destructive`}>
+                    <AlertTriangle className="h-7 w-7 shrink-0" aria-hidden /> The experiment is not sound
                   </p>
-                  <p className="text-sm font-sans text-muted-foreground mt-2 max-w-2xl">
+                  <p className={lead}>
                     You configured a {c.srm?.expected_holdout_pct}% holdout and are seeing{' '}
                     {c.srm?.observed_holdout_pct}%. Something is assigning tables incorrectly, so no result can be
                     trusted and none is shown. Stop and restart the experiment.
@@ -228,157 +245,148 @@ const AdminImpact = () => {
 
               {c.status === 'not_running' && (
                 <>
-                  <p className="font-serif text-3xl font-bold text-foreground">Not measured yet</p>
-                  <p className="text-sm font-sans text-muted-foreground mt-2 mb-4 max-w-2xl">
+                  <p className={`${headline} text-foreground`}>Not measured yet</p>
+                  <p className={`${lead} mb-5`}>
                     The only honest way to know what suggestions are worth is to show none to a small share of
                     tables and compare. One table in ten, for a couple of weeks. Nobody notices, and at the end
                     you have a number you can act on.
                   </p>
-                  <Button onClick={startExperiment}>Start a 10% holdout</Button>
+                  <Button className="h-11 rounded-xl px-5" onClick={startExperiment}>Start a 10% holdout</Button>
                 </>
               )}
-            </CardContent>
-          </Card>
+            </AdminCardContent>
+          </AdminCard>
 
           {/* ---- Health, before any detail ---- */}
           {c.status !== 'not_running' && (
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="font-serif text-lg">Is this measurement sound?</CardTitle>
-              </CardHeader>
-              <CardContent className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm font-sans">
-                <div>
+            <AdminCard>
+              <AdminCardHeader icon={FlaskConical} title="Is this measurement sound?" description="Checked before any figure is trusted." />
+              <AdminCardContent className="grid grid-cols-1 gap-3 text-sm font-sans sm:grid-cols-3">
+                <div className="rounded-xl bg-muted/40 p-3.5">
                   <p className="text-xs text-muted-foreground">Split</p>
-                  <p className="flex items-center gap-1.5 mt-1">
+                  <p className="mt-1.5 flex items-center gap-1.5 font-medium">
                     {c.srm?.checked
                       ? c.srm.healthy
-                        ? <><CheckCircle2 className="w-4 h-4 text-primary" /> as configured</>
-                        : <><AlertTriangle className="w-4 h-4 text-destructive" /> wrong ({c.srm.observed_holdout_pct}%)</>
-                      : <><HelpCircle className="w-4 h-4 text-muted-foreground" /> too few visits to check</>}
+                        ? <><CheckCircle2 className="h-4 w-4 text-emerald-600" aria-hidden /> as configured</>
+                        : <><AlertTriangle className="h-4 w-4 text-destructive" aria-hidden /> wrong ({c.srm.observed_holdout_pct}%)</>
+                      : <><HelpCircle className="h-4 w-4 text-muted-foreground" aria-hidden /> too few visits to check</>}
                   </p>
                 </div>
-                <div>
+                <div className="rounded-xl bg-muted/40 p-3.5">
                   <p className="text-xs text-muted-foreground">Guest ratings</p>
                   {/* An engine that lifts spend while lowering ratings has not won. */}
-                  <p className="mt-1 tabular-nums">
-                    {c.guardrails?.rating_treatment ?? '—'} vs {c.guardrails?.rating_holdout ?? '—'}
+                  <p className="mt-1.5 font-medium tabular-nums">
+                    {c.guardrails?.rating_treatment ?? '—'} <span className="font-normal text-muted-foreground">vs</span> {c.guardrails?.rating_holdout ?? '—'}
                   </p>
                 </div>
-                <div>
+                <div className="rounded-xl bg-muted/40 p-3.5">
                   <p className="text-xs text-muted-foreground">Minutes to served</p>
-                  <p className="mt-1 tabular-nums">
-                    {c.guardrails?.minutes_treatment ?? '—'} vs {c.guardrails?.minutes_holdout ?? '—'}
+                  <p className="mt-1.5 font-medium tabular-nums">
+                    {c.guardrails?.minutes_treatment ?? '—'} <span className="font-normal text-muted-foreground">vs</span> {c.guardrails?.minutes_holdout ?? '—'}
                   </p>
                 </div>
-              </CardContent>
-            </Card>
+              </AdminCardContent>
+            </AdminCard>
           )}
 
           {/* ---- The upper bound, labelled as such ---- */}
-          <Card>
-            <CardContent className="p-5">
-              <p className="text-sm font-sans text-muted-foreground">
-                Separately, <strong className="text-foreground">{km(data.attributed.revenue)}</strong> of revenue
-                came from lines a guest added straight after seeing a suggestion, across{' '}
-                {data.attributed.orders} orders.{' '}
-                <span className="text-foreground">This is an upper bound, not a measurement</span> — it counts the
-                whole line even when the guest would have ordered it anyway. The figure at the top of this page is
-                the one to trust.
-              </p>
-              <p className="text-xs font-sans text-muted-foreground mt-2">
-                {data.sessions} visits in this period, {km(data.net_sales)} in net sales — items after refunds,
-                with tips left out because a suggestion did not earn them.
-              </p>
-            </CardContent>
-          </Card>
+          <AdminSection title="The wider picture" titleId="impact-wider">
+            <Stagger className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4">
+              <KpiCard label="Visits" value={data.sessions} format={whole} hint={`last ${days} days`} />
+              <KpiCard label="Net sales" value={data.net_sales} format={money} unit="KM" hint="items after refunds, no tips" />
+              <KpiCard
+                className="col-span-2 sm:col-span-1"
+                label="Linked to a suggestion"
+                value={data.attributed.revenue}
+                format={money}
+                unit="KM"
+                hint={`${whole(data.attributed.orders)} orders · upper bound`}
+              />
+            </Stagger>
+            <p className="mt-3 max-w-3xl text-[13px] font-sans leading-relaxed text-muted-foreground text-pretty">
+              <strong className="text-foreground">{km(data.attributed.revenue)}</strong> of revenue
+              came from lines a guest added straight after seeing a suggestion, across{' '}
+              {data.attributed.orders} orders.{' '}
+              <span className="text-foreground">This is an upper bound, not a measurement</span> — it counts the
+              whole line even when the guest would have ordered it anyway. The figure at the top of this page is
+              the one to trust. Net sales are items after refunds, with tips left out because a suggestion did not earn them.
+            </p>
+          </AdminSection>
 
           {/* ---- Money left on the table ---- */}
           {looked.length > 0 && (
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="font-serif text-lg flex items-center gap-2">
-                  <Eye className="w-5 h-5 text-accent" /> Looked at, almost never ordered
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm font-sans text-muted-foreground mb-3">
-                  Guests open these and walk away. Usually the photo, the description or the price — rarely the
-                  dish. The cheapest revenue on this page.
-                </p>
-                <div className="space-y-1.5">
+            <AdminCard>
+              <AdminCardHeader
+                icon={Eye}
+                tone="accent"
+                title="Looked at, almost never ordered"
+                description="Guests open these and walk away. Usually the photo, the description or the price — rarely the dish. The cheapest revenue on this page."
+              />
+              <AdminCardContent>
+                <ul className="divide-y divide-border/60">
                   {looked.map((row) => (
-                    <div key={row.name} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-0.5 py-2 px-3 rounded-lg bg-muted/40">
-                      <span className="text-sm font-sans font-medium min-w-0">{row.name}</span>
+                    <li key={row.name} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-0.5 py-3 first:pt-0 last:pb-0">
+                      <span className="min-w-0 text-sm font-sans font-medium text-foreground">{row.name}</span>
                       <span className="text-sm font-sans tabular-nums text-muted-foreground">
-                        {row.views} looks · <span className="text-destructive font-semibold">{row.adds} added</span>
+                        {whole(row.views)} looks · <span className="font-semibold text-destructive">{whole(row.adds)} added</span>
                       </span>
-                    </div>
+                    </li>
                   ))}
-                </div>
-              </CardContent>
-            </Card>
+                </ul>
+              </AdminCardContent>
+            </AdminCard>
           )}
 
           {/* ---- Learning readiness: a countdown, not a switch ---- */}
           {readiness && (
-            <Card className={readiness.sampling_enabled ? 'border-primary/40' : undefined}>
-              <CardHeader className="pb-3">
-                <CardTitle className="font-serif text-lg flex items-center gap-2">
-                  <Sparkles className="w-5 h-5 text-accent" /> How the app is choosing suggestions
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                {readiness.sampling_enabled ? (
-                  <p className="text-sm font-sans text-muted-foreground max-w-2xl">
-                    It is testing as it goes. When it has only seen a pairing a handful of times it treats that as a
-                    guess rather than a fact, and gives it a share of the suggestions until it knows either way.
-                    Turned on automatically once there was enough history to learn from.
-                  </p>
-                ) : (
-                  <>
-                    <p className="text-sm font-sans text-muted-foreground mb-4 max-w-2xl">
-                      It is following fixed rules — your pairings, what sells together, and the kitchen's load.
-                      Once there is enough history it will start testing as it goes, treating a pairing it has seen
-                      four times as the guess it is instead of ranking it against one it has seen four hundred
-                      times. That happens on its own overnight; nothing to press.
-                    </p>
-                    <div className="space-y-1.5">
-                      {readiness.checks.map((row) => (
-                        <div
-                          key={row.check}
-                          className="flex flex-wrap items-center justify-between gap-x-3 gap-y-0.5 py-2 px-3 rounded-lg bg-muted/40"
-                        >
-                          <span className="text-sm font-sans flex items-center gap-2 min-w-0">
-                            {row.pass
-                              ? <CheckCircle2 className="w-4 h-4 text-primary shrink-0" aria-hidden />
-                              : <span className="w-4 h-4 rounded-full border-2 border-muted-foreground/40 shrink-0" aria-hidden />}
-                            <span className={row.pass ? 'text-muted-foreground' : 'font-medium'}>
-                              {CHECK_LABELS[row.check] ?? row.check}
-                            </span>
+            <AdminCard className={readiness.sampling_enabled ? 'border-primary/30' : undefined}>
+              <AdminCardHeader
+                icon={Sparkles}
+                tone="accent"
+                title="How the app is choosing suggestions"
+                description={readiness.sampling_enabled
+                  ? 'It is testing as it goes. When it has only seen a pairing a handful of times it treats that as a guess rather than a fact, and gives it a share of the suggestions until it knows either way. ' + ((readiness.policy_version ?? '').startsWith('v4')
+                    ? 'It has worked this way from the first table, and learns what guests reading in each language take.'
+                    : 'Turned on automatically once there was enough history to learn from.')
+                  : "It is following fixed rules — your pairings, what sells together, and the kitchen's load. Once there is enough history it will start testing as it goes, treating a pairing it has seen four times as the guess it is instead of ranking it against one it has seen four hundred times. That happens on its own overnight; nothing to press."}
+              />
+              {!readiness.sampling_enabled && (
+                <AdminCardContent>
+                  <ul className="divide-y divide-border/60">
+                    {readiness.checks.map((row) => (
+                      <li key={row.check} className="flex items-center justify-between gap-3 py-3 first:pt-0 last:pb-0">
+                        <span className="flex min-w-0 items-center gap-2.5 text-sm font-sans">
+                          {row.pass
+                            ? <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" aria-hidden />
+                            : <span className="h-4 w-4 shrink-0 rounded-full border-2 border-muted-foreground/40" aria-hidden />}
+                          <span className={row.pass ? 'text-muted-foreground' : 'font-medium text-foreground'}>
+                            {CHECK_LABELS[row.check] ?? row.check}
                           </span>
-                          <span className="text-sm font-sans tabular-nums text-muted-foreground shrink-0">
-                            {row.need !== undefined
-                              ? `${row.have ?? 0} of ${row.need}`
-                              : row.pass ? 'ready' : 'waiting'}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  </>
-                )}
-              </CardContent>
-            </Card>
+                        </span>
+                        <span className="shrink-0 text-sm font-sans tabular-nums text-muted-foreground">
+                          {row.need !== undefined
+                            ? `${whole(row.have ?? 0)} of ${whole(row.need)}`
+                            : row.pass ? 'ready' : 'waiting'}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </AdminCardContent>
+              )}
+            </AdminCard>
           )}
 
           {/* Only offered when it can be answered honestly. */}
           {data.food_cost.coverage < 0.5 && (
-            <p className="text-xs font-sans text-muted-foreground">
+            <p className="text-xs font-sans leading-relaxed text-muted-foreground">
               Figures above are net sales, not profit. Add ingredient costs to menu items
               ({data.food_cost.with_cost} of {data.food_cost.items} have one) and this page can report
               contribution margin instead.
             </p>
           )}
         </div>
+      ) : !error ? (
+        <AdminCard><EmptyState icon={FlaskConical} title="Nothing to show yet." hint="Figures appear here once guests have been seated." /></AdminCard>
       ) : null}
     </div>
   );

@@ -25,7 +25,7 @@ carries their name and is what goes on their home screen.
 
 | Role | Opens | Types | Lands on |
 |---|---|---|---|
-| **Owner** (both restaurants) | `/admin/login` on either site | Email and password | **Overview**: both restaurants side by side |
+| **Owner** (both restaurants) | `/admin/login` on either site | Email and password | **Both restaurants** (under Home): the two side by side |
 | **Restaurant admin** | Their restaurant's `/admin/login` | Email, and the initial password from their login card | Their restaurant's **Dashboard** |
 | **Waiter** | The link on their login card: `/waiter/login?u=<their username>` | The password only (the username is filled in) | The waiter phone, `/waiter` |
 | **Kitchen tablet** | The link on its login card: `/waiter/login?u=<restaurant>-kitchen&to=kitchen` | The password only | The kitchen display, `/kitchen` |
@@ -46,22 +46,33 @@ the restaurant, the address to open, what to type and the password. Tap
 The password is shown only on that card and is not stored anywhere; a tap
 beside the card does not close it.
 
-On a laptop the admin menu is on the left. On a phone, tap **☰** at the top
-left (or **More** in the bottom bar).
+The admin has five areas: **Home**, **Service**, **Menu**, **Reports** and
+**Setup**. On a laptop they are down the left side; on a phone they are the bar
+at the bottom, with Setup under **More**. The pages of an area are the tabs
+across the top. Below, **Setup → Team** means: open Setup, then the Team tab.
+The magnifier (Ctrl K) finds any page by name. The account (**Change
+password**, **Sign out**) and the restaurant switch are on the left side of a
+laptop, and under **More** on a phone.
+
+The first time an account opens the admin on a device, a one-minute tour,
+**What’s new**, shows where everything is. Skip it or go through it; it is
+there again as **What’s new** at the bottom of the left side (on a phone:
+**More → What’s new**), or type "tour" in the search.
 
 ### 1. The owner signs in (once)
 
 1. Open https://lasoul.net/admin/login and sign in with the owner's
-   email. To pick the demo password, open the menu → **Change password**
-   (or **Owner** → **Team** → **Change password** on your own row). If nobody
+   email. To pick the demo password, tap **Change password** at the bottom of
+   the left side (on a phone: **More → Change password**), or **Setup → Team** →
+   **Change password** on your own row. If nobody
    knows the owner's password, reset it in Lovable (Cloud → Users), never in
    a chat.
-2. The first screen is **Overview**, with both restaurants. That is the
+2. The first screen is **Both restaurants**. That is the
    owner's account working.
 
 ### 2. One admin per restaurant (owner, ~1 min each)
 
-1. Menu → **Owner** → **Team**.
+1. **Setup → Team**.
 2. **Appoint a restaurant admin**: type **Their email**, pick **Restaurant they
    will run** (**La Soul** or **Vera Italia**), then **Generate** next to
    **Initial password**.
@@ -72,19 +83,21 @@ left (or **More** in the bottom bar).
 
 If the email already has an account, leave the password empty: they get the
 role and keep their own password, and the card says so. If they forget their
-password later, the owner gives them a new one: **Team** → their row →
+password later, the owner gives them a new one: **Setup → Team** → their row →
 **Password** → type one or **Generate** → **Set new password**. They change it
-at once from the admin menu → **Change password**.
+at once with **Change password** (bottom of the left side; on a phone, under
+**More**).
 
 ### 3. Each restaurant's staff (owner or that restaurant's admin)
 
-The owner works on one restaurant at a time: open the menu and tap **La Soul**
-or **Vera Italia** in the switch at the top. A restaurant admin only ever sees
+The owner works on one restaurant at a time: tap **La Soul** or **Vera Italia**
+in the switch at the top of the left side (on a phone: under **More**). A
+restaurant admin only ever sees
 their own and skips this.
 
 Then, for each restaurant:
 
-1. Menu → **Waiters**. The form says **For Vera Italia** (or La Soul) and where
+1. **Setup → Waiters**. The form says **For Vera Italia** (or La Soul) and where
    they sign in. The owner can tap **Add to La Soul instead** to switch.
 2. **The kitchen tablet:** tap **Kitchen tablet** → the name (*Kitchen*) and
    username (*<restaurant>-kitchen*) are filled in → **Generate** →
@@ -97,30 +110,31 @@ Then, for each restaurant:
 Usernames are shared by both restaurants: if "That username is taken" appears,
 add a letter or the restaurant (for example a dot and the restaurant's name).
 
-**A waiter forgot their password:** Waiters → their row → **Password** →
+**A waiter forgot their password:** Setup → Waiters → their row → **Password** →
 **Generate** → **Set new password**. A new card opens; the old password stops
 working. The owner can do the same for anyone, at either restaurant, from
-**Team**. (Needs the latest `create-waiter` and `manage-admins` deployed.)
+**Setup → Team**. (Needs the latest `create-waiter` and `manage-admins` deployed.)
 
 **Every password at a glance:**
 
 | Whose | Who changes it | Where |
 |---|---|---|
-| Owner | The owner | Menu → **Change password** (asks for the current one) |
-| Restaurant admin | Themselves, or the owner if forgotten | Menu → **Change password**; the owner: **Team** → **Password** |
-| Waiter, kitchen tablet | Their admin or the owner | **Waiters** → **Password**; the owner also **Team** → **Password** |
+| Owner | The owner | **Change password**, at the bottom of the left side or under **More** on a phone (asks for the current one) |
+| Restaurant admin | Themselves, or the owner if forgotten | **Change password**, in the same place; the owner: **Setup → Team** → **Password** |
+| Waiter, kitchen tablet | Their admin or the owner | **Setup → Waiters** → **Password**; the owner also **Setup → Team** → **Password** |
 
 ### 4. The floor (per restaurant, ~5 min)
 
-1. **Tables** → *How many tables do you have?* → **Generate tables**.
-2. **Sections** → add one or two (for example Terrace, Inside) and move tables
-   into them.
-3. **Tonight** → tap each section → tap the waiters who cover it → **Done**.
+1. **Setup → Tables** → *How many tables do you have?* → **Generate tables**.
+2. **Setup → Floor sections** → add one or two (for example Terrace, Inside) and
+   move tables into them.
+3. **Service → Tonight’s waiters** → tap each section → tap the waiters who cover
+   it → **Done**.
    Without this, every table shows under *No waiter yet* on the phones.
-4. **QR Codes** → **Per table**. Print a few, or show one on a laptop screen to
+4. **Setup → QR codes** → **Per table**. Print a few, or show one on a laptop screen to
    scan. Vera Italia's codes open veraitalia.net; La Soul's open
    lasoul.net.
-5. **Ordering & service** → **Accept orders from guests** on, and **Service
+5. **Setup → Ordering & service** → **Accept orders from guests** on, and **Service
    hours** wide enough to cover the demo. An order sent outside them waits for
    a waiter to confirm it.
 
@@ -183,23 +197,24 @@ order from Vera Italia's menu.
 Sign in as the restaurant's admin on its own site.
 
 1. **Dashboard**: today's sales, open orders, what needs attention. Only this
-   restaurant's name and numbers; no switch, no Overview, no Team.
-2. **Menu**: tap a price to change it; switch a dish to **Sold out** and show
-   the guest's phone that it can no longer be ordered.
-3. **Waiters**: add a waiter live and share the card (under a minute).
-4. **Orders** and **Daily Report**: the demo order, paid, by method.
-5. **Tonight**: who covers which section.
+   restaurant's name and numbers; no switch, no Both restaurants, no Team.
+2. **Menu → Dishes**: tap a price to change it; switch a dish to **Sold out** and
+   show the guest's phone that it can no longer be ordered.
+3. **Setup → Waiters**: add a waiter live and share the card (under a minute).
+4. **Service → Orders** and **Reports → Daily report**: the demo order, paid, by
+   method.
+5. **Service → Tonight’s waiters**: who covers which section.
 
 ### Owner's overview (3 min)
 
 Sign in as the owner.
 
-1. **Overview**: La Soul and Vera Italia side by side — sales so far against
+1. **Home → Both restaurants**: La Soul and Vera Italia side by side — sales so far against
    the same time last week, tables seated, the kitchen queue, guests waiting,
    printers. It refreshes every 30 seconds.
 2. **Open Vera Italia admin** → the full admin of that restaurant; the switch
-   at the top of the menu goes back to La Soul.
-3. **Team**: who runs each restaurant, their waiters and kitchen tablets,
+   at the top of the left side (on a phone: under **More**) goes back to La Soul.
+3. **Setup → Team**: who runs each restaurant, their waiters and kitchen tablets,
    and when each last signed in. Appoint a restaurant admin, give anyone a new
    password, or **Remove** any account but your own: its sign-in is deleted
    for good, and orders and history stay. An admin's Remove also offers
@@ -215,5 +230,5 @@ Sign in as the owner.
   recording payment).
 - Demo orders stay in today's reports. To start the next day clean, see
   `docs/operations-runbook.md`, *Free every table before a demo or rehearsal*.
-- Switch off (Waiters → the switch on their row) or remove any account made
-  only for the demo (the owner: **Team → Remove**).
+- Switch off (Setup → Waiters → the switch on their row) or remove any account
+  made only for the demo (the owner: **Setup → Team → Remove**).

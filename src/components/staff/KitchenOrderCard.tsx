@@ -1,16 +1,20 @@
 import React, { useMemo, useState } from 'react';
-import { motion } from 'framer-motion';
-import { Ban, Check, ChefHat, CupSoda, FileJson, FileText, MoreHorizontal, Printer, RotateCcw, Utensils } from 'lucide-react';
-import { Badge } from '@/components/ui/badge';
+import { motion, useReducedMotion, type Variants } from 'framer-motion';
+import {
+  Ban, Check, ChefHat, CupSoda, FileJson, FileText, MoreHorizontal, Printer, RotateCcw, TriangleAlert, Utensils,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import PaymentBadge from '@/components/PaymentBadge';
 import { useNow } from '@/lib/clock';
-import { formatMinutes, orderUrgency, urgencyMark, urgencyText, formatClock } from '@/lib/timing';
+import { formatMinutes, orderUrgency, urgencyMark, formatClock } from '@/lib/timing';
 import { kitchenStart, orderStatusLabel } from '@/components/staff/order-status';
 import { stationParts, stationsInvolved, type StationPart } from '@/lib/station-lines';
+import { TONE, orderTone, type StaffTone } from '@/components/staff/status-tone';
+import { ARRIVE_FROM, ARRIVED, staffEnter, staffExit, staffMove } from '@/components/staff/staff-motion';
+import { ArrivalGlow } from '@/components/staff/StaffMotion';
 import type { Database } from '@/integrations/supabase/types';
 
 export type OrderStatus = Database['public']['Enums']['order_status'];
@@ -100,6 +104,43 @@ const PART_PROGRESS: Record<OrderItemStatus, string> = {
 };
 const stationWord = (s: string) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : 'Kitchen');
 
+/** A line's state, in the shared colours: untouched lines stay plain. */
+const ITEM_TONE: Partial<Record<OrderItemStatus, StaffTone>> = { preparing: 'preparing', ready: 'ready' };
+const lineSurface = (status: OrderItemStatus) => {
+  const tone = ITEM_TONE[status];
+  return tone === 'preparing' ? 'bg-[hsl(38_90%_50%/0.08)]'
+    : tone === 'ready' ? 'bg-[hsl(150_46%_36%/0.07)]'
+      : 'bg-muted/45';
+};
+
+/**
+ * A cook's note ("no onion"): what gets a dish sent back. Warm and bold, with
+ * a mark, but tinted rather than a solid slab so it does not drown the dish.
+ */
+function NoteChip({ children }: { children: React.ReactNode }) {
+  return (
+    <p className="mt-1 flex w-fit max-w-full items-start gap-1.5 rounded-md bg-[hsl(42_96%_56%/0.22)] px-2 py-0.5 text-sm md:text-base font-sans font-semibold leading-snug text-[hsl(30_70%_20%)]">
+      <TriangleAlert className="mt-[3px] h-3.5 w-3.5 md:h-4 md:w-4 shrink-0" aria-hidden />
+      <span className="min-w-0">{children}</span>
+    </p>
+  );
+}
+
+/**
+ * Allergens: unmistakable, not shouting. They were solid red slabs in capitals,
+ * the loudest thing on the board, so the dish name under them read second.
+ * Now: the red of "late", outlined and tinted, with a warning mark and the
+ * word "Allergens" — still the first thing a cook's eye catches on a line.
+ */
+function AllergenChip({ allergens }: { allergens: string[] }) {
+  return (
+    <p className="mt-1 flex w-fit max-w-full items-start gap-1.5 rounded-md border border-[hsl(0_72%_50%/0.45)] bg-[hsl(0_72%_50%/0.06)] px-1.5 py-0.5 text-xs md:text-sm lg:text-[13px] xl:text-sm font-sans leading-snug text-[hsl(0_72%_38%)]">
+      <TriangleAlert className="mt-[2px] h-3.5 w-3.5 shrink-0" aria-hidden />
+      <span className="min-w-0"><span className="font-bold">Allergens:</span> <span className="font-semibold">{allergens.join(', ')}</span></span>
+    </p>
+  );
+}
+
 /**
  * A combo part made here, under a combo line made at another station: the
  * lemonade of a burger combo, on the bar's board.
@@ -113,25 +154,15 @@ function PartLine({ part }: { part: StationPart<OrderItemStatus> }) {
   return (
     <div
       data-testid="combo-part-line"
-      className={`flex items-center gap-2 rounded-lg px-2 py-1.5 min-h-[52px] border border-dashed border-border ${
-        part.status === 'ready' ? 'bg-primary/10' : part.status === 'preparing' ? 'bg-accent/10' : 'bg-muted/40'
-      }`}
+      className={`flex items-center gap-2 rounded-lg px-2.5 py-2 min-h-[52px] border border-dashed border-border transition-colors duration-300 ${lineSurface(part.status)}`}
     >
       <div className="flex-1 min-w-0">
-        <p className={`text-base md:text-xl font-sans font-medium leading-snug ${part.status === 'ready' ? 'text-muted-foreground' : 'text-foreground'}`}>
+        <p className={`text-[17px] md:text-xl font-sans font-medium leading-snug ${part.status === 'ready' ? 'text-muted-foreground' : 'text-foreground'}`}>
           <span className="tabular-nums font-bold">{part.quantity}×</span> {part.name}
           <span className="text-sm md:text-base font-normal text-muted-foreground"> · part of {part.partOf}</span>
         </p>
-        {part.notes && (
-          <p className="mt-1 inline-block rounded-md bg-amber-200 text-amber-950 dark:bg-amber-300 dark:text-black font-sans font-bold text-sm md:text-base px-2 py-0.5">
-            ⚠ {part.notes}
-          </p>
-        )}
-        {part.allergens && part.allergens.length > 0 && (
-          <p className="mt-1 inline-block rounded-md bg-destructive text-destructive-foreground font-sans font-bold uppercase tracking-wide text-xs md:text-sm px-2 py-0.5">
-            Allergens: {part.allergens.join(', ')}
-          </p>
-        )}
+        {part.notes && <NoteChip>{part.notes}</NoteChip>}
+        {part.allergens && part.allergens.length > 0 && <AllergenChip allergens={part.allergens} />}
       </div>
       <span
         className="text-xs md:text-sm font-sans text-muted-foreground text-right px-2 shrink-0 max-w-[96px] leading-tight"
@@ -143,13 +174,6 @@ function PartLine({ part }: { part: StationPart<OrderItemStatus> }) {
   );
 }
 
-const statusColors: Partial<Record<OrderStatus, string>> = {
-  pending: 'bg-destructive/10 text-destructive border-destructive/20',
-  confirmed: 'bg-accent/10 text-accent border-accent/20',
-  preparing: 'bg-accent/15 text-accent border-accent/25',
-  ready: 'bg-primary/10 text-primary border-primary/20',
-  served: 'bg-muted text-muted-foreground border-border',
-};
 
 /** The stamp for the stage an order is currently in — what per-stage aging measures from. */
 function stageStart(order: KitchenOrder): string {
@@ -220,6 +244,8 @@ interface Props {
   selected?: boolean;
   /** Position on the board, 1-based, for the bump-bar digit keys. */
   slot?: number;
+  /** Changes when the board points at this ticket ("Show"): it glows again. */
+  spotlight?: number;
   onBumpItem: (itemId: string, status: OrderItemStatus) => Promise<void>;
   onBumpMany: (itemIds: string[], status: OrderItemStatus) => Promise<void>;
   onAdvanceOrder: (orderId: string, status: OrderStatus) => Promise<void>;
@@ -229,10 +255,15 @@ interface Props {
   onExport: (order: KitchenOrder, format: 'json' | 'csv') => void;
 }
 
-const KitchenOrderCard = ({
-  order, station, undoSeconds, showStatus, failedPrint, printStates = [], isNew = false, selected = false, slot,
+/*
+ * Takes a ref so the board's AnimatePresence can lift a leaving ticket out of
+ * the column at once (mode="popLayout"): the tickets under it close up while
+ * it fades or flies, instead of after.
+ */
+const KitchenOrderCard = React.forwardRef<HTMLDivElement, Props>(({
+  order, station, undoSeconds, showStatus, failedPrint, printStates = [], isNew = false, selected = false, slot, spotlight,
   onBumpItem, onBumpMany, onAdvanceOrder, onRevertOrder, onCancel, onPrint, onExport,
-}: Props) => {
+}, ref) => {
   const now = useNow();
   /**
    * Which taps are in flight.
@@ -255,6 +286,27 @@ const KitchenOrderCard = ({
     mark(key, true);
     try { await fn(); } finally { mark(key, false); }
   };
+
+  const reduced = useReducedMotion();
+  /**
+   * Whether this card is a ticket that has just come in, decided once when it
+   * appears: it drops in and glows. The same ticket reappearing in another
+   * column (it was started) is a move, not an arrival.
+   */
+  const [arriving] = useState(() => isNew && !showStatus && !reduced
+    && (order.status === 'pending' || order.status === 'confirmed'));
+  /**
+   * Leaving the board (served, voided) fades and shrinks a touch. Leaving this
+   * column for another is instant: the copy in the new column flies from here.
+   * The board passes the ids still on it through AnimatePresence's `custom`.
+   */
+  const leaveVariants = useMemo<Variants>(() => ({
+    // Never tappable on the way out: lifted out of the column, it lies over
+    // the ticket that slid up into its place.
+    leave: (onBoard?: Set<string>) => (onBoard?.has(order.id) || reduced
+      ? { opacity: 0, pointerEvents: 'none', transition: { duration: 0 } }
+      : { opacity: 0, scale: 0.97, pointerEvents: 'none', transition: staffExit }),
+  }), [order.id, reduced]);
 
   /**
    * Only the lines this station is responsible for.
@@ -294,85 +346,112 @@ const KitchenOrderCard = ({
       : order.status === 'ready' ? { to: 'preparing', since: order.ready_at }
         : null;
 
+  const late = urgency === 'late' || urgency === 'critical';
+  const statusTone = orderTone(order.status);
+
   return (
     <motion.div
-      layout
-      initial={{ opacity: 0, scale: 0.96 }}
-      animate={{ opacity: 1, scale: 1 }}
-      exit={{ opacity: 0, scale: 0.96 }}
-      transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
+      ref={ref}
+      /*
+       * On the board a ticket keeps one identity across columns, so starting
+       * or readying it carries the card to its new column instead of making it
+       * vanish here and pop up there. Position only: a card that changes
+       * height is not stretched on the way.
+       */
+      layout="position"
+      layoutId={showStatus ? undefined : `ticket-${order.id}`}
+      layoutCrossfade={false}
+      // A ticket that just arrived drops in; one that moved columns, or was
+      // already on the board, is simply where it belongs.
+      initial={arriving ? ARRIVE_FROM : false}
+      animate={ARRIVED}
+      exit="leave"
+      variants={leaveVariants}
+      transition={reduced ? { duration: 0 } : { ...staffEnter, layout: staffMove }}
       id={`ticket-${order.id}`}
       data-selected={selected || undefined}
-      className={`relative rounded-xl border bg-card overflow-hidden shadow-lux scroll-mt-28 ${
+      className={`relative rounded-2xl border bg-card shadow-lux scroll-mt-28 ${
         urgency === 'critical' ? 'border-destructive/60 breathe breathe-urgent'
-          : urgency === 'late' ? 'border-destructive/50'
-            : urgency === 'attention' ? 'border-accent/50'
-              : isNew ? 'border-primary breathe' : 'border-border'
+          : late ? 'border-destructive/50'
+            : urgency === 'attention' ? 'border-[hsl(38_90%_45%/0.5)]'
+              : isNew ? TONE.new.border : 'border-border'
       } ${/* An outline, not a ring: .shadow-lux and the breathing glow both
              own box-shadow, and a ring drawn with it simply vanished. */
         selected ? 'outline outline-4 outline-offset-2 outline-foreground' : ''}`}
     >
+      {(arriving || spotlight) && <ArrivalGlow key={spotlight ?? 'arrived'} tone="new" />}
       {/* Age as a colour band across the top, readable from across the
           kitchen: none while fresh, amber when getting on, red when late. */}
       {urgency !== 'fresh' && (
-        <div aria-hidden className={`h-1.5 ${urgency === 'attention' ? 'bg-accent' : 'bg-destructive'}`} />
+        <div aria-hidden className={`h-1.5 rounded-t-[15px] ${urgency === 'attention' ? TONE.preparing.bar : TONE.late.bar}`} />
       )}
-      <div className="flex items-center justify-between gap-2 px-4 py-3 border-b border-border">
-        <div className="flex items-center gap-2 flex-wrap min-w-0">
-          {order.section_name && (
-            <span
-              className="inline-flex items-center gap-1 text-[10px] uppercase font-sans px-1.5 py-0.5 rounded"
-              style={{ background: `${order.section_color}33`, color: order.section_color || undefined }}
-            >
-              {order.section_name}
+      <div className="px-4 pt-3 pb-2.5 border-b border-border/70">
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-center gap-2 flex-wrap min-w-0">
+            {slot != null && slot <= 9 && (
+              <span
+                className={`inline-flex items-center justify-center w-6 h-6 rounded-md text-xs font-sans font-bold tabular-nums transition-colors ${selected ? 'bg-foreground text-background' : 'bg-muted text-muted-foreground'}`}
+                title={`Press ${slot} to pick this ticket`}
+                aria-hidden
+              >
+                {slot}
+              </span>
+            )}
+            {/* Read from across a kitchen, not from arm's length: the table
+                number is the one thing a runner must get right first time. */}
+            <span className="font-serif text-2xl md:text-[32px] md:leading-9 font-bold tracking-tight text-foreground">Table {order.table_number}</span>
+            {isNew && (
+              <span className={`text-[11px] font-sans font-bold uppercase tracking-[0.08em] px-2 py-0.5 rounded-full ${TONE.new.solid}`}>New</span>
+            )}
+            {showStatus && statusTone && (
+              <span className={`inline-flex items-center gap-1.5 text-xs font-sans font-semibold px-2 py-0.5 rounded-full ${TONE[statusTone].chip}`}>
+                <span className={`w-1.5 h-1.5 rounded-full ${TONE[statusTone].dot}`} aria-hidden />
+                {orderStatusLabel(order.status)}
+              </span>
+            )}
+          </div>
+
+          {/* Urgency is spelled out, not only coloured — colour alone fails for
+              colour-blind staff and for anyone glancing across a room. In
+              History the age is nobody's wait any more: no big number there
+              (the line under the table says when it was served). */}
+          {!showStatus && (
+            <span className={`shrink-0 text-lg md:text-2xl font-sans font-semibold tabular-nums inline-flex items-center justify-end gap-1 leading-none ${
+              late
+                ? `${TONE.late.solid} rounded-lg px-2 py-1`
+                : urgency === 'attention' ? `${TONE.preparing.text} py-1` : 'text-foreground/70 py-1'
+            }`}>
+              {urgencyMark(urgency) && <span aria-hidden>{urgencyMark(urgency)}</span>}
+              {/* "0m" read like a stopped clock on a ticket that just came in. */}
+              {ageMs < 60_000 ? 'now' : formatMinutes(ageMs)}
+              {urgency !== 'fresh' && <span className="sr-only"> — {urgency}</span>}
             </span>
           )}
-          {/* Read from across a kitchen, not from arm's length: the table
-              number is the one thing a runner must get right first time. */}
-          {slot != null && slot <= 9 && (
-            <span
-              className={`inline-flex items-center justify-center w-6 h-6 rounded-md text-xs font-sans font-bold tabular-nums ${selected ? 'bg-foreground text-background' : 'bg-muted text-muted-foreground'}`}
-              title={`Press ${slot} to pick this ticket`}
-              aria-hidden
-            >
-              {slot}
-            </span>
-          )}
-          <span className="font-serif text-xl md:text-[28px] md:leading-8 font-bold text-foreground">Table {order.table_number}</span>
-          {isNew && (
-            <span className="text-[11px] font-sans font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-primary text-primary-foreground">New</span>
-          )}
-          {order.order_code && (
-            <span className="text-xs font-sans font-semibold tabular-nums tracking-wider px-1.5 py-0.5 rounded bg-muted text-foreground">
-              #{order.order_code}
-            </span>
-          )}
-          {order.guest_name && <span className="text-xs text-muted-foreground font-sans truncate">({order.guest_name})</span>}
-          {/* Which stations are involved — a food runner needs to know a drink is coming too. */}
-          {station === 'all' && hasBar && hasKitchen && (
-            <span className="inline-flex items-center gap-1 text-[10px] uppercase font-sans px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
-              <CupSoda className="w-3 h-3" /> + bar
-            </span>
-          )}
-          {showStatus && (
-            <Badge className={`text-xs font-sans ${statusColors[order.status]}`}>{orderStatusLabel(order.status)}</Badge>
-          )}
-          <PaymentBadge method={order.payment_method} status={order.payment_status} />
         </div>
 
-        {/* Urgency is spelled out, not only coloured — colour alone fails for
-            colour-blind staff and for anyone glancing across a room. */}
-        <div className="text-right shrink-0">
-          <span className={`text-sm md:text-lg font-sans font-semibold tabular-nums inline-flex items-center justify-end gap-1 ${
-            urgency === 'late' || urgency === 'critical'
-              ? 'bg-destructive text-destructive-foreground rounded-md px-2'
-              : urgencyText(urgency)
-          }`}>
-            {urgencyMark(urgency) && <span aria-hidden>{urgencyMark(urgency)}</span>}
-            {formatMinutes(ageMs)}
-            {urgency !== 'fresh' && <span className="sr-only"> — {urgency}</span>}
-          </span>
-          <span className="block text-xs md:text-sm text-muted-foreground font-sans tabular-nums">
+        {/* Everything else about the ticket, one quiet line under the table:
+            useful, never competing with the dishes. */}
+        <div className="mt-1 flex items-start justify-between gap-3 text-xs md:text-[13px] font-sans text-muted-foreground">
+          <div className="flex items-center gap-x-2.5 gap-y-0.5 flex-wrap min-w-0">
+            {order.section_name && (
+              <span className="inline-flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full shrink-0" style={{ background: order.section_color || undefined }} aria-hidden />
+                {order.section_name}
+              </span>
+            )}
+            {order.order_code && (
+              <span className="font-semibold tabular-nums tracking-wide text-foreground/70">#{order.order_code}</span>
+            )}
+            {order.guest_name && <span className="truncate">{order.guest_name}</span>}
+            {/* Which stations are involved — a food runner needs to know a drink is coming too. */}
+            {station === 'all' && hasBar && hasKitchen && (
+              <span className="inline-flex items-center gap-1">
+                <CupSoda className="w-3 h-3" aria-hidden /> + bar
+              </span>
+            )}
+            <PaymentBadge method={order.payment_method} status={order.payment_status} className="bg-transparent px-0 py-0 text-xs md:text-[13px]" />
+          </div>
+          <span className="shrink-0 tabular-nums">
             {STAGE_LABEL[order.status] ?? orderStatusLabel(order.status)} {formatMinutes(stageMs)} · {formatClock(kitchenStart(order))}
           </span>
         </div>
@@ -388,10 +467,8 @@ const KitchenOrderCard = ({
           return (
             <div
               key={item.id}
-              className={`flex items-center gap-2 rounded-lg px-2 py-1.5 min-h-[52px] ${
-                item.status === 'ready' ? 'bg-primary/10'
-                  : item.status === 'preparing' ? 'bg-accent/10' : 'bg-muted/40'
-              }`}
+              data-line-status={item.status}
+              className={`flex items-center gap-2 rounded-xl pl-2.5 pr-1.5 py-1.5 min-h-[56px] transition-colors duration-300 ${lineSurface(item.status)}`}
             >
               {/*
                 Text, not a button. The whole row used to bump the line, so a
@@ -401,10 +478,15 @@ const KitchenOrderCard = ({
                 labelled button on the right moves a line now.
               */}
               <div className="flex-1 min-w-0">
-                <p className={`text-base md:text-xl font-sans font-medium leading-snug ${item.status === 'ready' ? 'text-muted-foreground' : 'text-foreground'}`}>
-                  <span className="tabular-nums font-bold">{item.quantity}×</span> {item.menu_item_name}
+                {/* The dish is the ticket: largest type on the card after the
+                    table, the quantity bold in front where a cook counts. */}
+                {/* 19px on a 1024 board (three narrow columns), 21px where there is room:
+                    at 21px every second dish broke onto two lines there. */}
+                <p className={`text-[17px] md:text-[21px] lg:text-[19px] xl:text-[21px] font-sans font-medium leading-snug tracking-[-0.01em] transition-colors duration-300 ${item.status === 'ready' ? 'text-muted-foreground' : 'text-foreground'}`}>
+                  {/* More than one is the count most often missed: it gets a tint. */}
+                  <span className={`tabular-nums font-bold ${item.quantity > 1 ? 'rounded-md bg-foreground/[0.08] px-1 -ml-0.5' : ''}`}>{item.quantity}×</span> {item.menu_item_name}
                   {station === 'all' && item.station === 'bar' && (
-                    <CupSoda className="inline w-4 h-4 ml-1 text-muted-foreground" aria-label="bar" />
+                    <CupSoda className="inline w-4 h-4 ml-1 -mt-0.5 text-muted-foreground" aria-label="bar" />
                   )}
                 </p>
                 {item.components && item.components.length > 0 && (
@@ -423,17 +505,10 @@ const KitchenOrderCard = ({
                 )}
                 {/* Notes and allergens are what get a dish sent back or a guest
                     hurt. Small italic grey was the least legible text on the
-                    card; they are solid, bold blocks now. */}
-                {item.notes && (
-                  <p className="mt-1 inline-block rounded-md bg-amber-200 text-amber-950 dark:bg-amber-300 dark:text-black font-sans font-bold text-sm md:text-base px-2 py-0.5">
-                    ⚠ {item.notes}
-                  </p>
-                )}
-                {item.allergens && item.allergens.length > 0 && (
-                  <p className="mt-1 inline-block rounded-md bg-destructive text-destructive-foreground font-sans font-bold uppercase tracking-wide text-xs md:text-sm px-2 py-0.5">
-                    Allergens: {item.allergens.join(', ')}
-                  </p>
-                )}
+                    card; they are marked, coloured and bold now — under the
+                    dish, not louder than it. */}
+                {item.notes && <NoteChip>{item.notes}</NoteChip>}
+                {item.allergens && item.allergens.length > 0 && <AllergenChip allergens={item.allergens} />}
               </div>
 
               {prev && (
@@ -452,14 +527,22 @@ const KitchenOrderCard = ({
                   disabled={inFlight}
                   onClick={() => run(item.id, () => onBumpItem(item.id, next))}
                   aria-label={`Mark ${item.menu_item_name} as ${next}`}
-                  className="min-h-[48px] md:min-h-[56px] min-w-[80px] md:min-w-[96px] rounded-lg text-sm md:text-base font-sans font-semibold shrink-0 active:scale-95 transition-transform"
+                  // "Ready" is the colour the line turns when tapped.
+                  className={`min-h-[48px] md:min-h-[56px] min-w-[80px] md:min-w-[96px] rounded-[10px] text-sm md:text-base font-sans font-semibold shrink-0 active:scale-95 transition-[transform,background-color] ${
+                    item.status === 'preparing' ? `${TONE.ready.solid} hover:bg-[hsl(150_46%_28%)]` : 'bg-card'
+                  }`}
                 >
                   {ITEM_ACTION[item.status]}
                 </Button>
               ) : (
-                <span className="inline-flex items-center gap-1 text-sm font-sans font-semibold text-primary px-2 shrink-0">
-                  <Check className="w-4 h-4" /> Up
-                </span>
+                <motion.span
+                  initial={reduced ? false : { opacity: 0, scale: 0.7 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={staffEnter}
+                  className={`inline-flex items-center gap-1 text-sm md:text-base font-sans font-semibold px-2 shrink-0 ${TONE.ready.text}`}
+                >
+                  <Check className="w-4 h-4" strokeWidth={2.5} /> Up
+                </motion.span>
               )}
             </div>
           );
@@ -468,13 +551,13 @@ const KitchenOrderCard = ({
         {parts.map((part) => <PartLine key={part.key} part={part} />)}
 
         {items.length === 0 && parts.length === 0 && (
-          <p className="px-2 py-3 text-xs text-muted-foreground font-sans">Nothing for this station.</p>
+          <p className="px-2 py-3 text-sm text-muted-foreground font-sans">Nothing for this station.</p>
         )}
       </div>
 
       {order.notes && (
         <div className="px-3 pb-2">
-          <p className="rounded-md bg-amber-200 text-amber-950 dark:bg-amber-300 dark:text-black font-sans font-bold text-sm md:text-base px-2.5 py-1.5">
+          <p className="rounded-lg bg-[hsl(42_96%_56%/0.22)] text-[hsl(30_70%_20%)] font-sans font-semibold text-sm md:text-base px-2.5 py-1.5">
             Note: {order.notes}
           </p>
         </div>
@@ -487,17 +570,17 @@ const KitchenOrderCard = ({
           </p>
         </div>
       ) : printStates.length > 0 && (
-        <p className="px-4 pb-1 text-xs font-sans text-muted-foreground flex flex-wrap gap-x-3" aria-label="Print status">
+        <p className="px-4 pb-1.5 text-[11px] md:text-xs font-sans text-muted-foreground/80 flex flex-wrap gap-x-3" aria-label="Print status">
           {printStates.map((p) => (
-            <span key={p.type} className={p.tone === 'busy' ? 'text-accent' : undefined}>
+            <span key={p.type} className={p.tone === 'busy' ? TONE.preparing.text : undefined}>
               <Printer className="inline w-3 h-3 -mt-0.5 mr-1" aria-hidden />
-              {printStates.length > 1 ? `${p.type}: ` : ''}{p.label}
+              {printStates.length > 1 ? `${p.type === 'bar' ? 'Bar' : 'Kitchen'}: ` : ''}{p.label}
             </span>
           ))}
         </p>
       )}
 
-      <div className="px-3 pb-3 space-y-2">
+      <div className="px-3 pb-3 space-y-1.5">
         <div className="flex flex-wrap gap-2">
           {pending.length > 0 && (
             <Button
@@ -505,7 +588,7 @@ const KitchenOrderCard = ({
               size="sm"
               disabled={busy.has('start-all')}
               onClick={() => run('start-all', () => onBumpMany(pending.map((i) => i.id), 'preparing'))}
-              className="min-h-[48px] md:min-h-[56px] rounded-lg text-sm md:text-base font-sans gap-1.5"
+              className="min-h-[48px] md:min-h-[56px] rounded-[10px] bg-card text-sm md:text-base font-sans font-semibold gap-1.5"
             >
               <ChefHat className="w-4 h-4" /> Start all ({pending.length})
             </Button>
@@ -515,7 +598,7 @@ const KitchenOrderCard = ({
               size="sm"
               disabled={busy.has('all-ready')}
               onClick={() => run('all-ready', () => onBumpMany(notReady.map((i) => i.id), 'ready'))}
-              className="min-h-[48px] md:min-h-[56px] flex-1 min-w-[140px] rounded-lg bg-primary text-primary-foreground text-sm md:text-base font-sans font-semibold active:scale-95 transition-transform"
+              className={`min-h-[48px] md:min-h-[56px] flex-1 min-w-[140px] rounded-[10px] ${TONE.ready.solid} hover:bg-[hsl(150_46%_28%)] text-sm md:text-base font-sans font-semibold active:scale-95 transition-transform`}
             >
               All ready ({notReady.length})
             </Button>
@@ -525,7 +608,7 @@ const KitchenOrderCard = ({
               size="sm"
               disabled={busy.has('served')}
               onClick={() => run('served', () => onAdvanceOrder(order.id, 'served'))}
-              className="min-h-[48px] md:min-h-[56px] flex-1 min-w-[140px] rounded-lg bg-primary text-primary-foreground text-sm md:text-base font-sans font-semibold active:scale-95 transition-transform"
+              className={`min-h-[48px] md:min-h-[56px] flex-1 min-w-[140px] rounded-[10px] ${TONE.ready.solid} hover:bg-[hsl(150_46%_28%)] text-sm md:text-base font-sans font-semibold active:scale-95 transition-transform`}
             >
               <Utensils className="w-4 h-4 mr-1.5" /> Mark served
             </Button>
@@ -582,6 +665,7 @@ const KitchenOrderCard = ({
       </div>
     </motion.div>
   );
-};
+});
+KitchenOrderCard.displayName = 'KitchenOrderCard';
 
 export default KitchenOrderCard;

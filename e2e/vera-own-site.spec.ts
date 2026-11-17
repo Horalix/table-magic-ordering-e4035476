@@ -19,7 +19,8 @@ test.describe('Vera Italia’s own site', () => {
     await expect(page.getByRole('heading', { level: 1, name: 'Vera Italia' })).toBeVisible();
     // Where it is, on the photograph and in the visit section; "Opening soon" no longer.
     await expect(page.getByText('Italian restaurant · Sarajevo')).toBeVisible();
-    await expect(page.getByRole('heading', { level: 2, name: 'Sarajevo' })).toBeAttached();
+    // The street the owner gave on 16 November 2026 (src/lib/venues.ts): La Soul's building, its own door.
+    await expect(page.getByRole('heading', { level: 2, name: 'Butmirska cesta 16B' })).toBeAttached();
     await expect(page.getByText('Opening soon')).toHaveCount(0);
     await expect(page.locator('html')).toHaveAttribute('data-venue', 'veraitalia');
     await expect(page.getByRole('img', { name: 'La Soul' })).toHaveCount(0);
@@ -93,7 +94,8 @@ test.describe('Vera Italia’s own site', () => {
     expect(html).toContain('<link rel="canonical" href="https://veraitalia.net/privacy/" />');
     expect(html).toContain('Vera Italia respects your privacy');
     expect(html).toContain('href="/manifest-veraitalia.webmanifest"');
-    expect(html).not.toMatch(/La Soul|Butmirska/);
+    // Same building as La Soul, never its name or its other door (16A).
+    expect(html).not.toMatch(/La Soul|16A/);
     expect(await (await page.request.get('/sitemap.xml')).text()).toContain('<loc>https://veraitalia.net/privacy/</loc>');
 
     await installVeraStubs(page);
@@ -103,11 +105,23 @@ test.describe('Vera Italia’s own site', () => {
     await expect(page.getByText(/La Soul/)).toHaveCount(0);
   });
 
-  test('names other languages on its website, which has an address for each, and not on its menu, which has one for all', async ({ page }) => {
+  test('has every page in three languages, each at its own address naming the other two', async ({ page }) => {
     expect(await (await page.request.get('/')).text()).toContain('<link rel="alternate" hreflang="bs" href="https://veraitalia.net/bs/" />');
     for (const path of ['/menu/veraitalia/', '/menu/veraitalia/pizza-napoletana/', '/menu/veraitalia/dish/truffle-pizza/']) {
-      expect(await (await page.request.get(path)).text()).not.toContain('hreflang=');
+      for (const [lang, address] of [['en', path], ['bs', `/bs${path}`], ['ar', `/ar${path}`]]) {
+        const html = await (await page.request.get(address)).text();
+        expect(html).toMatch(new RegExp(`<html lang="${lang}"`));
+        expect(html).toContain(`<link rel="canonical" href="https://veraitalia.net${address}" />`);
+        expect(html).toContain(`<link rel="alternate" hreflang="ar" href="https://veraitalia.net/ar${path}" />`);
+        expect(html).toContain(`<link rel="alternate" hreflang="x-default" href="https://veraitalia.net${path}" />`);
+      }
     }
+    // Written in its language: the Bosnian dish page's title.
+    expect(await (await page.request.get('/bs/menu/veraitalia/dish/truffle-pizza/')).text()).toMatch(/<title>[^<]*Vera Italia[^<]*<\/title>/);
+    await installVeraStubs(page);
+    await page.goto('/ar/menu/veraitalia/');
+    await expect(page.locator('html')).toHaveAttribute('dir', 'rtl');
+    await expect(page.locator('link[rel="canonical"]')).toHaveAttribute('href', 'https://veraitalia.net/ar/menu/veraitalia/');
   });
 
   test('an address that is no page, and its staff sign-in, are nobody’s search result', async ({ page }) => {
@@ -144,11 +158,13 @@ test.describe('Vera Italia’s own site', () => {
 
     await options(true);
     await page.goto('/');
-    await expect(page.getByTestId('reserve-link')).toHaveAttribute('href', '/reserve/');
+    // On the photograph, in the header from tablet width up, by the address and in the footer.
+    const reserve = page.locator('main').getByTestId('reserve-link').first();
+    await expect(reserve).toHaveAttribute('href', '/reserve/');
     await expect.poll(ld).toContain('"acceptsReservations":"https://veraitalia.net/reserve/"');
     expect(await ld()).toContain('"name":"Can I reserve a table?"');
 
-    await page.getByTestId('reserve-link').click();
+    await reserve.click();
     await expect(page.getByRole('button', { name: 'Ask for this table' })).toBeVisible();
     await expect(page).toHaveTitle('Reserve a table at Vera Italia, Sarajevo');
     await expect(page.locator('link[rel="canonical"]')).toHaveAttribute('href', 'https://veraitalia.net/reserve/');

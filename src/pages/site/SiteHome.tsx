@@ -5,6 +5,7 @@ import SiteHero from '@/components/site/SiteHero';
 import SiteStory from '@/components/site/SiteStory';
 import SiteSignatures from '@/components/site/SiteSignatures';
 import SiteMenuCards from '@/components/site/SiteMenuCards';
+import SiteReserve, { SiteReserveFloat } from '@/components/site/SiteReserve';
 import SiteOrderSteps from '@/components/site/SiteOrderSteps';
 import SitePromise from '@/components/site/SitePromise';
 import SiteFaq from '@/components/site/SiteFaq';
@@ -18,6 +19,8 @@ import { orderingCopy } from '@/lib/seo/ordering';
 import { useMenuOnly } from '@/hooks/useMenuOnly';
 import { useReservationsOffered } from '@/hooks/useReservationsOffered';
 import { DEFAULT_VENUE, VENUES } from '@/lib/venues';
+import { dropPoster } from '@/lib/seo/poster';
+import { useSiteFacts } from '@/lib/seo/site-facts';
 import './site.css';
 
 const ALTERNATES: Record<string, string> = { ...Object.fromEntries(LOCALES.map((l) => [l, sitePath(l)])), 'x-default': '/' };
@@ -58,7 +61,9 @@ const SiteHome = ({ venueSlug = DEFAULT_VENUE, locale: pathLocale }: { venueSlug
   const ordering = useMenuOnly() === false;
   // Nor a table asked for online, while the restaurant takes no requests there (src/lib/seo/reservations.ts).
   const reservations = useReservationsOffered(venue.slug);
-  const jsonLd = useMemo(() => homeGraph(venue, shownLocale, ordering, reservations), [venue, shownLocale, ordering, reservations]);
+  // And what the live menu answered at the last publish (src/lib/seo/menu-faq.ts), once it is here: SiteFaq asks the same.
+  const facts = useSiteFacts();
+  const jsonLd = useMemo(() => homeGraph(venue, shownLocale, ordering, reservations, facts), [venue, shownLocale, ordering, reservations, facts]);
   usePageMeta({
     title: st('seo_title'), description: st(orderingCopy('seo_description', ordering)),
     path: sitePath(shownLocale), locale: shownLocale, alternates: ALTERNATES, jsonLd,
@@ -69,23 +74,26 @@ const SiteHome = ({ venueSlug = DEFAULT_VENUE, locale: pathLocale }: { venueSlug
   useEffect(() => {
     const root = document.documentElement;
     root.classList.add('site-smooth');
-    return () => root.classList.remove('site-smooth');
+    // Leaving for another page: the first screen's poster, were it still there, goes too.
+    return () => { root.classList.remove('site-smooth'); dropPoster(); };
   }, []);
 
   return (
     <div className="site-root">
-      <SiteHeader venue={venue} />
+      <SiteHeader venue={venue} reservations={reservations} />
       <main id="main" tabIndex={-1} className="outline-none">
-        <SiteHero venue={venue} ordering={ordering} />
+        <SiteHero venue={venue} ordering={ordering} reservations={reservations} />
         <SiteStory />
         <SiteSignatures venue={venue} />
         <SiteMenuCards venue={venue} />
+        <SiteReserve venue={venue} open={reservations} />
         {ordering && <SiteOrderSteps />}
         <SitePromise />
         <SiteFaq venue={venue} ordering={ordering} reservations={reservations} />
         <SiteVisit venue={venue} />
       </main>
-      <SiteFooter venue={venue} />
+      <SiteFooter venue={venue} reservations={reservations} />
+      <SiteReserveFloat open={reservations} />
     </div>
   );
 };

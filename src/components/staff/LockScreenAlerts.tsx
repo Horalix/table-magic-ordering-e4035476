@@ -60,12 +60,12 @@ const LockScreenAlerts = ({ alerts, venueName }: { alerts: LockScreenAlertsContr
       {(on || wantsAttention) && (
         <div className="mt-2 flex flex-wrap gap-2">
           {on && (
-            <button type="button" onClick={test} className="min-h-[40px] px-3 rounded-lg border border-border bg-background text-xs font-semibold">
+            <button type="button" onClick={test} className="min-h-[44px] px-3.5 rounded-lg border border-border bg-background text-xs font-semibold">
               Send a test
             </button>
           )}
           {wantsAttention && (
-            <button type="button" onClick={putOff} className="min-h-[40px] px-3 rounded-lg text-xs font-semibold text-muted-foreground">
+            <button type="button" onClick={putOff} className="min-h-[44px] px-3.5 rounded-lg text-xs font-semibold text-muted-foreground">
               Not now
             </button>
           )}

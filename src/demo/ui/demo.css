@@ -1,0 +1,73 @@
+/*
+ * The look of the demo's own pages (demo mode only): the front page, the
+ * side-by-side stage, the sign-in page and the presenter's control. Dark,
+ * in the app's own greens, with the app's cream as the light and its
+ * terracotta as the one accent. Loaded only by src/demo/ui.
+ */
+
+.demo-surface {
+  background:
+    radial-gradient(70% 55% at 78% 0%, rgba(126, 155, 121, 0.2) 0%, transparent 62%),
+    radial-gradient(50% 40% at 0% 18%, rgba(217, 138, 95, 0.1) 0%, transparent 60%),
+    linear-gradient(180deg, #111a15 0%, #0c120f 46%, #0b100e 100%);
+  background-color: #0c120f;
+}
+
+/* A faint grid behind the hero, fading out below it. */
+.demo-grid {
+  background-image:
+    linear-gradient(rgba(244, 236, 221, 0.045) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(244, 236, 221, 0.045) 1px, transparent 1px);
+  background-size: 56px 56px;
+  mask-image: radial-gradient(75% 70% at 60% 30%, #000 0%, transparent 78%);
+  -webkit-mask-image: radial-gradient(75% 70% at 60% 30%, #000 0%, transparent 78%);
+}
+
+/* The light behind the devices. */
+.demo-halo {
+  background: radial-gradient(55% 55% at 55% 45%, rgba(143, 176, 138, 0.26) 0%, rgba(217, 138, 95, 0.08) 45%, transparent 72%);
+  filter: blur(18px);
+}
+
+.demo-card {
+  background: linear-gradient(180deg, rgba(244, 236, 221, 0.055) 0%, rgba(244, 236, 221, 0.02) 100%);
+  box-shadow: 0 0 0 1px rgba(244, 236, 221, 0.08) inset, 0 1px 0 rgba(255, 255, 255, 0.05) inset;
+  transition: transform 0.35s cubic-bezier(0.22, 0.8, 0.3, 1), box-shadow 0.35s cubic-bezier(0.22, 0.8, 0.3, 1), background 0.35s;
+}
+
+.demo-card:hover {
+  transform: translateY(-4px);
+  background: linear-gradient(180deg, rgba(244, 236, 221, 0.09) 0%, rgba(244, 236, 221, 0.03) 100%);
+  box-shadow: 0 0 0 1px rgba(235, 174, 140, 0.4) inset, 0 28px 50px -28px rgba(0, 0, 0, 0.8);
+}
+
+.demo-contact {
+  background:
+    radial-gradient(60% 90% at 100% 0%, rgba(217, 138, 95, 0.35) 0%, transparent 60%),
+    linear-gradient(135deg, #f7f1e4 0%, #efe6d3 100%);
+}
+
+.demo-press {
+  transition-property: transform, background-color, box-shadow, color;
+  transition-duration: 0.2s;
+  transition-timing-function: cubic-bezier(0.22, 0.8, 0.3, 1);
+}
+
+.demo-press:active {
+  transform: scale(0.97);
+}
+
+.demo-ping {
+  animation: demo-ping 1.8s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+
+@keyframes demo-ping {
+  0% { transform: scale(1); opacity: 0.7; }
+  80%, 100% { transform: scale(2.6); opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .demo-card, .demo-press { transition: none; }
+  .demo-card:hover { transform: none; }
+  .demo-ping { animation: none; }
+}

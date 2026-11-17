@@ -4,13 +4,17 @@ import LanguageSelector from '@/components/guest/LanguageSelector';
 import { cn } from '@/lib/utils';
 import { useSiteT } from '@/lib/site-i18n';
 import { menuPath, type Venue } from '@/lib/venues';
+import { RESERVE_PATH } from '@/lib/seo/reservations';
 
 /**
  * The website's header: transparent over the hero, a frosted cream bar once
  * the page has scrolled. The wordmark, three anchors, the language switch the
  * menu uses, and the way into the menu — which is what most visitors came for.
+ * While the restaurant takes table requests online (`reservations`), "Reserve"
+ * sits beside it from tablet width up; a phone has it in the first screen and,
+ * further down, as a pill above the bottom edge (SiteReserve.tsx).
  */
-const SiteHeader = ({ venue }: { venue: Venue }) => {
+const SiteHeader = ({ venue, reservations = false }: { venue: Venue; reservations?: boolean }) => {
   const { st } = useSiteT();
   const [solid, setSolid] = useState(false);
 
@@ -67,6 +71,15 @@ const SiteHeader = ({ venue }: { venue: Venue }) => {
 
         <div className="flex items-center justify-self-end gap-2 sm:gap-3">
           <LanguageSelector variant="site" />
+          {reservations && (
+            <Link
+              to={RESERVE_PATH}
+              data-testid="reserve-link"
+              className="hidden h-11 items-center rounded-full border border-ls-forest/20 px-5 text-sm font-semibold text-ls-forest transition-colors hover:border-ls-forest/40 hover:bg-ls-forest/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ls-sage-deep focus-visible:ring-offset-2 focus-visible:ring-offset-ls-cream sm:inline-flex"
+            >
+              {st('header_reserve')}
+            </Link>
+          )}
           <Link
             to={menuPath(venue.slug)}
             className="inline-flex h-11 items-center rounded-full bg-ls-forest px-4 text-[13px] font-semibold text-ls-cream shadow-[0_6px_20px_-10px_rgba(35,46,40,0.6)] transition-colors hover:bg-ls-forest-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ls-sage-deep focus-visible:ring-offset-2 focus-visible:ring-offset-ls-cream sm:px-5 sm:text-sm"

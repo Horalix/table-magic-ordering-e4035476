@@ -72,7 +72,8 @@ const ReviewPrompt = ({ open, onClose, sessionId, sessionToken }: ReviewPromptPr
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="sm:max-w-md rounded-2xl" closeLabel={t('close')}>
+      {/* A card with room around it on a phone, not a full-width slab with rounded corners. */}
+      <DialogContent className="w-[calc(100%-2rem)] max-w-md rounded-3xl" closeLabel={t('close')}>
         <DialogHeader>
           {/* Each step's own question: the waiter step asks about the waiter, not the visit again. */}
           <DialogTitle className="font-serif text-center text-xl">
@@ -104,7 +105,7 @@ const ReviewPrompt = ({ open, onClose, sessionId, sessionToken }: ReviewPromptPr
                   className={`w-9 h-9 transition-colors ${
                     star <= (hoveredStar || rating)
                       ? 'fill-accent text-accent'
-                      : 'text-muted-foreground/30'
+                      : 'text-muted-foreground/60'
                   }`}
                 />
               </motion.button>

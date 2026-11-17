@@ -8,6 +8,7 @@ import { staffKeys } from '@/lib/realtime';
 import { useNow } from '@/lib/clock';
 import { formatMinutes, orderUrgency, urgencyMark, urgencyText } from '@/lib/timing';
 import type { StationFilter } from '@/components/staff/KitchenOrderCard';
+import { TONE } from '@/components/staff/status-tone';
 
 /**
  * "All day" — how much of each dish is outstanding across every open order.
@@ -50,7 +51,7 @@ const AllDayPanel = ({ station, onChanged }: Props) => {
         // partial batch is exactly the situation where a cook must look.
         toast.warning(`${result.updated} updated, ${result.failed} could not be`);
       } else {
-        toast.success(`${row.name} — ${status === 'ready' ? 'all up' : 'started'}`);
+        toast.success(`${row.name}: ${status === 'ready' ? 'all ready' : 'started'}`);
       }
       await refetch();
       onChanged();
@@ -62,16 +63,24 @@ const AllDayPanel = ({ station, onChanged }: Props) => {
   };
 
   if (isLoading) {
-    return <p className="px-6 py-10 text-sm text-muted-foreground font-sans">Counting…</p>;
+    // The rows' own shape while counting, so nothing jumps when they arrive.
+    return (
+      <div className="p-4 sm:px-6 grid gap-2.5 lg:grid-cols-2" aria-busy="true" aria-label="Counting">
+        {Array.from({ length: 6 }).map((_, i) => (
+          <div key={i} className="h-[76px] rounded-2xl border border-border bg-card animate-pulse motion-reduce:animate-none" />
+        ))}
+      </div>
+    );
   }
 
   if (error) {
     return (
-      <div className="px-6 py-10">
-        <p className="text-sm text-destructive font-sans mb-3">
-          Could not load the all-day counts. Do not batch off the board — it only shows part of the queue.
+      <div className="mx-4 sm:mx-6 my-6 rounded-2xl border border-destructive/40 bg-destructive/5 px-5 py-4">
+        <p className="text-base text-foreground font-sans font-semibold">Could not load the all-day counts</p>
+        <p className="text-sm text-muted-foreground font-sans mt-0.5 mb-3">
+          Do not batch off the board: it only shows part of the queue.
         </p>
-        <Button variant="outline" size="sm" onClick={() => void refetch()}>Try again</Button>
+        <Button variant="outline" onClick={() => void refetch()} className="min-h-[44px]">Try again</Button>
       </div>
     );
   }
@@ -79,18 +88,24 @@ const AllDayPanel = ({ station, onChanged }: Props) => {
   const rows = data ?? [];
   if (rows.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center py-20">
-        <ChefHat className="w-12 h-12 text-muted-foreground mb-4" />
-        <p className="text-muted-foreground font-sans">Nothing outstanding</p>
+      <div className="flex flex-col items-center justify-center py-20 px-6 text-center">
+        <span className="w-16 h-16 rounded-full bg-muted grid place-items-center mb-4" aria-hidden>
+          <ChefHat className="w-7 h-7 text-muted-foreground" />
+        </span>
+        <p className="font-serif text-xl font-semibold text-foreground">Nothing outstanding</p>
+        <p className="mt-1 text-sm font-sans text-muted-foreground">Every dish ordered is up or served.</p>
       </div>
     );
   }
 
+  // Read from the stove, like the board: the count and the dish are the row.
+  // Two columns on a wide screen, so a long list is not a strip of white.
   return (
-    <div className="p-4 space-y-2">
-      <p className="px-1 pb-1 text-xs text-muted-foreground font-sans">
+    <div className="p-4 sm:px-6">
+      <p className="px-1 pb-3 text-sm text-muted-foreground font-sans">
         Every open order, not just what fits on the board.
       </p>
+      <div className="grid gap-2.5 lg:grid-cols-2">
       {rows.map((row) => {
         const outstanding = row.qty_pending + row.qty_preparing;
         const ageMs = Math.max(0, now - new Date(row.oldest_at).getTime());
@@ -101,18 +116,24 @@ const AllDayPanel = ({ station, onChanged }: Props) => {
         return (
           <div
             key={`${row.menu_item_id ?? row.name}-${row.station}`}
-            className="flex items-center gap-3 rounded-xl border border-border bg-card px-4 py-3 min-h-[64px]"
+            className={`flex flex-wrap items-center gap-x-3.5 gap-y-2 rounded-2xl border bg-card shadow-lux px-2.5 py-2.5 min-h-[76px] ${
+              urgency === 'late' || urgency === 'critical' ? TONE.late.border : 'border-border'
+            }`}
           >
-            <span className="font-sans text-2xl font-semibold tabular-nums text-foreground w-14 shrink-0">
+            {/* What is left to cook; a row that is all up shows its count in the green of ready. */}
+            <span className={`w-14 h-14 shrink-0 rounded-xl grid place-items-center font-sans text-[28px] font-bold tabular-nums leading-none ${
+              outstanding > 0 ? 'bg-foreground/[0.06] text-foreground' : TONE.ready.chip
+            }`}>
               {outstanding > 0 ? outstanding : row.qty_ready}
             </span>
 
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-sans font-semibold text-foreground truncate">
+            {/* On a phone the buttons go under the dish rather than off the screen. */}
+            <div className="flex-1 min-w-[9rem]">
+              <p className="text-lg md:text-xl font-sans font-semibold leading-snug text-foreground">
                 {row.name}
-                {row.station === 'bar' && <CupSoda className="inline w-3.5 h-3.5 ml-1.5 text-muted-foreground" aria-label="bar" />}
+                {row.station === 'bar' && <CupSoda className="inline w-4 h-4 ml-1.5 -mt-0.5 text-muted-foreground" aria-label="bar" />}
               </p>
-              <p className="text-xs font-sans text-muted-foreground tabular-nums">
+              <p className="text-sm font-sans text-muted-foreground tabular-nums mt-0.5">
                 {row.qty_pending > 0 && <>{row.qty_pending} waiting · </>}
                 {row.qty_preparing > 0 && <>{row.qty_preparing} in prep · </>}
                 {row.qty_ready > 0 && <>{row.qty_ready} up · </>}
@@ -123,32 +144,32 @@ const AllDayPanel = ({ station, onChanged }: Props) => {
               </p>
             </div>
 
-            <div className="flex gap-2 shrink-0">
+            <div className="flex gap-2 shrink-0 ms-auto">
               {row.qty_pending > 0 && row.pending_ids.length > 0 && (
                 <Button
                   variant="outline"
-                  size="sm"
                   disabled={busy === `${row.menu_item_id}:preparing`}
                   onClick={() => bump(row, 'preparing', row.pending_ids)}
-                  className="h-10 rounded-lg text-xs font-sans"
+                  className="min-h-[52px] px-4 rounded-[10px] bg-card text-sm md:text-base font-sans font-semibold"
                 >
                   Start all
                 </Button>
               )}
               {outstanding > 0 && row.open_ids.length > 0 && (
+                // The board's words and colour for the same action: "All ready", in the green of ready.
                 <Button
-                  size="sm"
                   disabled={busy === `${row.menu_item_id}:ready`}
                   onClick={() => bump(row, 'ready', row.open_ids)}
-                  className="h-10 rounded-lg bg-primary text-primary-foreground text-xs font-sans active:scale-95 transition-transform"
+                  className={`min-h-[52px] px-4 rounded-[10px] ${TONE.ready.solid} hover:bg-[hsl(150_46%_28%)] text-sm md:text-base font-sans font-semibold active:scale-95 transition-transform`}
                 >
-                  All up
+                  All ready
                 </Button>
               )}
             </div>
           </div>
         );
       })}
+      </div>
     </div>
   );
 };

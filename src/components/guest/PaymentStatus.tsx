@@ -58,28 +58,77 @@ const OrderCode = ({ code }: { code: string | null }) => {
   );
 };
 
+/** Where the sparks of the success mark fly to: eight, evenly round, alternating near and far. */
+const SPARKS = Array.from({ length: 8 }, (_, i) => {
+  const angle = (i / 8) * Math.PI * 2 - Math.PI / 2;
+  const reach = i % 2 ? 50 : 60;
+  return { x: Math.cos(angle) * reach, y: Math.sin(angle) * reach, accent: i % 2 === 1 };
+});
+
 /**
  * The "order sent" moment: the circle springs in (0.6 → 1, the one bounce the
- * app allows itself) and the check draws itself. Reduced motion: both simply
+ * app allows itself), two rings ripple out of it once, a few sparks fly off,
+ * and the check draws itself. Reduced motion: the circle and check simply
  * appear.
  */
 const SuccessMark = () => {
   const reduced = useReducedMotion();
   return (
+    <div className="relative w-20 h-20 mx-auto">
+      {!reduced && (
+        <>
+          {[0, 0.18].map((delay) => (
+            <motion.span
+              key={delay}
+              aria-hidden
+              className="absolute inset-0 rounded-full border-2 border-primary/40"
+              initial={{ scale: 0.8, opacity: 0.9 }}
+              animate={{ scale: 2, opacity: 0 }}
+              transition={{ duration: 1.1, delay: 0.12 + delay, ease: easeEnter }}
+            />
+          ))}
+          {SPARKS.map((spark, i) => (
+            <motion.span
+              key={i}
+              aria-hidden
+              className={`absolute left-1/2 top-1/2 -ml-1 -mt-1 h-2 w-2 rounded-full ${spark.accent ? 'bg-accent' : 'bg-primary/70'}`}
+              initial={{ x: 0, y: 0, scale: 0, opacity: 1 }}
+              animate={{ x: spark.x, y: spark.y, scale: [0, 1, 0.4], opacity: [1, 1, 0] }}
+              transition={{ duration: 0.75, delay: 0.16, ease: easeEnter }}
+            />
+          ))}
+        </>
+      )}
+      <motion.div
+        initial={reduced ? false : { scale: 0.6, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        transition={springSuccess}
+        className="relative w-20 h-20 rounded-full bg-primary grid place-items-center shadow-[0_14px_34px_-12px_hsl(var(--primary)/0.65)]"
+      >
+        <svg viewBox="0 0 24 24" className="w-10 h-10 text-primary-foreground" fill="none" stroke="currentColor" strokeWidth={2.6} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+          <motion.path
+            d="M5.5 12.5l4.25 4.25L18.5 7.75"
+            initial={reduced ? false : { pathLength: 0 }}
+            animate={{ pathLength: 1 }}
+            transition={{ duration: duration.draw, ease: easeEnter, delay: duration.fast }}
+          />
+        </svg>
+      </motion.div>
+    </div>
+  );
+};
+
+/** The lines under the success mark arrive one after another, once the mark has landed. */
+const Rise = ({ children, step, className }: { children: React.ReactNode; step: number; className?: string }) => {
+  const reduced = useReducedMotion();
+  return (
     <motion.div
-      initial={reduced ? false : { scale: 0.6, opacity: 0 }}
-      animate={{ scale: 1, opacity: 1 }}
-      transition={springSuccess}
-      className="w-16 h-16 mx-auto rounded-full bg-primary/10 grid place-items-center"
+      initial={reduced ? false : { opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: duration.slow, ease: easeEnter, delay: 0.28 + step * 0.07 }}
+      className={className}
     >
-      <svg viewBox="0 0 24 24" className="w-8 h-8 text-primary" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-        <motion.path
-          d="M5.5 12.5l4.25 4.25L18.5 7.75"
-          initial={reduced ? false : { pathLength: 0 }}
-          animate={{ pathLength: 1 }}
-          transition={{ duration: duration.draw, ease: easeEnter, delay: duration.fast }}
-        />
-      </svg>
+      {children}
     </motion.div>
   );
 };
@@ -186,37 +235,56 @@ const PaymentStatus = ({
   return shell(
     <>
       <SuccessMark />
-      <h2 className="font-serif text-2xl font-bold text-foreground mt-5">
-        {payLater && held ? t('order_received_title') : payLater ? t('order_sent_title') : t('payment_received_title')}
-      </h2>
-      <p className="text-muted-foreground font-sans mt-2 text-sm leading-relaxed">
-        {payLater && held ? t('order_waiter_will_confirm')
-          : payLater ? t('pay_waiter_when_ready') : released ? t('order_in_kitchen_now') : t('order_sent_kitchen')}
-      </p>
-      <p className="text-xl font-sans font-semibold text-foreground mt-3 tabular-nums">
-        {payLater && <span className="text-sm font-sans font-normal text-muted-foreground me-2">{t('to_pay')}</span>}
-        {amountLabel}
-      </p>
-      <OrderCode code={orderCode} />
-      {(tableNumber || (orderId && !held)) && (
-        <div className="mt-4 flex flex-col items-center gap-1">
-          {/* Silent when the kitchen has no basis for an estimate. */}
-          {orderId && !held && <OrderEta orderId={orderId} />}
-          {tableNumber && <p className="text-sm font-sans text-muted-foreground">{t('bring_to_table_n', { n: tableNumber })}</p>}
+      <Rise step={0}>
+        <h2 className="font-serif text-[1.75rem] leading-tight tracking-tight font-bold text-foreground mt-7">
+          {payLater && held ? t('order_received_title') : payLater ? t('order_sent_title') : t('payment_received_title')}
+        </h2>
+        <p className="text-muted-foreground font-sans mt-2 text-[15px] leading-relaxed">
+          {payLater && held ? t('order_waiter_will_confirm')
+            : payLater ? t('pay_waiter_when_ready') : released ? t('order_in_kitchen_now') : t('order_sent_kitchen')}
+        </p>
+      </Rise>
+      {/* The order as a receipt: what it costs, its number, where it is going. */}
+      <Rise step={1} className="mt-6 rounded-3xl bg-card text-start shadow-[0_1px_2px_rgba(0,0,0,0.04),0_12px_32px_-18px_rgba(0,0,0,0.18)] ring-1 ring-border/60">
+        <div className="flex items-baseline justify-between gap-4 px-5 pt-4 pb-3.5">
+          <span className="text-sm font-sans text-muted-foreground">{payLater ? t('to_pay') : t('total')}</span>
+          <span className="text-2xl font-sans font-semibold text-foreground tabular-nums">{amountLabel}</span>
         </div>
+        {(orderCode || tableNumber) && (
+          <dl className="flex items-start justify-between gap-4 border-t border-dashed border-border px-5 py-3.5 font-sans">
+            {orderCode ? (
+              <div>
+                <dt className="text-xs text-muted-foreground">{t('order_number')}</dt>
+                <dd dir="ltr" className="mt-0.5 text-base font-semibold text-foreground tabular-nums tracking-wider">{orderCode}</dd>
+              </div>
+            ) : <span />}
+            {tableNumber && (
+              <div className="text-end">
+                <dt className="text-xs text-muted-foreground">{t('table')}</dt>
+                <dd className="mt-0.5 text-base font-semibold text-foreground tabular-nums">{tableNumber}</dd>
+              </div>
+            )}
+          </dl>
+        )}
+      </Rise>
+      {/* Silent when the kitchen has no basis for an estimate. */}
+      {orderId && !held && (
+        <Rise step={2} className="mt-4 flex justify-center">
+          <OrderEta orderId={orderId} />
+        </Rise>
       )}
-      <div className="mt-6 space-y-2.5">
+      <Rise step={3} className="mt-7 space-y-2.5">
         {onTrackOrder && (
           <Button onClick={onTrackOrder} className="w-full h-12 rounded-2xl bg-primary text-primary-foreground hover:bg-sage-dark font-sans font-semibold">
             {t('track_order')}
           </Button>
         )}
         {onContinue && (
-          <Button onClick={onContinue} variant="outline" className="w-full h-12 rounded-2xl font-sans font-semibold">
+          <Button onClick={onContinue} variant="outline" className="w-full h-12 rounded-2xl font-sans font-semibold bg-transparent hover:bg-muted hover:text-foreground">
             {t('order_more')}
           </Button>
         )}
-      </div>
+      </Rise>
     </>,
   );
 };

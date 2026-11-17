@@ -1,11 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { supabase } from '@/integrations/supabase/client';
 import { SHOW_DELETED } from '@/lib/menu-bin';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import PaymentBadge from '@/components/PaymentBadge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
@@ -25,9 +24,11 @@ import {
   LogOut,
   Monitor,
   PowerOff,
+  Receipt,
   RefreshCw,
   Settings,
   Sparkles,
+  TriangleAlert,
   UserX,
   Users,
   Utensils,
@@ -35,7 +36,7 @@ import {
   VolumeX,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { formatDuration, formatMinutes, useElapsed, useElapsedMinutes, waitBg, seatedBg } from '@/lib/timing';
+import { formatDuration, formatMinutes, orderUrgency, useElapsed, useElapsedMinutes, seatedBg } from '@/lib/timing';
 import {
   ackBillRequest, ackWaiterCall, canTakePayment, closeTableSession, describePaymentResult, km, recordTablePayment,
   resolveBillRequest as rpcResolveBillRequest, resolveWaiterCall as rpcResolveWaiterCall,
@@ -59,6 +60,9 @@ import HeldOrdersCard from '@/components/staff/HeldOrdersCard';
 import EndOfDayTables from '@/components/staff/EndOfDayTables';
 import LockScreenAlerts from '@/components/staff/LockScreenAlerts';
 import MenuOnlyNotice from '@/components/staff/MenuOnlyNotice';
+import { TONE, orderTone, type StaffTone } from '@/components/staff/status-tone';
+import { ARRIVE_FROM, ARRIVED, staffEnter, staffExit, usePastFirstPaint } from '@/components/staff/staff-motion';
+import { ArrivalGlow, TickingCount } from '@/components/staff/StaffMotion';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
@@ -127,6 +131,16 @@ interface PendingSettle {
 
 const tableOf = (row: { table_sessions: { tables: { table_number: number } | null } | null }) =>
   row.table_sessions?.tables?.table_number ?? '?';
+
+/**
+ * A strip that asks for one tap (sound off, sound blocked): the same soft
+ * amber as the end-of-day notice under it, words left-aligned beside their
+ * icon, so two warnings never look like two different apps.
+ */
+const CAUTION_STRIP = 'w-full min-h-[44px] rounded-xl border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-start text-sm font-sans font-semibold leading-snug text-foreground flex items-center gap-2.5 hover:bg-amber-500/15 transition-colors';
+
+/** "Table 7", the same size and face on every card in the lists. */
+const TABLE_TITLE = 'font-serif text-[26px] font-bold leading-none tracking-tight';
 
 /** The waiter's sections today, their tables, and who is seated at them ("All my tables"). */
 interface MyFloor {
@@ -658,6 +672,10 @@ const WaiterDashboard = () => {
     const top = section.getBoundingClientRect().top + window.scrollY - (headerRef.current?.offsetHeight ?? 0) - 12;
     window.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
   };
+  /** After the first paint, a card that appears is news: it drops in and glows. */
+  const pastFirstPaint = usePastFirstPaint(!loading && loaded);
+  const arrivals = pastFirstPaint.current;
+
   /** Same order as the list: food going cold, a guest waiting, the bill. */
   const attentionSummary = summarize({
     ready: readyToRun.map(tableOf),
@@ -828,9 +846,13 @@ const WaiterDashboard = () => {
                   retrying" next to "3 tables" is wider than a 360px phone
                   leaves here. */}
               <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-sm text-muted-foreground mt-0.5">
-                {/* Not "0 tables" before anything has loaded. */}
-                {loaded && <span className="whitespace-nowrap">{plural(tables.length, 'table')}</span>}
-                {venueName && <span className="whitespace-nowrap">{loaded ? '· ' : ''}{venueName}</span>}
+                {/* Not "0 tables" before anything has loaded. One run of words,
+                    so a 360px phone never starts its second line with "·". */}
+                {(loaded || venueName) && (
+                  <span className="min-w-0 truncate">
+                    {[loaded ? plural(tables.length, 'table') : null, venueName].filter(Boolean).join(' · ')}
+                  </span>
+                )}
                 <ConnectionPill state={connection} />
               </div>
             </div>
@@ -869,25 +891,25 @@ const WaiterDashboard = () => {
           <div className="max-w-6xl mx-auto px-4 sm:px-6 pb-2">
             <button
               onClick={() => { void toggleSound(); }}
-              className="w-full min-h-[44px] rounded-xl bg-amber-100 text-amber-900 border border-amber-200 text-sm font-sans font-semibold flex items-center justify-center gap-2 px-3"
+              className={CAUTION_STRIP}
             >
-              <VolumeX className="w-4 h-4 shrink-0" aria-hidden />
-              {mutedUntil ? `Sound is off until ${soundBackAt(mutedUntil)}` : 'Sound is off'}
-              {buzzes ? ' — the phone only buzzes. Tap to turn on.' : ' — you will not hear calls or ready food. Tap to turn on.'}
+              <VolumeX className="w-4 h-4 shrink-0 text-amber-700" aria-hidden />
+              <span className="min-w-0">
+                {mutedUntil ? `Sound is off until ${soundBackAt(mutedUntil)}` : 'Sound is off'}
+                {buzzes ? ' — the phone only buzzes. Tap to turn on.' : ' — you will not hear calls or ready food. Tap to turn on.'}
+              </span>
             </button>
           </div>
         )}
-
-        <MenuOnlyNotice audience="waiter" outerClassName="max-w-6xl mx-auto px-4 sm:px-6 pb-2" />
-        {staffVenue && <EndOfDayTables hours={staffVenue.venue.hours} outerClassName="max-w-6xl mx-auto px-4 sm:px-6 pb-2" />}
 
         {soundOn && !audioUnlocked && (
           <div className="max-w-6xl mx-auto px-4 sm:px-6 pb-2">
             <button
               onClick={() => { void unlockSound().then((ok) => { if (ok) playWaiterCallAlert(); }); }}
-              className="w-full min-h-[44px] rounded-xl bg-amber-100 text-amber-900 border border-amber-200 text-sm font-sans font-semibold flex items-center justify-center gap-2"
+              className={CAUTION_STRIP}
             >
-              <VolumeX className="w-4 h-4" aria-hidden /> {buzzes ? 'Alerts are silent — tap once to turn on sound and vibration' : 'Alerts are silent — tap once to turn on sound'}
+              <VolumeX className="w-4 h-4 shrink-0 text-amber-700" aria-hidden />
+              <span className="min-w-0">{buzzes ? 'Alerts are silent — tap once to turn on sound and vibration' : 'Alerts are silent — tap once to turn on sound'}</span>
             </button>
           </div>
         )}
@@ -917,7 +939,8 @@ const WaiterDashboard = () => {
             label="Owed"
             // The unit small, so "114.00 KM" stays on one line in a third of a phone.
             value={totalOwed > 0 ? <>{totalOwed.toFixed(2)}<span className="text-xs font-medium"> KM</span></> : '—'}
-            tone={totalOwed > 0 ? 'warn' : 'idle'}
+            // Money, not cooking: plain ink, not the amber of "preparing".
+            tone={totalOwed > 0 ? 'active' : 'idle'}
           />
           {/* The same count as the "In the kitchen" list below. Plates already
               up are not in it: they are on top of the screen, to be run. */}
@@ -938,12 +961,14 @@ const WaiterDashboard = () => {
                 key={attentionSummary}
                 type="button"
                 onClick={showAttention}
-                className="pointer-events-auto w-full min-h-[48px] rounded-xl bg-amber-400 text-amber-950 shadow-lux-lg px-3 py-2 flex items-center gap-2 text-left text-sm font-sans font-semibold kds-flash"
+                className="pointer-events-auto w-full min-h-[52px] rounded-2xl bg-[hsl(150_12%_14%)] text-white shadow-lux-lg pl-2 pr-2 py-2 flex items-center gap-2.5 text-left text-sm font-sans font-semibold kds-flash"
               >
-                <Bell className="w-5 h-5 shrink-0" aria-hidden />
+                <span className="w-9 h-9 rounded-xl bg-white/10 grid place-items-center shrink-0" aria-hidden>
+                  <Bell className="w-[18px] h-[18px]" />
+                </span>
                 {/* Two lines before an ellipsis: the bill is last, and it is money. */}
-                <span className="min-w-0 flex-1 line-clamp-2">{attentionSummary}</span>
-                <span className="shrink-0 rounded-lg bg-amber-950/10 px-2.5 py-1">Show</span>
+                <span className="min-w-0 flex-1 line-clamp-2 leading-snug">{attentionSummary}</span>
+                <span className="shrink-0 rounded-xl bg-white text-[hsl(150_12%_14%)] px-3 py-1.5 font-bold">Show</span>
               </button>
             </div>
           </div>
@@ -951,6 +976,11 @@ const WaiterDashboard = () => {
       </header>
 
       <main className="max-w-6xl mx-auto px-4 sm:px-6 py-5 space-y-7">
+        {/* In the page, not the sticky header: with the end-of-day notice in
+            it the header took 42% of a 390px phone and 48% of a 360px one,
+            and the list it exists to show was barely on screen. */}
+        <MenuOnlyNotice audience="waiter" />
+        {staffVenue && <EndOfDayTables hours={staffVenue.venue.hours} />}
         {/* On top while there is something to do about it (turn it on, add the
             app to the Home Screen, unblock notifications); below the tables
             once it is on, or put off with "Not now". */}
@@ -988,23 +1018,25 @@ const WaiterDashboard = () => {
             </div>
           ) : (
             <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              <AnimatePresence mode="popLayout">
+              <AnimatePresence mode="popLayout" initial={false}>
                 {/* Food going cold first, then a guest waiting, then the bill. */}
                 {readyToRun.map((order) => (
-                  <motion.div key={order.id} layout initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.96 }}>
+                  <ArrivingItem key={order.id} arriving={arrivals}>
                     <OrderCard
                       order={order}
                       busy={busy.has(`order:${order.id}`)}
                       onUpdate={updateOrderStatus}
                       highlight
+                      arriving={arrivals}
                     />
                     {takeStrip(order.table_session_id, tableOf(order))}
-                  </motion.div>
+                  </ArrivingItem>
                 ))}
                 {waiterCalls.map((call) => (
                   <AlertCard
                     key={call.id}
-                    color="amber"
+                    tone="calling"
+                    arriving={arrivals}
                     icon={<Hand className="w-5 h-5" />}
                     title={`Table ${tableOf(call)}`}
                     label="Needs you"
@@ -1022,8 +1054,9 @@ const WaiterDashboard = () => {
                 {billRequests.map((bill) => (
                   <AlertCard
                     key={bill.id}
-                    color="primary"
-                    icon={<CreditCard className="w-5 h-5" />}
+                    tone="bill"
+                    arriving={arrivals}
+                    icon={<Receipt className="w-5 h-5" />}
                     title={`Table ${tableOf(bill)}`}
                     label="Wants the bill"
                     alert={bill}
@@ -1104,18 +1137,11 @@ const WaiterDashboard = () => {
             <EmptyState icon={<Utensils className="w-5 h-5" />} text="Nothing cooking for your tables." />
           ) : (
             <div className="grid sm:grid-cols-2 gap-3">
-              <AnimatePresence mode="popLayout">
+              <AnimatePresence mode="popLayout" initial={false}>
                 {cooking.map((order) => (
-                  <motion.div
-                    key={order.id}
-                    layout
-                    initial={{ opacity: 0, y: 8 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, scale: 0.96 }}
-                    transition={{ duration: 0.2 }}
-                  >
-                    <OrderCard order={order} busy={busy.has(`order:${order.id}`)} onUpdate={updateOrderStatus} />
-                  </motion.div>
+                  <ArrivingItem key={order.id} arriving={arrivals}>
+                    <OrderCard order={order} busy={busy.has(`order:${order.id}`)} onUpdate={updateOrderStatus} arriving={arrivals} />
+                  </ArrivingItem>
                 ))}
               </AnimatePresence>
             </div>
@@ -1172,8 +1198,8 @@ const WaiterDashboard = () => {
               <h2 className="font-serif text-base sm:text-lg font-bold">My tables</h2>
               <span className="text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground tabular-nums">{tables.length}</span>
               {totalOwed > 0 && (
-                <span className="text-sm font-sans font-semibold text-amber-700 dark:text-amber-400 tabular-nums">
-                  {km(totalOwed)} owed
+                <span className="text-sm font-sans font-medium text-muted-foreground tabular-nums">
+                  · <span className="font-semibold text-foreground">{km(totalOwed)}</span> owed
                 </span>
               )}
               <ChevronDown className="w-5 h-5 ml-auto text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
@@ -1319,16 +1345,17 @@ const StatChip = ({
   value: React.ReactNode;
   tone?: 'idle' | 'active' | 'warn' | 'urgent';
 }) => {
-  const toneCls = {
-    idle: 'bg-muted/50 text-foreground',
-    active: 'bg-primary/10 text-primary',
-    warn: 'bg-amber-500/10 text-amber-700 dark:text-amber-400',
-    urgent: 'bg-destructive/10 text-destructive',
+  // Calm tiles; only the number takes a colour, and only when it needs a look.
+  const valueCls = {
+    idle: 'text-foreground/70',
+    active: 'text-foreground',
+    warn: TONE.preparing.text,
+    urgent: TONE.late.text,
   }[tone];
   return (
-    <div className={`rounded-xl ${toneCls} px-2 py-2`}>
-      <p className="text-xs font-medium opacity-75 leading-none">{label}</p>
-      <p className="font-sans font-semibold text-base sm:text-lg leading-tight tabular-nums whitespace-nowrap mt-1">{value}</p>
+    <div className={`rounded-2xl border bg-card px-2 py-2 shadow-[0_1px_2px_hsl(150_10%_15%/0.04)] transition-colors ${tone === 'urgent' ? 'border-[hsl(0_72%_50%/0.3)]' : 'border-border/80'}`}>
+      <p className="text-[11px] font-sans font-medium uppercase tracking-[0.08em] text-muted-foreground leading-none">{label}</p>
+      <p className={`font-sans font-semibold text-base sm:text-lg leading-tight tabular-nums whitespace-nowrap mt-1.5 ${valueCls}`}>{value}</p>
     </div>
   );
 };
@@ -1337,7 +1364,9 @@ const SectionTitle = ({ icon, title, count }: { icon: React.ReactNode; title: st
   <div className="flex items-center gap-2 mb-3">
     <span className="text-muted-foreground">{icon}</span>
     <h2 className="font-serif text-lg font-semibold">{title}</h2>
-    <span className="text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground tabular-nums">{count}</span>
+    <span className="min-w-[1.5rem] text-center text-xs font-semibold px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
+      <TickingCount value={count} />
+    </span>
   </div>
 );
 
@@ -1369,7 +1398,7 @@ const OwesRow = ({
   onCash: () => void;
   onTerminal: () => void;
 }) => (
-  <div className="rounded-lg border border-amber-500/40 bg-amber-500/5 p-2.5">
+  <div className={`rounded-xl border p-2.5 ${TONE.bill.surface}`}>
     <p className="text-sm font-sans font-semibold text-foreground">
       Owes <span className="tabular-nums">{km(amount)}</span>
       {orders > 1 && <span className="font-normal text-muted-foreground"> · {orders} orders</span>}
@@ -1385,21 +1414,36 @@ const OwesRow = ({
   </div>
 );
 
-const AlertCard = ({
-  color,
-  icon,
-  title,
-  label,
-  alert,
-  claimedBy,
-  doneLabel,
-  busy,
-  onDone,
-  claimBusy = false,
-  onClaim,
-  children,
-}: {
-  color: 'amber' | 'primary';
+/**
+ * A card in the attention list. Present when the screen opened: simply there.
+ * Arrived since (food came up, a guest called): drops in from above. Leaving
+ * (served, done): fades. With reduce motion, none of it moves.
+ */
+const ArrivingItem = React.forwardRef<HTMLDivElement, { arriving: boolean; children: React.ReactNode }>(
+  ({ arriving, children }, ref) => {
+    const reduced = useReducedMotion();
+    const [arrived] = useState(arriving);
+    return (
+      <motion.div
+        ref={ref}
+        layout="position"
+        initial={arrived && !reduced ? ARRIVE_FROM : false}
+        animate={ARRIVED}
+        exit={reduced ? { opacity: 0, transition: { duration: 0 } } : { opacity: 0, scale: 0.97, transition: staffExit }}
+        transition={reduced ? { duration: 0 } : staffEnter}
+      >
+        {children}
+      </motion.div>
+    );
+  },
+);
+ArrivingItem.displayName = 'ArrivingItem';
+
+const AlertCard = React.forwardRef<HTMLDivElement, {
+  /** Violet for a call, ink for a bill: the same on every staff screen. */
+  tone: Extract<StaffTone, 'calling' | 'bill'>;
+  /** Mounted after the screen's first paint: it just came in. */
+  arriving: boolean;
   icon: React.ReactNode;
   title: string;
   label: string;
@@ -1413,27 +1457,35 @@ const AlertCard = ({
   /** "I'm going" — offered while nobody has said so. */
   onClaim?: () => void;
   children?: React.ReactNode;
-}) => {
-  const accent = color === 'amber' ? 'bg-amber-500' : 'bg-primary';
-  const tint = color === 'amber' ? 'bg-amber-500/5 border-amber-500/30' : 'bg-primary/5 border-primary/30';
+}>(({
+  tone,
+  arriving,
+  icon,
+  title,
+  label,
+  alert,
+  claimedBy,
+  doneLabel,
+  busy,
+  onDone,
+  claimBusy = false,
+  onClaim,
+  children,
+}, ref) => {
+  const t = TONE[tone];
+  const [arrived] = useState(arriving);
   const claimed = alert.status === 'acknowledged' && claimedBy !== null;
   return (
-    <motion.div
-      layout
-      initial={{ opacity: 0, x: -8 }}
-      animate={{ opacity: 1, x: 0 }}
-      exit={{ opacity: 0, scale: 0.95 }}
-      transition={{ duration: 0.18 }}
-    >
-      <div className={`relative overflow-hidden rounded-xl border ${tint} pl-3 pr-2 py-2.5 space-y-2`}>
-        <div className={`absolute left-0 top-0 bottom-0 w-1 ${accent}`} />
+    <ArrivingItem ref={ref} arriving={arriving}>
+      <div className={`relative rounded-2xl border bg-card shadow-lux pl-2.5 pr-2 py-2.5 space-y-2 ${t.border}`}>
+        {arrived && <ArrivalGlow tone={tone} />}
         <div className="flex items-center gap-3">
-          <div className={`w-10 h-10 rounded-lg ${accent} text-white grid place-items-center shrink-0`}>
+          <div className={`w-11 h-11 rounded-xl ${t.solid} grid place-items-center shrink-0`}>
             {icon}
           </div>
           <div className="min-w-0 flex-1">
-            <p className="font-sans font-bold text-xl leading-tight truncate">{title}</p>
-            <p className="text-sm font-medium text-foreground/80 truncate">
+            <p className={`${TABLE_TITLE} truncate`}>{title}</p>
+            <p className={`mt-1 text-sm font-semibold truncate ${t.text}`}>
               {label} · <Elapsed since={alert.created_at} />
             </p>
             <p className={`text-sm truncate ${claimed ? 'font-semibold text-foreground' : 'text-muted-foreground'}`}>
@@ -1444,20 +1496,21 @@ const AlertCard = ({
               has said they are going. */}
           <div className="flex flex-col gap-2 shrink-0 w-[8.5rem]">
             {!claimed && onClaim && (
-              <Button className="tap-sm min-h-[48px] w-full text-sm font-semibold gap-1.5" disabled={busy || claimBusy} onClick={onClaim}>
+              <Button className="tap-sm min-h-[48px] w-full text-sm font-semibold gap-1.5 rounded-xl" disabled={busy || claimBusy} onClick={onClaim}>
                 <Footprints className="w-4 h-4" aria-hidden /> I&rsquo;m going
               </Button>
             )}
-            <Button variant="outline" className="tap-sm min-h-[48px] w-full text-sm font-semibold gap-1.5" disabled={busy} onClick={onDone}>
+            <Button variant="outline" className="tap-sm min-h-[48px] w-full text-sm font-semibold gap-1.5 rounded-xl bg-card" disabled={busy} onClick={onDone}>
               <CheckCircle2 className="w-4 h-4" aria-hidden /> {doneLabel}
             </Button>
           </div>
         </div>
         {children}
       </div>
-    </motion.div>
+    </ArrivingItem>
   );
-};
+});
+AlertCard.displayName = 'AlertCard';
 
 const TableCard = ({
   session, activeOrders, onClose, children,
@@ -1475,7 +1528,7 @@ const TableCard = ({
       <CardContent className="p-4 space-y-3">
         <div className="flex items-start justify-between">
           <div>
-            <p className="font-serif text-2xl font-bold leading-none">T{tableNumber}</p>
+            <p className={TABLE_TITLE}>Table {tableNumber}</p>
             {session.guest_name && <p className="text-sm text-muted-foreground mt-1 truncate max-w-[160px]">{session.guest_name}</p>}
           </div>
           {/* Seated duration, on the seated scale. Colouring it with the
@@ -1505,7 +1558,7 @@ const UnassignedRow = ({ session, busy, onTake }: { session: WaiterSession; busy
   const ms = useElapsed(session.opened_at);
   return (
     <li className="rounded-lg border border-border ps-3 pe-1.5 py-1.5 min-h-[56px] flex items-center gap-2 text-sm">
-      <span className="font-serif text-lg font-bold shrink-0">T{session.tables?.table_number ?? '?'}</span>
+      <span className="font-serif text-lg font-bold shrink-0">Table {session.tables?.table_number ?? '?'}</span>
       <span className="text-muted-foreground truncate flex-1">{session.guest_name ?? ''}</span>
       <span className={`text-xs px-2 py-0.5 rounded-full border tabular-nums shrink-0 ${seatedBg(ms)}`}>{formatDuration(ms)}</span>
       <Button className="tap-sm min-h-[44px] shrink-0 text-sm font-semibold" disabled={busy} onClick={onTake}>
@@ -1651,15 +1704,6 @@ const TakeTableStrip = ({ tableNumber, busy, onTake }: { tableNumber: number | s
   </div>
 );
 
-const STATUS_META: Partial<Record<OrderStatus, { dot: string }>> = {
-  pending: { dot: 'bg-muted-foreground' },
-  confirmed: { dot: 'bg-blue-500' },
-  preparing: { dot: 'bg-amber-500' },
-  ready: { dot: 'bg-emerald-500' },
-  awaiting_payment: { dot: 'bg-accent' },
-  payment_failed: { dot: 'bg-destructive' },
-};
-
 /**
  * What a WAITER may do to an order.
  *
@@ -1675,42 +1719,58 @@ const NEXT_META: Partial<Record<OrderStatus, { status: OrderStatus; label: strin
   ready: { status: 'served', label: 'Mark served', icon: <Utensils className="w-4 h-4 mr-1.5" /> },
 };
 
-const OrderCard = ({ order, busy, onUpdate, highlight = false }: {
+/** How long an order has waited, on the kitchen's scale and in the kitchen's colours. */
+const waitChip = (ms: number) => {
+  const u = orderUrgency(ms);
+  return u === 'late' || u === 'critical' ? TONE.late.chip
+    : u === 'attention' ? TONE.preparing.chip
+      : 'bg-muted text-muted-foreground';
+};
+
+const OrderCard = ({ order, busy, onUpdate, highlight = false, arriving = false }: {
   order: WaiterOrder;
   busy: boolean;
   onUpdate: (id: string, status: OrderStatus) => void;
   highlight?: boolean;
+  /** Mounted after the screen's first paint: the food just came up. */
+  arriving?: boolean;
 }) => {
   const held = isHeld(order);
   const inKitchen = isInKitchen(order.status) && !held;
   const ms = useElapsed(kitchenStart(order));
   const next = inKitchen ? NEXT_META[order.status] : undefined;
-  const meta = STATUS_META[order.status] ?? STATUS_META.pending;
+  // The kitchen's colours: blue new, amber preparing, green ready. Held and
+  // unpaid orders are not cooking, so they stay neutral (failed is red).
+  const tone: StaffTone | null = held ? null : inKitchen ? orderTone(order.status) : order.status === 'payment_failed' ? 'late' : null;
   const tableNumber = tableOf(order);
+  const [glow] = useState(highlight && arriving);
 
   return (
-    <Card className={`card-lux-hover ${highlight ? 'border-emerald-500/50 bg-emerald-500/5' : ''}`}>
+    <Card className={`relative card-lux-hover rounded-2xl ${highlight ? `${TONE.ready.surface} border-[hsl(150_46%_36%/0.45)]` : ''}`}>
+      {glow && <ArrivalGlow tone="ready" />}
       <CardContent className="p-4">
-        <div className="flex items-center justify-between mb-2.5 gap-2">
-          <div className="flex items-center gap-2 min-w-0 flex-wrap">
-            <p className="font-serif text-2xl font-bold leading-none shrink-0">T{tableNumber}</p>
-            <Badge variant="outline" className="text-xs gap-1.5">
-              <span className={`w-1.5 h-1.5 rounded-full ${meta?.dot ?? ''}`} />
+        <div className="flex items-start justify-between mb-2.5 gap-2">
+          <div className="flex items-center gap-x-2 gap-y-1.5 min-w-0 flex-wrap">
+            <p className={`${TABLE_TITLE} shrink-0`}>Table {tableNumber}</p>
+            <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-sans font-semibold ${
+              highlight ? TONE.ready.solid : tone ? TONE[tone].chip : 'bg-muted text-muted-foreground'
+            }`}>
+              <span className={`w-1.5 h-1.5 rounded-full ${highlight ? 'bg-white' : tone ? TONE[tone].dot : 'bg-muted-foreground'}`} aria-hidden />
               {highlight ? 'Ready to run' : held ? 'Needs confirming' : orderStatusLabel(order.status)}
-            </Badge>
+            </span>
             {/* Not in the kitchen, the status already says what the money is
                 doing; a second pill saying it again only wrapped the row. */}
-            {inKitchen && <PaymentBadge method={order.payment_method} status={order.payment_status} />}
+            {inKitchen && <PaymentBadge method={order.payment_method} status={order.payment_status} className="bg-transparent px-0.5 text-xs" />}
           </div>
           {inKitchen && (
-            <span className={`text-xs px-2 py-0.5 rounded-full border tabular-nums ${waitBg(ms)}`}>{formatDuration(ms)}</span>
+            <span className={`mt-0.5 text-xs font-semibold px-2 py-0.5 rounded-full tabular-nums shrink-0 ${waitChip(ms)}`}>{formatDuration(ms)}</span>
           )}
         </div>
         {/* A card order whose payment has not cleared looked exactly like a
             new "Pending" one, and the waiter chased the kitchen for food it had
             never been sent. */}
         {!inKitchen && (
-          <p className={`text-sm font-sans font-semibold mb-2 ${order.status === 'payment_failed' ? 'text-destructive' : 'text-accent'}`}>
+          <p className={`text-sm font-sans font-semibold mb-2 ${order.status === 'payment_failed' ? 'text-destructive' : 'text-foreground'}`}>
             {held
               ? 'Not in kitchen — confirm it above'
               : order.status === 'payment_failed'
@@ -1718,13 +1778,19 @@ const OrderCard = ({ order, busy, onUpdate, highlight = false }: {
                 : 'Not in kitchen — payment pending'}
           </p>
         )}
-        <ul className="text-sm font-sans space-y-0.5 mb-3 text-foreground/90">
+        <ul className="text-[15px] font-sans space-y-1 mb-3 text-foreground">
           {(order.order_items ?? []).map((item, index) => (
-            <li key={`${item.menu_items?.name ?? 'item'}-${index}`} className="flex gap-2">
-              <span className="tabular-nums text-muted-foreground w-6">{item.quantity}x</span>
-              <span>
+            <li key={`${item.menu_items?.name ?? 'item'}-${index}`} className="flex gap-2 leading-snug">
+              <span className={`tabular-nums w-7 shrink-0 ${item.quantity > 1 ? 'font-bold text-foreground' : 'text-muted-foreground'}`}>{item.quantity}×</span>
+              <span className="min-w-0">
                 {item.menu_items?.name ?? 'Menu item'}
-                {item.notes && <span className="block text-sm text-accent font-semibold">! {item.notes}</span>}
+                {item.notes && (
+                  // The kitchen's note mark, so a runner reads it the way the cook did.
+                  <span className="mt-0.5 flex w-fit max-w-full items-start gap-1 rounded-md bg-[hsl(42_96%_56%/0.22)] px-1.5 py-0.5 text-sm font-semibold text-[hsl(30_70%_20%)]">
+                    <TriangleAlert className="mt-[3px] h-3.5 w-3.5 shrink-0" aria-hidden />
+                    <span className="min-w-0">{item.notes}</span>
+                  </span>
+                )}
               </span>
             </li>
           ))}
@@ -1732,10 +1798,14 @@ const OrderCard = ({ order, busy, onUpdate, highlight = false }: {
         {/* The kitchen has always printed this. The person actually carrying
             the plate to the guest could not see it. */}
         {order.notes && (
-          <p className="text-sm text-accent font-semibold mb-3 -mt-2">Note: {order.notes}</p>
+          <p className="text-sm font-semibold mb-3 -mt-1 rounded-lg bg-[hsl(42_96%_56%/0.2)] text-[hsl(30_70%_22%)] px-2.5 py-1.5">Note: {order.notes}</p>
         )}
         {next && (
-          <Button className="w-full tap min-h-[52px] text-base font-semibold" disabled={busy} onClick={() => onUpdate(order.id, next.status)}>
+          <Button
+            className={`w-full tap min-h-[52px] text-base font-semibold rounded-xl ${next.status === 'served' ? `${TONE.ready.solid} hover:bg-[hsl(150_46%_28%)]` : ''}`}
+            disabled={busy}
+            onClick={() => onUpdate(order.id, next.status)}
+          >
             {next.icon}{next.label}
           </Button>
         )}

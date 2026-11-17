@@ -1,45 +1,57 @@
-import React from 'react';
-import { Link, useLocation } from 'react-router-dom';
-import { ClipboardList, LayoutDashboard, LayoutGrid, Menu as MenuIcon, QrCode, UtensilsCrossed } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { Ellipsis } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { AREAS, pagesIn } from '@/components/admin/nav/admin-nav';
+import { areaTarget } from '@/components/admin/nav/nav-memory';
+import { WaitingBadge, WaitingWords } from '@/components/admin/nav/NavParts';
+import { useAreaTap } from '@/components/admin/nav/use-area-tap';
+import type { AdminShell } from '@/components/admin/nav/shell';
 
 /**
- * The four admin jobs that happen on a phone, mid-service, one tap away.
+ * The phone's bottom bar: the same areas as the laptop's sidebar.
  *
- * Everything else stays in the drawer. These are the ones a manager does
- * standing at the pass: see how today is going, take a dish off (or change
- * its price), show or print a QR code, find an order. Printing is in the
- * drawer, and one tap from the kitchen board's gear.
+ * Home, Service, Menu and Reports are one tap away with a thumb; Service
+ * carries the number of guests waiting for an answer about a table, the one
+ * thing that rings the manager's phone. Setup, the other screens and the
+ * account are behind More (nav/MoreSheet.tsx), which is lit while a Setup
+ * page is open. The pages inside an area are the chips under the top bar.
  */
-const TABS = [
-  { label: 'Dashboard', path: '/admin', icon: LayoutDashboard },
-  { label: 'Menu', path: '/admin/menu', icon: UtensilsCrossed },
-  { label: 'QR Codes', path: '/admin/qr-codes', icon: QrCode },
-  { label: 'Orders', path: '/admin/orders', icon: ClipboardList },
-] as const;
 
-/** The owner's first look, wherever they are: both restaurants at once. */
-const OWNER_TAB = { label: 'Overview', path: '/admin/overview', icon: LayoutGrid } as const;
+const item = 'relative flex min-h-[56px] w-full flex-col items-center justify-center gap-1 font-sans text-[11px] leading-none transition-colors focus-visible:outline-none focus-visible:bg-muted';
 
-const AdminMobileTabs = ({ owner = false, onMore }: { owner?: boolean; onMore: () => void }) => {
-  const { pathname } = useLocation();
-  const tabs = owner ? [OWNER_TAB, ...TABS] : TABS;
+const AdminMobileTabs = ({ shell, moreOpen, onMore }: { shell: AdminShell; moreOpen: boolean; onMore: () => void }) => {
+  const areas = AREAS.filter((a) => a.id !== 'setup');
+  const inMore = shell.area === 'setup';
+  const tap = useAreaTap(shell.audience);
   return (
     <nav
       aria-label="Admin quick navigation"
-      className="lg:hidden fixed bottom-0 inset-x-0 z-40 border-t border-border bg-background/95 backdrop-blur pb-[env(safe-area-inset-bottom)]"
+      className="fixed inset-x-0 bottom-0 z-40 border-t border-border/80 bg-background/[0.97] pb-[env(safe-area-inset-bottom)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] backdrop-blur-md lg:hidden print:hidden"
     >
-      <ul className={`grid ${owner ? 'grid-cols-6' : 'grid-cols-5'}`}>
-        {tabs.map(({ label, path, icon: Icon }) => {
-          const active = path === '/admin' ? pathname === '/admin' : pathname.startsWith(path);
+      <ul data-tour="areas" className="mx-auto grid max-w-xl grid-cols-5">
+        {areas.map((area) => {
+          const pages = pagesIn(area.id, shell.audience);
+          if (!pages.length) return <li key={area.id} />;
+          const active = shell.area === area.id;
+          // The area you are in goes to its first page; any other, to where you last were in it.
+          const to = areaTarget(area.id, shell.audience, shell.pathname) ?? pages[0].path;
+          const waiting = area.id === 'service' ? shell.pending : 0;
           return (
-            <li key={path}>
+            <li key={area.id}>
               <Link
-                to={path}
-                aria-current={active ? 'page' : undefined}
-                className={`flex flex-col items-center justify-center gap-0.5 min-h-[56px] text-[11px] font-sans ${active ? 'text-primary font-semibold' : 'text-muted-foreground'}`}
+                to={to}
+                onClick={tap(area.id, to)}
+                aria-current={active ? 'location' : undefined}
+                data-tour={area.id}
+                className={cn(item, active ? 'font-semibold text-primary' : 'text-muted-foreground')}
               >
-                <Icon className="w-5 h-5" aria-hidden />
-                {label}
+                <span className="relative">
+                  <area.icon className="h-[22px] w-[22px]" strokeWidth={active ? 2.2 : 1.8} aria-hidden />
+                  {waiting > 0 && (
+                    <WaitingBadge count={waiting} className="absolute -right-3 -top-1.5 h-[18px] min-w-[18px] px-1 ring-2 ring-background" />
+                  )}
+                </span>
+                <span>{area.label}{waiting > 0 && <WaitingWords count={waiting} />}</span>
               </Link>
             </li>
           );
@@ -48,9 +60,12 @@ const AdminMobileTabs = ({ owner = false, onMore }: { owner?: boolean; onMore: (
           <button
             type="button"
             onClick={onMore}
-            className="w-full flex flex-col items-center justify-center gap-0.5 min-h-[56px] text-[11px] font-sans text-muted-foreground"
+            aria-haspopup="dialog"
+            aria-expanded={moreOpen}
+            data-tour="more"
+            className={cn(item, inMore ? 'font-semibold text-primary' : 'text-muted-foreground')}
           >
-            <MenuIcon className="w-5 h-5" aria-hidden />
+            <Ellipsis className="h-[22px] w-[22px]" strokeWidth={inMore ? 2.2 : 1.8} aria-hidden />
             More
           </button>
         </li>

@@ -6,7 +6,9 @@ import {
   ShieldAlert, Star, Timer, TrendingDown, TrendingUp, Users, UtensilsCrossed, Wallet,
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { AdminCard, AdminCardContent, EmptyState } from '@/components/admin/AdminCard';
+import { AdminPageHeader } from '@/components/admin/AdminPage';
+import { money as groupedMoney } from '@/components/admin/admin-format';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import { chooseStaffVenue } from '@/lib/current-venue';
@@ -65,7 +67,7 @@ function openAdmin(slug: string) {
 }
 
 const n = (v: unknown) => Number(v ?? 0) || 0;
-const money = (v: unknown) => `${n(v).toFixed(2)} KM`;
+const money = (v: unknown) => `${groupedMoney(n(v))} KM`;
 const plural = (count: number, one: string, many = `${one}s`) => `${count} ${count === 1 ? one : many}`;
 const weekday = (day: string) => new Date(`${day}T12:00:00`).toLocaleDateString('en-GB', { weekday: 'long' });
 
@@ -129,7 +131,7 @@ const Figure = ({ icon: Icon, label, value, words = false, children }: {
   words?: boolean;
   children?: React.ReactNode;
 }) => (
-  <div className="rounded-xl border border-border p-3 sm:p-4 min-w-0">
+  <div className="min-w-0 rounded-xl bg-muted/40 p-3 sm:p-4">
     <p className="text-xs font-sans text-muted-foreground flex items-center gap-1.5">
       <Icon className="w-3.5 h-3.5 shrink-0" aria-hidden /> {label}
     </p>
@@ -151,18 +153,16 @@ const RestaurantCard = ({ v }: { v: VenueOverview }) => {
 
   return (
     <motion.section variants={fadeUp} aria-label={name}>
-      <Card className="border-border h-full flex flex-col">
-        <CardHeader className="pb-3">
-          <CardTitle className="font-serif text-2xl flex items-center justify-between gap-3">
-            <span className="truncate">{name}</span>
-            {!live && (
-              <span className="text-[11px] font-sans font-medium text-muted-foreground border border-border rounded-full px-2 py-0.5 shrink-0">
-                Not live
-              </span>
-            )}
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="flex-1 flex flex-col gap-4">
+      <AdminCard className="flex h-full flex-col">
+        <div className="flex items-center justify-between gap-3 px-5 pt-5 pb-4 sm:px-6 sm:pt-6">
+          <h2 className="min-w-0 truncate font-serif text-2xl font-semibold leading-snug text-foreground">{name}</h2>
+          {!live && (
+            <span className="shrink-0 rounded-full border border-border px-2.5 py-0.5 text-[11px] font-sans font-medium text-muted-foreground">
+              Not live
+            </span>
+          )}
+        </div>
+        <AdminCardContent className="flex flex-1 flex-col gap-4">
           {/* What needs someone now, before any number. */}
           <div role="group" aria-label={`${name}: needs attention`} className="space-y-1.5">
             {alerts.length === 0 ? (
@@ -220,8 +220,8 @@ const RestaurantCard = ({ v }: { v: VenueOverview }) => {
           <Button onClick={() => openAdmin(v.slug)} className="mt-auto w-full min-h-[44px] rounded-xl gap-2" disabled={!VENUES[v.slug]}>
             Open {name} admin <ArrowRight className="w-4 h-4" />
           </Button>
-        </CardContent>
-      </Card>
+        </AdminCardContent>
+      </AdminCard>
     </motion.section>
   );
 };
@@ -238,29 +238,24 @@ const AdminOverview = () => {
 
   return (
     <div>
-      <div className="flex items-start justify-between gap-3 mb-6 flex-wrap">
-        <div>
-          <motion.h1
-            initial={{ opacity: 0, y: 6 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
-            className="font-serif text-3xl font-bold text-foreground"
-          >
-            Overview
-          </motion.h1>
-          <p className="text-sm font-sans text-muted-foreground mt-1">
-            Both restaurants, today
+      <AdminPageHeader
+        title="Both restaurants"
+        description={(
+          <>
+            Today's sales, orders and tables at each restaurant, side by side
             {dataUpdatedAt > 0 && <> · updated {formatClock(new Date(dataUpdatedAt))}</>}
-          </p>
-        </div>
-        <Button variant="outline" onClick={() => void refetch()} disabled={isFetching} className="gap-2 min-h-[44px] rounded-xl">
-          <RefreshCw className={`w-4 h-4 ${isFetching ? 'animate-spin' : ''}`} aria-hidden /> Refresh
-        </Button>
-      </div>
+          </>
+        )}
+        actions={(
+          <Button variant="outline" onClick={() => void refetch()} disabled={isFetching} className="gap-2 min-h-[44px] rounded-xl">
+            <RefreshCw className={`w-4 h-4 ${isFetching ? 'animate-spin motion-reduce:animate-none' : ''}`} aria-hidden /> Refresh
+          </Button>
+        )}
+      />
 
       {error && (
-        <Card className="border-destructive/25 bg-destructive/5 mb-6">
-          <CardContent className="p-4 sm:p-5 space-y-3">
+        <AdminCard className="mb-6 border-destructive/25 bg-destructive/5">
+          <AdminCardContent className="space-y-3 pt-4 sm:pt-5">
             <p role="alert" className="text-sm font-sans text-foreground">{error.message}</p>
             {!data && (
               <div className="flex flex-wrap gap-2">
@@ -271,14 +266,16 @@ const AdminOverview = () => {
                 ))}
               </div>
             )}
-          </CardContent>
-        </Card>
+          </AdminCardContent>
+        </AdminCard>
       )}
 
       {isLoading ? (
-        <div className="grid gap-4 lg:grid-cols-2">
-          {Object.values(VENUES).map((v) => <Skeleton key={v.slug} className="h-[460px] rounded-xl" />)}
+        <div className="grid gap-4 lg:grid-cols-2" aria-busy="true" aria-label="Loading">
+          {Object.values(VENUES).map((v) => <Skeleton key={v.slug} className="h-[460px] rounded-2xl" />)}
         </div>
+      ) : data && data.length === 0 ? (
+        <AdminCard><EmptyState icon={UtensilsCrossed} title="No restaurants to show." hint="Open a restaurant's admin from the switch." /></AdminCard>
       ) : data ? (
         <motion.div
           variants={staggerContainer(0.05)}

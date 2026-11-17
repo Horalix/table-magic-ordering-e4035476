@@ -6,11 +6,12 @@ import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import LoginCard from '@/components/admin/LoginCard';
 import NewPasswordField from '@/components/admin/NewPasswordField';
+import { AdminPageHeader } from '@/components/admin/AdminPage';
+import { AdminCard, AdminCardContent, AdminCardHeader } from '@/components/admin/AdminCard';
 import {
   isKitchenTablet, lastSignInWords, MIN_PASSWORD, plainRefusal, readRefusal, refusalField, staffSiteUrl,
   teamSignInsText, type LoginDetails, type TeamAccount,
 } from '@/lib/staff-accounts';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -24,6 +25,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { cn } from '@/lib/utils';
 import { VENUES } from '@/lib/venues';
 import type { AdminOutletContext } from '@/components/admin/AdminLayout';
 
@@ -55,6 +57,10 @@ import type { AdminOutletContext } from '@/components/admin/AdminLayout';
  *
  * Copy all sign-ins copies the whole list — who, what they type, the address
  * they open, never a password (teamSignInsText).
+ *
+ * Layout: the people first, by restaurant, then the owner and any sign-in
+ * with no role; the appoint form beside them on a laptop, under them on a
+ * phone. Add an admin, at the top, goes to the form.
  */
 
 type Account = TeamAccount;
@@ -91,6 +97,11 @@ const BOTH = 'both';
 
 const who = (a: Account) => a.email ?? (a.username ? `@${a.username}` : 'Unknown account');
 const personOf = (a: Account) => a.display_name ?? who(a);
+const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+const initials = (a: Account) => {
+  const words = personOf(a).replace(/^@/, '').split(/[\s@.]+/).filter(Boolean);
+  return (a.display_name ? words.slice(0, 2).map((w) => w[0]).join('') : (words[0]?.[0] ?? '?')).toUpperCase();
+};
 
 /**
  * Who gets a Password button: a restaurant's admin (signs in with their
@@ -111,32 +122,45 @@ function resetCard(a: Account, venueName: string, password: string): LoginDetail
   };
 }
 
+/** One group of people in a card: a small label (when given), then a row each. */
 const People = ({ title, icon: Icon, people, empty, action }: {
-  title: string;
-  icon: React.ElementType;
+  title?: string;
+  icon?: React.ElementType;
   people: Account[];
   empty: string;
   action?: (a: Account) => React.ReactNode;
 }) => (
   <div>
-    <p className="text-xs font-sans font-semibold uppercase tracking-[0.12em] text-muted-foreground flex items-center gap-1.5 mb-1.5">
-      <Icon className="w-3.5 h-3.5" aria-hidden /> {title}
-    </p>
+    {title && (
+      <p className="mb-1 flex items-center gap-1.5 text-[11px] font-sans font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+        {Icon && <Icon className="h-3.5 w-3.5" aria-hidden />} {title}
+        {people.length > 0 && <span className="font-medium tabular-nums tracking-normal text-muted-foreground/80">· {people.length}</span>}
+      </p>
+    )}
     {people.length === 0 ? (
-      <p className="text-sm font-sans text-muted-foreground py-1.5">{empty}</p>
+      <p className="py-2 text-sm font-sans text-muted-foreground">{empty}</p>
     ) : (
-      <ul className="divide-y divide-border">
+      <ul className="divide-y divide-border/70">
         {people.map((a) => {
           // Who they sign in as, under a name, and when they last did.
           const sub = [a.display_name ? who(a) : null, lastSignInWords(a.last_sign_in_at)].filter(Boolean).join(' · ');
           return (
-            <li key={`${a.user_id}-${a.kind}`} className="flex items-center justify-between gap-3 py-2 min-h-[44px]">
+            <li key={`${a.user_id}-${a.kind}`} className="flex min-h-[44px] items-center gap-3 py-2.5">
+              <span
+                className={cn(
+                  'hidden h-8 w-8 shrink-0 place-items-center rounded-full text-[11px] font-sans font-semibold sm:grid',
+                  a.you ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground',
+                )}
+                aria-hidden
+              >
+                {isKitchenTablet(a) ? <ChefHat className="h-3.5 w-3.5" /> : initials(a)}
+              </span>
               <div className="min-w-0 flex-1">
-                <p className="text-sm font-sans font-medium text-foreground truncate">
+                <p className="truncate text-sm font-sans font-medium text-foreground">
                   {personOf(a)}
                   {a.you && <span className="ml-1.5 text-xs font-normal text-muted-foreground">(you)</span>}
                 </p>
-                {sub && <p className="text-xs font-sans text-muted-foreground truncate">{sub}</p>}
+                {sub && <p className="truncate text-xs font-sans text-muted-foreground">{sub}</p>}
               </div>
               {action?.(a)}
             </li>
@@ -157,6 +181,8 @@ const AdminTeam = () => {
   const [saving, setSaving] = useState(false);
   const [card, setCard] = useState<LoginDetails | null>(null);
   const passwordRef = useRef<HTMLInputElement>(null);
+  const emailRef = useRef<HTMLInputElement>(null);
+  const formCard = useRef<HTMLDivElement>(null);
   const [resetTarget, setResetTarget] = useState<Account | null>(null);
   const [resetPassword, setResetPassword] = useState('');
   const [resetProblem, setResetProblem] = useState<string | null>(null);
@@ -164,7 +190,7 @@ const AdminTeam = () => {
   const [removeTarget, setRemoveTarget] = useState<Account | null>(null);
   const [removing, setRemoving] = useState<'remove' | 'revoke' | null>(null);
 
-  const { data, error, isLoading, refetch } = useQuery({
+  const { data, error, isLoading, isFetching, refetch } = useQuery({
     queryKey: ['owner-team'],
     queryFn: () => callTeam<TeamList>({ action: 'list' }),
     staleTime: 0,
@@ -278,14 +304,14 @@ const AdminTeam = () => {
 
   // On a phone the row's buttons are icons only, each a full 44 px tap, so
   // both fit beside a name at 360 px; their labels come back from sm up.
-  const rowButton = 'gap-1.5 min-h-[44px] min-w-[44px] px-2.5 sm:min-h-[40px] sm:px-3 shrink-0';
+  const rowButton = 'gap-1.5 min-h-[44px] min-w-[44px] px-2.5 lg:min-h-[40px] sm:px-3 shrink-0';
 
   const removeButton = (a: Account) => (
     <Button
-      variant="outline"
+      variant="ghost"
       size="sm"
       onClick={() => setRemoveTarget(a)}
-      className={`${rowButton} text-destructive hover:text-destructive`}
+      className={`${rowButton} text-destructive hover:bg-destructive/10 hover:text-destructive`}
       aria-label={`Remove ${personOf(a)}`}
     >
       <Trash2 className="w-4 h-4" aria-hidden /> <span className="hidden sm:inline">Remove</span>
@@ -341,7 +367,7 @@ const AdminTeam = () => {
 
   /** Password (or, on your own row, Change password), and Remove on everyone's but yours. */
   const rowActions = (a: Account) => (
-    <div className="flex items-center gap-2 shrink-0">
+    <div className="flex items-center gap-1.5 shrink-0 sm:gap-2">
       {passwordButton(a)}
       {!a.you && removeButton(a)}
     </div>
@@ -349,6 +375,7 @@ const AdminTeam = () => {
 
   const owners = accounts.filter((a) => a.kind === 'owner');
   const noRole = accounts.filter((a) => a.kind === 'none');
+  const signIns = new Set(accounts.map((a) => a.user_id)).size;
 
   const copyAll = async () => {
     const text = teamSignInsText(venues, accounts);
@@ -361,183 +388,225 @@ const AdminTeam = () => {
     }
   };
 
-  return (
-    <div>
-      <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0">
-          <h1 className="font-serif text-3xl font-bold text-foreground">Team</h1>
-          <p className="text-sm font-sans text-muted-foreground mt-1">
-            Who runs each restaurant, and every sign-in. Only you, the owner, see this page.
+  /** The form is under the people: take the owner to it, ready to type. */
+  const goToForm = () => {
+    formCard.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    emailRef.current?.focus({ preventScroll: true });
+  };
+
+  const appointForm = (
+    <AdminCard ref={formCard} className="scroll-mt-20">
+      <AdminCardHeader
+        icon={UserPlus}
+        title="Appoint a restaurant admin"
+        description="They run one restaurant, or both, and sign in with their email."
+      />
+      <AdminCardContent>
+        <form onSubmit={appoint} className="space-y-4">
+          <div>
+            <Label htmlFor="team-email" className="font-sans text-sm">Their email</Label>
+            <Input
+              id="team-email"
+              ref={emailRef}
+              type="email"
+              autoComplete="off"
+              autoCapitalize="none"
+              spellCheck={false}
+              value={email}
+              onChange={(e) => { setEmail(e.target.value); setNeedsPassword(null); }}
+              placeholder="name@example.com"
+              required
+              className="mt-1.5 h-11"
+            />
+          </div>
+          <div>
+            <Label id="team-venue" className="font-sans text-sm">Restaurant they will run</Label>
+            <div
+              role="group"
+              aria-labelledby="team-venue"
+              className="mt-1.5 grid gap-1 rounded-xl bg-muted/70 p-1"
+              style={{ gridTemplateColumns: `repeat(${venues.length + 1}, minmax(0, 1fr))` }}
+            >
+              {[...venues, { slug: BOTH, name: 'Both' }].map((v) => (
+                <button
+                  key={v.slug}
+                  type="button"
+                  aria-pressed={venue === v.slug}
+                  onClick={() => setVenue(v.slug)}
+                  className={cn(
+                    'min-h-11 truncate rounded-lg px-2 text-sm font-sans transition-colors sm:min-h-10',
+                    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                    venue === v.slug ? 'bg-background font-semibold text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground',
+                  )}
+                >
+                  {v.name}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <Label htmlFor="team-password" className="font-sans text-sm">Initial password <span className="text-muted-foreground font-normal">(new accounts only)</span></Label>
+            <NewPasswordField
+              id="team-password"
+              ref={passwordRef}
+              value={password}
+              onChange={(v) => { setPassword(v); setNeedsPassword(null); }}
+              problem={needsPassword}
+              hint={`Only if they have no account yet. At least ${MIN_PASSWORD} characters.`}
+              className="mt-1.5"
+            />
+          </div>
+          <Button type="submit" disabled={saving || !email.trim()} className="h-auto min-h-11 w-full gap-2 whitespace-normal py-2.5">
+            {saving ? <Loader2 className="w-4 h-4 shrink-0 animate-spin motion-reduce:animate-none" /> : <ShieldCheck className="w-4 h-4 shrink-0" />}
+            Appoint {chosenNames} admin
+          </Button>
+        </form>
+        <div className="mt-4 space-y-1.5 rounded-xl bg-muted/50 px-4 py-3 text-xs font-sans leading-relaxed text-muted-foreground">
+          <p>
+            They sign in at{' '}
+            {chosen.map((slug, i) => (
+              <span key={slug}>
+                {i > 0 && ' or '}
+                <span className="font-medium text-foreground break-all">{staffSiteUrl(slug).replace(/^https?:\/\//, '')}/admin/login</span>
+              </span>
+            ))}{' '}
+            with this email{chosen.length > 1 ? ', and switch between the two restaurants at the top of the admin menu' : ''}.
           </p>
-          <p className="text-xs font-sans text-muted-foreground mt-1">
-            Passwords can't be shown, not even here: they are stored scrambled. Password (the lock) gives someone a new one.
+          <p>
+            You get a card to copy or share as soon as they are appointed. An initial password is shown on it once; ask them to change it after signing in.
           </p>
         </div>
-        <Button
-          variant="outline"
-          onClick={() => void copyAll()}
-          disabled={!data}
-          className="gap-2 min-h-[44px] rounded-xl shrink-0"
-        >
-          <Copy className="w-4 h-4" aria-hidden /> Copy all sign-ins
-        </Button>
-      </div>
+      </AdminCardContent>
+    </AdminCard>
+  );
 
-      <Card className="mb-6">
-        <CardHeader>
-          <CardTitle className="font-serif text-lg flex items-center gap-2"><UserPlus className="w-5 h-5" /> Appoint a restaurant admin</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={appoint} className="space-y-4">
-            <div className="grid gap-4 lg:grid-cols-3">
-              <div>
-                <Label htmlFor="team-email" className="font-sans text-sm">Their email</Label>
-                <Input
-                  id="team-email"
-                  type="email"
-                  autoComplete="off"
-                  value={email}
-                  onChange={(e) => { setEmail(e.target.value); setNeedsPassword(null); }}
-                  placeholder="name@example.com"
-                  required
-                  className="mt-1.5 h-11"
-                />
-              </div>
-              <div>
-                <Label id="team-venue" className="font-sans text-sm">Restaurant they will run</Label>
-                <div role="group" aria-labelledby="team-venue" className="mt-1.5 grid grid-cols-3 gap-1 rounded-lg bg-muted/60 p-1">
-                  {[...venues, { slug: BOTH, name: 'Both' }].map((v) => (
-                    <button
-                      key={v.slug}
-                      type="button"
-                      aria-pressed={venue === v.slug}
-                      onClick={() => setVenue(v.slug)}
-                      className={`min-h-9 rounded-md px-2 text-sm font-sans transition-colors ${
-                        venue === v.slug ? 'bg-background text-foreground font-semibold shadow-sm' : 'text-muted-foreground hover:text-foreground'
-                      }`}
-                    >
-                      {v.name}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div>
-                <Label htmlFor="team-password" className="font-sans text-sm">Initial password <span className="text-muted-foreground font-normal">(new accounts only)</span></Label>
-                <NewPasswordField
-                  id="team-password"
-                  ref={passwordRef}
-                  value={password}
-                  onChange={(v) => { setPassword(v); setNeedsPassword(null); }}
-                  problem={needsPassword}
-                  hint={`Only if they have no account yet. At least ${MIN_PASSWORD} characters.`}
-                  className="mt-1.5"
-                />
-              </div>
-            </div>
-            <Button type="submit" disabled={saving || !email.trim()} className="gap-2 min-h-[44px] rounded-xl">
-              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <ShieldCheck className="w-4 h-4" />}
-              Appoint {chosenNames} admin
+  const ownerCard = data && (
+    <AdminCard>
+      <AdminCardHeader icon={Crown} title="Owner" description="Every restaurant, every page, and this one." />
+      <AdminCardContent>
+        <People people={owners} empty="No owner account." action={rowActions} />
+      </AdminCardContent>
+    </AdminCard>
+  );
+
+  return (
+    <div className="mx-auto w-full max-w-6xl">
+      <AdminPageHeader
+        title="Team"
+        description="Who runs each restaurant, and every sign-in. Only you, the owner, see this page."
+        actions={(
+          <>
+            <Button variant="outline" onClick={() => void copyAll()} disabled={!data} className="h-11 gap-2 lg:h-10">
+              <Copy className="w-4 h-4" aria-hidden /> Copy all sign-ins
             </Button>
-            <p className="text-xs font-sans text-muted-foreground">
-              They sign in at{' '}
-              {chosen.map((slug, i) => (
-                <span key={slug}>
-                  {i > 0 && ' or '}
-                  <span className="font-medium text-foreground break-all">{staffSiteUrl(slug).replace(/^https?:\/\//, '')}/admin/login</span>
-                </span>
-              ))}{' '}
-              with this email{chosen.length > 1 ? ', and switch between the two restaurants at the top of the admin menu' : ''}.
-              You get a card to copy or share as soon as they are appointed.
-            </p>
-          </form>
-        </CardContent>
-      </Card>
-
-      <LoginCard details={card} onDone={() => setCard(null)} />
+            <Button onClick={goToForm} className="h-11 gap-2 lg:h-10">
+              <UserPlus className="w-4 h-4" aria-hidden /> Add an admin
+            </Button>
+          </>
+        )}
+      >
+        <div className="flex max-w-3xl items-start gap-2.5 rounded-xl border border-border/70 bg-card/60 px-3.5 py-2.5 text-xs font-sans leading-relaxed text-muted-foreground">
+          <LockKeyhole className="mt-0.5 h-3.5 w-3.5 shrink-0 text-foreground/70" aria-hidden />
+          <p>
+            Passwords can't be shown, not even here: they are stored scrambled. Password (the lock) gives someone a new one,
+            shown once on a card for you to send them.
+            {data && signIns > 0 && <span className="text-foreground/80"> {plural(signIns, 'sign-in')} in all.</span>}
+          </p>
+        </div>
+      </AdminPageHeader>
 
       {error && (
-        <Card className="border-destructive/25 bg-destructive/5 mb-6">
-          <CardContent className="p-4 sm:p-5">
-            <p role="alert" className="text-sm font-sans text-foreground">
-              Could not load the team: {error.message}. The manage-admins function may not be deployed yet.
-            </p>
-          </CardContent>
-        </Card>
+        <div className="mb-6">
+          <p role="alert" className="rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm font-sans text-destructive">
+            Could not load the team: {error.message}. The manage-admins function may not be deployed yet.
+          </p>
+          <Button variant="outline" disabled={isFetching} onClick={() => { void refetch(); }} className="mt-3 h-11 gap-2 lg:h-10">
+            {isFetching && <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden />} Try again
+          </Button>
+        </div>
       )}
 
-      {isLoading ? (
-        <div className="grid gap-4 lg:grid-cols-2">
-          {venues.map((v) => <Skeleton key={v.slug} className="h-72 rounded-xl" />)}
-        </div>
-      ) : data ? (
-        <>
-          {/* grid-cols-1 is minmax(0, 1fr): without it a phone's one column
-              grows to the longest name, and the cards run off the screen. */}
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 mb-6">
-            {venues.map((v) => {
-              const here = accounts.filter((a) => a.venue === v.slug);
-              return (
-                <section key={v.slug} aria-label={`${v.name} team`} className="min-w-0">
-                  <Card className="h-full">
-                    <CardHeader className="pb-3">
-                      <CardTitle className="font-serif text-xl">{v.name}</CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                      <People
-                        title="Admins"
-                        icon={ShieldCheck}
-                        people={here.filter((a) => a.kind === 'admin')}
-                        empty="No admin of its own yet: you run it."
-                        action={rowActions}
-                      />
-                      <People
-                        title="Waiters"
-                        icon={Users}
-                        people={here.filter((a) => a.kind === 'waiter' && !isKitchenTablet(a))}
-                        empty="No waiters yet. Add them under Waiters."
-                        action={rowActions}
-                      />
-                      <People
-                        title="Kitchen screens"
-                        icon={ChefHat}
-                        people={here.filter(isKitchenTablet)}
-                        empty="No kitchen tablet yet. Add one under Waiters → Kitchen tablet."
-                        action={rowActions}
-                      />
-                    </CardContent>
-                  </Card>
+      <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_380px]">
+        <div className="min-w-0 space-y-6">
+          {isLoading ? (
+            venues.map((v) => (
+              <AdminCard key={v.slug} className="p-5 sm:p-6" aria-busy="true" aria-label={`Loading ${v.name}`}>
+                <Skeleton className="h-6 w-40" />
+                <Skeleton className="mt-2 h-4 w-56" />
+                <div className="mt-6 space-y-3">
+                  {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-11 w-full rounded-lg" />)}
+                </div>
+              </AdminCard>
+            ))
+          ) : data ? (
+            <>
+              {/* min-w-0 all the way down: without it a phone's one column
+                  grows to the longest name, and the cards run off the screen. */}
+              {venues.map((v) => {
+                const here = accounts.filter((a) => a.venue === v.slug);
+                const admins = here.filter((a) => a.kind === 'admin');
+                const waiters = here.filter((a) => a.kind === 'waiter' && !isKitchenTablet(a));
+                const kitchens = here.filter(isKitchenTablet);
+                const counts = [plural(admins.length, 'admin'), plural(waiters.length, 'waiter'), plural(kitchens.length, 'kitchen screen')].join(' · ');
+                return (
+                  <section key={v.slug} aria-label={`${v.name} team`} className="min-w-0">
+                    <AdminCard>
+                      <AdminCardHeader title={v.name} description={counts} />
+                      <AdminCardContent className="space-y-5">
+                        <People
+                          title="Admins"
+                          icon={ShieldCheck}
+                          people={admins}
+                          empty="No admin of its own yet: you run it."
+                          action={rowActions}
+                        />
+                        <People
+                          title="Waiters"
+                          icon={Users}
+                          people={waiters}
+                          empty="No waiters yet. Add them under Waiters."
+                          action={rowActions}
+                        />
+                        <People
+                          title="Kitchen screens"
+                          icon={ChefHat}
+                          people={kitchens}
+                          empty="No kitchen tablet yet. Add one under Waiters → Kitchen tablet."
+                          action={rowActions}
+                        />
+                      </AdminCardContent>
+                    </AdminCard>
+                  </section>
+                );
+              })}
+
+              {ownerCard}
+
+              {noRole.length > 0 && (
+                <section aria-label="Sign-ins with no role" className="min-w-0">
+                  <AdminCard>
+                    <AdminCardHeader
+                      icon={UserX}
+                      tone="muted"
+                      title="Sign-ins with no role"
+                      description="These still sign in, but open nothing: an admin whose role was revoked, or a waiter whose sign-in stayed behind. Remove them, or appoint one by their email."
+                    />
+                    <AdminCardContent>
+                      <People people={noRole} empty="" action={rowActions} />
+                    </AdminCardContent>
+                  </AdminCard>
                 </section>
-              );
-            })}
-          </div>
+              )}
+            </>
+          ) : null}
+        </div>
 
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="font-serif text-lg flex items-center gap-2"><Crown className="w-5 h-5" /> Owner</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <People title="Every restaurant" icon={Crown} people={owners} empty="No owner account." action={rowActions} />
-            </CardContent>
-          </Card>
+        <div className="min-w-0 lg:sticky lg:top-[calc(var(--admin-top,0px)+1.5rem)]">
+          {appointForm}
+        </div>
+      </div>
 
-          {noRole.length > 0 && (
-            <section aria-label="Sign-ins with no role" className="mt-6">
-              <Card>
-                <CardHeader className="pb-3">
-                  <CardTitle className="font-serif text-lg flex items-center gap-2"><UserX className="w-5 h-5" /> Sign-ins with no role</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-2">
-                  <p className="text-sm font-sans text-muted-foreground">
-                    These still sign in, but open nothing: an admin whose role was revoked, or a waiter whose sign-in stayed
-                    behind. Remove them, or appoint one above by their email.
-                  </p>
-                  <People title="No role" icon={UserX} people={noRole} empty="" action={rowActions} />
-                </CardContent>
-              </Card>
-            </section>
-          )}
-        </>
-      ) : null}
+      <LoginCard details={card} onDone={() => setCard(null)} />
 
       {/* Remove: the sign-in goes for good, with everything it does at both
           restaurants. An admin's row also offers the old Revoke. */}
@@ -556,7 +625,7 @@ const AdminTeam = () => {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter className="gap-2">
-            <Button type="button" variant="outline" disabled={!!removing} onClick={() => setRemoveTarget(null)}>
+            <Button type="button" variant="outline" disabled={!!removing} onClick={() => setRemoveTarget(null)} className="h-11 lg:h-10">
               Keep them
             </Button>
             {removeTarget?.kind === 'admin' && (
@@ -565,9 +634,9 @@ const AdminTeam = () => {
                 variant="outline"
                 disabled={!!removing}
                 onClick={() => removeTarget && void revoke(removeTarget)}
-                className="gap-2"
+                className="h-11 gap-2 lg:h-10"
               >
-                {removing === 'revoke' ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserMinus className="w-4 h-4" />}
+                {removing === 'revoke' ? <Loader2 className="w-4 h-4 animate-spin motion-reduce:animate-none" /> : <UserMinus className="w-4 h-4" />}
                 Only stop running {nameOf(removeTarget.venue)}
               </Button>
             )}
@@ -575,9 +644,9 @@ const AdminTeam = () => {
               type="button"
               disabled={!!removing}
               onClick={() => removeTarget && void removeAccount(removeTarget)}
-              className="gap-2 bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              className="h-11 gap-2 bg-destructive text-destructive-foreground hover:bg-destructive/90 lg:h-10"
             >
-              {removing === 'remove' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+              {removing === 'remove' ? <Loader2 className="w-4 h-4 animate-spin motion-reduce:animate-none" /> : <Trash2 className="w-4 h-4" />}
               Remove account
             </Button>
           </AlertDialogFooter>
@@ -589,7 +658,7 @@ const AdminTeam = () => {
       <Dialog open={!!resetTarget} onOpenChange={(open) => { if (!open) closeReset(); }}>
         <DialogContent className="max-w-[calc(100vw-2rem)] sm:max-w-md rounded-2xl">
           <form onSubmit={(e) => void giveNewPassword(e)} noValidate className="space-y-4">
-            <DialogHeader>
+            <DialogHeader className="pe-8 text-start">
               <DialogTitle className="font-serif">New password for {resetTarget ? resetTarget.display_name ?? who(resetTarget) : ''}</DialogTitle>
               <DialogDescription>
                 {resetTarget && <>{nameOf(resetTarget.venue)} · {resetTarget.kind === 'admin' ? 'admin' : isKitchenTablet(resetTarget) ? 'kitchen tablet' : 'waiter'}. </>}
@@ -605,11 +674,14 @@ const AdminTeam = () => {
                 problem={resetProblem}
                 className="mt-1.5"
               />
+              <p className="mt-2 text-xs font-sans text-muted-foreground">
+                Next you get a card with it, to copy or send to them. It is shown there once.
+              </p>
             </div>
-            <DialogFooter className="gap-2 sm:gap-0">
-              <Button type="button" variant="outline" onClick={closeReset}>Cancel</Button>
-              <Button type="submit" disabled={resetting} className="gap-2">
-                {resetting && <Loader2 className="w-4 h-4 animate-spin" />} Set new password
+            <DialogFooter className="gap-2">
+              <Button type="button" variant="outline" onClick={closeReset} className="h-11 lg:h-10">Cancel</Button>
+              <Button type="submit" disabled={resetting} className="h-11 gap-2 lg:h-10">
+                {resetting && <Loader2 className="w-4 h-4 animate-spin motion-reduce:animate-none" />} Set new password
               </Button>
             </DialogFooter>
           </form>

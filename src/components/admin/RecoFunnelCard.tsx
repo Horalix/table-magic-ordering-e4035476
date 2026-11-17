@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, Filter } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { AdminCard, AdminCardContent, AdminCardHeader, EmptyState } from '@/components/admin/AdminCard';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   FUNNEL_STAGES, getRecoFunnel, placementLabel, summariseFunnel,
@@ -59,17 +59,16 @@ const RecoFunnelCard = ({ days = 28, holdout }: { days?: number; holdout?: Holdo
   const inc = incremental(holdout);
 
   return (
-    <Card id="funnel" className="rounded-2xl border-border">
-      <CardHeader className="pb-3">
-        <CardTitle className="font-serif text-lg flex items-center gap-2">
-          <Filter className="w-5 h-5 text-primary shrink-0" /> From suggestion to sale
-        </CardTitle>
-        <p className="text-xs font-sans text-muted-foreground">
+    <AdminCard id="funnel">
+      <AdminCardHeader
+        icon={Filter}
+        title="From suggestion to sale"
+        description={<>
           Every suggestion the engine made in the last {days} trading days, and how far it got. Paid means a line on
           an order that became a sale.
-        </p>
-      </CardHeader>
-      <CardContent className="space-y-5">
+        </>}
+      />
+      <AdminCardContent className="space-y-5">
         {error ? (
           <div className="flex items-start gap-2 text-sm font-sans">
             <AlertTriangle className="w-4 h-4 text-destructive shrink-0 mt-0.5" />
@@ -78,7 +77,7 @@ const RecoFunnelCard = ({ days = 28, holdout }: { days?: number; holdout?: Holdo
         ) : !rows ? (
           <Skeleton className="h-48 rounded-2xl" />
         ) : totals.length === 0 ? (
-          <p className="text-sm font-sans text-muted-foreground py-4 text-center">No suggestions were made in this window.</p>
+          <EmptyState icon={Filter} title="No suggestions were made in this window." hint="The funnel fills in as guests are shown suggestions on their phones." />
         ) : (
           <>
             {totals.map((t) => {
@@ -146,8 +145,8 @@ const RecoFunnelCard = ({ days = 28, holdout }: { days?: number; holdout?: Holdo
             <p className={`text-sm font-sans ${inc.measured ? 'text-foreground' : 'text-muted-foreground'}`}>{inc.text}</p>
           </>
         )}
-      </CardContent>
-    </Card>
+      </AdminCardContent>
+    </AdminCard>
   );
 };
 

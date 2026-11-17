@@ -52,8 +52,8 @@ async function asMarko(page: Page) {
 const notice = (page: Page) => page.getByTestId('end-of-day');
 
 test.describe('after the work day', () => {
-  // The doors of La Soul close at 21:00 (src/lib/venues.ts); nothing is set in the admin.
-  const evening = (): Floor => ({ local_time: '21:45', day_ends_at: null, tables: [table(1), table(3), table(7, 24)], closes: 0 });
+  // The doors of La Soul close at 23:00 (src/lib/venues.ts, the owner's hours of 16 November 2026); nothing is set in the admin.
+  const evening = (): Floor => ({ local_time: '23:45', day_ends_at: null, tables: [table(1), table(3), table(7, 24)], closes: 0 });
 
   test('the admin says how many tables are open, closes the settled ones, and keeps the one that owes', async ({ page }) => {
     const floor = evening();
@@ -104,7 +104,7 @@ test.describe('during service', () => {
     const floor: Floor = { local_time: '19:00', day_ends_at: null, tables: [table(1), table(2)], closes: 0 };
     await stubFloor(page, floor);
     await page.goto('/admin/tables');
-    await expect(page.getByRole('heading', { level: 1, name: 'Table Management' })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1, name: 'Tables', exact: true })).toBeVisible();
     await expect(notice(page)).toHaveCount(0);
     await page.getByRole('button', { name: 'Close all tables (2 open)' }).click();
     await page.getByRole('dialog', { name: 'Close all tables?' }).getByRole('button', { name: 'Close 2 tables' }).click();
@@ -113,7 +113,7 @@ test.describe('during service', () => {
   });
 
   test('the work day ends when the manager says, not at closing time', async ({ page }) => {
-    await stubFloor(page, { local_time: '21:45', day_ends_at: '23:00', tables: [table(1)], closes: 0 });
+    await stubFloor(page, { local_time: '23:30', day_ends_at: '23:45', tables: [table(1)], closes: 0 });
     await page.goto('/admin/orders');
     await expect(page.getByRole('heading', { level: 1, name: 'Orders' })).toBeVisible();
     await expect(notice(page)).toHaveCount(0);
@@ -130,7 +130,7 @@ test.describe('during service', () => {
 test('a database from before this feature shows nothing', async ({ page }) => {
   // The fixtures answer an unknown function with an empty list.
   await page.goto('/admin/tables');
-  await expect(page.getByRole('heading', { level: 1, name: 'Table Management' })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: 'Tables', exact: true })).toBeVisible();
   await expect(notice(page)).toHaveCount(0);
   await expect(page.getByRole('button', { name: /Close all tables/ })).toHaveCount(0);
 });

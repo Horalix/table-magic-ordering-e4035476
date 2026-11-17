@@ -201,12 +201,12 @@ const HeldOrdersCard = ({
   return (
     <section
       aria-label="Needs confirming"
-      className={`border-2 border-amber-500/60 bg-amber-50 dark:bg-amber-950/30 rounded-xl p-3 sm:p-4 space-y-3 ${className}`}
+      className={`border-2 border-amber-500/50 bg-amber-500/10 dark:bg-amber-950/30 rounded-2xl p-3 sm:p-4 space-y-3 ${className}`}
     >
       <h2 className="text-sm font-sans font-semibold uppercase tracking-wider text-amber-800 dark:text-amber-300 flex items-center gap-2">
         <AlertTriangle className="w-4 h-4" aria-hidden /> Needs confirming ({held.length})
       </h2>
-      <p className="text-xs font-sans text-amber-900/80 dark:text-amber-200/80 -mt-2">
+      <p className="text-sm font-sans text-amber-950/80 dark:text-amber-200/80 -mt-2">
         Not printed yet. Check someone is at the table, then confirm.
       </p>
 
@@ -215,21 +215,22 @@ const HeldOrdersCard = ({
           const suspicious = heldReasonIsSuspicious(o.held_reason);
           const working = busy.has(o.id);
           return (
-            <li key={o.id} className="rounded-lg bg-card border border-border p-3 space-y-2" data-testid="held-order">
+            <li key={o.id} className="rounded-xl bg-card border border-border shadow-lux p-3 space-y-2" data-testid="held-order">
               <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-                <span className="text-lg font-sans font-bold text-foreground">Table {o.table_number}</span>
+                {/* The table in the face and size the tickets and cards use. */}
+                <span className="font-serif text-2xl font-bold leading-none tracking-tight text-foreground">Table {o.table_number}</span>
                 {o.guest_name && <span className="text-sm font-sans text-foreground">{o.guest_name}</span>}
                 {o.order_code && <span className="text-xs font-mono text-muted-foreground">#{o.order_code}</span>}
                 <span className="text-xs font-sans text-muted-foreground"><Waiting since={o.created_at} /></span>
-                <span className="ml-auto text-base font-sans font-semibold text-foreground">{km(o.total)}</span>
+                <span className="ml-auto text-base font-sans font-semibold tabular-nums text-foreground">{km(o.total)}</span>
               </div>
               <p className="inline-flex items-center gap-1.5 rounded-full bg-amber-100 dark:bg-amber-900/50 text-amber-900 dark:text-amber-200 px-2.5 py-1 text-xs font-sans font-semibold">
                 {heldReasonLabel(o.held_reason, o.table_number)}
               </p>
-              <ul className="text-sm font-sans text-foreground">
+              <ul className="text-[15px] font-sans text-foreground space-y-0.5">
                 {o.items.map((i, n) => (
                   <li key={n}>
-                    {i.quantity}× {i.name}
+                    <span className="tabular-nums font-semibold">{i.quantity}×</span> {i.name}
                     {i.notes && <span className="text-muted-foreground"> — {i.notes}</span>}
                   </li>
                 ))}

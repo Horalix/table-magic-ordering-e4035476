@@ -1,10 +1,12 @@
 import { Link } from 'react-router-dom';
 import { useSiteT } from '@/lib/site-i18n';
 import { menuPath, type Venue } from '@/lib/venues';
+import { rcopy } from '@/lib/reservation-copy';
+import { RESERVE_PATH } from '@/lib/seo/reservations';
 import { Container } from './SiteSection';
 
-const SiteFooter = ({ venue }: { venue: Venue }) => {
-  const { st } = useSiteT();
+const SiteFooter = ({ venue, reservations = false }: { venue: Venue; reservations?: boolean }) => {
+  const { st, locale } = useSiteT();
   const linkClass = 'text-[15px] text-ls-cream/80 transition-colors hover:text-ls-cream focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ls-sage focus-visible:ring-offset-2 focus-visible:ring-offset-ls-forest rounded-sm';
   return (
     <footer className="bg-ls-forest pb-[max(2.5rem,env(safe-area-inset-bottom))] pt-16 text-ls-cream sm:pt-20">
@@ -28,13 +30,15 @@ const SiteFooter = ({ venue }: { venue: Venue }) => {
           <nav aria-label={st('footer_nav')} className="lg:col-span-3">
             <ul className="space-y-3">
               <li><Link to={menuPath(venue.slug)} className={linkClass}>{st('footer_menu')}</Link></li>
+              {/* Only while the restaurant takes requests online (Admin → Reservations). */}
+              {reservations && <li><Link to={RESERVE_PATH} data-testid="reserve-link" className={linkClass}>{rcopy('title', locale)}</Link></li>}
               <li><a href="#story" className={linkClass}>{st('nav_story')}</a></li>
               <li><a href="#visit" className={linkClass}>{st('nav_visit')}</a></li>
               <li><Link to="/privacy/" className={linkClass}>{st('footer_privacy')}</Link></li>
             </ul>
           </nav>
         </div>
-        <p className="pt-8 text-[13px] text-ls-cream/50">{st('footer_rights', { year: new Date().getFullYear() })}</p>
+        <p className="pt-8 text-[13px] text-ls-cream/60">{st('footer_rights', { year: new Date().getFullYear() })}</p>
       </Container>
     </footer>
   );

@@ -1,8 +1,10 @@
+import { DEMO_MODE } from '@/lib/demo-mode';
 import React, { useEffect, useState } from 'react';
-import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Monitor, Wifi, Bluetooth, Copy, Check, Printer, ChevronDown, Loader2, CheckCircle2, AlertTriangle, Sparkles, HelpCircle, Usb } from 'lucide-react';
+import { Monitor, Wifi, Bluetooth, Copy, Check, Printer, ChevronDown, Loader2, CheckCircle2, AlertTriangle, Sparkles, HelpCircle, Usb, Tablet } from 'lucide-react';
 import { toast } from 'sonner';
+import { AdminCard, AdminCardContent, AdminCardHeader } from '@/components/admin/AdminCard';
+import { cn } from '@/lib/utils';
 import { buildKitchenTicketBytes, type KitchenPrintSettings } from '@/lib/ticket-export';
 import {
   bluetoothSupported, connectBluetoothPrinter, connectedPrinterName, disconnectBluetoothPrinter,
@@ -23,15 +25,20 @@ const origin = typeof window !== 'undefined' ? window.location.origin : 'https:/
 const winShortcut = `"C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe" --kiosk-printing ${origin}/kitchen`;
 const macShortcut = `open -a "Google Chrome" --args --kiosk-printing ${origin}/kitchen`;
 const PRINTER_KEY = 'kitchen:isPrinter';
+/** The Network printers card's id (CloudPrinters.tsx). */
+const NETWORK_PRINTERS_ID = 'network-printers';
 
 const sampleOrder = {
   id: 'test-0000-0000', status: 'pending', total: 27.5, tip_amount: 2.5, payment_method: 'card' as const,
   notes: 'Allergy: nuts', created_at: new Date().toISOString(), table_number: 5, guest_name: 'Test', section_name: 'Terrace',
   items: [
-    { quantity: 1, notes: 'no onions', menu_item_name: 'La Soul Burger', unit_price: 18 },
+    { quantity: 1, notes: 'no onions', menu_item_name: DEMO_MODE ? 'Casa Burger' : 'La Soul Burger', unit_price: 18 },
     { quantity: 2, notes: null, menu_item_name: 'Espresso', unit_price: 3.5 },
   ],
 };
+
+/** Tap targets: 44 px on a phone, the desktop's 40. */
+const TAP = 'h-11 lg:h-10';
 
 const CopyField = ({ value, label }: { value: string; label?: string }) => {
   const [copied, setCopied] = useState(false);
@@ -40,12 +47,12 @@ const CopyField = ({ value, label }: { value: string; label?: string }) => {
     catch { toast.error('Could not copy — select and copy manually'); }
   };
   return (
-    <div className="mt-1">
-      {label && <p className="text-[11px] uppercase tracking-wide text-muted-foreground font-sans mb-1">{label}</p>}
-      <div className="flex items-stretch gap-2">
-        <code className="flex-1 min-w-0 text-xs bg-muted/60 border border-border rounded-lg px-3 py-2 font-mono break-all">{value}</code>
-        <Button type="button" variant="outline" size="sm" onClick={copy} className="shrink-0 gap-1.5">
-          {copied ? <Check className="w-3.5 h-3.5 text-primary" /> : <Copy className="w-3.5 h-3.5" />}{copied ? 'Copied' : 'Copy'}
+    <div>
+      {label && <p className="mb-1 text-xs font-sans font-medium text-muted-foreground">{label}</p>}
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-stretch">
+        <code className="min-w-0 flex-1 break-all rounded-lg border border-border bg-card px-3 py-2.5 font-mono text-xs leading-relaxed">{value}</code>
+        <Button type="button" variant="outline" onClick={copy} className="h-11 shrink-0 gap-1.5 self-start sm:h-auto lg:min-h-[40px] sm:self-stretch">
+          {copied ? <Check className="h-4 w-4 text-primary" /> : <Copy className="h-4 w-4" />}{copied ? 'Copied' : 'Copy'}
         </Button>
       </div>
     </div>
@@ -53,38 +60,59 @@ const CopyField = ({ value, label }: { value: string; label?: string }) => {
 };
 
 const Step = ({ n, children }: { n: number; children: React.ReactNode }) => (
-  <div className="flex gap-3">
-    <span className="shrink-0 w-6 h-6 rounded-full bg-primary/15 text-primary text-xs font-bold font-sans flex items-center justify-center">{n}</span>
-    <div className="min-w-0 flex-1 text-sm font-sans text-muted-foreground leading-relaxed pt-0.5">{children}</div>
-  </div>
+  <li className="flex gap-3">
+    <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-primary/10 text-xs font-semibold font-sans tabular-nums text-primary" aria-hidden>{n}</span>
+    <div className="min-w-0 flex-1 pt-0.5 text-sm font-sans leading-relaxed text-muted-foreground">{children}</div>
+  </li>
 );
 
 const MethodButton = ({ active, onClick, icon: Icon, title, sub, recommended }: { active: boolean; onClick: () => void; icon: typeof Monitor; title: string; sub: string; recommended?: boolean }) => (
-  <button type="button" onClick={onClick}
-    className={`flex flex-col h-full text-left rounded-xl border p-3 transition-colors ${active ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted/40'}`}>
-    <div className="flex items-center justify-between gap-2 mb-1.5 min-h-[20px]">
-      <Icon className={`w-5 h-5 ${active ? 'text-primary' : 'text-muted-foreground'}`} />
+  <button
+    type="button" onClick={onClick} aria-pressed={active}
+    className={cn(
+      'flex h-full min-h-[88px] flex-col rounded-xl border p-3 text-start transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+      active ? 'border-primary/60 bg-primary/5 ring-1 ring-primary/30' : 'border-border hover:bg-muted/40',
+    )}
+  >
+    <span className="mb-2 flex min-h-[20px] items-center justify-between gap-2">
+      <Icon className={cn('h-5 w-5', active ? 'text-primary' : 'text-muted-foreground')} aria-hidden />
       {recommended && (
-        <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-primary text-primary-foreground text-[9px] font-sans font-bold uppercase tracking-wide">
-          <Sparkles className="w-2.5 h-2.5" /> Easiest
+        <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-sans font-semibold uppercase tracking-wide text-primary">
+          <Sparkles className="h-2.5 w-2.5" aria-hidden /> Easiest
         </span>
       )}
-    </div>
-    <p className="font-sans text-sm font-medium text-foreground">{title}</p>
-    <p className="text-[11px] text-muted-foreground font-sans mt-0.5 leading-snug">{sub}</p>
+    </span>
+    <span className="font-sans text-sm font-medium text-foreground">{title}</span>
+    <span className="mt-0.5 text-xs font-sans leading-snug text-muted-foreground">{sub}</span>
   </button>
+);
+
+/** Where this device stands with the chosen method: one line, green when it is ready. */
+const StatusLine = ({ ok, warn = false, icon: Icon, children }: { ok: boolean; warn?: boolean; icon: typeof Monitor; children: React.ReactNode }) => (
+  <div
+    className={cn(
+      'flex items-start gap-2 rounded-xl px-3.5 py-3 text-sm font-sans',
+      ok ? 'bg-primary/10 text-primary' : warn ? 'bg-amber-500/10 text-amber-800 dark:text-amber-400' : 'bg-muted/60 text-muted-foreground',
+    )}
+  >
+    {ok ? <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" aria-hidden /> : <Icon className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />}
+    <span className="min-w-0 break-words">{children}</span>
+  </div>
 );
 
 const Troubleshoot = ({ tips }: { tips: React.ReactNode[] }) => {
   const [open, setOpen] = useState(false);
   return (
-    <div className="rounded-lg border border-border bg-muted/30">
-      <button type="button" onClick={() => setOpen((o) => !o)} className="w-full flex items-center justify-between px-3 py-2 text-xs font-sans font-medium text-foreground">
-        <span className="flex items-center gap-1.5"><HelpCircle className="w-3.5 h-3.5 text-muted-foreground" /> Nothing printed?</span>
-        <ChevronDown className={`w-3.5 h-3.5 transition-transform ${open ? 'rotate-180' : ''}`} />
+    <div className="rounded-xl border border-border/80">
+      <button
+        type="button" onClick={() => setOpen((o) => !o)} aria-expanded={open}
+        className="flex min-h-[44px] w-full items-center justify-between gap-2 rounded-xl px-3.5 text-sm font-sans font-medium text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        <span className="flex items-center gap-2"><HelpCircle className="h-4 w-4 text-muted-foreground" aria-hidden /> Nothing printed?</span>
+        <ChevronDown className={cn('h-4 w-4 text-muted-foreground transition-transform motion-reduce:transition-none', open && 'rotate-180')} aria-hidden />
       </button>
       {open && (
-        <ul className="px-3 pb-3 pt-0 space-y-1.5 text-[11px] text-muted-foreground font-sans list-disc list-inside">
+        <ul className="list-disc space-y-1.5 px-3.5 pb-3.5 ps-8 text-xs font-sans leading-relaxed text-muted-foreground">
           {tips.map((tip, i) => <li key={i}>{tip}</li>)}
         </ul>
       )}
@@ -175,25 +203,33 @@ const PrinterSetupGuide = ({ settings, onTestPrint }: { settings: KitchenPrintSe
     finally { setBtBusy(false); }
   };
   const forgetBt = () => { forgetBluetoothPrinter(); setBtName(null); toast.success('Printer forgotten'); };
+  const spin = 'h-4 w-4 animate-spin motion-reduce:animate-none';
+  const b = (s: React.ReactNode) => <span className="font-medium text-foreground">{s}</span>;
 
   return (
-    <Card>
-      <CardContent className="p-5 space-y-4">
-        <div>
-          <h2 className="font-serif text-lg font-semibold text-foreground flex items-center gap-2">
-            <Printer className="w-5 h-5 text-primary" /> Tablet printing
-          </h2>
-          <p className="text-xs text-muted-foreground font-sans mt-1">Set up on the tablet that runs the Kitchen screen. The <span className="text-foreground/80">fiscal receipt</span> printer (Tring) is set up separately via fiscalization.</p>
-        </div>
-
+    <AdminCard>
+      <AdminCardHeader
+        icon={Tablet}
+        title="Or print from a tablet"
+        description={(
+          <>
+            For a USB or Bluetooth printer next to the kitchen tablet. Set it up on that tablet; it has to stay on with the Kitchen screen open.
+            If a network printer above is online for a station, the tablet leaves that station to it.
+          </>
+        )}
+      />
+      <AdminCardContent className="space-y-4">
         {recommend === 'bluetooth' && (
-          <div className="flex items-start gap-2 rounded-xl bg-primary/5 border border-primary/20 px-3.5 py-2.5">
-            <Sparkles className="w-4 h-4 text-primary mt-0.5 shrink-0" />
-            <p className="text-xs font-sans text-foreground/80"><span className="font-semibold text-foreground">Easiest setup:</span> pair a Bluetooth printer once below — this tablet then reconnects and prints every new order automatically.</p>
-          </div>
+          <p className="flex items-start gap-2 text-xs font-sans leading-relaxed text-muted-foreground">
+            <Sparkles className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" aria-hidden />
+            <span><span className="font-medium text-foreground">Easiest on this device:</span> pair a Bluetooth printer once — this tablet then reconnects and prints every new order automatically.</span>
+          </p>
         )}
 
-        <div className={`grid gap-2 grid-cols-1 sm:grid-cols-2 ${btOk && directOk ? 'lg:grid-cols-4' : btOk || directOk ? 'lg:grid-cols-3' : ''}`}>
+        <div
+          role="group" aria-label="How the tablet prints"
+          className={cn('grid grid-cols-2 gap-2', btOk && directOk ? 'lg:grid-cols-4' : btOk || directOk ? 'lg:grid-cols-3' : '')}
+        >
           {btOk && <MethodButton active={method === 'bluetooth'} onClick={() => setMethod('bluetooth')} icon={Bluetooth} title="Bluetooth" sub="Pair once, prints automatically" recommended={recommend === 'bluetooth'} />}
           {directOk && <MethodButton active={method === 'usb'} onClick={() => setMethod('usb')} icon={Usb} title="USB or classic Bluetooth" sub="Android tablet + USB cable; Bluetooth printers missing above" />}
           <MethodButton active={method === 'device'} onClick={() => setMethod('device')} icon={Monitor} title="This device" sub="Print dialog — Windows/Mac printer" recommended={recommend === 'device'} />
@@ -202,51 +238,50 @@ const PrinterSetupGuide = ({ settings, onTestPrint }: { settings: KitchenPrintSe
 
         {/* BLUETOOTH */}
         {method === 'bluetooth' && btOk && (
-          <div className="space-y-3 pt-1">
+          <div className="space-y-4 pt-1">
             {btBlocked && (
-              <p className="flex items-start gap-2 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-700 dark:text-amber-400 px-3 py-2 text-xs font-sans">
-                <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
-                You’re in an embedded preview, where browsers block Bluetooth. Open the <span className="font-medium">published site directly in Chrome</span> on the kitchen tablet (<code className="bg-card px-1 rounded">{origin}/kitchen</code>) to pair.
+              <p className="flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3.5 py-3 text-xs font-sans leading-relaxed text-amber-800 dark:text-amber-400">
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+                <span>You’re in an embedded preview, where browsers block Bluetooth. Open the <span className="font-medium">published site directly in Chrome</span> on the kitchen tablet (<code className="break-all rounded bg-card px-1">{origin}/kitchen</code>) to pair.</span>
               </p>
             )}
 
-            <div className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-sans ${btName ? 'bg-primary/10 text-primary' : remembered ? 'bg-amber-500/10 text-amber-700 dark:text-amber-400' : 'bg-muted/50 text-muted-foreground'}`}>
-              {btName ? <CheckCircle2 className="w-4 h-4 shrink-0" /> : <Bluetooth className="w-4 h-4 shrink-0" />}
+            <StatusLine ok={!!btName} warn={!btName && !!remembered} icon={Bluetooth}>
               {btName
-                ? <span>Connected: <span className="font-semibold">{btName}</span> · reconnects automatically</span>
+                ? <>Connected: <span className="font-semibold">{btName}</span> · reconnects automatically</>
                 : remembered
-                  ? <span>Saved: <span className="font-semibold">{remembered}</span> — turn the printer on, then Reconnect</span>
+                  ? <>Saved: <span className="font-semibold">{remembered}</span> — turn the printer on, then Reconnect</>
                   : 'No Bluetooth printer connected'}
-            </div>
+            </StatusLine>
 
             <div className="flex flex-wrap gap-2">
               {btName ? (
                 <>
-                  <Button variant="outline" onClick={testBt} disabled={btBusy} className="gap-1.5">
-                    {btBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Printer className="w-4 h-4" />} Send a test ticket
+                  <Button variant="outline" onClick={testBt} disabled={btBusy} className={cn(TAP, 'gap-1.5')}>
+                    {btBusy ? <Loader2 className={spin} /> : <Printer className="h-4 w-4" />} Send a test ticket
                   </Button>
-                  <Button variant="ghost" onClick={forgetBt} className="text-muted-foreground">Forget</Button>
+                  <Button variant="ghost" onClick={forgetBt} className={cn(TAP, 'text-muted-foreground')}>Forget</Button>
                 </>
               ) : (
                 <>
-                  <Button onClick={connectBt} disabled={btBusy || btBlocked} className="gap-1.5">
-                    {btBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Bluetooth className="w-4 h-4" />} {remembered ? 'Pair a different printer' : 'Connect Bluetooth printer'}
+                  <Button onClick={connectBt} disabled={btBusy || btBlocked} className={cn(TAP, 'gap-1.5')}>
+                    {btBusy ? <Loader2 className={spin} /> : <Bluetooth className="h-4 w-4" />} {remembered ? 'Pair a different printer' : 'Connect Bluetooth printer'}
                   </Button>
                   {remembered && (
-                    <Button variant="outline" onClick={reconnectBt} disabled={btBusy || btBlocked} className="gap-1.5">
-                      {btBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Bluetooth className="w-4 h-4" />} Reconnect
+                    <Button variant="outline" onClick={reconnectBt} disabled={btBusy || btBlocked} className={cn(TAP, 'gap-1.5')}>
+                      {btBusy ? <Loader2 className={spin} /> : <Bluetooth className="h-4 w-4" />} Reconnect
                     </Button>
                   )}
                 </>
               )}
             </div>
 
-            <div className="space-y-3 pt-1">
-              <Step n={1}>On the <span className="font-medium text-foreground">kitchen tablet</span>, turn the printer on and make sure its <span className="font-medium text-foreground">Bluetooth is on</span> (not already paired to a phone).</Step>
-              <Step n={2}>Tap <span className="font-medium text-foreground">Connect Bluetooth printer</span> and choose it from the list.</Step>
-              <Step n={3}>Tap <span className="font-medium text-foreground">Send a test ticket</span> — a sample should print. That's it.</Step>
-              <Step n={4}>Open the <span className="font-medium text-foreground">Kitchen Display</span> (<code className="text-xs bg-muted px-1 rounded">{origin}/kitchen</code>) on that tablet — it reconnects on its own and prints every new order automatically.</Step>
-            </div>
+            <ol className="space-y-3">
+              <Step n={1}>On the {b('kitchen tablet')}, turn the printer on and make sure its {b('Bluetooth is on')} (not already paired to a phone).</Step>
+              <Step n={2}>Tap {b('Connect Bluetooth printer')} and choose it from the list.</Step>
+              <Step n={3}>Tap {b('Send a test ticket')} — a sample should print. That's it.</Step>
+              <Step n={4}>Open the {b('Kitchen Display')} (<code className="break-all rounded bg-muted px-1 text-xs">{origin}/kitchen</code>) on that tablet — it reconnects on its own and prints every new order automatically.</Step>
+            </ol>
 
             <Troubleshoot tips={[
               <>Make sure you opened the <span className="font-medium">real site in Chrome</span> (Android/Windows/Mac), not inside an app preview — Bluetooth is blocked there.</>,
@@ -259,34 +294,33 @@ const PrinterSetupGuide = ({ settings, onTestPrint }: { settings: KitchenPrintSe
 
         {/* USB / SERIAL — straight to the printer, no dialog */}
         {method === 'usb' && directOk && (
-          <div className="space-y-3 pt-1">
-            <div className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-sans ${directName ? 'bg-primary/10 text-primary' : 'bg-muted/50 text-muted-foreground'}`}>
-              {directName ? <CheckCircle2 className="w-4 h-4 shrink-0" /> : <Usb className="w-4 h-4 shrink-0" />}
-              {directName ? <span>Connected: <span className="font-semibold">{directName}</span> · reconnects automatically</span> : 'No USB or serial printer connected'}
-            </div>
+          <div className="space-y-4 pt-1">
+            <StatusLine ok={!!directName} icon={Usb}>
+              {directName ? <>Connected: <span className="font-semibold">{directName}</span> · reconnects automatically</> : 'No USB or serial printer connected'}
+            </StatusLine>
             <div className="flex flex-wrap gap-2">
               {usbSupported() && (
-                <Button onClick={() => connectDirect('usb')} disabled={directBusy} variant={directName ? 'outline' : 'default'} className="gap-1.5">
-                  {directBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Usb className="w-4 h-4" />} Connect USB printer
+                <Button onClick={() => connectDirect('usb')} disabled={directBusy} variant={directName ? 'outline' : 'default'} className={cn(TAP, 'gap-1.5')}>
+                  {directBusy ? <Loader2 className={spin} /> : <Usb className="h-4 w-4" />} Connect USB printer
                 </Button>
               )}
               {serialSupported() && (
-                <Button onClick={() => connectDirect('serial')} disabled={directBusy} variant="outline" className="gap-1.5">
-                  <Bluetooth className="w-4 h-4" /> Classic Bluetooth / serial
+                <Button onClick={() => connectDirect('serial')} disabled={directBusy} variant="outline" className={cn(TAP, 'gap-1.5')}>
+                  <Bluetooth className="h-4 w-4" /> Classic Bluetooth / serial
                 </Button>
               )}
               {directName && (
                 <>
-                  <Button variant="outline" onClick={testDirect} disabled={directBusy} className="gap-1.5"><Printer className="w-4 h-4" /> Send a test ticket</Button>
-                  <Button variant="ghost" onClick={() => { void forgetDirectPrinters().then(() => setDirectName(null)); }} className="text-muted-foreground">Forget</Button>
+                  <Button variant="outline" onClick={testDirect} disabled={directBusy} className={cn(TAP, 'gap-1.5')}><Printer className="h-4 w-4" /> Send a test ticket</Button>
+                  <Button variant="ghost" onClick={() => { void forgetDirectPrinters().then(() => setDirectName(null)); }} className={cn(TAP, 'text-muted-foreground')}>Forget</Button>
                 </>
               )}
             </div>
-            <div className="space-y-3 pt-1">
-              <Step n={1}><span className="font-medium text-foreground">Android tablet:</span> plug the printer in with a USB‑OTG cable, open this page in <span className="font-medium text-foreground">Chrome</span>, tap <span className="font-medium text-foreground">Connect USB printer</span> and pick it.</Step>
-              <Step n={2}><span className="font-medium text-foreground">Bluetooth printer that does not show up under Bluetooth:</span> pair it in the tablet’s own Bluetooth settings first (PIN is usually 0000 or 1234), then tap <span className="font-medium text-foreground">Classic Bluetooth / serial</span>.</Step>
-              <Step n={3}>Send a test ticket, then keep the <span className="font-medium text-foreground">Kitchen Display</span> open on this tablet — it reconnects on its own and prints every new order, with no print dialog.</Step>
-            </div>
+            <ol className="space-y-3">
+              <Step n={1}>{b('Android tablet:')} plug the printer in with a USB‑OTG cable, open this page in {b('Chrome')}, tap {b('Connect USB printer')} and pick it.</Step>
+              <Step n={2}>{b('Bluetooth printer that does not show up under Bluetooth:')} pair it in the tablet’s own Bluetooth settings first (PIN is usually 0000 or 1234), then tap {b('Classic Bluetooth / serial')}.</Step>
+              <Step n={3}>Send a test ticket, then keep the {b('Kitchen Display')} open on this tablet — it reconnects on its own and prints every new order, with no print dialog.</Step>
+            </ol>
             <Troubleshoot tips={[
               <>On Windows the printer’s own driver holds a USB printer — use <span className="font-medium">This device</span> (the print dialog) there instead.</>,
               <>Classic Bluetooth needs Chrome 117+ on a computer or Chrome 137+ on Android.</>,
@@ -297,35 +331,37 @@ const PrinterSetupGuide = ({ settings, onTestPrint }: { settings: KitchenPrintSe
 
         {/* THIS DEVICE */}
         {method === 'device' && (
-          <div className="space-y-3 pt-1">
-            <div className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-sans ${isPrinter ? 'bg-primary/10 text-primary' : 'bg-muted/50 text-muted-foreground'}`}>
-              {isPrinter ? <CheckCircle2 className="w-4 h-4" /> : <Printer className="w-4 h-4" />}
+          <div className="space-y-4 pt-1">
+            <StatusLine ok={isPrinter} icon={Printer}>
               {isPrinter ? 'This device is set as the kitchen printer' : 'This device is not set as the printer yet'}
-            </div>
+            </StatusLine>
             <div className="flex flex-wrap gap-2">
-              <Button onClick={toggleDevice} variant={isPrinter ? 'outline' : 'default'}>
+              <Button onClick={toggleDevice} variant={isPrinter ? 'outline' : 'default'} className={TAP}>
                 {isPrinter ? 'Stop using this device' : 'Use this device as the printer'}
               </Button>
-              <Button variant="outline" onClick={onTestPrint} className="gap-1.5"><Printer className="w-4 h-4" /> Send a test ticket</Button>
+              <Button variant="outline" onClick={onTestPrint} className={cn(TAP, 'gap-1.5')}><Printer className="h-4 w-4" /> Send a test ticket</Button>
             </div>
-            <div className="space-y-3 pt-1">
-              <Step n={1}>Plug the 80 mm printer into this tablet/PC and make sure it's installed as the <span className="font-medium text-foreground">default printer</span> in the OS.</Step>
-              <Step n={2}>Tap <span className="font-medium text-foreground">"Use this device as the printer"</span>, then <span className="font-medium text-foreground">Send a test ticket</span> to confirm.</Step>
-              <Step n={3}>Keep the <span className="font-medium text-foreground">Kitchen Display</span> open on this device — new orders print automatically.</Step>
+            <ol className="space-y-3">
+              <Step n={1}>Plug the 80 mm printer into this tablet/PC and make sure it's installed as the {b('default printer')} in the OS.</Step>
+              <Step n={2}>Tap {b('"Use this device as the printer"')}, then {b('Send a test ticket')} to confirm.</Step>
+              <Step n={3}>Keep the {b('Kitchen Display')} open on this device — new orders print automatically.</Step>
               <Step n={4}>
-                <button type="button" onClick={() => setShowSilent((s) => !s)} className="inline-flex items-center gap-1 text-primary font-medium hover:underline">
-                  Print without the popup each time <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showSilent ? 'rotate-180' : ''}`} />
+                <button
+                  type="button" onClick={() => setShowSilent((s) => !s)} aria-expanded={showSilent}
+                  className="-my-2 inline-flex min-h-[44px] items-center gap-1 font-medium text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:min-h-0 sm:my-0"
+                >
+                  Print without the popup each time <ChevronDown className={cn('h-4 w-4 transition-transform motion-reduce:transition-none', showSilent && 'rotate-180')} aria-hidden />
                 </button>
                 {showSilent && (
-                  <div className="mt-2 space-y-3 rounded-lg bg-muted/40 border border-border p-3">
-                    <p className="text-xs">Launch Chrome in <span className="font-medium text-foreground">kiosk-printing</span> mode so tickets print silently. Make a desktop shortcut with this target:</p>
+                  <div className="mt-2 space-y-3 rounded-xl bg-muted/40 p-3.5">
+                    <p className="text-xs">Launch Chrome in {b('kiosk-printing')} mode so tickets print silently. Make a desktop shortcut with this target:</p>
                     <CopyField label="Windows shortcut target" value={winShortcut} />
                     <CopyField label="Mac (Terminal)" value={macShortcut} />
-                    <p className="text-[11px] text-muted-foreground">On iPad / Android the print sheet appears each time — use Bluetooth or Network for fully silent printing.</p>
+                    <p className="text-xs text-muted-foreground">On iPad / Android the print sheet appears each time — use Bluetooth or Network for fully silent printing.</p>
                   </div>
                 )}
               </Step>
-            </div>
+            </ol>
             <Troubleshoot tips={[
               <>Check the printer is the <span className="font-medium">default</span> in the operating system's printer settings, with paper loaded.</>,
               <>If a print dialog appears and nothing prints, pick the right printer in that dialog once.</>,
@@ -337,20 +373,23 @@ const PrinterSetupGuide = ({ settings, onTestPrint }: { settings: KitchenPrintSe
         {/* NETWORK — now its own section with per-printer addresses. */}
         {method === 'network' && (
           <div className="space-y-3 pt-1">
-            <p className="flex items-start gap-2 rounded-lg bg-primary/5 border border-primary/20 px-3 py-2.5 text-sm font-sans text-foreground/80">
-              <Wifi className="w-4 h-4 mt-0.5 shrink-0 text-primary" />
+            <p className="flex items-start gap-2 rounded-xl bg-primary/5 px-3.5 py-3 text-sm font-sans leading-relaxed text-foreground/80">
+              <Wifi className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden />
               <span>
                 A network printer does not need this tablet at all. Add it under <span className="font-semibold text-foreground">Network printers</span> at
-                the top of this page — it gets its own address to paste into the printer, and shows here when it is online.
+                the top of this page — it gets its own address to paste into the printer, and shows there when it is online.
               </span>
             </p>
-            <Button variant="outline" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} className="gap-1.5">
-              <Wifi className="w-4 h-4" /> Go to Network printers
+            <Button
+              variant="outline" className={cn(TAP, 'gap-1.5')}
+              onClick={() => document.getElementById(NETWORK_PRINTERS_ID)?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+            >
+              <Wifi className="h-4 w-4" /> Go to Network printers
             </Button>
           </div>
         )}
-      </CardContent>
-    </Card>
+      </AdminCardContent>
+    </AdminCard>
   );
 };
 

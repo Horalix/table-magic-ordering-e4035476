@@ -1,9 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
-import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { formatDuration, formatMinutes, useElapsed, useElapsedMinutes } from '@/lib/timing';
+import { formatMinutes, orderUrgency } from '@/lib/timing';
 import { useNow, useNowBucketed } from '@/lib/clock';
 import {
   useCoalesced, useLatestRequest, useStaffRealtime, useStaffRealtimeEvent, useStaffRefresh,
@@ -11,7 +10,7 @@ import {
 import ConnectionPill from '@/components/staff/ConnectionPill';
 import TableActionSheet, { type SheetTable } from '@/components/monitor/TableActionSheet';
 import { businessDayISO } from '@/lib/reporting';
-import { ArrowLeft, Bell, CheckCircle2, ChefHat, Clock, Grid3x3, Lock, LogIn, Receipt, Users, Volume2, VolumeX } from 'lucide-react';
+import { ArrowLeft, Bell, CheckCircle2, ChefHat, Clock, Grid3x3, Hand, Lock, LogIn, Receipt, Volume2, VolumeX } from 'lucide-react';
 import PinPad from '@/components/monitor/PinPad';
 import { toast } from 'sonner';
 import {
@@ -26,6 +25,11 @@ import { isHeld, isInKitchen, kitchenStart } from '@/components/staff/order-stat
 import HeldOrdersCard from '@/components/staff/HeldOrdersCard';
 import EndOfDayTables from '@/components/staff/EndOfDayTables';
 import MenuOnlyNotice from '@/components/staff/MenuOnlyNotice';
+import { TONE, toneGlow, type StaffTone } from '@/components/staff/status-tone';
+import FloorView, { type FloorOrder } from '@/components/monitor/FloorView';
+import type { FloorTileData } from '@/components/monitor/FloorTile';
+import { floorStatus } from '@/components/monitor/floor-state';
+import { outstandingFor } from '@/lib/staff-api';
 import type { Database } from '@/integrations/supabase/types';
 import { isKitchenUsername } from '@/lib/staff-accounts';
 
@@ -64,9 +68,10 @@ type BillReq = Pick<
 const isOpenKitchenOrder = (o: Order) => isInKitchen(o.status) && !isHeld(o) && o.status !== 'served';
 type Assignment = Pick<Database['public']['Tables']['section_assignments']['Row'], 'section_id' | 'waiter_id' | 'shift_date'>;
 type WaiterStats = { total: number; occupied: number; calls: number; bills: number; ready: number };
-type TableState = 'free' | 'occupied' | 'ready' | 'call' | 'bill';
 
 const LAST_WAITER_KEY = 'monitor:lastWaiterId';
+/** "By table" or "Needs you first", remembered on this screen. */
+const ORDER_KEY = 'monitor:order';
 const IDLE_MS = 5 * 60 * 1000;
 
 const WaiterMonitor = () => {
@@ -92,6 +97,13 @@ const WaiterMonitor = () => {
   const now = useNow();
   const sortNow = useNowBucketed(60_000);
   const [mode, setMode] = useState<'rail' | 'mine' | 'all'>('rail');
+  const [order, setOrderState] = useState<FloorOrder>(() => {
+    try { return localStorage.getItem(ORDER_KEY) === 'urgency' ? 'urgency' : 'table'; } catch { return 'table'; }
+  });
+  const setOrder = (next: FloorOrder) => {
+    setOrderState(next);
+    try { localStorage.setItem(ORDER_KEY, next); } catch { /* not remembered */ }
+  };
   const [openTableId, setOpenTableId] = useState<string | null>(null);
   const [meId, setMeId] = useState<string | null>(null);
   /** Which restaurant's floor this is — the heading said La Soul at both. */
@@ -126,6 +138,8 @@ const WaiterMonitor = () => {
   const { unlocked: audioUnlocked, unlock: unlockSound } = useAudioUnlock();
   /** Shown instead of a toast storm: the board says it is stale until a fetch succeeds. */
   const [stale, setStale] = useState(false);
+  /** The floor has answered once. Before that, "0/0" and an empty rail are not known, not quiet. */
+  const [loaded, setLoaded] = useState(false);
   const beginFetch = useLatestRequest();
 
   const fetchAll = useCallback(async () => {
@@ -189,6 +203,7 @@ const WaiterMonitor = () => {
     // A kitchen tablet signs in as a waiter (Admin → Waiters) but serves no tables.
     setWaiters(((w.data ?? []) as (Waiter & { username: string | null })[]).filter((x) => !isKitchenUsername(x.username)));
     setAssignments((a.data ?? []) as Assignment[]);
+    setLoaded(true);
   }, [beginFetch]);
 
   useEffect(() => { void fetchAll(); }, [fetchAll]);
@@ -243,21 +258,6 @@ const WaiterMonitor = () => {
     [waiters],
   );
 
-  const tableUrgency = useCallback((table: TableRow) => {
-    const sess = sessions.find((session) => session.table_id === table.id);
-    if (!sess) return -1;
-    if (bills.some((bill) => bill.table_session_id === sess.id)) return 100;
-    if (calls.some((call) => call.table_session_id === sess.id)) return 80;
-    const tOrders = orders.filter((order) => order.table_session_id === sess.id && isOpenKitchenOrder(order));
-    if (tOrders.some((order) => order.status === 'ready')) return 60;
-    const oldestMs = tOrders.reduce((acc, order) => Math.max(acc, sortNow - new Date(kitchenStart(order)).getTime()), 0);
-    if (oldestMs > 15 * 60_000) return 40 + oldestMs / 60_000;
-    return 20 + oldestMs / 60_000;
-  }, [bills, calls, sortNow, orders, sessions]);
-
-  const sortByUrgency = useCallback((arr: TableRow[]) =>
-    [...arr].sort((a, b) => tableUrgency(b) - tableUrgency(a)), [tableUrgency]);
-
   const waiterStats = useCallback((waiterId: string): WaiterStats => {
     const myTables = tables.filter((table) => tableWaiter(table) === waiterId);
     const mySess = sessions.filter((session) => myTables.some((table) => table.id === session.table_id));
@@ -271,7 +271,6 @@ const WaiterMonitor = () => {
     };
   }, [bills, calls, orders, sessions, tableWaiter, tables]);
 
-  const occupied = sessions.length;
   const pendingAlerts = calls.length + bills.length;
   /*
    * Orders in the kitchen. A card order still waiting for its payment is not
@@ -413,10 +412,59 @@ const WaiterMonitor = () => {
   }, [bills, calls, openTableId, orders, sessions, tableWaiter, tables, waiterById, waiters]);
 
   const activeWaiter = activeWaiterId ? waiterById[activeWaiterId] : null;
-  const myTables = activeWaiterId
-    ? sortByUrgency(tables.filter((table) => tableWaiter(table) === activeWaiterId))
-    : [];
-  const allTables = sortByUrgency(tables);
+
+  /**
+   * One tile's worth of facts per table, all from what this screen already
+   * loads: taken or free, the loudest thing waiting there, and the small facts
+   * (seated for, guests, what it owes, who is going). Nothing is guessed.
+   */
+  const tiles = useMemo<(FloorTileData & { waiterId: string | null })[]>(() => {
+    const nameOfUser = (uid: string | null | undefined) =>
+      (uid ? waiters.find((w) => w.user_id === uid)?.display_name ?? null : null);
+    const earliest = (list: (string | null | undefined)[]) =>
+      list.filter((x): x is string => !!x).sort()[0] ?? null;
+    return [...tables].sort((a, b) => a.table_number - b.table_number).map((table) => {
+      const sess = sessions.find((session) => session.table_id === table.id);
+      const mine = sess ? orders.filter((o) => o.table_session_id === sess.id) : [];
+      const inKitchen = mine.filter(isOpenKitchenOrder);
+      const ready = inKitchen.filter((o) => o.status === 'ready');
+      const cooking = inKitchen.filter((o) => o.status !== 'ready');
+      const call = sess ? calls.find((c) => c.table_session_id === sess.id) : undefined;
+      const bill = sess ? bills.find((b) => b.table_session_id === sess.id) : undefined;
+      const status = floorStatus({
+        seated: !!sess,
+        callAt: call?.created_at ?? null,
+        billAt: bill?.created_at ?? null,
+        readyCount: ready.length,
+        // The orders query selects every column; ready_at is there when the database records it.
+        readyAt: earliest(ready.map((o) => (o as { ready_at?: string | null }).ready_at)),
+        cookingSince: earliest(cooking.map((o) => kitchenStart(o))),
+      }, sortNow);
+      const waiterId = tableWaiter(table);
+      const going = status.kind === 'calling' ? call?.acknowledged_by : status.kind === 'bill' ? bill?.acknowledged_by : null;
+      return {
+        id: table.id,
+        number: table.table_number,
+        sectionName: table.sections?.name ?? null,
+        sectionColor: table.sections?.color ?? null,
+        status,
+        seatedSince: sess?.opened_at ?? null,
+        guestName: sess?.guest_name ?? null,
+        covers: sess?.covers ?? null,
+        owed: sess ? outstandingFor(mine) : 0,
+        cooking: cooking.length,
+        readyCount: ready.length,
+        awaitingPayment: mine.filter((o) => o.status === 'awaiting_payment').length,
+        waiterId,
+        waiterName: waiterId ? waiterById[waiterId]?.display_name ?? null : null,
+        goingName: nameOfUser(going),
+      };
+    });
+  }, [bills, calls, orders, sessions, sortNow, tableWaiter, tables, waiterById, waiters]);
+  const myTiles = useMemo(
+    () => (activeWaiterId ? tiles.filter((t) => t.waiterId === activeWaiterId) : []),
+    [activeWaiterId, tiles],
+  );
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -461,13 +509,12 @@ const WaiterMonitor = () => {
           {soundOn && !audioUnlocked && (
             <button
               onClick={() => { void unlockSound(); }}
-              className="shrink-0 inline-flex items-center gap-1.5 h-9 px-3 rounded-full text-sm font-sans font-semibold bg-amber-100 text-amber-900 border border-amber-200"
+              className="shrink-0 inline-flex items-center gap-1.5 h-9 px-3 rounded-full text-sm font-sans font-semibold bg-amber-500/10 text-foreground border border-amber-500/40 hover:bg-amber-500/15 transition-colors"
             >
-              <VolumeX className="w-4 h-4" aria-hidden /> Tap to enable sound
+              <VolumeX className="w-4 h-4 text-amber-700" aria-hidden /> Tap to enable sound
             </button>
           )}
-          <StatPill icon={<Users className="w-3.5 h-3.5" />} label="Occupied" value={`${occupied}/${tables.length}`} tone="active" />
-          <StatPill icon={<ChefHat className="w-3.5 h-3.5" />} label="Orders" value={openOrders.length} tone={openOrders.length ? 'active' : 'idle'} />
+          <StatPill icon={<ChefHat className="w-3.5 h-3.5" />} label="Orders" value={loaded ? openOrders.length : '—'} tone={openOrders.length ? 'active' : 'idle'} />
           <StatPill
             icon={<Bell className="w-3.5 h-3.5" />}
             label="Alerts"
@@ -481,7 +528,9 @@ const WaiterMonitor = () => {
             icon={<Clock className="w-3.5 h-3.5" />}
             label="Oldest"
             value={oldestOrderMs ? formatMinutes(oldestOrderMs) : '—'}
-            tone={oldestOrderMs > 20 * 60_000 ? 'urgent' : oldestOrderMs > 10 * 60_000 ? 'warn' : 'idle'}
+            /* The kitchen's own scale (src/lib/timing.ts), so this pill turns red
+               exactly when a table's tile below says "Late". */
+            tone={orderUrgency(oldestOrderMs) === 'late' || orderUrgency(oldestOrderMs) === 'critical' ? 'urgent' : orderUrgency(oldestOrderMs) === 'attention' ? 'warn' : 'idle'}
           />
         </div>
         {/* Persistent, not a toast: a toast is gone in four seconds and the
@@ -491,53 +540,67 @@ const WaiterMonitor = () => {
             Could not refresh — this floor may be out of date. Retrying automatically.
           </div>
         )}
-        <MenuOnlyNotice audience="waiter" outerClassName="px-4 sm:px-6 pb-3" />
-        {staffVenue && <EndOfDayTables hours={staffVenue.venue.hours} outerClassName="px-4 sm:px-6 pb-3" />}
       </header>
 
       <main className="p-4 sm:p-6">
+        {/* In the page, not the sticky header: there they took a quarter of a
+            1024×768 tablet for the whole shift, over the tables. */}
+        <MenuOnlyNotice audience="waiter" outerClassName="mb-4" />
+        {staffVenue && <EndOfDayTables hours={staffVenue.venue.hours} outerClassName="mb-4" />}
         {/* Pinned above every mode: the floor monitor is often the screen nearest the door. */}
         <HeldOrdersCard soundEnabled={soundOn} className="mb-4" onChanged={refetch} />
-        {mode === 'rail' && (
-          <RailView
-            waiters={waiters}
-            waiterStats={waiterStats}
-            onSelectWaiter={openWaiter}
-            onAllTables={() => setMode('all')}
-            totalTables={tables.length}
-          />
+        {mode === 'rail' && !loaded && <RailSkeleton />}
+        {mode === 'rail' && loaded && (
+          <>
+            <RailView
+              waiters={waiters}
+              waiterStats={waiterStats}
+              onSelectWaiter={openWaiter}
+              onAllTables={() => setMode('all')}
+              totalTables={tables.length}
+            />
+            {/* The whole floor on the screen's first page, so a glance from across
+                the room answers "what is taken, what needs us" without a tap. */}
+            {tables.length > 0 && (
+              <div className="mt-8 border-t border-border pt-6">
+                <FloorView
+                  title="The floor"
+                  tiles={tiles}
+                  order={order}
+                  onOrderChange={setOrder}
+                  showWaiter
+                  now={sortNow}
+                  onOpen={setOpenTableId}
+                  emptyText=""
+                />
+              </div>
+            )}
+          </>
         )}
 
-        {mode === 'all' && (
-          <TablesGrid
+        {mode !== 'rail' && !loaded && <RailSkeleton />}
+        {mode === 'all' && loaded && (
+          <FloorView
             emptyText="No tables are set up yet. A manager adds them under Admin › Tables."
-            tables={allTables}
-            sessions={sessions}
-            orders={orders}
-            calls={calls}
-            bills={bills}
-            waiterById={waiterById}
-            tableWaiter={tableWaiter}
+            tiles={tiles}
+            order={order}
+            onOrderChange={setOrder}
+            showWaiter
             now={sortNow}
-            large={false}
             onOpen={setOpenTableId}
           />
         )}
 
         {/* One empty message, not two: the grid said "No tables." and this
             page said "No tables assigned right now." underneath it. */}
-        {mode === 'mine' && activeWaiter && (
-          <TablesGrid
+        {mode === 'mine' && activeWaiter && loaded && (
+          <FloorView
             emptyText="No tables for you today yet. They appear once a manager assigns your section, or a table is given to you."
-            tables={myTables}
-            sessions={sessions}
-            orders={orders}
-            calls={calls}
-            bills={bills}
-            waiterById={waiterById}
-            tableWaiter={tableWaiter}
+            tiles={myTiles}
+            order={order}
+            onOrderChange={setOrder}
+            showWaiter={false}
             now={sortNow}
-            large
             onOpen={setOpenTableId}
           />
         )}
@@ -565,6 +628,18 @@ const WaiterMonitor = () => {
   );
 };
 
+/** The rail's shape while the floor loads, so the cards do not pop in under a finger. */
+const RailSkeleton = () => (
+  <div aria-busy="true" aria-label="Loading the floor">
+    <div className="mx-auto mb-6 h-4 w-48 rounded-full bg-muted animate-pulse motion-reduce:animate-none" />
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3 xl:gap-4">
+      {[0, 1, 2, 3].map((i) => (
+        <div key={i} className="min-h-[120px] rounded-2xl border border-border bg-card animate-pulse motion-reduce:animate-none" />
+      ))}
+    </div>
+  </div>
+);
+
 const RailView = ({
   waiters,
   waiterStats,
@@ -579,14 +654,14 @@ const RailView = ({
   totalTables: number;
 }) => (
   <div>
-    <p className="text-center text-sm font-sans text-muted-foreground mb-6">
+    <p className="text-center text-sm font-sans text-muted-foreground mb-4">
       Tap your name to see your tables
     </p>
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3 xl:gap-4">
       <button
         type="button"
         onClick={onAllTables}
-        className="min-h-[120px] rounded-2xl border-2 border-dashed border-border bg-card hover:bg-accent/10 active:scale-[0.98] transition-all p-5 text-left"
+        className="min-h-[104px] rounded-2xl border border-dashed border-border bg-card/60 hover:bg-card active:scale-[0.98] transition-all p-5 text-left"
       >
         <div className="flex items-center gap-3 mb-2">
           <Grid3x3 className="w-6 h-6 text-muted-foreground" />
@@ -598,17 +673,17 @@ const RailView = ({
       {waiters.map((waiter) => {
         const stats = waiterStats(waiter.id);
         const urgent = stats.bills + stats.calls;
+        // The most pressing thing on this waiter's floor colours the card, in
+        // the colours every staff screen uses: a call, then a bill, then food.
+        const tone: StaffTone | null = stats.calls > 0 ? 'calling' : stats.bills > 0 ? 'bill' : stats.ready > 0 ? 'ready' : null;
         return (
           <button
             key={waiter.id}
             type="button"
             onClick={() => onSelectWaiter(waiter)}
-            className={`min-h-[120px] rounded-2xl border-2 p-5 text-left active:scale-[0.98] transition-all ${
-              urgent > 0
-                ? 'border-destructive/60 bg-destructive/5 hover:bg-destructive/10 breathe breathe-urgent'
-                : stats.ready > 0
-                  ? 'border-accent/60 bg-accent/5 hover:bg-accent/10'
-                  : 'border-border bg-card hover:bg-accent/10'
+            style={stats.calls > 0 ? toneGlow('calling') : undefined}
+            className={`min-h-[104px] rounded-2xl border bg-card p-4 xl:p-5 text-left shadow-lux active:scale-[0.98] transition-[transform,background-color,border-color] hover:bg-muted/40 ${
+              tone ? `${TONE[tone].border} ${stats.calls > 0 ? 'breathe' : ''}` : 'border-border'
             }`}
           >
             <div className="flex items-start justify-between gap-2 mb-2">
@@ -626,14 +701,14 @@ const RailView = ({
               )}
             </div>
             <div className="flex flex-wrap gap-1.5 mt-2">
-              {stats.bills > 0 && (
-                <Chip tone="urgent" icon={<Receipt className="w-3.5 h-3.5" />}>{plural(stats.bills, 'bill')}</Chip>
-              )}
               {stats.calls > 0 && (
-                <Chip tone="urgent" icon={<Bell className="w-3.5 h-3.5" />}>{plural(stats.calls, 'call')}</Chip>
+                <Chip tone="calling" icon={<Hand className="w-3.5 h-3.5" />}>{plural(stats.calls, 'call')}</Chip>
+              )}
+              {stats.bills > 0 && (
+                <Chip tone="bill" icon={<Receipt className="w-3.5 h-3.5" />}>{plural(stats.bills, 'bill')}</Chip>
               )}
               {stats.ready > 0 && (
-                <Chip tone="warn" icon={<CheckCircle2 className="w-3.5 h-3.5" />}>{stats.ready} food up</Chip>
+                <Chip tone="ready" icon={<CheckCircle2 className="w-3.5 h-3.5" />}>{stats.ready} food up</Chip>
               )}
               {urgent === 0 && stats.ready === 0 && (
                 <Chip tone="idle">All quiet</Chip>
@@ -646,92 +721,19 @@ const RailView = ({
   </div>
 );
 
-const Chip = ({ tone, icon, children }: { tone: 'idle' | 'warn' | 'urgent'; icon?: React.ReactNode; children: React.ReactNode }) => {
+const Chip = ({ tone, icon, children }: { tone: 'idle' | 'calling' | 'bill' | 'ready'; icon?: React.ReactNode; children: React.ReactNode }) => {
+  // A guest waiting (call, bill) is solid; food up is tinted; quiet is grey.
   const tones = {
     idle: 'bg-muted text-muted-foreground',
-    warn: 'bg-accent/20 text-accent',
-    urgent: 'bg-destructive text-destructive-foreground',
+    calling: TONE.calling.solid,
+    bill: TONE.bill.solid,
+    ready: TONE.ready.chip,
   } as const;
   return (
     // Read from a step back, across a counter: 13px, not 11.
     <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[13px] leading-none font-sans font-semibold ${tones[tone]}`}>
       {icon}{children}
     </span>
-  );
-};
-
-const TablesGrid = ({
-  emptyText,
-  tables,
-  sessions,
-  orders,
-  calls,
-  bills,
-  waiterById,
-  tableWaiter,
-  now,
-  large,
-  onOpen,
-}: {
-  /** Says why there is nothing here, which depends on whose view this is. */
-  emptyText: string;
-  tables: TableRow[];
-  sessions: Session[];
-  orders: Order[];
-  calls: Call[];
-  bills: BillReq[];
-  waiterById: Record<string, Waiter>;
-  tableWaiter: (table: TableRow) => string | null;
-  now: number;
-  large: boolean;
-  onOpen: (tableId: string) => void;
-}) => {
-  if (tables.length === 0) {
-    return (
-      <div className="max-w-md mx-auto my-12 rounded-xl border border-dashed border-border bg-muted/30 px-6 py-10 text-center text-muted-foreground font-sans flex flex-col items-center gap-2">
-        <Grid3x3 className="w-6 h-6 opacity-60" aria-hidden />
-        {emptyText}
-      </div>
-    );
-  }
-
-  const cols = large
-    ? 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5'
-    : 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6';
-
-  return (
-    <div className={`grid ${cols} gap-3`}>
-      {tables.map((table) => {
-        const sess = sessions.find((session) => session.table_id === table.id);
-        const tOrders = sess
-          ? orders.filter((order) => order.table_session_id === sess.id && isOpenKitchenOrder(order))
-          : [];
-        const awaitingPayment = sess
-          ? orders.filter((order) => order.table_session_id === sess.id && order.status === 'awaiting_payment').length
-          : 0;
-        const hasCall = sess ? calls.some((call) => call.table_session_id === sess.id) : false;
-        const hasBill = sess ? bills.some((bill) => bill.table_session_id === sess.id) : false;
-        const readyOrders = tOrders.filter((order) => order.status === 'ready').length;
-        const oldestMs = tOrders.reduce((acc, order) => Math.max(acc, now - new Date(kitchenStart(order)).getTime()), 0);
-        const waiterId = tableWaiter(table);
-        const waiterName = waiterId ? waiterById[waiterId]?.display_name : null;
-        return (
-          <TableCard
-            key={table.id}
-            table={table}
-            session={sess}
-            ordersCount={tOrders.length}
-            readyCount={readyOrders}
-            awaitingPayment={awaitingPayment}
-            oldestMs={oldestMs}
-            hasCall={hasCall}
-            hasBill={hasBill}
-            waiterName={waiterName}
-            onOpen={() => onOpen(table.id)}
-          />
-        );
-      })}
-    </div>
   );
 };
 
@@ -746,11 +748,12 @@ const StatPill = ({
   value: React.ReactNode;
   tone?: 'idle' | 'active' | 'warn' | 'urgent';
 }) => {
+  // Fine is quiet (white, grey words); only what needs a look takes a colour.
   const tones = {
-    idle: 'bg-muted text-muted-foreground border-border',
-    active: 'bg-primary/10 text-primary border-primary/20',
-    warn: 'bg-accent/10 text-accent border-accent/20',
-    urgent: 'bg-destructive/10 text-destructive border-destructive/20',
+    idle: 'bg-card text-muted-foreground border-border',
+    active: 'bg-card text-muted-foreground border-border [&>span:last-child]:text-foreground',
+    warn: `${TONE.preparing.chip} border-transparent`,
+    urgent: `${TONE.late.chip} border-transparent`,
   } as const;
   return (
     // Shown on phones too now: the status row scrolls sideways instead of
@@ -760,141 +763,6 @@ const StatPill = ({
       <span className="opacity-80">{label}</span>
       <span className="font-semibold">{value}</span>
     </div>
-  );
-};
-
-const TableCard = ({
-  table,
-  session,
-  ordersCount,
-  readyCount,
-  awaitingPayment,
-  oldestMs,
-  hasCall,
-  hasBill,
-  waiterName,
-  onOpen,
-}: {
-  table: TableRow;
-  session?: Session;
-  ordersCount: number;
-  readyCount: number;
-  /** Card orders not yet paid, so not in the kitchen. Said in words, never counted as cooking. */
-  awaitingPayment: number;
-  oldestMs: number;
-  hasCall: boolean;
-  hasBill: boolean;
-  waiterName: string | null;
-  onOpen: () => void;
-}) => {
-  const elapsed = useElapsed(session?.opened_at);
-  const occupied = !!session;
-
-  let state: TableState = 'free';
-  if (hasBill) state = 'bill';
-  else if (hasCall) state = 'call';
-  else if (readyCount > 0) state = 'ready';
-  else if (occupied) state = 'occupied';
-
-  /*
-   * A calling table breathes like a bill does, in the accent. It used to
-   * `animate-pulse`, which fades the WHOLE card, text and all, to half
-   * opacity and back — so the tables that most needed a waiter looked
-   * greyed-out and disabled for half of every second.
-   */
-  const palette: Record<TableState, { ring: string; bg: string; chip: string; label: string }> = {
-    free: { ring: 'border-border', bg: 'bg-card', chip: 'bg-muted text-muted-foreground', label: 'Free' },
-    occupied: { ring: 'border-primary/30', bg: 'bg-primary/5', chip: 'bg-primary/15 text-primary', label: 'Seated' },
-    ready: { ring: 'border-accent/40', bg: 'bg-accent/5', chip: 'bg-accent/20 text-accent', label: 'Food up' },
-    call: { ring: 'border-accent/70 breathe', bg: 'bg-accent/10', chip: 'bg-accent text-accent-foreground', label: 'Calling' },
-    bill: { ring: 'border-destructive/60 breathe breathe-urgent', bg: 'bg-destructive/10', chip: 'bg-destructive text-destructive-foreground', label: 'Wants bill' },
-  };
-  const selectedPalette = palette[state];
-
-  return (
-    <Card
-      role="button"
-      tabIndex={0}
-      onClick={onOpen}
-      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(); } }}
-      aria-label={`Table ${table.table_number} — ${selectedPalette.label}`}
-      data-state={state}
-      style={state === 'call' ? ({ '--breathe-color': 'var(--accent)' } as React.CSSProperties) : undefined}
-      className={`border-2 cursor-pointer text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring active:scale-[0.99] ${selectedPalette.ring} ${selectedPalette.bg} transition-all`}
-    >
-      <CardContent className="p-3">
-        <div className="mb-2">
-          <div className="flex items-start justify-between gap-2">
-            <p className="font-serif text-2xl font-bold leading-none">T{table.table_number}</p>
-            <span className={`shrink-0 text-xs px-2 py-0.5 rounded-full font-sans font-semibold uppercase tracking-wide ${selectedPalette.chip}`}>
-              {selectedPalette.label}
-            </span>
-          </div>
-          {/* Under the number, the card's full width: beside the state it was
-              cut to "GARDEN R…" as soon as it was big enough to read. */}
-          {table.sections && (
-            <div className="flex items-center gap-1 mt-1">
-              <span className="w-2 h-2 shrink-0 rounded-full" style={{ background: table.sections.color }} />
-              <span className="text-xs uppercase tracking-wide text-muted-foreground truncate">{table.sections.name}</span>
-            </div>
-          )}
-        </div>
-
-        {/* Readable from a step back: 12–14px. The details were 10–11px, which
-            is a tablet held in the hand, not one standing on a counter. */}
-        {occupied && session ? (
-          <>
-            {session.guest_name && (
-              <p className="text-sm font-sans text-foreground truncate">{session.guest_name}</p>
-            )}
-            <p className="text-sm text-muted-foreground font-sans flex items-center gap-1 mt-0.5">
-              <Clock className="w-3.5 h-3.5" aria-hidden /> {formatDuration(elapsed)}
-            </p>
-            <div className="flex items-center gap-x-2.5 gap-y-1 mt-2 text-sm font-sans flex-wrap">
-              {hasBill && (
-                <span className="inline-flex items-center gap-1 text-destructive font-semibold">
-                  <Receipt className="w-3.5 h-3.5" aria-hidden /> Bill
-                </span>
-              )}
-              {hasCall && (
-                <span className="inline-flex items-center gap-1 text-accent font-semibold">
-                  <Bell className="w-3.5 h-3.5" aria-hidden /> Calling
-                </span>
-              )}
-              {readyCount > 0 && (
-                <span className="inline-flex items-center gap-1 text-accent font-semibold">
-                  <CheckCircle2 className="w-3.5 h-3.5" aria-hidden /> {readyCount} up
-                </span>
-              )}
-              {/* Not counting what is already up: "1 up · 1 order" was one plate. */}
-              {ordersCount - readyCount > 0 && (
-                <span className="inline-flex items-center gap-1 text-primary">
-                  <ChefHat className="w-3.5 h-3.5" aria-hidden /> {ordersCount - readyCount} in kitchen
-                </span>
-              )}
-            </div>
-            {awaitingPayment > 0 && (
-              <p className="text-xs text-accent font-sans mt-1">
-                {awaitingPayment} not in kitchen — payment pending
-              </p>
-            )}
-            {oldestMs > 0 && (
-              <p className="text-xs text-muted-foreground font-sans mt-1">
-                Oldest order {formatMinutes(oldestMs)}
-              </p>
-            )}
-          </>
-        ) : (
-          <p className="text-sm text-muted-foreground font-sans">Available</p>
-        )}
-
-        {waiterName && (
-          <p className="text-xs text-muted-foreground font-sans mt-2 pt-2 border-t border-border/60 truncate">
-            Waiter: {waiterName}
-          </p>
-        )}
-      </CardContent>
-    </Card>
   );
 };
 

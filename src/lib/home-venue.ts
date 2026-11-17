@@ -18,8 +18,22 @@
  */
 const HOMES = ['lasoul', 'veraitalia'];
 
+/**
+ * The offline demo build (docs/demo-mode.md): one fictional restaurant, whose
+ * names are in src/demo/brand.ts.
+ *
+ * vite.config.ts replaces __TABLEFLOW_DEMO_BUILD__ with a literal in every
+ * build, so in the normal build this is the constant `false` and whatever it
+ * guards — every import of src/demo — is left out of the bundle. Where
+ * nothing replaces it (the unit tests, the build's own scripts) it does not
+ * exist, and this is false there too.
+ */
+export const DEMO_BUILD: boolean = typeof __TABLEFLOW_DEMO_BUILD__ !== 'undefined' && __TABLEFLOW_DEMO_BUILD__ === true;
+/** The demo restaurant's slug; the same value as RESTAURANT.slug in src/demo/brand.ts (this file imports nothing). */
+export const DEMO_VENUE = 'casademo';
+
 const fromApp = (import.meta as { env?: Record<string, string | undefined> }).env?.VITE_HOME_VENUE;
 const fromBuild = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env?.VITE_HOME_VENUE;
 const requested = (fromApp ?? fromBuild ?? '').trim();
 
-export const HOME_VENUE: string = HOMES.includes(requested) ? requested : 'lasoul';
+export const HOME_VENUE: string = DEMO_BUILD ? DEMO_VENUE : HOMES.includes(requested) ? requested : 'lasoul';
