@@ -212,6 +212,7 @@ export type Database = {
       }
       experiments: {
         Row: {
+          auto: boolean
           created_at: string
           ended_at: string | null
           holdout_pct: number
@@ -223,6 +224,7 @@ export type Database = {
           venue_id: string
         }
         Insert: {
+          auto?: boolean
           created_at?: string
           ended_at?: string | null
           holdout_pct: number
@@ -234,6 +236,7 @@ export type Database = {
           venue_id?: string
         }
         Update: {
+          auto?: boolean
           created_at?: string
           ended_at?: string | null
           holdout_pct?: number
@@ -1932,6 +1935,7 @@ export type Database = {
           print_paper_width: number
           print_show_prices: boolean
           reco_alcohol_from: string
+          reco_auto_holdout_pct: number
           reco_exploration: number
           reco_holdout_pct: number
           reco_min_acceptance: number
@@ -1991,6 +1995,7 @@ export type Database = {
           print_paper_width?: number
           print_show_prices?: boolean
           reco_alcohol_from?: string
+          reco_auto_holdout_pct?: number
           reco_exploration?: number
           reco_holdout_pct?: number
           reco_min_acceptance?: number
@@ -2050,6 +2055,7 @@ export type Database = {
           print_paper_width?: number
           print_show_prices?: boolean
           reco_alcohol_from?: string
+          reco_auto_holdout_pct?: number
           reco_exploration?: number
           reco_holdout_pct?: number
           reco_min_acceptance?: number
@@ -4112,6 +4118,7 @@ export type Database = {
         }[]
       }
       reco_holdout_comparison: { Args: { _days?: number }; Returns: Json }
+      reco_keep_measuring: { Args: never; Returns: Json }
       reco_kind: {
         Args: {
           _name: string
@@ -4146,6 +4153,8 @@ export type Database = {
       }
       reco_now: { Args: never; Returns: string }
       reco_policy_version: { Args: never; Returns: string }
+      reco_policy_version_for: { Args: { _venue: string }; Returns: string }
+      reco_profit_check: { Args: { _days?: number }; Returns: Json }
       reco_rank_scored: {
         Args: {
           _cart_item_ids?: string[]
@@ -4302,6 +4311,7 @@ export type Database = {
       run_daily_maintenance: { Args: never; Returns: Json }
       run_scheduled_learning_refresh: { Args: never; Returns: Json }
       run_scheduled_maintenance: { Args: never; Returns: Json }
+      run_scheduled_reco_measuring: { Args: never; Returns: Json }
       run_scheduled_reservation_sweep: { Args: never; Returns: Json }
       run_scheduled_table_close: { Args: never; Returns: Json }
       sales_analytics: { Args: { _from?: string; _to?: string }; Returns: Json }
@@ -4388,6 +4398,7 @@ export type Database = {
         }
         Returns: Json
       }
+      set_reco_auto_holdout: { Args: { _pct: number }; Returns: Json }
       shift_close_for: {
         Args: { _day?: string; _venue?: string }
         Returns: Json
