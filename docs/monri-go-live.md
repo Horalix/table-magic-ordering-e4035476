@@ -18,7 +18,9 @@ a payment. It defaults to `false` on a fresh database.
 ## 1. What the restaurant must obtain
 
 These are **external blockers**. Nothing in this repository can substitute for
-them, and none of them are invented here.
+them, and none of them are invented here. The list to send Monri, with a draft
+message in English and Bosnian and what Monri's documents say about Apple Pay
+and Google Pay, is `docs/monri-request-list.md`.
 
 | Requirement | Who provides it | Notes |
 |---|---|---|
